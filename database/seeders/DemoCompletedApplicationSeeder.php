@@ -23,7 +23,7 @@ class DemoCompletedApplicationSeeder extends Seeder
     public function run(): void
     {
         $student = User::query()
-            ->where('email', env('STUDENT_EMAIL', 'student@scholarship.test'))
+            ->where('email', env('STUDENT_EMAIL', 'support@findscholarship.online'))
             ->first();
         $scholarship = Scholarship::query()
             ->with('provider')

@@ -1,6 +1,5 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
-import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -1216,7 +1215,6 @@ onMounted(loadAccount);
                     </div>
                 </section>
 
-                <AdminFooter />
             </div>
         </section>
     </main>

@@ -1,7 +1,6 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
@@ -16,8 +15,16 @@ const releaseCandidates = ref([]);
 const supportRecipients = ref([]);
 const programSummary = ref(null);
 const monitoringViews = ['summary', 'monitoring', 'releases', 'outcomes'];
+const monitoringBaseUrl = `/provider/programs/${scholarshipId}/monitoring`;
+const monitoringPathSection = window.location.pathname.replace(/\/$/, '').split('/').at(-1);
+const routeMonitoringView = {
+    academic: 'monitoring',
+    releases: 'releases',
+    outcomes: 'outcomes',
+}[monitoringPathSection];
 const requestedMonitoringView = new URLSearchParams(window.location.search).get('view');
-const activeTab = ref(monitoringViews.includes(requestedMonitoringView) ? requestedMonitoringView : 'summary');
+const activeTab = ref(routeMonitoringView
+    ?? (monitoringViews.includes(requestedMonitoringView) ? requestedMonitoringView : 'summary'));
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
@@ -55,26 +62,57 @@ const viewTabs = computed(() => [
         label: 'Overview',
         icon: 'fa-solid fa-table-columns',
         count: Number(programSummary.value?.attention_count ?? 0),
+        href: monitoringBaseUrl,
     },
     {
         value: 'monitoring',
         label: 'Academic checks',
         icon: 'fa-solid fa-chart-line',
         count: cycles.value.reduce((total, cycle) => total + Number(cycle.action_needed_count ?? 0), 0),
+        href: `${monitoringBaseUrl}/academic`,
     },
     {
         value: 'releases',
         label: 'Benefit releases',
         icon: 'fa-solid fa-hand-holding-heart',
         count: benefitReleases.value.reduce((total, release) => total + Number(release.pending_count ?? 0), 0),
+        href: `${monitoringBaseUrl}/releases`,
     },
     {
         value: 'outcomes',
         label: 'Support outcomes',
         icon: 'fa-solid fa-flag-checkered',
         count: renewalReadyCount.value,
+        href: `${monitoringBaseUrl}/outcomes`,
     },
 ]);
+const activeView = computed(() => viewTabs.value.find((view) => view.value === activeTab.value) ?? viewTabs.value[0]);
+const activeViewCopy = computed(() => ({
+    summary: {
+        eyebrow: 'Recipient monitoring',
+        title: 'Monitoring overview',
+        description: 'See urgent records, upcoming work, and the current recipient lifecycle.',
+        icon: 'fa-solid fa-table-columns',
+    },
+    monitoring: {
+        eyebrow: 'Academic monitoring',
+        title: 'Academic checks',
+        description: 'Request grade records and review recipient submissions.',
+        icon: 'fa-solid fa-graduation-cap',
+    },
+    releases: {
+        eyebrow: 'Recipient support',
+        title: 'Benefit releases',
+        description: 'Schedule support and record release evidence for each recipient.',
+        icon: 'fa-solid fa-hand-holding-heart',
+    },
+    outcomes: {
+        eyebrow: 'Recipient lifecycle',
+        title: 'Support outcomes',
+        description: 'Renew, complete, or end recipient support using the recorded history.',
+        icon: 'fa-solid fa-flag-checkered',
+    },
+}[activeTab.value]));
 
 function defaultForm() {
     return {
@@ -153,16 +191,11 @@ function openSummaryItem(item) {
 function setActiveTab(view) {
     if (!monitoringViews.includes(view)) return;
 
-    activeTab.value = view;
-    const url = new URL(window.location.href);
+    const target = viewTabs.value.find((item) => item.value === view)?.href;
 
-    if (view === 'summary') {
-        url.searchParams.delete('view');
-    } else {
-        url.searchParams.set('view', view);
+    if (target) {
+        window.location.assign(target);
     }
-
-    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
 async function openRecipientRecord(recipient) {
@@ -475,22 +508,27 @@ onMounted(loadMonitoring);
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
                     <a :href="`/provider/programs/${scholarshipId}`" class="truncate font-semibold text-slate-600 transition hover:text-slate-950">{{ scholarship?.title || 'Program' }}</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="font-semibold text-slate-950">Monitoring</span>
+                    <span class="font-semibold text-slate-950">{{ activeView.label }}</span>
                 </nav>
 
-                <div v-if="isLoading" class="provider-panel mt-5 p-6 text-sm text-slate-500">Loading recipient monitoring...</div>
+                <div v-if="isLoading" class="provider-panel mt-4 p-6 text-sm text-slate-500">Loading recipient monitoring...</div>
+                <div v-else-if="errorMessage && !scholarship" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
+                    {{ errorMessage }}
+                </div>
 
                 <template v-else-if="scholarship">
                     <TaskPageHeader
+                        class="mt-4"
                         theme="provider"
-                        eyebrow="Recipient support"
-                        :title="scholarship.title"
-                        description="Review ongoing requirements, benefit releases, and recipient outcomes."
-                        icon="fa-solid fa-chart-line"
+                        :eyebrow="activeViewCopy.eyebrow"
+                        :title="activeViewCopy.title"
+                        :description="activeViewCopy.description"
+                        :icon="activeViewCopy.icon"
                     >
                         <template #meta>
+                            <span>{{ scholarship.title }}</span>
                             <span>{{ scholarship.selected_recipients_count }} selected recipient{{ Number(scholarship.selected_recipients_count) === 1 ? '' : 's' }}</span>
-                            <span>{{ activeSupportCount }} active support record{{ activeSupportCount === 1 ? '' : 's' }}</span>
+                            <span v-if="activeTab === 'summary' || activeTab === 'outcomes'">{{ activeSupportCount }} active support record{{ activeSupportCount === 1 ? '' : 's' }}</span>
                         </template>
                         <template #actions>
                             <button v-if="activeTab === 'monitoring'" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openComposer">
@@ -508,24 +546,28 @@ onMounted(loadMonitoring);
                         </template>
                     </TaskPageHeader>
 
-                    <ProviderProgramNav :program-id="scholarship.id" active="monitoring" />
+                    <ProviderProgramNav
+                        :program-id="scholarship.id"
+                        active="monitoring"
+                    />
 
                     <p v-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
 
-                    <div class="provider-panel mt-4 grid gap-1 p-1.5 sm:grid-cols-2 lg:grid-cols-4" aria-label="Recipient monitoring views">
-                        <button
+                    <nav class="provider-panel mt-4 overflow-x-auto p-1.5" aria-label="Recipient monitoring views">
+                        <div class="flex min-w-max items-center gap-1 lg:min-w-0">
+                        <a
                             v-for="view in viewTabs"
                             :key="view.value"
-                            type="button"
+                            :href="view.href"
                             :aria-current="activeTab === view.value ? 'page' : undefined"
-                            :class="['flex items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition', activeTab === view.value ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']"
-                            @click="setActiveTab(view.value)"
+                            :class="['flex min-h-10 min-w-40 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition lg:min-w-0 lg:flex-1', activeTab === view.value ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']"
                         >
                             <i :class="[view.icon, 'text-xs', activeTab === view.value ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
                             <span>{{ view.label }}</span>
                             <span v-if="view.count" :class="['rounded px-1.5 py-0.5 text-[10px]', activeTab === view.value ? 'bg-white/10 text-white' : 'bg-amber-100 text-amber-800']">{{ view.count }}</span>
-                        </button>
-                    </div>
+                        </a>
+                        </div>
+                    </nav>
 
                     <template v-if="activeTab === 'summary'">
                         <section class="provider-panel mt-4 overflow-hidden">
@@ -813,7 +855,6 @@ onMounted(loadMonitoring);
                     </template>
                 </template>
 
-                <ProviderFooter />
             </div>
         </section>
 

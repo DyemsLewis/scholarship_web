@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
-import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { limitPhoneNumber } from '../support/phoneNumber';
@@ -193,7 +192,6 @@ onMounted(loadProfile);
                     </form>
                 </div>
 
-                <AdminFooter />
             </div>
         </section>
     </main>

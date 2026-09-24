@@ -1,7 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { formatFileSize } from '../support/display';
@@ -387,7 +386,6 @@ onMounted(loadWorkspace);
                     </div>
                 </template>
 
-                <ProviderFooter />
             </div>
         </section>
     </main>

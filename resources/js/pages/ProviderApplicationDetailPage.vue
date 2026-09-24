@@ -5,7 +5,6 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.vue';
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
@@ -124,10 +123,10 @@ function safeProviderUrl(value) {
 
 const applicationListUrl = computed(() => safeProviderUrl(requestedReturnTo)
     || (application.value?.scholarship?.id
-        ? `/provider/programs/${application.value.scholarship.id}/applications?workspace=applications`
+        ? `/provider/programs/${application.value.scholarship.id}/applications/review`
         : '/provider/applications/review'));
 const programApplicantUrl = computed(() => application.value?.scholarship?.id
-    ? `/provider/programs/${application.value.scholarship.id}/applications?workspace=applications`
+    ? `/provider/programs/${application.value.scholarship.id}/applications/review`
     : '/provider/applications/review');
 
 function applicationNavigationUrl(item) {
@@ -263,17 +262,16 @@ const programWorkspaceAction = computed(() => {
 });
 const programWorkspaceUrl = computed(() => {
     const scholarshipId = application.value?.scholarship?.id;
-    const workspaceSection = programWorkspaceAction.value?.section ?? 'applications';
 
     return scholarshipId
-        ? `/provider/programs/${scholarshipId}/applications?workspace=${workspaceSection}`
+        ? `/provider/programs/${scholarshipId}/applications/${programWorkspaceAction.value?.section === 'schedule' ? 'activities' : 'review'}`
         : '/provider/applications/review';
 });
 const programActivityUrl = computed(() => {
     const scholarshipId = application.value?.scholarship?.id;
 
     return scholarshipId
-        ? `/provider/programs/${scholarshipId}/applications?workspace=schedule`
+        ? `/provider/programs/${scholarshipId}/applications/activities`
         : '/provider/applications/activities';
 });
 const applicantProfileProofs = computed(() => application.value?.applicant?.profile_proofs ?? []);
@@ -1531,7 +1529,7 @@ onMounted(loadApplication);
                             </section>
 
                             <section v-if="activeSection === 'eligibility' && application.exam" class="provider-panel order-3 overflow-hidden">
-                                <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center">
+                                <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)] sm:items-center">
                                     <div class="flex h-36 items-center justify-center border-b border-slate-200 bg-slate-50 p-4 sm:border-b-0 sm:border-r">
                                         <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
                                     </div>
@@ -1543,10 +1541,6 @@ onMounted(loadApplication);
                                         </div>
                                         <p class="mt-2 text-xs leading-5 text-slate-500">Your organization conducts and grades this exam outside the portal.</p>
                                     </div>
-                                    <a :href="`/provider/programs/${application.scholarship.id}/edit`" class="m-4 inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-                                        <i class="fa-solid fa-pen"></i>
-                                        Edit program
-                                    </a>
                                 </div>
                             </section>
 
@@ -2719,7 +2713,6 @@ onMounted(loadApplication);
                     </nav>
                 </div>
 
-                <ProviderFooter />
             </div>
         </section>
 

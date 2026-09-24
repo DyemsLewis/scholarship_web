@@ -91,7 +91,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         $student = $this->seedUser(
-            email: env('STUDENT_EMAIL', 'student@scholarship.test'),
+            email: env('STUDENT_EMAIL', 'support@findscholarship.online'),
             username: env('STUDENT_USERNAME', 'student'),
             role: 'applicant',
             password: env('STUDENT_PASSWORD', $password),

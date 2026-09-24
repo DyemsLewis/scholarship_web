@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
@@ -758,7 +757,6 @@ onBeforeUnmount(() => {
                     </form>
                 </div>
 
-                <ProviderFooter />
             </div>
         </section>
     </main>

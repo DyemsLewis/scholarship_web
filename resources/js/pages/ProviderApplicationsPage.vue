@@ -2,7 +2,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
@@ -25,7 +24,6 @@ const applicationWorkspaceMode = ['review', 'activities', 'results', 'decisions'
     : 'all';
 const initialScholarshipId = appElement?.dataset.scholarshipId ?? pageSearchParams.get('scholarship_id') ?? '';
 const initialScholarshipTitle = appElement?.dataset.scholarshipTitle ?? '';
-const requestedWorkspaceSection = pageSearchParams.get('workspace');
 const requestedQueueFilter = pageSearchParams.get('filter');
 const requestedQueueSort = pageSearchParams.get('sort');
 const requestedApplicationPage = Number(pageSearchParams.get('page'));
@@ -75,12 +73,11 @@ const applicationSearch = ref(pageSearchParams.get('search') ?? '');
 const applicationPage = ref(Number.isInteger(requestedApplicationPage) && requestedApplicationPage > 0 ? requestedApplicationPage : 1);
 const applicationPagination = ref({ current_page: 1, last_page: 1, per_page: 10, total: 0, from: null, to: null });
 const queueFilterCounts = ref({ needs_review: 0, waiting_activity: 0, ready_result: 0, final_decision: 0, selected: 0, waitlisted: 0, all: 0 });
-const activityWaitingCounts = ref({});
 const totalProviderApplications = ref(0);
 const applicationsPerPage = 10;
-const activeWorkspaceSection = ref(['applications', 'schedule'].includes(requestedWorkspaceSection)
-    ? requestedWorkspaceSection
-    : (applicationWorkspaceMode === 'activities' && initialScholarshipId ? 'schedule' : 'applications'));
+const activeWorkspaceSection = ref(applicationWorkspaceMode === 'activities' && initialScholarshipId
+    ? 'schedule'
+    : 'applications');
 const programEvents = ref([]);
 const scheduleEditorType = ref('');
 const scheduleSaving = ref(false);
@@ -128,10 +125,6 @@ const scheduleMapAddress = computed(() => {
 
     return structuredAddress || scheduleForm.value.locationAddress;
 });
-const canManagePrograms = computed(() => Boolean(
-    window.portalUser?.has_full_access
-        || window.portalUser?.permissions?.includes('manage_programs'),
-));
 const configuredScheduleTypes = computed(() => {
     const configured = selectedScholarshipContext.value?.selection_stages ?? ['screening'];
 
@@ -148,43 +141,6 @@ const availableBulkAdvanceTargets = computed(() => {
         (application.bulk_advance_targets ?? []).includes(target.value)
     )));
 });
-const pendingReviewCount = computed(() => Number(queueFilterCounts.value.needs_review ?? 0));
-const waitingScheduleTypes = computed(() => {
-    return configuredScheduleTypes.value.filter((type) => (
-        scheduleEvent(type.value)?.status !== 'scheduled'
-        && Number(activityWaitingCounts.value[type.value] ?? 0) > 0
-    ));
-});
-const workspaceTasks = computed(() => {
-    const tasks = [];
-
-    if (pendingReviewCount.value > 0) {
-        tasks.push({
-            section: 'applications',
-            title: `${pendingReviewCount.value} application${pendingReviewCount.value === 1 ? '' : 's'} waiting for review`,
-            description: 'Check eligibility, files, and applicant details before deciding.',
-            action: 'Review applicants',
-        });
-    }
-
-    if (waitingScheduleTypes.value.length > 0) {
-        const labels = waitingScheduleTypes.value.map((type) => type.label).join(' and ');
-        const isNextSchedule = waitingScheduleTypes.value.some((type) => scheduleEvent(type.value)?.status === 'completed');
-        const scheduleLabel = `${labels.toLowerCase()} schedule${waitingScheduleTypes.value.length === 1 ? '' : 's'}`;
-        tasks.push({
-            section: 'schedule',
-            title: `Publish ${isNextSchedule ? (waitingScheduleTypes.value.length === 1 ? 'a new ' : 'new ') : 'the '}${scheduleLabel}`,
-            description: isNextSchedule
-                ? 'New applicants reached this stage after the earlier activity closed.'
-                : 'Applicants have reached this stage and are waiting for the shared details.',
-            action: 'Set schedule',
-        });
-    }
-
-    return tasks;
-});
-const primaryWorkspaceTask = computed(() => workspaceTasks.value[0] ?? null);
-const remainingWorkspaceTaskCount = computed(() => Math.max(workspaceTasks.value.length - 1, 0));
 const exportApplicationsUrl = computed(() => {
     if (!hasProgramContext.value) {
         return '/provider/export/applications';
@@ -240,10 +196,10 @@ const focusedWorkspaceCopy = computed(() => workspaceCopy[applicationWorkspaceMo
 const focusedWorkflowModes = ['review', 'activities', 'results', 'decisions'];
 const focusedOutcomeModes = ['recipients', 'waitlist'];
 const isFocusedWorkflowWorkspace = computed(() => (
-    !hasProgramContext.value && focusedWorkflowModes.includes(applicationWorkspaceMode)
+    focusedWorkflowModes.includes(applicationWorkspaceMode)
 ));
 const isFocusedOutcomeWorkspace = computed(() => (
-    !hasProgramContext.value && focusedOutcomeModes.includes(applicationWorkspaceMode)
+    focusedOutcomeModes.includes(applicationWorkspaceMode)
 ));
 const isDedicatedQueueWorkspace = computed(() => (
     isFocusedWorkflowWorkspace.value || isFocusedOutcomeWorkspace.value
@@ -258,13 +214,13 @@ const pageIcon = computed(() => ({
 }[applicationWorkspaceMode] ?? (activeWorkspaceSection.value === 'schedule'
     ? 'fa-solid fa-calendar-check'
     : 'fa-solid fa-users-viewfinder')));
-const pageKicker = computed(() => (hasProgramContext.value ? 'Program Applicants' : focusedWorkspaceCopy.value?.kicker || 'Applicants'));
-const pageTitle = computed(() => (hasProgramContext.value
+const pageKicker = computed(() => focusedWorkspaceCopy.value?.kicker || (hasProgramContext.value ? 'Program applicants' : 'Applicants'));
+const pageTitle = computed(() => focusedWorkspaceCopy.value?.title || (hasProgramContext.value
     ? selectedScholarshipContext.value?.title || 'Scholarship program'
-    : focusedWorkspaceCopy.value?.title || 'Applicant workflow'));
-const pageDescription = computed(() => (hasProgramContext.value
+    : 'Applicant workflow'));
+const pageDescription = computed(() => focusedWorkspaceCopy.value?.description || (hasProgramContext.value
     ? 'Review applicants, publish activities, and record outcomes.'
-    : focusedWorkspaceCopy.value?.description || 'Find applicants who need review or a recorded result.'));
+    : 'Find applicants who need review or a recorded result.'));
 const reviewFilterOptions = computed(() => [
     {
         value: 'needs_review',
@@ -296,7 +252,7 @@ const reviewFilterOptions = computed(() => [
     },
 ]);
 const visibleReviewFilterOptions = computed(() => {
-    if (hasProgramContext.value || applicationWorkspaceMode === 'all') {
+    if (applicationWorkspaceMode === 'all') {
         return reviewFilterOptions.value;
     }
 
@@ -349,10 +305,10 @@ const showReviewerAssignment = computed(() => (
     && selectedQueueFilter.value === 'needs_review'
 ));
 const showSubmissionMetric = computed(() => (
-    hasProgramContext.value || ['review', 'all'].includes(applicationWorkspaceMode)
+    ['review', 'all'].includes(applicationWorkspaceMode)
 ));
 const showReadinessMetrics = computed(() => (
-    hasProgramContext.value || ['review', 'decisions', 'all'].includes(applicationWorkspaceMode)
+    ['review', 'decisions', 'all'].includes(applicationWorkspaceMode)
 ));
 const outcomeFilterOptions = computed(() => [
     {
@@ -450,15 +406,15 @@ function applicationQueueLabel(application) {
 }
 
 function applicationActionLabel(application) {
-    if (applicationWorkspaceMode === 'recipients' && !hasProgramContext.value) {
+    if (applicationWorkspaceMode === 'recipients') {
         return 'Open recipient';
     }
 
-    if (applicationWorkspaceMode === 'waitlist' && !hasProgramContext.value) {
+    if (applicationWorkspaceMode === 'waitlist') {
         return 'Review alternate';
     }
 
-    if (applicationWorkspaceMode === 'activities' && !hasProgramContext.value) {
+    if (applicationWorkspaceMode === 'activities') {
         return 'Manage schedule';
     }
 
@@ -482,8 +438,8 @@ function applicationActionLabel(application) {
 }
 
 function applicationPrimaryActionUrl(application) {
-    if (applicationWorkspaceMode === 'activities' && !hasProgramContext.value && application.scholarship?.id) {
-        return `/provider/programs/${application.scholarship.id}/applications?workspace=schedule`;
+    if (applicationWorkspaceMode === 'activities' && application.scholarship?.id) {
+        return `/provider/programs/${application.scholarship.id}/applications/activities`;
     }
 
     return applicationDetailUrl(application);
@@ -569,22 +525,6 @@ function applicantInitials(application) {
         .toUpperCase();
 }
 
-function programStatusClass(status) {
-    if (status === 'published') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'closed') {
-        return 'bg-slate-200 text-slate-700';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
 function documentIssueCount(application) {
     return (application.documents ?? []).filter((document) => ['pending', 'needs_replacement', 'rejected'].includes(document.status ?? 'pending')).length;
 }
@@ -616,15 +556,6 @@ function applicationDetailUrl(application) {
         : (applicationWaitingForActivity(application) || workflowStage(application) === 'screening' ? 'applicant' : 'decision'));
 
     return `${url.pathname}${url.search}${url.hash}`;
-}
-
-function selectWorkspaceSection(section) {
-    activeWorkspaceSection.value = section;
-    scheduleError.value = '';
-
-    const url = new URL(window.location.href);
-    url.searchParams.set('workspace', section);
-    window.history.replaceState({}, '', url);
 }
 
 function toggleBulkActions() {
@@ -1007,7 +938,6 @@ async function loadProviderData(showLoading = true) {
         programEvents.value = response.data.program_events ?? [];
         applicationPagination.value = response.data.pagination ?? applicationPagination.value;
         queueFilterCounts.value = response.data.filter_counts ?? queueFilterCounts.value;
-        activityWaitingCounts.value = response.data.activity_waiting_counts ?? {};
         totalProviderApplications.value = Number(response.data.stats?.applications ?? 0);
 
         if (!availableBulkAdvanceTargets.value.some((target) => target.value === bulkAdvanceTarget.value)) {
@@ -1126,7 +1056,7 @@ onMounted(loadProviderData);
                         {{ selectedScholarshipContext?.title || 'Program workspace' }}
                     </a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="font-semibold text-slate-950">{{ activeWorkspaceSection === 'schedule' ? 'Activities' : 'Applicants' }}</span>
+                    <span class="font-semibold text-slate-950">{{ focusedWorkspaceCopy?.kicker || (activeWorkspaceSection === 'schedule' ? 'Activities' : 'Applicants') }}</span>
                 </nav>
 
                 <TaskPageHeader
@@ -1146,79 +1076,17 @@ onMounted(loadProviderData);
                     v-if="hasProgramContext"
                     :program-id="selectedScholarshipId"
                     :active="activeWorkspaceSection === 'schedule' ? 'schedule' : 'applicants'"
-                    :can-manage="canManagePrograms"
                 />
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="provider-panel mt-4 p-6 text-sm text-slate-500">
                     Loading applicants...
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
+                <div v-else-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
                     {{ errorMessage }}
                 </div>
 
                 <div v-else class="mt-5 flex flex-col gap-4">
-                    <section v-if="hasProgramContext" class="provider-panel overflow-hidden">
-                        <div class="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="flex min-w-0 items-center gap-3">
-                                <img
-                                    :src="selectedScholarshipContext?.image_url || '/uploads/scholarship-default.jpg'"
-                                    :alt="selectedScholarshipContext?.title || 'Scholarship program'"
-                                    class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
-                                >
-                                <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <p class="truncate text-sm font-bold text-slate-950">{{ selectedScholarshipContext?.title }}</p>
-                                        <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', programStatusClass(selectedScholarshipContext?.status)]">
-                                            {{ statusLabel(selectedScholarshipContext?.status) }}
-                                        </span>
-                                    </div>
-                                    <p class="mt-1 text-xs text-slate-500">
-                                        {{ selectedScholarshipContext?.category || 'Scholarship program' }}
-                                        <span class="mx-1 text-slate-300">/</span>
-                                        Deadline {{ selectedScholarshipContext?.deadline || 'not set' }}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-slate-500">
-                                <span><strong class="text-sm text-slate-950">{{ applications.length }}</strong> applicants</span>
-                                <span><strong class="text-sm text-slate-950">{{ selectedScholarshipContext?.awarded_slots_count ?? 0 }}</strong> selected</span>
-                                <span v-if="Number(selectedScholarshipContext?.slots_available ?? 0) > 0">
-                                    <strong class="text-sm text-slate-950">{{ selectedScholarshipContext.slots_available }}</strong> slots
-                                </span>
-                            </div>
-                        </div>
-
-                    </section>
-
-                    <section
-                        v-if="hasProgramContext && primaryWorkspaceTask"
-                        class="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                    >
-                        <div class="flex min-w-0 items-start gap-3">
-                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
-                                <i class="fa-solid fa-bell text-sm" aria-hidden="true"></i>
-                            </span>
-                            <div class="min-w-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Next task</p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">{{ primaryWorkspaceTask.title }}</p>
-                                <p class="mt-0.5 text-xs leading-5 text-slate-600">
-                                    {{ primaryWorkspaceTask.description }}
-                                    <span v-if="remainingWorkspaceTaskCount" class="font-semibold"> {{ remainingWorkspaceTaskCount }} more task{{ remainingWorkspaceTaskCount === 1 ? '' : 's' }} are marked in the tabs above.</span>
-                                </p>
-                            </div>
-                        </div>
-                        <button
-                            type="button"
-                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                            @click="selectWorkspaceSection(primaryWorkspaceTask.section)"
-                        >
-                            {{ primaryWorkspaceTask.action }}
-                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                        </button>
-                    </section>
-
                     <section v-if="hasProgramContext && activeWorkspaceSection === 'schedule'" class="provider-panel p-4 sm:p-5">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div>
@@ -1228,9 +1096,6 @@ onMounted(loadProviderData);
                                     Add shared details when applicants reach an exam or interview.
                                 </p>
                             </div>
-                            <a :href="`/provider/programs/${selectedScholarshipId}/edit`" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-                                Edit selection plan
-                            </a>
                         </div>
 
                         <p v-if="scheduleError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ scheduleError }}</p>
@@ -1449,7 +1314,7 @@ onMounted(loadProviderData);
                             </label>
                             <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                                 <button
-                                    v-if="hasProgramContext || applicationWorkspaceMode === 'all'"
+                                    v-if="applicationWorkspaceMode === 'all'"
                                     type="button"
                                     :class="[
                                         'rounded-md border px-3 py-2.5 text-sm font-bold transition',
@@ -1648,7 +1513,6 @@ onMounted(loadProviderData);
                     </section>
                 </div>
 
-                <ProviderFooter />
             </div>
         </section>
 

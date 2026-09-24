@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import ProviderFooter from './ProviderFooter.vue';
 import ProviderSidebar from './ProviderSidebar.vue';
 import TaskPageHeader from './TaskPageHeader.vue';
 
@@ -195,7 +194,6 @@ onMounted(loadPrograms);
                     </div>
                 </section>
 
-                <ProviderFooter />
             </div>
         </section>
     </main>

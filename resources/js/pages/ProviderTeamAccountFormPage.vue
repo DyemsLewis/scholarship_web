@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { limitPhoneNumber } from '../support/phoneNumber';
@@ -456,7 +455,6 @@ onMounted(loadAccount);
                     </div>
                 </form>
 
-                <ProviderFooter />
             </div>
         </section>
     </main>

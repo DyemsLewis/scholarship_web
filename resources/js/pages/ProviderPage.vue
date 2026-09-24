@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
@@ -325,7 +324,7 @@ function programActionHref(program) {
     }
 
     if (program.status === 'published' && Number(program.pending_review_applications_count ?? 0) > 0 && canReviewApplications.value) {
-        return `/provider/programs/${program.id}/applications?workspace=applications`;
+        return `/provider/programs/${program.id}/applications/review`;
     }
 
     return `/provider/programs/${program.id}`;
@@ -512,7 +511,6 @@ onMounted(loadProviderData);
 
                 </div>
 
-                <ProviderFooter />
             </div>
         </section>
     </main>

@@ -57,7 +57,7 @@ class ProgramCatalogSeedTest extends TestCase
             ->where('provider_id', $bukasKinabukasan->id)
             ->where('title', 'Bukas Kinabukasan School Essentials Grant')
             ->firstOrFail();
-        $student = $users->firstWhere('email', 'student@scholarship.test');
+        $student = $users->firstWhere('email', 'support@findscholarship.online');
 
         $this->assertSame('approved', $tulayAral->providerProfile?->verification_status);
         $this->assertSame('approved', $bukasKinabukasan->providerProfile?->verification_status);

@@ -25,7 +25,7 @@ class DemoPreparationCommandTest extends TestCase
         $this->assertDatabaseHas('users', ['email' => 'admin@scholarship.test', 'role' => 'admin']);
         $this->assertDatabaseHas('users', ['email' => 'tulayaral@scholarship.test', 'role' => 'provider']);
         $this->assertDatabaseHas('users', ['email' => 'bukasfoundation@scholarship.test', 'role' => 'provider']);
-        $this->assertDatabaseHas('users', ['email' => 'student@scholarship.test', 'role' => 'applicant']);
+        $this->assertDatabaseHas('users', ['email' => 'support@findscholarship.online', 'role' => 'applicant']);
         $this->assertDatabaseHas('scholarships', ['title' => 'Tulay Aral Senior High Support Grant']);
     }
 }

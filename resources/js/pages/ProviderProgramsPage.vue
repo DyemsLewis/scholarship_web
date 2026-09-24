@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
@@ -92,23 +91,6 @@ function programLifecycle(scholarship) {
     return 'published';
 }
 
-function targetApplicantLabel(scholarship) {
-    const levels = String(scholarship.eligible_education_levels ?? '')
-        .split(/\r?\n|,/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-
-    if (levels.length === 0 || levels.length >= 7) {
-        return 'All learners';
-    }
-
-    if (levels.includes('preschool') && levels.includes('elementary') && levels.length === 2) {
-        return 'Preschool / Elementary';
-    }
-
-    return levels.slice(0, 2).map(labelFromKey).join(', ') + (levels.length > 2 ? ` +${levels.length - 2}` : '');
-}
-
 function programDeadlineLabel(deadline) {
     if (!deadline) {
         return 'No deadline';
@@ -158,9 +140,80 @@ function programStatusClass(status) {
 }
 
 function programPrimaryAction(scholarship) {
+    return programTask(scholarship).action;
+}
+
+function programEditAction(scholarship) {
+    if (!canManagePrograms.value || programPrimaryAction(scholarship).href.endsWith('/edit')) {
+        return null;
+    }
+
     return {
-        label: 'View summary',
-        href: `/provider/programs/${scholarship.id}`,
+        label: 'Edit',
+        href: `/provider/programs/${scholarship.id}/edit`,
+    };
+}
+
+function programTask(scholarship) {
+    if (['draft', 'rejected'].includes(scholarship.status)) {
+        return {
+            title: scholarship.status === 'rejected' ? 'Changes requested' : 'Setup incomplete',
+            detail: scholarship.status === 'rejected' ? 'Review the admin feedback.' : 'Continue the program setup.',
+            action: {
+                label: canManagePrograms.value ? 'Continue setup' : 'View status',
+                href: canManagePrograms.value
+                    ? `/provider/programs/${scholarship.id}/edit`
+                    : `/provider/programs/${scholarship.id}`,
+            },
+        };
+    }
+
+    if (scholarship.status === 'pending_review') {
+        return {
+            title: 'Awaiting admin review',
+            detail: 'No provider action is needed.',
+            action: {
+                label: 'View status',
+                href: `/provider/programs/${scholarship.id}`,
+            },
+        };
+    }
+
+    if (scholarship.status === 'closed') {
+        return {
+            title: 'Application cycle closed',
+            detail: 'Applicant records remain available.',
+            action: {
+                label: 'View records',
+                href: `/provider/programs/${scholarship.id}`,
+            },
+        };
+    }
+
+    const reviewCount = Number(scholarship.pending_review_applications_count ?? 0);
+
+    if (canReviewApplications.value && reviewCount > 0) {
+        return {
+            title: `${reviewCount} application${reviewCount === 1 ? '' : 's'} need review`,
+            detail: 'Continue from the review queue.',
+            action: {
+                label: 'Start review',
+                href: `/provider/programs/${scholarship.id}/applications/review`,
+            },
+        };
+    }
+
+    const applicantCount = Number(scholarship.applications_count ?? 0);
+
+    return {
+        title: applicantCount > 0 ? 'Application cycle active' : 'Waiting for applicants',
+        detail: applicantCount > 0
+            ? `${applicantCount} applicant${applicantCount === 1 ? '' : 's'} in this program.`
+            : 'The program is published.',
+        action: {
+            label: 'Open program',
+            href: `/provider/programs/${scholarship.id}`,
+        },
     };
 }
 
@@ -203,16 +256,14 @@ onMounted(loadProviderData);
                 <TaskPageHeader
                     theme="provider"
                     eyebrow="Programs"
-                    title="Scholarship programs"
-                    description="Find a program and continue its current task."
+                    title="Programs"
+                    description="Choose a program to continue."
                     icon="fa-solid fa-graduation-cap"
                     :action-href="canPostScholarships && canManagePrograms ? '/provider/programs/create' : ''"
                     :action-label="canPostScholarships && canManagePrograms ? 'Create program' : ''"
                 >
                     <template #meta>
-                        <span>{{ scholarships.length }} total</span>
-                        <span>{{ lifecycleOptions.find((item) => item.value === 'published')?.count ?? 0 }} published</span>
-                        <span>{{ lifecycleOptions.find((item) => item.value === 'drafts')?.count ?? 0 }} need setup</span>
+                        <span>{{ scholarships.length }} program{{ scholarships.length === 1 ? '' : 's' }}</span>
                     </template>
                 </TaskPageHeader>
 
@@ -278,16 +329,15 @@ onMounted(loadProviderData);
 
                         <template v-else>
                             <div v-if="filteredScholarships.length" class="bg-white">
-                                <div class="hidden grid-cols-[minmax(0,1fr)_7rem_10rem_8rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 lg:grid">
+                                <div class="hidden grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_13rem] items-center gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 lg:grid">
                                     <span>Program</span>
-                                    <span class="text-center">Applicants</span>
-                                    <span class="text-center">Status</span>
-                                    <span class="text-center">Action</span>
+                                    <span>Current step</span>
+                                    <span class="text-center">Actions</span>
                                 </div>
                                 <article
                                     v-for="scholarship in filteredScholarships"
                                     :key="scholarship.id"
-                                    class="grid gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_7rem_10rem_8rem] lg:items-center"
+                                    class="grid gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_13rem] lg:items-center lg:gap-4"
                                 >
                                     <div class="flex min-w-0 items-center gap-3">
                                         <img
@@ -296,43 +346,41 @@ onMounted(loadProviderData);
                                             class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                         >
                                         <div class="min-w-0 flex-1">
-                                            <div class="flex min-w-0 items-start gap-2">
+                                            <div class="flex min-w-0 items-center gap-2">
                                                 <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">
                                                     {{ scholarship.title }}
                                                 </h4>
-                                                <span :class="['inline-flex shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase lg:hidden', programStatusClass(scholarship.status)]">
+                                                <span :class="['inline-flex shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase', programStatusClass(scholarship.status)]">
                                                     {{ programStatusLabel(scholarship.status) }}
                                                 </span>
                                             </div>
                                             <p class="mt-1 truncate text-xs leading-5 text-slate-500">
                                                 {{ scholarship.category || 'Uncategorized' }}
-                                                <span class="mx-1 text-slate-300">&middot;</span>
-                                                {{ targetApplicantLabel(scholarship) }}
-                                                <span v-if="scholarship.deadline" class="hidden sm:inline"><span class="mx-1 text-slate-300">&middot;</span>{{ programDeadlineLabel(scholarship.deadline) }}</span>
+                                                <span v-if="scholarship.deadline"><span class="mx-1 text-slate-300">&middot;</span>Due {{ programDeadlineLabel(scholarship.deadline) }}</span>
                                             </p>
                                         </div>
                                     </div>
-                                    <div class="flex items-center justify-between gap-3 lg:block lg:text-center">
-                                        <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Applicants</span>
-                                        <span class="text-sm font-bold text-slate-950">
-                                            {{ canReviewApplications ? Number(scholarship.applications_count ?? 0) : '-' }}
-                                        </span>
+                                    <div class="min-w-0 rounded-md bg-slate-50 px-3 py-2 lg:bg-transparent lg:px-0 lg:py-0">
+                                        <p class="text-sm font-bold text-slate-800">{{ programTask(scholarship).title }}</p>
+                                        <p class="mt-0.5 truncate text-xs text-slate-500">{{ programTask(scholarship).detail }}</p>
                                     </div>
-                                    <div class="hidden min-w-0 flex-col items-center gap-1.5 text-center lg:flex">
-                                        <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', programStatusClass(scholarship.status)]">
-                                            {{ programStatusLabel(scholarship.status) }}
-                                        </span>
-                                        <span v-if="canReviewApplications && Number(scholarship.pending_review_applications_count ?? 0) > 0" class="text-[11px] font-bold text-amber-700">
-                                            {{ scholarship.pending_review_applications_count }} to review
-                                        </span>
+                                    <div class="grid grid-cols-1 gap-2 sm:ml-14 sm:flex sm:w-fit lg:ml-0 lg:w-full lg:justify-center">
+                                        <a
+                                            v-if="programEditAction(scholarship)"
+                                            :href="programEditAction(scholarship).href"
+                                            class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                        >
+                                            <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
+                                            {{ programEditAction(scholarship).label }}
+                                        </a>
+                                        <a
+                                            :href="programPrimaryAction(scholarship).href"
+                                            class="inline-flex shrink-0 items-center justify-center rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
+                                        >
+                                            {{ programPrimaryAction(scholarship).label }}
+                                            <i class="fa-solid fa-arrow-right ml-2 text-[10px]" aria-hidden="true"></i>
+                                        </a>
                                     </div>
-                                    <a
-                                        :href="programPrimaryAction(scholarship).href"
-                                        class="inline-flex w-full shrink-0 items-center justify-center rounded-md bg-slate-950 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800 sm:ml-14 sm:w-fit lg:ml-0 lg:justify-self-center"
-                                    >
-                                        {{ programPrimaryAction(scholarship).label }}
-                                        <i class="fa-solid fa-arrow-right ml-2 text-[10px]" aria-hidden="true"></i>
-                                    </a>
                                 </article>
                             </div>
 
@@ -351,7 +399,6 @@ onMounted(loadProviderData);
                     </section>
                 </div>
 
-                <ProviderFooter />
             </div>
         </section>
     </main>

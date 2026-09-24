@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
@@ -335,7 +334,6 @@ onMounted(loadAdminData);
                     </div>
                 </section>
 
-                <AdminFooter />
             </div>
         </section>
     </main>

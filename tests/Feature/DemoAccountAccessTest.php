@@ -102,7 +102,7 @@ class DemoAccountAccessTest extends TestCase
         }
 
         $applicant = $this->loginAs(
-            email: env('STUDENT_EMAIL', 'student@scholarship.test'),
+            email: env('STUDENT_EMAIL', 'support@findscholarship.online'),
             password: env('STUDENT_PASSWORD', $defaultPassword),
             role: 'applicant',
             redirect: '/dashboard',

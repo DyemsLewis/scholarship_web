@@ -3,8 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import ProgramBenefitsEditor from '../components/ProgramBenefitsEditor.vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
-import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
@@ -90,12 +88,12 @@ const currentLocalDateTime = new Date(Date.now() - new Date().getTimezoneOffset(
     .toISOString();
 const todayDate = currentLocalDateTime.slice(0, 10);
 const formSections = [
-    { id: 'details', label: 'Overview', help: 'Set the program identity, public contact, and main location.', icon: 'fa-solid fa-file-lines' },
-    { id: 'support', label: 'Benefits & dates', help: 'Define the support, recipient slots, and application timeline.', icon: 'fa-solid fa-gift' },
-    { id: 'eligibility', label: 'Eligible applicants', help: 'Set who can apply and how the portal checks profile fit.', icon: 'fa-solid fa-user-check' },
-    { id: 'application', label: 'Application files', help: 'Choose the initial files and originals applicants may need to present later.', icon: 'fa-solid fa-folder-open' },
-    { id: 'selection', label: 'Selection flow', help: 'Arrange pre-screening, later provider stages, and review scoring.', icon: 'fa-solid fa-route' },
-    { id: 'review', label: 'Review & submit', help: 'Preview the listing, save a draft, or send it for admin review.', icon: 'fa-solid fa-clipboard-check' },
+    { id: 'details', label: 'Overview', help: 'Set the program identity, public contact, and main location.' },
+    { id: 'support', label: 'Benefits & dates', help: 'Define the support, recipient slots, and application timeline.' },
+    { id: 'eligibility', label: 'Eligible applicants', help: 'Set who can apply and how the portal checks profile fit.' },
+    { id: 'application', label: 'Application files', help: 'Choose the initial files and originals applicants may need to present later.' },
+    { id: 'selection', label: 'Selection flow', help: 'Arrange pre-screening, later provider stages, and review scoring.' },
+    { id: 'review', label: 'Review & submit', help: 'Preview the listing, save a draft, or send it for admin review.' },
 ];
 const formSubsections = {
     eligibility: [
@@ -2706,20 +2704,19 @@ onBeforeUnmount(() => {
             <div class="provider-container provider-container-narrow">
                 <TaskPageHeader
                     theme="provider"
-                    :eyebrow="isEditMode ? 'Edit program' : 'New program'"
-                    :title="scholarshipForm.title || (isEditMode ? 'Edit scholarship program' : 'Create scholarship program')"
-                    :description="isEditMode ? 'Update one program section at a time without changing its existing applicant records.' : 'Build the scholarship in focused sections, then review it before publishing.'"
+                    :eyebrow="isEditMode ? 'Program configuration' : 'New program'"
+                    :title="isEditMode ? 'Edit program' : 'Create scholarship program'"
+                    :description="isEditMode ? 'Update one setup section at a time. Applicant records are managed in a separate workspace.' : 'Complete one section at a time, then review before submitting.'"
                     icon="fa-solid fa-pen-to-square"
                     secondary-href="/provider/programs"
                     secondary-label="Back to programs"
                 >
                     <template #meta>
-                        <span>Current section: {{ activeFormSectionMeta.label }}</span>
-                        <span>{{ completedProgramReadinessCount }} of {{ programReadinessItems.length }} required areas complete</span>
+                        <span v-if="isEditMode">{{ scholarshipForm.title || 'Untitled program' }}</span>
+                        <span>Section {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}</span>
+                        <span>{{ completedProgramReadinessCount }} of {{ programReadinessItems.length }} checks ready</span>
                     </template>
                 </TaskPageHeader>
-
-                <ProviderProgramNav v-if="isEditMode" :program-id="scholarshipId" active="settings" can-manage />
 
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
                     Loading scholarship form...
@@ -2741,21 +2738,6 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div
-                        v-if="selectionPlanLocked"
-                        class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 shadow-sm"
-                    >
-                        <div class="flex items-start gap-3">
-                            <i class="fa-solid fa-shield-halved mt-0.5 text-amber-700" aria-hidden="true"></i>
-                            <div>
-                                <p class="font-bold text-slate-950">Existing applicant process protected</p>
-                                <p class="mt-1 leading-5">
-                                    {{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already {{ existingApplicationCount === 1 ? 'uses' : 'use' }} this flow. Stages are locked, but schedules and handoff details remain editable. Duplicate the program to change its flow.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div
                         v-if="!isEditMode && draftSavedAt"
                         class="flex flex-col gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
                     >
@@ -2774,23 +2756,35 @@ onBeforeUnmount(() => {
                         novalidate
                         @submit.prevent="saveScholarship"
                     >
-                        <div class="overflow-hidden rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
-                            <nav class="flex gap-1 overflow-x-auto" aria-label="Program form sections">
+                        <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+                            <label class="block sm:hidden">
+                                <span class="sr-only">Program setup section</span>
+                                <select
+                                    :value="activeFormSection"
+                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                                    @change="openFormSection($event.target.value)"
+                                >
+                                    <option v-for="(section, index) in formSections" :key="section.id" :value="section.id">
+                                        {{ index + 1 }}. {{ section.label }}
+                                    </option>
+                                </select>
+                            </label>
+                            <nav class="hidden gap-1 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" aria-label="Program form sections">
                                 <button
-                                    v-for="section in formSections"
+                                    v-for="(section, index) in formSections"
                                     :key="section.id"
                                     type="button"
                                     :aria-current="activeFormSection === section.id ? 'page' : undefined"
                                     :class="[
-                                        'flex min-w-[10rem] flex-1 items-center justify-center gap-2 rounded-md px-3 py-3 text-center text-sm font-bold transition',
+                                        'flex min-w-0 items-center gap-2 rounded-md px-3 py-2.5 text-left text-xs font-bold transition',
                                         activeFormSection === section.id
                                             ? 'bg-slate-950 text-white shadow-sm'
                                             : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
                                     ]"
                                     @click="openFormSection(section.id)"
                                 >
-                                    <i :class="[section.icon, activeFormSection === section.id ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
-                                    <span>{{ section.label }}</span>
+                                    <span :class="['grid h-6 w-6 shrink-0 place-items-center rounded text-[10px]', activeFormSection === section.id ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-500']">{{ index + 1 }}</span>
+                                    <span class="truncate">{{ section.label }}</span>
                                 </button>
                             </nav>
                         </div>
@@ -2799,7 +2793,7 @@ onBeforeUnmount(() => {
                             <div class="border-b border-slate-200 px-5 py-4 sm:px-7">
                                 <div class="flex items-start justify-between gap-4">
                                     <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Program editor</p>
+                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Section {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}</p>
                                         <h3 class="mt-1 text-xl font-bold text-slate-950">{{ activeFormSectionMeta.label }}</h3>
                                     </div>
                                     <button type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950" @click="showFormGuidance = !showFormGuidance">
@@ -3452,7 +3446,7 @@ onBeforeUnmount(() => {
                                     </div>
                                     <div v-else class="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
                                         <i class="fa-solid fa-lock mt-1 text-slate-500" aria-hidden="true"></i>
-                                        <p>The stage order is protected because applicants already use this process. Activity dates can still be published from the workspace.</p>
+                                        <p>{{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already {{ existingApplicationCount === 1 ? 'uses' : 'use' }} this flow, so its stage order is protected. Duplicate the program to use a different flow.</p>
                                     </div>
 
                                     <div class="mt-5 flex items-center justify-between gap-3">
@@ -3527,7 +3521,7 @@ onBeforeUnmount(() => {
                                     </div>
                                     <a
                                         v-if="isEditMode && hasSchedulableSelectionStage"
-                                        :href="`/provider/programs/${scholarshipId}/applications?workspace=schedule`"
+                                        :href="`/provider/programs/${scholarshipId}/applications/activities`"
                                         class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
                                     >
                                         Open schedule workspace
@@ -5040,7 +5034,6 @@ onBeforeUnmount(() => {
                     </form>
                 </div>
 
-                <ProviderFooter />
             </div>
         </section>
 

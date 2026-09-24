@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Mail\PortalNotificationMail;
 use App\Models\ActivityLog;
 use App\Models\PortalNotification;
+use App\Support\EmailAddressPolicy;
 use Illuminate\Contracts\Events\ShouldHandleEventsAfterCommit;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
@@ -17,6 +18,12 @@ class PortalNotificationObserver implements ShouldHandleEventsAfterCommit
         $user = $notification->user;
 
         if (! $user?->email || ! $this->shouldSendEmail($notification)) {
+            return;
+        }
+
+        if (! app()->runningUnitTests()
+            && config('mail.block_reserved_domains')
+            && ! EmailAddressPolicy::canReceiveExternalMail($user->email)) {
             return;
         }
 

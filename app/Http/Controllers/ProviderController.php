@@ -139,28 +139,6 @@ class ProviderController extends Controller
         return view('provider-programs');
     }
 
-    public function programEditDirectory(Request $request): View|RedirectResponse
-    {
-        if (! $request->user()) {
-            return redirect()->route('login');
-        }
-
-        abort_unless($request->user()->isProvider(), 403);
-
-        return view('provider-program-edit-directory');
-    }
-
-    public function programManageDirectory(Request $request): View|RedirectResponse
-    {
-        if (! $request->user()) {
-            return redirect()->route('login');
-        }
-
-        abort_unless($request->user()->isProvider(), 403);
-
-        return view('provider-program-manage-directory');
-    }
-
     public function recipientMonitoringDirectory(Request $request): View|RedirectResponse
     {
         if (! $request->user()) {
@@ -225,6 +203,30 @@ class ProviderController extends Controller
 
         abort_unless($request->user()->isProvider(), 403);
 
+        if ($request->filled('scholarship_id')) {
+            $scholarshipId = filter_var($request->query('scholarship_id'), FILTER_VALIDATE_INT);
+            abort_unless($scholarshipId !== false && $scholarshipId > 0, 404);
+
+            $scholarship = Scholarship::query()->findOrFail($scholarshipId);
+            abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+
+            $workspace = match (true) {
+                $request->routeIs('provider.applications.activities') => 'activities',
+                $request->routeIs('provider.applications.results') => 'results',
+                $request->routeIs('provider.applications.decisions') => 'decisions',
+                $request->routeIs('provider.applications.recipients') => 'recipients',
+                $request->routeIs('provider.applications.waitlist-directory') => 'waitlist',
+                in_array($request->query('filter'), ['waiting_activity', 'active_stages'], true) => 'activities',
+                in_array($request->query('filter'), ['ready_result', 'formal_application'], true) => 'results',
+                $request->query('filter') === 'final_decision' => 'decisions',
+                $request->query('filter') === 'selected' => 'recipients',
+                $request->query('filter') === 'waitlisted' => 'waitlist',
+                default => 'review',
+            };
+
+            return redirect()->route("provider.programs.applications.{$workspace}", $scholarship);
+        }
+
         return view('provider-applications');
     }
 
@@ -236,6 +238,10 @@ class ProviderController extends Controller
 
         abort_unless($request->user()->isProvider(), 403);
         abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+
+        if ($request->routeIs('provider.programs.applications')) {
+            return redirect()->route('provider.programs.applications.review', $scholarship);
+        }
 
         return view('provider-applications', [
             'scholarship' => $scholarship,
@@ -6846,9 +6852,11 @@ class ProviderController extends Controller
             'stage_label' => $reviewedStage !== null
                 ? ScholarshipSelectionPlan::label($reviewedStage)
                 : 'Review',
-            'list_url' => route('provider.applications', [
-                'scholarship_id' => $application->scholarship_id,
-            ], false),
+            'list_url' => route(match ($reviewedStage) {
+                'exam', 'interview', 'formal_application' => 'provider.programs.applications.results',
+                'decision' => 'provider.programs.applications.decisions',
+                default => 'provider.programs.applications.review',
+            }, $application->scholarship_id, false),
             'next_application' => $nextApplication ? [
                 'id' => $nextApplication->id,
                 'applicant_name' => $nextApplication->applicant?->name ?: "Application #{$nextApplication->id}",

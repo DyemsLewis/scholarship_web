@@ -1,7 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
@@ -187,7 +186,6 @@ onMounted(loadTeam);
                     </div>
                 </section>
 
-                <ProviderFooter />
             </div>
         </section>
     </main>

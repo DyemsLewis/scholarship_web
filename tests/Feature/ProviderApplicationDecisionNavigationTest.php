@@ -43,7 +43,7 @@ class ProviderApplicationDecisionNavigationTest extends TestCase
             ->assertJsonPath('review_navigation.next_application.id', $next->id)
             ->assertJsonPath('review_navigation.next_application.applicant_name', $next->applicant->name)
             ->assertJsonPath('review_navigation.next_application.url', "/provider/applications/{$next->id}")
-            ->assertJsonPath('review_navigation.list_url', "/provider/applications?scholarship_id={$program->id}");
+            ->assertJsonPath('review_navigation.list_url', "/provider/programs/{$program->id}/applications/review");
     }
 
     public function test_application_detail_returns_neighboring_records_only_from_the_same_program(): void

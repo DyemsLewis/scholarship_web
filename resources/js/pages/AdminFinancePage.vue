@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
@@ -293,7 +292,6 @@ onMounted(() => loadFinance());
                     </div>
                 </section>
 
-                <AdminFooter />
             </div>
         </section>
 

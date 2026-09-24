@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
@@ -1184,7 +1183,6 @@ onMounted(loadScholarship);
                     </nav>
                 </div>
 
-                <AdminFooter />
             </div>
         </section>
 

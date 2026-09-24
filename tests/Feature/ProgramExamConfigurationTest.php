@@ -66,7 +66,7 @@ class ProgramExamConfigurationTest extends TestCase
     {
         $this->seed();
 
-        $applicant = User::query()->where('email', 'student@scholarship.test')->firstOrFail();
+        $applicant = User::query()->where('email', 'support@findscholarship.online')->firstOrFail();
         $scholarship = Scholarship::query()->where('title', 'Bukas Kinabukasan STEM Pathways Grant')->firstOrFail();
         $application = ScholarshipApplication::create([
             'scholarship_id' => $scholarship->id,

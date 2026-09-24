@@ -19,10 +19,8 @@ const navLinks = computed(() => [
         label: 'Programs',
         icon: 'fa-solid fa-graduation-cap',
         children: [
-            { href: '/provider/programs', label: 'Program overview', exact: true },
+            { href: '/provider/programs', label: 'All programs', exact: true },
             ...(canManagePrograms ? [{ href: '/provider/programs/create', label: 'Create program', exact: true }] : []),
-            ...(canManagePrograms ? [{ href: '/provider/programs/edit', label: 'Edit programs', exact: true }] : []),
-            { href: '/provider/programs/manage', label: 'Manage programs', exact: true },
         ],
     }] : []),
     ...(canReviewApplications ? [{

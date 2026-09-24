@@ -16,6 +16,8 @@ return [
 
     'default' => env('MAIL_MAILER', 'log'),
 
+    'block_reserved_domains' => env('MAIL_BLOCK_RESERVED_DOMAINS', true),
+
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations

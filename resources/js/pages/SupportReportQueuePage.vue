@@ -1,15 +1,12 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
-import AdminFooter from '../components/AdminFooter.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
-import ProviderFooter from '../components/ProviderFooter.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isAdmin = window.location.pathname.startsWith('/admin');
 const Sidebar = isAdmin ? AdminSidebar : ProviderSidebar;
-const Footer = isAdmin ? AdminFooter : ProviderFooter;
 const basePath = isAdmin ? '/admin/reports' : '/provider/reports';
 const isLoading = ref(true);
 const updatingId = ref(null);
@@ -410,7 +407,6 @@ onMounted(() => loadReports());
                     </div>
                 </section>
 
-                <component :is="Footer" />
             </div>
         </section>
     </main>
