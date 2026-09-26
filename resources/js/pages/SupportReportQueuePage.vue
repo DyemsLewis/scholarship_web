@@ -322,7 +322,7 @@ onMounted(() => loadReports());
                     </p>
 
                     <div v-else-if="reports.length" :class="isAdmin ? 'divide-y divide-slate-200 bg-white' : 'bg-white'">
-                        <div v-if="!isAdmin" class="hidden grid-cols-[minmax(0,1fr)_16rem_8rem] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 lg:grid">
+                        <div v-if="!isAdmin" class="portal-record-head hidden grid-cols-[minmax(0,1fr)_16rem_8rem] items-center gap-3 lg:grid">
                             <span>Report</span>
                             <span>Status</span>
                             <span class="text-center">Action</span>
@@ -331,7 +331,7 @@ onMounted(() => loadReports());
                             v-for="report in reports"
                             :key="report.id"
                             :class="[
-                                'grid gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:items-center',
+                                'portal-record-row grid gap-3 lg:items-center',
                                 isAdmin ? 'lg:grid-cols-[minmax(0,1fr)_13rem_6rem]' : 'lg:grid-cols-[minmax(0,1fr)_16rem_8rem]',
                             ]"
                         >

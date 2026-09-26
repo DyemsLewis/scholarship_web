@@ -610,8 +610,8 @@ onMounted(loadMonitoring);
                                 </div>
                                 <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ overviewWorkItems.length }} item{{ overviewWorkItems.length === 1 ? '' : 's' }}</span>
                             </header>
-                            <div class="overflow-x-auto">
-                                <table class="w-full min-w-[760px] text-left text-sm">
+                            <div class="portal-table-scroll">
+                                <table class="portal-data-table min-w-[760px]">
                                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
                                         <tr>
                                             <th class="px-5 py-3">Work item</th>
@@ -644,8 +644,8 @@ onMounted(loadMonitoring);
 
                     <template v-else-if="activeTab === 'monitoring'">
                         <section v-if="!cycles.length" class="provider-panel mt-3 overflow-hidden">
-                            <div class="overflow-x-auto">
-                                <table class="w-full min-w-[760px] text-left text-sm">
+                            <div class="portal-table-scroll">
+                                <table class="portal-data-table min-w-[760px]">
                                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
                                         <tr>
                                             <th class="px-5 py-3">Monitoring period</th>
@@ -710,8 +710,8 @@ onMounted(loadMonitoring);
                                     </div>
                                     <p v-if="cycle.instructions" class="border-t border-slate-200 px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Recipient instructions:</strong> {{ cycle.instructions }}</p>
 
-                                    <div class="overflow-x-auto border-t border-slate-200">
-                                        <table class="w-full min-w-[820px] text-left text-sm">
+                                    <div class="portal-table-scroll border-t border-slate-200">
+                                        <table class="portal-data-table min-w-[820px]">
                                             <colgroup>
                                                 <col class="w-[28%]">
                                                 <col class="w-[29%]">
@@ -779,8 +779,8 @@ onMounted(loadMonitoring);
 
                     <template v-else-if="activeTab === 'releases'">
                         <section v-if="!benefitReleases.length" class="provider-panel mt-3 overflow-hidden">
-                            <div class="overflow-x-auto">
-                                <table class="w-full min-w-[760px] text-left text-sm">
+                            <div class="portal-table-scroll">
+                                <table class="portal-data-table min-w-[760px]">
                                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
                                         <tr>
                                             <th class="px-5 py-3">Benefit release</th>
@@ -826,8 +826,8 @@ onMounted(loadMonitoring);
                                         <div class="bg-slate-50 px-5 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Document check</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.requires_original_verification ? 'Originals required' : 'No original check at release' }}</p><p class="mt-0.5 text-xs text-slate-500">Receipt evidence is recorded per recipient.</p></div>
                                     </div>
                                     <p v-if="release.instructions" class="border-t border-slate-200 px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Instructions:</strong> {{ release.instructions }}</p>
-                                    <div class="overflow-x-auto border-t border-slate-200">
-                                        <table class="w-full min-w-[820px] text-left text-sm">
+                                    <div class="portal-table-scroll border-t border-slate-200">
+                                        <table class="portal-data-table min-w-[820px]">
                                             <colgroup>
                                                 <col class="w-[28%]">
                                                 <col class="w-[23%]">
@@ -893,8 +893,8 @@ onMounted(loadMonitoring);
                                 <span class="w-fit rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{{ renewalReadyCount }} ready for renewal</span>
                             </header>
 
-                            <div class="overflow-x-auto">
-                                <table class="w-full min-w-[1080px] text-left text-sm">
+                            <div class="portal-table-scroll">
+                                <table class="portal-data-table min-w-[1080px]">
                                     <colgroup>
                                         <col class="w-[24%]">
                                         <col class="w-[20%]">

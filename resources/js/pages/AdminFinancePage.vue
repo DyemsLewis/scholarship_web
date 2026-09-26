@@ -243,8 +243,8 @@ onMounted(() => loadFinance());
                         <p class="mt-3 text-sm font-bold text-slate-900">No receipts found</p>
                         <p class="mt-1 text-sm text-slate-500">Try another period or search term.</p>
                     </div>
-                    <div v-else class="overflow-x-auto">
-                        <table class="min-w-[800px] table-fixed divide-y divide-slate-200 text-left text-sm">
+                    <div v-else class="portal-table-scroll">
+                        <table class="portal-data-table min-w-[800px] table-fixed">
                             <colgroup>
                                 <col class="w-72">
                                 <col>

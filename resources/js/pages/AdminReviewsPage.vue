@@ -415,9 +415,9 @@ onMounted(loadReviewData);
                     </section>
 
                     <section v-if="activeReviewType === 'providers'" class="admin-panel overflow-hidden">
-                        <div v-if="filteredProviders.length === 0" class="p-6">
-                            <p class="text-sm font-bold text-slate-900">No provider reviews in this view</p>
-                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                        <div v-if="filteredProviders.length === 0" class="portal-table-empty">
+                            <p class="portal-table-empty-title">No provider reviews in this view</p>
+                            <p class="portal-table-empty-copy">
                                 New provider registrations appear here after they submit their organization details and verification proof.
                             </p>
                         </div>
@@ -426,7 +426,7 @@ onMounted(loadReviewData);
                             <article
                                 v-for="provider in visibleReviewItems"
                                 :key="provider.id"
-                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
+                                class="portal-record-row flex items-center gap-3"
                             >
                                 <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
                                     {{ providerInitials(provider) }}
@@ -463,9 +463,9 @@ onMounted(loadReviewData);
                             Loading {{ statusLabel(selectedProgramStatus).toLowerCase() }} programs...
                         </div>
 
-                        <div v-else-if="filteredPrograms.length === 0" class="p-6">
-                            <p class="text-sm font-bold text-slate-900">No {{ statusLabel(selectedProgramStatus).toLowerCase() }} programs</p>
-                            <p class="mt-1 text-sm leading-6 text-slate-500">
+                        <div v-else-if="filteredPrograms.length === 0" class="portal-table-empty">
+                            <p class="portal-table-empty-title">No {{ statusLabel(selectedProgramStatus).toLowerCase() }} programs</p>
+                            <p class="portal-table-empty-copy">
                                 Choose another status to review programs at a different stage.
                             </p>
                         </div>
@@ -475,7 +475,7 @@ onMounted(loadReviewData);
                                 v-for="scholarship in visibleReviewItems"
                                 :id="`program-${scholarship.id}`"
                                 :key="scholarship.id"
-                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-2.5 last:border-b-0 sm:px-4"
+                                class="portal-record-row flex items-center gap-3"
                             >
                                 <img
                                     :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
@@ -524,7 +524,7 @@ onMounted(loadReviewData);
                             <article
                                 v-for="applicant in visibleReviewItems"
                                 :key="applicant.id"
-                                class="flex items-center gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4"
+                                class="portal-record-row flex items-center gap-3"
                             >
                                 <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
                                     {{ applicantInitials(applicant) }}

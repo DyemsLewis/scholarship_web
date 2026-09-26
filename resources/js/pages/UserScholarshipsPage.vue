@@ -556,6 +556,16 @@ function coverageLabel(scholarship) {
         .join(', ');
 }
 
+function availableSlotsLabel(scholarship) {
+    const slots = scholarship?.slots_available;
+
+    if (slots === null || slots === undefined || slots === '') {
+        return 'Not specified';
+    }
+
+    return `${slots} planned`;
+}
+
 function documentReadinessLabel(scholarship) {
     const readiness = scholarship?.prepared_documents;
     const required = Number(readiness?.required ?? 0);
@@ -1088,21 +1098,45 @@ onBeforeUnmount(() => {
                                         </p>
                                     </div>
 
-                                    <div class="mt-4 flex items-start gap-3">
-                                        <span class="student-icon-badge">
-                                            <i class="fa-solid fa-user-graduate text-xs"></i>
-                                        </span>
-                                        <div class="min-w-0">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                                Intended for
-                                            </p>
-                                            <p class="mt-1 truncate text-sm font-bold text-slate-900">
-                                                {{ targetApplicantLabel(scholarship) }}
-                                            </p>
+                                    <p
+                                        v-if="scholarship.description"
+                                        class="mt-3 line-clamp-2 max-w-5xl text-sm leading-6 text-slate-600"
+                                    >
+                                        {{ scholarship.description }}
+                                    </p>
+
+                                    <div class="mt-4 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+                                        <div class="flex min-w-0 items-start gap-2.5 bg-slate-50 p-3">
+                                            <i class="fa-solid fa-user-graduate mt-1 w-4 shrink-0 text-center text-amber-700" aria-hidden="true"></i>
+                                            <div class="min-w-0">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Eligible learners</p>
+                                                <p class="mt-1 truncate text-sm font-bold text-slate-900">{{ targetApplicantLabel(scholarship) }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex min-w-0 items-start gap-2.5 bg-slate-50 p-3">
+                                            <i class="fa-solid fa-chart-line mt-1 w-4 shrink-0 text-center text-amber-700" aria-hidden="true"></i>
+                                            <div class="min-w-0">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Academic rule</p>
+                                                <p class="mt-1 truncate text-sm font-bold text-slate-900">{{ academicRequirementLabel(scholarship) }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex min-w-0 items-start gap-2.5 bg-slate-50 p-3">
+                                            <i class="fa-solid fa-location-dot mt-1 w-4 shrink-0 text-center text-amber-700" aria-hidden="true"></i>
+                                            <div class="min-w-0">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Coverage</p>
+                                                <p :title="coverageLabel(scholarship)" class="mt-1 truncate text-sm font-bold text-slate-900">{{ coverageLabel(scholarship) }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex min-w-0 items-start gap-2.5 bg-slate-50 p-3">
+                                            <i class="fa-solid fa-users mt-1 w-4 shrink-0 text-center text-amber-700" aria-hidden="true"></i>
+                                            <div class="min-w-0">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Planned recipients</p>
+                                                <p class="mt-1 truncate text-sm font-bold text-slate-900">{{ availableSlotsLabel(scholarship) }}</p>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div class="mt-4 flex h-24 items-center gap-3 rounded-md border border-amber-100 bg-amber-50 p-3">
+                                    <div class="mt-4 flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 p-3.5">
                                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-200 text-amber-900">
                                             <i :class="[primaryBenefitIcon(scholarship), 'text-sm']"></i>
                                         </span>
@@ -1118,10 +1152,10 @@ onBeforeUnmount(() => {
                                                     +{{ remainingBenefitCount(scholarship) }} more
                                                 </span>
                                             </div>
-                                            <p class="mt-1 truncate text-sm font-bold text-slate-950">
+                                            <p class="mt-1 line-clamp-1 text-sm font-bold text-slate-950">
                                                 {{ primaryBenefitTitle(scholarship) }}
                                             </p>
-                                            <p class="mt-1 truncate text-xs font-semibold text-slate-600">
+                                            <p class="mt-1 line-clamp-1 text-xs font-semibold text-slate-600">
                                                 {{ primaryBenefitDetails(scholarship) }}
                                             </p>
                                         </div>

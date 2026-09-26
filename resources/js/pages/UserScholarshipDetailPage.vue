@@ -1097,6 +1097,7 @@ onMounted(loadScholarship);
                                 <p class="mt-2 text-xs leading-5 text-slate-500">{{ criterion.comparison || criterion.note }}</p>
                             </div>
                         </div>
+
                     </div>
 
                     <footer class="flex items-center justify-between gap-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">

@@ -42,9 +42,9 @@ function scoreLabel(value) {
                     <i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>
                 </span>
                 <div class="min-w-0">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Pre-screening handoff record</p>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Pre-screening decision record</p>
                     <h3 class="mt-1 text-base font-bold">{{ record.decision?.label || 'Passed pre-screening' }}</h3>
-                    <p class="mt-0.5 text-xs text-slate-300">{{ record.record_id }} &middot; Snapshot version {{ record.snapshot_version }}</p>
+                    <p class="mt-0.5 text-xs text-slate-300">Record {{ record.record_id }}</p>
                 </div>
             </div>
             <div class="shrink-0 sm:text-right">
@@ -109,7 +109,7 @@ function scoreLabel(value) {
                 <p class="mt-2 text-sm leading-6 text-slate-700">{{ record.decision?.note }}</p>
 
                 <div class="mt-4 border-t border-slate-200 pt-4">
-                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Next configured stage</p>
+                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">What came next</p>
                     <p class="mt-1 text-sm font-bold text-slate-950">{{ record.next_step?.label }}</p>
                     <p v-if="record.next_step?.mode_label" class="mt-1 text-xs font-semibold text-slate-600">{{ record.next_step.mode_label }}</p>
                     <p class="mt-2 text-xs leading-5 text-slate-600">{{ record.next_step?.instructions }}</p>

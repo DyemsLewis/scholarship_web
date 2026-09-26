@@ -172,6 +172,9 @@ class DemoRecipientAgreementSeeder extends Seeder
             'other_contract_terms' => 'Recipients attend orientation and provide one short academic progress update each semester.',
             'recipient_agreement' => [
                 'commitment_type' => 'reporting',
+                'responsibilities' => 'Remain enrolled, attend the recipient orientation, and submit one academic progress update at the end of each semester.',
+                'required_evidence' => 'Official report card or certified grade record for each semester and a signed attendance record for orientation.',
+                'release_conditions' => 'The first allowance is prepared after identity and enrollment verification. Any later release requires the recipient agreement to remain active and all due monitoring records to be reviewed.',
                 'duration' => 'One academic progress update at the end of each semester during the support period.',
                 'noncompliance_consequence' => 'The provider contacts the recipient and reviews the circumstances before holding any unreleased support.',
                 'exit_or_exception_process' => 'The recipient may contact the Community Scholarship Desk to report academic, health, transfer, or family circumstances and request an adjusted arrangement.',

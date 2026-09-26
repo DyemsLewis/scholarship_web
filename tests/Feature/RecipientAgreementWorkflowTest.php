@@ -31,13 +31,16 @@ class RecipientAgreementWorkflowTest extends TestCase
             ->assertJsonPath('application.recipient_agreement.snapshot.award_amount', '18000.00');
 
         $version = $selection->json('application.recipient_agreement.version');
-        $this->assertStringStartsWith('recipient-agreement-v1-', $version);
+        $this->assertStringStartsWith('recipient-agreement-v2-', $version);
 
         $this->actingAs($applicant)
             ->getJson("/dashboard/applications/{$application->id}/data")
             ->assertOk()
             ->assertJsonPath('application.recipient_agreement.status', 'pending')
-            ->assertJsonPath('application.recipient_agreement.snapshot.benefits.0.title', 'Learning allowance');
+            ->assertJsonPath('application.recipient_agreement.snapshot.benefits.0.title', 'Learning allowance')
+            ->assertJsonPath('application.recipient_agreement.snapshot.recipient_expectation.required_evidence', 'Official report card at the end of each semester.')
+            ->assertJsonPath('application.recipient_agreement.snapshot.recipient_expectation.release_conditions', 'The first allowance is released after identity and enrollment verification.')
+            ->assertJsonPath('application.recipient_agreement.snapshot.provider_contact.email', 'support@findscholarship.online');
 
         $this->actingAs($applicant)
             ->patchJson("/dashboard/applications/{$application->id}/response", [
@@ -104,11 +107,17 @@ class RecipientAgreementWorkflowTest extends TestCase
             'support_ends_at' => now()->addYear()->toDateString(),
             'recipient_agreement' => [
                 'commitment_type' => 'reporting',
+                'responsibilities' => 'Remain enrolled and submit one academic progress update each semester.',
+                'required_evidence' => 'Official report card at the end of each semester.',
+                'release_conditions' => 'The first allowance is released after identity and enrollment verification.',
                 'duration' => 'Submit one academic update each semester.',
                 'noncompliance_consequence' => 'Future support may be held after provider review.',
                 'exit_or_exception_process' => 'Contact the provider to explain exceptional circumstances.',
             ],
             'renewal_policy' => 'Renewal depends on the disclosed academic requirement.',
+            'contact_email' => 'support@findscholarship.online',
+            'contact_number' => '09171234567',
+            'contact_person' => 'Scholarship Support Desk',
             'status' => 'published',
         ]);
         $scholarship->benefits()->create([

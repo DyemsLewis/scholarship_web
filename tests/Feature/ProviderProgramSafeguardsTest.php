@@ -190,6 +190,9 @@ class ProviderProgramSafeguardsTest extends TestCase
         $provider = $this->verifiedProvider();
         $agreement = [
             'commitment_type' => 'service',
+            'responsibilities' => 'Complete one community learning activity and attend the closing orientation.',
+            'required_evidence' => 'Signed activity attendance and provider completion confirmation.',
+            'release_conditions' => 'Support is released after enrollment verification; later support requires the listed activity record.',
             'duration' => 'One community activity before the end of the school year.',
             'noncompliance_consequence' => 'The provider reviews the circumstances before deciding whether remaining support continues.',
             'exit_or_exception_process' => 'The recipient may request an adjustment for health, family, or academic circumstances.',
@@ -209,6 +212,30 @@ class ProviderProgramSafeguardsTest extends TestCase
         $scholarship = Scholarship::findOrFail($response->json('scholarship.id'));
 
         $this->assertSame($agreement, $scholarship->recipient_agreement);
+    }
+
+    public function test_complete_recipient_terms_are_required_before_program_submission(): void
+    {
+        $provider = $this->verifiedProvider();
+        $agreement = [
+            'commitment_type' => 'reporting',
+            'responsibilities' => 'Submit an academic progress update.',
+            'required_evidence' => '',
+            'release_conditions' => '',
+            'duration' => 'Each semester.',
+            'noncompliance_consequence' => 'The provider reviews the circumstances before the next release.',
+            'exit_or_exception_process' => 'Contact the provider to request an adjustment.',
+        ];
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
+                'recipient_agreement' => json_encode($agreement),
+            ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'recipient_agreement.required_evidence',
+                'recipient_agreement.release_conditions',
+            ]);
     }
 
     public function test_incomplete_program_cannot_be_submitted_for_review(): void
@@ -689,6 +716,15 @@ class ProviderProgramSafeguardsTest extends TestCase
             'deadline' => now()->addMonth()->toDateString(),
             'support_starts_at' => now()->addMonths(2)->toDateString(),
             'support_ends_at' => now()->addYear()->toDateString(),
+            'recipient_agreement' => json_encode([
+                'commitment_type' => 'reporting',
+                'responsibilities' => 'Remain enrolled and submit one academic progress update each semester.',
+                'required_evidence' => 'Official report card or certified grade record for each requested semester.',
+                'release_conditions' => 'The first benefit is released after enrollment verification; later releases require completed monitoring records.',
+                'duration' => 'Throughout the current school year.',
+                'noncompliance_consequence' => 'The provider contacts the recipient and reviews the circumstances before holding unreleased support.',
+                'exit_or_exception_process' => 'The recipient may contact the provider to report illness, transfer, withdrawal, or another exceptional circumstance.',
+            ]),
             'status' => 'pending_review',
             'terms_accepted' => true,
             ...$overrides,

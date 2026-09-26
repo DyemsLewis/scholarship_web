@@ -278,6 +278,88 @@
         @apply rounded-lg border border-slate-200 bg-slate-50 p-3;
     }
 
+    /* Shared table and responsive record-list primitives. */
+    .portal-table-scroll {
+        @apply overflow-x-auto;
+        scrollbar-width: thin;
+        scrollbar-color: #94a3b8 transparent;
+    }
+
+    .portal-data-table {
+        @apply w-full border-collapse text-left text-sm;
+    }
+
+    .portal-data-table thead {
+        @apply bg-slate-50;
+    }
+
+    .portal-data-table th {
+        @apply h-10 px-4 py-2.5 align-middle text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500;
+    }
+
+    .portal-data-table td {
+        @apply px-4 py-3 align-middle text-sm leading-5 text-slate-700;
+        vertical-align: middle !important;
+    }
+
+    .portal-data-table tbody tr {
+        @apply border-b border-slate-200 transition last:border-b-0 hover:bg-slate-50/70;
+    }
+
+    .portal-table-center {
+        @apply text-center;
+    }
+
+    .portal-table-end {
+        @apply text-right;
+    }
+
+    .portal-record-head {
+        @apply border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500;
+    }
+
+    .portal-record-row {
+        @apply min-h-[4.5rem] border-b border-slate-200 px-4 py-3 transition last:border-b-0 hover:bg-slate-50/70;
+    }
+
+    .portal-record-cell {
+        @apply min-w-0;
+    }
+
+    .portal-record-cell-center {
+        @apply flex min-w-0 items-center justify-between gap-3;
+    }
+
+    .portal-record-actions {
+        @apply flex min-w-0 items-center gap-2;
+    }
+
+    .portal-record-mobile-label {
+        @apply shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400;
+    }
+
+    .portal-table-empty {
+        @apply px-5 py-8 text-center;
+    }
+
+    .portal-table-empty-title {
+        @apply text-sm font-bold text-slate-900;
+    }
+
+    .portal-table-empty-copy {
+        @apply mt-1 text-sm leading-6 text-slate-500;
+    }
+
+    @media (min-width: 1024px) {
+        .portal-record-cell-center {
+            @apply justify-center text-center;
+        }
+
+        .portal-record-actions {
+            @apply justify-center;
+        }
+    }
+
     .student-action-card {
         @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md;
     }

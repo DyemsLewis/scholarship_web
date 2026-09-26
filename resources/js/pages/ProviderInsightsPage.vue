@@ -275,7 +275,7 @@ onMounted(loadInsights);
                         </div>
 
                         <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
-                            <div class="hidden grid-cols-[minmax(0,1fr)_20rem_8rem] gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 xl:grid">
+                            <div class="portal-record-head hidden grid-cols-[minmax(0,1fr)_20rem_8rem] items-center gap-4 xl:grid">
                                 <span>Applicant</span>
                                 <span class="text-center">Files</span>
                                 <span class="text-center">Action</span>
@@ -283,7 +283,7 @@ onMounted(loadInsights);
                             <article
                                 v-for="packet in documentReviewQueue"
                                 :key="packet.application_id"
-                                class="grid gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 xl:grid-cols-[minmax(0,1fr)_20rem_8rem] xl:items-center"
+                                class="portal-record-row grid gap-3 xl:grid-cols-[minmax(0,1fr)_20rem_8rem] xl:items-center"
                             >
                                 <div class="flex min-w-0 gap-3">
                                     <img

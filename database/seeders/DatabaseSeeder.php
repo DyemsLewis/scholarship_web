@@ -258,6 +258,9 @@ class DatabaseSeeder extends Seeder
                     'other_contract_terms' => 'Recipients attend one orientation and submit a short end-of-term update on how the assistance was used.',
                     'recipient_agreement' => [
                         'commitment_type' => 'activities',
+                        'responsibilities' => 'Attend one recipient orientation and submit one end-of-term update explaining how the assistance was used.',
+                        'required_evidence' => 'Signed orientation attendance and the provider end-of-term utilization form.',
+                        'release_conditions' => 'The grant and supplies are released after identity, enrollment, and recipient agreement verification. No later release is scheduled for this one-time package.',
                         'duration' => 'One orientation and one end-of-term update during the current program cycle.',
                         'noncompliance_consequence' => 'The provider will contact the recipient first. Continued or unreleased support may be paused or ended only after the circumstances are reviewed.',
                         'exit_or_exception_process' => 'The recipient may contact the Community Scholarship Desk to explain illness, transfer, withdrawal, or another circumstance and request an adjusted arrangement.',
@@ -333,6 +336,9 @@ class DatabaseSeeder extends Seeder
                     'other_contract_terms' => 'Recipients submit proof of enrollment before release and a brief utilization update after the first semester.',
                     'recipient_agreement' => [
                         'commitment_type' => 'reporting',
+                        'responsibilities' => 'Remain enrolled for the first semester and submit a brief update explaining how the college-entry assistance was used.',
+                        'required_evidence' => 'Official proof of enrollment before release and the provider utilization form after the first semester.',
+                        'release_conditions' => 'The one-time grant is released after identity, enrollment, original-document, and recipient agreement verification.',
                         'duration' => 'Proof of enrollment before release and one utilization update after the first semester.',
                         'noncompliance_consequence' => 'Support not yet released may be held while the provider verifies the recipient status. Any further action must be explained directly to the recipient.',
                         'exit_or_exception_process' => 'The recipient may contact the Community Scholarship Desk to report enrollment changes or request consideration for circumstances outside their control.',
@@ -416,6 +422,9 @@ class DatabaseSeeder extends Seeder
                     'other_contract_terms' => 'A parent or guardian attends the release orientation and confirms receipt of school materials.',
                     'recipient_agreement' => [
                         'commitment_type' => 'activities',
+                        'responsibilities' => 'The recipient and parent or guardian must attend the release orientation and sign the itemized receipt for the school materials.',
+                        'required_evidence' => 'Signed orientation attendance and an itemized acknowledgment receipt for the materials received.',
+                        'release_conditions' => 'School materials are released after identity, enrollment, guardian, orientation, and recipient agreement verification.',
                         'duration' => 'One release orientation during the current school year.',
                         'noncompliance_consequence' => 'Materials will not be released until the parent or guardian completes the required receipt and orientation process.',
                         'exit_or_exception_process' => 'A parent or guardian may contact the Learner Support Office to request another orientation arrangement when attendance is not possible.',
@@ -497,6 +506,9 @@ class DatabaseSeeder extends Seeder
                     'other_contract_terms' => 'Finalists complete the provider-managed qualifying exam and interview. Recipients join one community learning session during the award period.',
                     'recipient_agreement' => [
                         'commitment_type' => 'activities',
+                        'responsibilities' => 'Remain enrolled in the approved STEM track and complete one community learning session during the award period.',
+                        'required_evidence' => 'Current enrollment record, latest official grade record when requested, and provider-confirmed attendance for the community learning session.',
+                        'release_conditions' => 'The STEM grant is released after identity, enrollment, final selection, original-document, and recipient agreement verification.',
                         'duration' => 'One community learning session during the current program cycle.',
                         'noncompliance_consequence' => 'The provider will contact the recipient and review the circumstances before deciding whether any remaining program support should continue.',
                         'exit_or_exception_process' => 'The recipient may contact the STEM Programs Office to explain academic, health, family, or scheduling circumstances and request an alternative arrangement.',

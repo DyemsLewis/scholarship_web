@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import ApplicantNextActionPanel from '../components/ApplicantNextActionPanel.vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
@@ -53,9 +52,9 @@ const applicationView = ['active', 'action', 'completed', 'monitoring'].includes
 const applicationViewContent = {
     active: {
         eyebrow: 'Active applications',
-        title: 'Follow your current applications',
-        description: 'See the present stage and next step for applications still in progress.',
-        sectionTitle: 'Applications in progress',
+        title: 'Follow your applications and support',
+        description: 'See applications in progress and scholarships with ongoing recipient support.',
+        sectionTitle: 'Active applications and scholarships',
         emptyTitle: 'No active applications',
         emptyText: 'Browse scholarships when you are ready to begin a new pre-screening application.',
     },
@@ -226,14 +225,14 @@ const visibleApplicationQueue = computed(() => applicationQueue.value.filter((ap
     }
 
     if (applicationView === 'completed') {
-        return Boolean(application.workflow?.is_closed);
+        return Boolean(application.workflow?.is_closed) && !applicationIsActive(application);
     }
 
     if (applicationView === 'monitoring') {
         return Boolean(application.recipient_monitoring?.eligible);
     }
 
-    return !application.workflow?.is_closed;
+    return applicationIsActive(application);
 }));
 const nextStepLabel = computed(() => steps[currentStep.value + 1]?.label
     ? `Continue to ${steps[currentStep.value + 1].label}`
@@ -422,9 +421,103 @@ function applicationNeedsAction(application) {
         || actorLabel.includes('recipient');
 }
 
+function applicationHasOngoingSupport(application) {
+    const monitoring = application?.recipient_monitoring;
+    const agreementStatus = String(application?.recipient_agreement?.status ?? '').toLowerCase();
+    const supportStatus = String(monitoring?.support_status ?? '').toLowerCase();
+
+    return Boolean(monitoring?.eligible)
+        && agreementStatus !== 'declined'
+        && ['active', 'renewed'].includes(supportStatus);
+}
+
+function applicationIsActive(application) {
+    return !application?.workflow?.is_closed
+        || Boolean(application?.recipient_agreement?.can_respond || application?.requires_student_response)
+        || applicationHasOngoingSupport(application);
+}
+
+function applicationCardAction(application) {
+    if (application?.correction_status === 'requested') {
+        return {
+            eyebrow: 'Your next step',
+            title: 'Update the requested information',
+            description: application?.correction_message || 'Review the provider request and submit the corrected information.',
+            icon: 'fa-solid fa-pen-to-square',
+        };
+    }
+
+    if (application?.recipient_agreement?.can_respond || application?.requires_student_response) {
+        return {
+            eyebrow: 'Agreement needed',
+            title: 'Review your recipient agreement',
+            description: 'Confirm the scholarship support and recipient responsibilities before continuing.',
+            icon: 'fa-solid fa-file-signature',
+        };
+    }
+
+    const pendingMonitoring = Number(application?.recipient_monitoring?.pending_count ?? 0);
+
+    if (pendingMonitoring > 0) {
+        return {
+            eyebrow: 'Monitoring update',
+            title: `${pendingMonitoring} requirement${pendingMonitoring === 1 ? '' : 's'} ready for submission`,
+            description: 'Open the scholarship record to submit the requested academic update.',
+            icon: 'fa-solid fa-graduation-cap',
+        };
+    }
+
+    if (applicationHasOngoingSupport(application)) {
+        return {
+            eyebrow: 'Recipient support',
+            title: application?.recipient_monitoring?.support_status_label || 'Scholarship support is active',
+            description: 'Review monitoring updates, benefit releases, and provider notices in your scholarship record.',
+            icon: 'fa-solid fa-award',
+        };
+    }
+
+    const nextAction = applicationNextActionDetails(application);
+    const actor = String(nextAction.actor_label ?? nextAction.actor ?? '').toLowerCase();
+
+    return {
+        eyebrow: application?.workflow?.is_closed
+            ? 'Final result'
+            : (actor.includes('provider') ? 'Provider step' : 'Your next step'),
+        title: applicationNextAction(application),
+        description: nextAction.description || '',
+        icon: application?.workflow?.is_closed ? 'fa-solid fa-flag-checkered' : 'fa-solid fa-arrow-right',
+    };
+}
+
+function applicationStageLabel(application) {
+    if (application?.recipient_agreement?.can_respond || application?.requires_student_response) {
+        return 'Recipient agreement';
+    }
+
+    if (applicationHasOngoingSupport(application)) {
+        return 'Recipient support';
+    }
+
+    return application?.workflow?.current_stage_label
+        || application?.status_progress?.label
+        || statusLabel(application?.status);
+}
+
 function applicationActionLabel(application) {
     if (application?.correction_status === 'requested') {
         return 'Review update';
+    }
+
+    if (application?.recipient_agreement?.can_respond || application?.requires_student_response) {
+        return 'Review agreement';
+    }
+
+    if (Number(application?.recipient_monitoring?.pending_count ?? 0) > 0) {
+        return 'Submit update';
+    }
+
+    if (applicationHasOngoingSupport(application)) {
+        return 'Open support';
     }
 
     if (application?.workflow?.is_closed) {
@@ -1395,110 +1488,104 @@ watch(selectedScholarship, (scholarship) => {
                             <article
                                 v-for="application in visibleApplicationQueue"
                                 :key="application.id"
-                                class="overflow-hidden rounded-lg border border-l-4 border-slate-200 border-l-slate-900 bg-white shadow-sm"
+                                class="overflow-hidden rounded-lg border border-slate-200 border-t-4 border-t-slate-900 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md"
                             >
-                                <div class="p-4">
-                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                        <div class="flex min-w-0 gap-3">
+                                <div class="p-4 sm:p-5">
+                                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="flex min-w-0 gap-3.5">
                                             <img
                                                 :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
                                                 :alt="application.scholarship?.title || 'Scholarship'"
-                                                class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                                class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                             >
                                             <div class="min-w-0">
-                                                <h4 class="truncate font-bold text-slate-950">
+                                                <p class="truncate text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                                    {{ application.scholarship?.provider?.name || 'Scholarship provider' }}
+                                                </p>
+                                                <h4 class="mt-1 truncate text-base font-bold text-slate-950">
                                                     {{ application.scholarship?.title || 'Scholarship' }}
                                                 </h4>
-                                                <p class="mt-1 text-sm text-slate-500">
+                                                <p class="mt-1 text-xs text-slate-500">
                                                     Submitted {{ application.submitted_at || 'recently' }}
-                                                </p>
-                                                <p class="mt-1 truncate text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                                    {{ application.scholarship?.provider?.name || 'Scholarship provider' }}
                                                 </p>
                                             </div>
                                         </div>
-                                        <div class="flex flex-wrap gap-2 sm:justify-end">
+                                        <div class="flex flex-wrap items-center gap-2 sm:justify-end">
                                             <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
                                                 {{ applicationStatusLabel(application) }}
                                             </span>
-                                        <span
-                                            v-if="application.correction_status === 'requested'"
-                                            class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
-                                        >
-                                            Update requested
-                                        </span>
-                                        <span
-                                            v-else-if="application.correction_status === 'submitted'"
-                                            class="w-fit rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold uppercase text-sky-800"
-                                        >
-                                            Correction sent
-                                        </span>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-3 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-600">
-                                        <span class="rounded-md bg-slate-100 px-2.5 py-1">
-                                            Stage: {{ application.workflow?.current_stage_label || application.status_progress?.label || statusLabel(application.status) }}
-                                        </span>
-                                        <span
-                                            v-if="application.student_responded_at"
-                                            class="rounded-md bg-slate-100 px-2.5 py-1 text-slate-700"
-                                        >
-                                            Responded {{ application.student_responded_at }}
-                                        </span>
-                                    </div>
-
-                                    <ApplicantNextActionPanel
-                                        class="mt-3"
-                                        :actor="applicationNextActionDetails(application).actor_label || 'Check application'"
-                                        :title="applicationNextAction(application)"
-                                        :description="applicationNextActionDetails(application).description || ''"
-                                        :closed="Boolean(application.workflow?.is_closed)"
-                                        compact
-                                        action-available
-                                    >
-                                        <template #action>
-                                            <a
-                                                :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
+                                            <span
+                                                v-if="application.correction_status === 'requested'"
+                                                class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
                                             >
-                                                {{ applicationActionLabel(application) }}
-                                                <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
-                                            </a>
-                                        </template>
-                                    </ApplicantNextActionPanel>
-
-                                    <details v-if="application.status_progress?.steps?.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-50">
-                                        <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-xs font-bold text-slate-700">
-                                            <span class="flex items-center gap-2">
-                                                <i class="fa-solid fa-route text-slate-400" aria-hidden="true"></i>
-                                                View application flow
+                                                Update requested
                                             </span>
-                                            <span class="flex min-w-0 items-center gap-2 text-slate-500">
-                                                <span class="hidden truncate font-semibold sm:block">{{ applicationNextAction(application) }}</span>
-                                                <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+                                            <span
+                                                v-else-if="application.correction_status === 'submitted'"
+                                                class="w-fit rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold uppercase text-sky-800"
+                                            >
+                                                Correction sent
                                             </span>
-                                        </summary>
-                                        <div class="overflow-x-auto border-t border-slate-200 bg-white">
-                                            <ol class="flex min-w-max divide-x divide-slate-200">
-                                                <li
-                                                    v-for="(step, index) in application.status_progress.steps"
-                                                    :key="step.key"
-                                                    :class="['flex min-w-[10rem] flex-1 items-center gap-2.5 px-3 py-3 text-xs', timelineStepClass(step.state)]"
-                                                >
-                                                    <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-bold', step.state === 'complete' ? 'bg-white/15 text-white' : step.state === 'current' ? 'bg-amber-400 text-slate-950' : 'bg-slate-100 text-slate-500']">
-                                                        <i v-if="step.state === 'complete'" class="fa-solid fa-check" aria-hidden="true"></i>
-                                                        <span v-else>{{ index + 1 }}</span>
-                                                    </span>
-                                                    <span class="min-w-0">
-                                                        <span class="block truncate font-bold">{{ step.label }}</span>
-                                                        <span class="mt-0.5 block text-[9px] font-semibold uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</span>
-                                                    </span>
-                                                </li>
-                                            </ol>
                                         </div>
-                                    </details>
+                                    </div>
+
+                                    <div class="mt-4 grid gap-4 border-t border-slate-200 pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                                        <div class="flex min-w-0 items-start gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                                <i :class="applicationCardAction(application).icon" aria-hidden="true"></i>
+                                            </span>
+                                            <div class="min-w-0">
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">
+                                                    {{ applicationCardAction(application).eyebrow }}
+                                                </p>
+                                                <p class="mt-1 text-sm font-bold text-slate-950">
+                                                    {{ applicationCardAction(application).title }}
+                                                </p>
+                                                <p v-if="applicationCardAction(application).description" class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">
+                                                    {{ applicationCardAction(application).description }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <a
+                                            :href="application.detail_url || `/dashboard/applications/${application.id}`"
+                                            class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
+                                        >
+                                            {{ applicationActionLabel(application) }}
+                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                        </a>
+                                    </div>
                                 </div>
+
+                                <details v-if="application.status_progress?.steps?.length" class="group border-t border-slate-200 bg-slate-50">
+                                    <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-xs text-slate-600 sm:px-5 [&::-webkit-details-marker]:hidden">
+                                        <span class="min-w-0 truncate">
+                                            <span class="font-semibold text-slate-500">Current stage:</span>
+                                            <strong class="ml-1 text-slate-800">{{ applicationStageLabel(application) }}</strong>
+                                        </span>
+                                        <span class="inline-flex shrink-0 items-center gap-2 font-bold text-slate-700">
+                                            View flow
+                                            <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                        </span>
+                                    </summary>
+                                    <div class="overflow-x-auto border-t border-slate-200 bg-white">
+                                        <ol class="flex min-w-max divide-x divide-slate-200">
+                                            <li
+                                                v-for="(step, index) in application.status_progress.steps"
+                                                :key="step.key"
+                                                :class="['flex min-w-[10rem] flex-1 items-center gap-2.5 px-3 py-3 text-xs', timelineStepClass(step.state)]"
+                                            >
+                                                <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-bold', step.state === 'complete' ? 'bg-white/15 text-white' : step.state === 'current' ? 'bg-amber-400 text-slate-950' : 'bg-slate-100 text-slate-500']">
+                                                    <i v-if="step.state === 'complete'" class="fa-solid fa-check" aria-hidden="true"></i>
+                                                    <span v-else>{{ index + 1 }}</span>
+                                                </span>
+                                                <span class="min-w-0">
+                                                    <span class="block truncate font-bold">{{ step.label }}</span>
+                                                    <span class="mt-0.5 block text-[9px] font-semibold uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</span>
+                                                </span>
+                                            </li>
+                                        </ol>
+                                    </div>
+                                </details>
                             </article>
                         </div>
                     </section>

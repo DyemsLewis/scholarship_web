@@ -35,6 +35,9 @@ export function normalizeRecipientAgreement(scholarship) {
 
     return {
         commitment_type: commitmentType,
+        responsibilities: saved.responsibilities ?? commitmentText,
+        required_evidence: saved.required_evidence ?? '',
+        release_conditions: saved.release_conditions ?? '',
         duration: saved.duration ?? '',
         noncompliance_consequence: saved.noncompliance_consequence ?? '',
         exit_or_exception_process: saved.exit_or_exception_process ?? '',
@@ -47,8 +50,8 @@ export function agreementClarity(scholarship) {
     const benefits = Array.isArray(scholarship?.benefits) ? scholarship.benefits : [];
     const noCommitment = agreement.commitment_type === 'none' && !agreement.commitment_text;
     const commitmentDisclosed = noCommitment || (
-        hasText(agreement.commitment_text)
-        && agreement.commitment_text !== genericBriefingText
+        hasText(agreement.responsibilities)
+        && agreement.responsibilities !== genericBriefingText
         && agreement.commitment_type !== 'provider_briefing'
     );
     const checks = [
@@ -62,9 +65,23 @@ export function agreementClarity(scholarship) {
         {
             key: 'commitment',
             label: 'What the provider expects',
-            value: noCommitment ? 'The provider states that no recipient commitment applies.' : agreement.commitment_text,
+            value: noCommitment ? 'The provider states that no recipient commitment applies.' : agreement.responsibilities,
             complete: commitmentDisclosed,
             missing: 'The recipient duty has not been clearly explained.',
+        },
+        {
+            key: 'evidence',
+            label: 'Proof the recipient must submit',
+            value: noCommitment ? 'No responsibility evidence is required.' : agreement.required_evidence,
+            complete: noCommitment || hasText(agreement.required_evidence),
+            missing: 'The proof required from the recipient has not been listed.',
+        },
+        {
+            key: 'release',
+            label: 'Conditions for receiving benefits',
+            value: agreement.release_conditions,
+            complete: hasText(agreement.release_conditions),
+            missing: 'The conditions and timing for benefit release have not been explained.',
         },
         {
             key: 'duration',

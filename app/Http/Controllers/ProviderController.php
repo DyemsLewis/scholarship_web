@@ -4602,6 +4602,31 @@ class ProviderController extends Controller
             return;
         }
 
+        $agreement = (array) ($value('recipient_agreement') ?? []);
+        $commitmentType = $agreement['commitment_type'] ?? 'provider_briefing';
+
+        if ($commitmentType === 'provider_briefing') {
+            $errors['recipient_agreement'] = 'Disclose the complete recipient agreement before submitting the program for review.';
+        }
+
+        if (blank($agreement['release_conditions'] ?? null)) {
+            $errors['recipient_agreement.release_conditions'] = 'Explain the conditions for receiving the scholarship benefits.';
+        }
+
+        if ($commitmentType !== 'none') {
+            foreach ([
+                'responsibilities' => 'State the exact responsibilities the recipient must complete.',
+                'required_evidence' => 'List the proof the recipient must submit.',
+                'duration' => 'State how long the recipient responsibilities apply.',
+                'noncompliance_consequence' => 'Explain what happens when a responsibility is not completed.',
+                'exit_or_exception_process' => 'Explain the exception, adjustment, or withdrawal process.',
+            ] as $field => $message) {
+                if (blank($agreement[$field] ?? null)) {
+                    $errors["recipient_agreement.{$field}"] = $message;
+                }
+            }
+        }
+
         if (blank($deadline)) {
             $errors['deadline'] = 'Add an application deadline before submitting the program for review.';
         } elseif (CarbonImmutable::parse($deadline)->startOfDay()->isBefore(CarbonImmutable::today())) {

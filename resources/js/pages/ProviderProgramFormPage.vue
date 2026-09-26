@@ -831,8 +831,6 @@ const recipientAgreementReady = computed(() => {
         && hasText(scholarshipForm.value.recipientAgreement.noncompliance_consequence)
         && hasText(scholarshipForm.value.recipientAgreement.exit_or_exception_process);
 });
-const recipientCommitmentPreview = computed(() => scholarshipForm.value.recipientAgreement.responsibilities
-    || commitmentEntries().map((entry) => entry.value).filter(Boolean).join(' '));
 const programReadinessItems = computed(() => [
     {
         label: 'Program overview',
@@ -1877,9 +1875,16 @@ function applySelectedCommitment() {
 }
 
 function applyCustomCommitment() {
-    clearCommitmentFields();
-    scholarshipForm.value.otherContractTerms = customCommitmentText.value;
-    scholarshipForm.value.recipientAgreement.responsibilities = customCommitmentText.value;
+    const responsibilities = scholarshipForm.value.recipientAgreement.responsibilities;
+    const option = commitmentOptions.find((item) => item.value === selectedCommitmentOption.value);
+
+    customCommitmentText.value = responsibilities;
+
+    if (option?.field) {
+        scholarshipForm.value[option.field] = responsibilities;
+    } else if (selectedCommitmentOption.value !== 'none') {
+        scholarshipForm.value.otherContractTerms = responsibilities;
+    }
 }
 
 function composeProgramAddress(form = scholarshipForm.value) {
@@ -4604,24 +4609,20 @@ onBeforeUnmount(() => {
                                                 <div class="flex items-start gap-3">
                                                     <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-eye" aria-hidden="true"></i></span>
                                                     <div class="min-w-0 flex-1">
-                                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Applicant preview</p>
-                                                        <p v-if="selectedCommitmentOption !== 'custom'" class="mt-1 text-sm font-semibold leading-6 text-slate-800">{{ recipientCommitmentPreview }}</p>
-                                                        <div v-else class="mt-2">
-                                                            <label class="sr-only" for="scholarship-custom-commitment">What the provider expects</label>
-                                                            <textarea
-                                                                id="scholarship-custom-commitment"
-                                                                v-model="customCommitmentText"
-                                                                rows="3"
-                                                                maxlength="600"
-                                                                placeholder="State exactly what the recipient is expected to do."
-                                                                :class="inputClass"
-                                                                @input="applyCustomCommitment"
-                                                            ></textarea>
-                                                            <div class="mt-1.5 flex items-center justify-between text-xs text-slate-500">
-                                                                <span>This wording will be shown to applicants.</span>
-                                                                <span>{{ customCommitmentText.length }}/600</span>
-                                                            </div>
-                                                        </div>
+                                                        <label :class="labelClass" for="scholarship-agreement-responsibilities">
+                                                            Exact recipient responsibilities
+                                                            <span :class="requiredHintClass">Required</span>
+                                                        </label>
+                                                        <textarea
+                                                            id="scholarship-agreement-responsibilities"
+                                                            v-model="scholarshipForm.recipientAgreement.responsibilities"
+                                                            rows="4"
+                                                            maxlength="2000"
+                                                            placeholder="List every action the recipient must complete, including attendance, grade maintenance, reports, or service duties."
+                                                            :class="inputClass"
+                                                            @input="applyCustomCommitment"
+                                                        ></textarea>
+                                                        <p class="mt-1.5 text-xs leading-5 text-slate-500">Use definite terms. Avoid wording such as “may be required” or “the provider will explain later.”</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -4629,6 +4630,40 @@ onBeforeUnmount(() => {
                                             <div class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
                                                 <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
                                                     <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">1</span>
+                                                    <div :class="fieldStackClass">
+                                                        <label :class="labelClass" for="scholarship-agreement-evidence">
+                                                            Proof the recipient must submit
+                                                            <span :class="requiredHintClass">Required</span>
+                                                        </label>
+                                                        <textarea
+                                                            id="scholarship-agreement-evidence"
+                                                            v-model="scholarshipForm.recipientAgreement.required_evidence"
+                                                            rows="3"
+                                                            maxlength="1500"
+                                                            placeholder="Example: Official report card each semester and signed attendance confirmation after orientation."
+                                                            :class="inputClass"
+                                                        ></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
+                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">2</span>
+                                                    <div :class="fieldStackClass">
+                                                        <label :class="labelClass" for="scholarship-agreement-release-conditions">
+                                                            Conditions for receiving the benefits
+                                                            <span :class="requiredHintClass">Required</span>
+                                                        </label>
+                                                        <textarea
+                                                            id="scholarship-agreement-release-conditions"
+                                                            v-model="scholarshipForm.recipientAgreement.release_conditions"
+                                                            rows="3"
+                                                            maxlength="1500"
+                                                            placeholder="Explain when support is released and what must be verified before each release."
+                                                            :class="inputClass"
+                                                        ></textarea>
+                                                    </div>
+                                                </div>
+                                                <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
+                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">3</span>
                                                     <div :class="fieldStackClass">
                                                         <label :class="labelClass" for="scholarship-agreement-duration">
                                                             How long the expectation applies
@@ -4645,7 +4680,7 @@ onBeforeUnmount(() => {
                                                     </div>
                                                 </div>
                                                 <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
-                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">2</span>
+                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">4</span>
                                                     <div :class="fieldStackClass">
                                                         <label :class="labelClass" for="scholarship-agreement-consequence">
                                                             What happens if it is not completed
@@ -4662,7 +4697,7 @@ onBeforeUnmount(() => {
                                                     </div>
                                                 </div>
                                                 <div class="grid gap-3 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
-                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">3</span>
+                                                    <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">5</span>
                                                     <div :class="fieldStackClass">
                                                         <label :class="labelClass" for="scholarship-agreement-exit">
                                                             Exception, adjustment, or withdrawal process
@@ -4680,6 +4715,22 @@ onBeforeUnmount(() => {
                                                 </div>
                                             </div>
                                         </template>
+
+                                        <div v-if="selectedCommitmentOption === 'none'" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white p-4">
+                                            <label :class="labelClass" for="scholarship-agreement-release-conditions-none">
+                                                Conditions for receiving the benefits
+                                                <span :class="requiredHintClass">Required</span>
+                                            </label>
+                                            <textarea
+                                                id="scholarship-agreement-release-conditions-none"
+                                                v-model="scholarshipForm.recipientAgreement.release_conditions"
+                                                rows="3"
+                                                maxlength="1500"
+                                                placeholder="Explain when support is released and what identity, enrollment, or receipt verification is required."
+                                                :class="inputClass"
+                                            ></textarea>
+                                            <p class="mt-1.5 text-xs leading-5 text-slate-500">This does not create a recipient contribution. It only explains how the listed support is released.</p>
+                                        </div>
                                     </div>
                                 </section>
                             </fieldset>

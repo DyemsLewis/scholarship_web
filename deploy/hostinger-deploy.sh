@@ -15,6 +15,7 @@ rm -f bootstrap/cache/*.php
 php artisan package:discover --ansi
 
 mkdir -p \
+    storage/app/public \
     storage/framework/cache \
     storage/framework/sessions \
     storage/framework/views \

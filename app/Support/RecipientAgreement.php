@@ -33,7 +33,7 @@ class RecipientAgreement
 
     public static function version(array $snapshot): string
     {
-        return 'recipient-agreement-v1-'.substr(hash('sha256', json_encode($snapshot)), 0, 16);
+        return 'recipient-agreement-v2-'.substr(hash('sha256', json_encode($snapshot)), 0, 16);
     }
 
     public static function payload(ScholarshipApplication $application): ?array
@@ -60,7 +60,7 @@ class RecipientAgreement
             'response_note' => $application->student_response_note,
             'requires_response' => $application->final_outcome === 'selected' && blank($application->student_response_status),
             'can_respond' => $application->final_outcome === 'selected' && blank($application->student_response_status),
-            'notice' => 'This records the terms shown when the applicant was selected. It does not replace any formal document the provider may require.',
+            'notice' => 'This fixed record contains the program terms disclosed when you were selected. If a later document is different, ask the provider to explain the difference before signing or continuing.',
         ];
     }
 }

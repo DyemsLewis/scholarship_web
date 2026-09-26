@@ -159,8 +159,8 @@ onMounted(() => {
                         <p class="mt-1 text-sm text-slate-500">Confirmed provider purchases will appear here for fulfillment.</p>
                     </div>
 
-                    <div v-else class="overflow-x-auto">
-                        <table class="min-w-[980px] table-fixed divide-y divide-slate-200 text-left text-sm">
+                    <div v-else class="portal-table-scroll">
+                        <table class="portal-data-table min-w-[980px] table-fixed">
                             <colgroup>
                                 <col class="w-64">
                                 <col>

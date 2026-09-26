@@ -121,19 +121,19 @@ onMounted(loadTeam);
                     </div>
 
                     <div v-if="isLoading" class="p-6 text-sm text-slate-500">Loading team accounts...</div>
-                    <div v-else-if="accounts.length === 0" class="p-8 text-center">
+                    <div v-else-if="accounts.length === 0" class="portal-table-empty">
                         <i class="fa-solid fa-user-group text-2xl text-slate-300"></i>
-                        <p class="mt-3 text-sm font-bold text-slate-900">No team accounts yet</p>
-                        <p class="mt-1 text-sm text-slate-500">Create one when another staff member needs provider access.</p>
+                        <p class="portal-table-empty-title mt-3">No team accounts yet</p>
+                        <p class="portal-table-empty-copy">Create one when another staff member needs provider access.</p>
                     </div>
                     <div v-else>
-                        <div class="hidden grid-cols-[minmax(16rem,1.3fr)_minmax(15rem,1fr)_minmax(10rem,.65fr)_11rem] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 xl:grid">
+                        <div class="portal-record-head hidden grid-cols-[minmax(16rem,1.3fr)_minmax(15rem,1fr)_minmax(10rem,.65fr)_11rem] items-center gap-4 px-5 xl:grid">
                             <span>Member</span>
                             <span>Role and permissions</span>
                             <span>Program access</span>
                             <span class="text-center">Actions</span>
                         </div>
-                        <article v-for="account in accounts" :key="account.id" class="grid gap-3 border-b border-slate-200 px-4 py-3 transition last:border-b-0 hover:bg-slate-50 xl:grid-cols-[minmax(16rem,1.3fr)_minmax(15rem,1fr)_minmax(10rem,.65fr)_11rem] xl:items-center xl:px-5">
+                        <article v-for="account in accounts" :key="account.id" class="portal-record-row grid gap-3 xl:grid-cols-[minmax(16rem,1.3fr)_minmax(15rem,1fr)_minmax(10rem,.65fr)_11rem] xl:items-center xl:px-5">
                             <div class="flex min-w-0 items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-[11px] font-black text-amber-200">
                                     {{ accountInitials(account.name) }}
@@ -176,7 +176,7 @@ onMounted(loadTeam);
                                     : 'All programs' }}
                             </p>
 
-                            <div class="flex w-full gap-2 xl:w-44 xl:justify-self-center">
+                            <div class="portal-record-actions w-full xl:w-44 xl:justify-self-center">
                                 <a :href="`/provider/team/accounts/${account.id}/edit`" class="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-center text-xs font-bold text-slate-700 transition hover:bg-slate-100">Edit</a>
                                 <button type="button" :disabled="updatingId === account.id" class="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60" @click="toggleStatus(account)">
                                     {{ updatingId === account.id ? 'Updating...' : account.account_status === 'suspended' ? 'Reactivate' : 'Suspend' }}

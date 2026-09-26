@@ -198,7 +198,7 @@ onMounted(loadAdminData);
                     </div>
 
                     <div v-else-if="users.length" class="bg-white">
-                        <div class="hidden grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_12rem_5.5rem] items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 lg:grid">
+                        <div class="portal-record-head hidden grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_12rem_5.5rem] items-center gap-3 lg:grid">
                             <span>Account</span>
                             <span class="text-center">Role</span>
                             <span class="text-center">Access</span>
@@ -208,7 +208,7 @@ onMounted(loadAdminData);
                         <article
                             v-for="user in users"
                             :key="user.id"
-                            class="grid gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_12rem_5.5rem] lg:items-center"
+                            class="portal-record-row grid gap-3 lg:grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_12rem_5.5rem] lg:items-center"
                         >
                             <div class="flex min-w-0 items-center gap-3">
                                 <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white">
@@ -226,8 +226,8 @@ onMounted(loadAdminData);
                                 </div>
                             </div>
 
-                            <div class="flex items-center justify-between gap-3 lg:block lg:text-center">
-                                <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Role</span>
+                            <div class="portal-record-cell-center lg:block">
+                                <span class="portal-record-mobile-label lg:hidden">Role</span>
                                 <span
                                     :class="[
                                         'inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase',
@@ -242,8 +242,8 @@ onMounted(loadAdminData);
                                 </span>
                             </div>
 
-                            <div class="flex items-center justify-between gap-3 lg:justify-center">
-                                <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Access</span>
+                            <div class="portal-record-cell-center">
+                                <span class="portal-record-mobile-label lg:hidden">Access</span>
                                 <div class="flex items-center gap-1.5">
                                     <span
                                         :class="[
@@ -267,8 +267,8 @@ onMounted(loadAdminData);
                                 </div>
                             </div>
 
-                            <div class="flex items-center justify-between gap-3 lg:justify-center">
-                                <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Verification</span>
+                            <div class="portal-record-cell-center">
+                                <span class="portal-record-mobile-label lg:hidden">Verification</span>
                                 <div class="flex min-w-0 items-center gap-2">
                                     <span
                                         :class="[
@@ -291,8 +291,8 @@ onMounted(loadAdminData);
                                 </div>
                             </div>
 
-                            <div class="flex items-center justify-between gap-3 lg:justify-center">
-                                <span class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 lg:hidden">Action</span>
+                            <div class="portal-record-cell-center">
+                                <span class="portal-record-mobile-label lg:hidden">Action</span>
                                 <a
                                     :href="`/admin/accounts/${user.id}/edit`"
                                     class="inline-flex rounded-md bg-slate-950 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-slate-800"
@@ -303,9 +303,9 @@ onMounted(loadAdminData);
                         </article>
                     </div>
 
-                    <div v-else class="p-6">
-                        <p class="text-sm font-bold text-slate-900">No matching accounts</p>
-                        <p class="mt-1 text-sm leading-6 text-slate-500">Try another role or search term.</p>
+                    <div v-else class="portal-table-empty">
+                        <p class="portal-table-empty-title">No matching accounts</p>
+                        <p class="portal-table-empty-copy">Try another role or search term.</p>
                     </div>
 
                     <div

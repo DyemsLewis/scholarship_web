@@ -1523,17 +1523,17 @@ onMounted(loadProviderData);
                         </div>
 
                         <div class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
-                            <div class="hidden gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_auto]">
+                            <div class="portal-record-head hidden gap-4 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_auto]">
                                 <span>Applicant</span>
                                 <span>{{ recordStatusColumnLabel }}</span>
                                 <span class="text-right">Action</span>
                             </div>
 
-                            <div v-if="rankedApplications.length === 0" class="px-5 py-8 text-center">
-                                <p class="text-sm font-bold text-slate-900">
+                            <div v-if="rankedApplications.length === 0" class="portal-table-empty">
+                                <p class="portal-table-empty-title">
                                     {{ totalProviderApplications === 0 ? 'No applicants yet' : 'No applicants in this queue' }}
                                 </p>
-                                <p class="mx-auto mt-1 max-w-2xl text-sm leading-5 text-slate-500">
+                                <p class="portal-table-empty-copy mx-auto max-w-2xl">
                                     {{ totalProviderApplications === 0
                                         ? (hasProgramContext
                                             ? 'Applicants will appear here after they submit the program pre-screening form.'
@@ -1546,7 +1546,7 @@ onMounted(loadProviderData);
                                 v-for="application in visibleApplications"
                                 :key="application.id"
                                 :class="[
-                                    'grid gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_auto] lg:items-center',
+                                    'portal-record-row grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_auto] lg:items-center',
                                 ]"
                             >
                                 <div class="flex min-w-0 items-center gap-3">
@@ -1592,7 +1592,7 @@ onMounted(loadProviderData);
                                 </div>
 
                                 <div :class="[
-                                    'flex w-full shrink-0 gap-2 lg:justify-end',
+                                    'portal-record-actions w-full shrink-0 lg:justify-end',
                                     showReviewerAssignment ? 'lg:w-72' : 'lg:w-auto',
                                     hasProgramContext && availableBulkAdvanceTargets.length ? 'pl-24 lg:pl-0' : 'pl-14 lg:pl-0',
                                 ]">

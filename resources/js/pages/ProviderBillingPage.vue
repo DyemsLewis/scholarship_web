@@ -403,12 +403,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                         </div>
 
                         <div v-else>
-                            <div class="hidden grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.25fr)_13rem] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 xl:grid">
+                            <div class="portal-record-head hidden grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.25fr)_13rem] items-center gap-3 xl:grid">
                                 <span>Service request</span>
                                 <span>Progress</span>
                                 <span class="text-right">Payment and action</span>
                             </div>
-                            <article v-for="purchase in purchases" :key="purchase.id" class="grid gap-3 border-b border-slate-200 px-4 py-3 transition last:border-b-0 hover:bg-slate-50/70 xl:grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.25fr)_13rem] xl:items-center">
+                            <article v-for="purchase in purchases" :key="purchase.id" class="portal-record-row grid gap-3 xl:grid-cols-[minmax(16rem,1fr)_minmax(20rem,1.25fr)_13rem] xl:items-center">
                                 <div class="min-w-0">
                                     <p class="truncate text-sm font-bold text-slate-950">{{ purchase.plan_name }}</p>
                                     <p class="mt-1 font-mono text-[11px] text-slate-500">{{ purchase.reference_number }}</p>

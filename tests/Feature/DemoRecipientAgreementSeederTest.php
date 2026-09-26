@@ -40,6 +40,6 @@ class DemoRecipientAgreementSeederTest extends TestCase
         $this->assertSame('awarded', $application->status);
         $this->assertNull($application->student_response_status);
         $this->assertNotEmpty($application->provider_contract_terms_snapshot);
-        $this->assertStringStartsWith('recipient-agreement-v1-', $application->provider_contract_terms_version);
+        $this->assertStringStartsWith('recipient-agreement-v2-', $application->provider_contract_terms_version);
     }
 }

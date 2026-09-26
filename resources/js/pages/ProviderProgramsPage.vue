@@ -329,7 +329,7 @@ onMounted(loadProviderData);
 
                         <template v-else>
                             <div v-if="filteredScholarships.length" class="bg-white">
-                                <div class="hidden grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_13rem] items-center gap-4 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 lg:grid">
+                                <div class="portal-record-head hidden grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_13rem] items-center gap-4 lg:grid">
                                     <span>Program</span>
                                     <span>Current step</span>
                                     <span class="text-center">Actions</span>
@@ -337,7 +337,7 @@ onMounted(loadProviderData);
                                 <article
                                     v-for="scholarship in filteredScholarships"
                                     :key="scholarship.id"
-                                    class="grid gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_13rem] lg:items-center lg:gap-4"
+                                    class="portal-record-row grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_13rem] lg:items-center lg:gap-4"
                                 >
                                     <div class="flex min-w-0 items-center gap-3">
                                         <img
@@ -364,7 +364,7 @@ onMounted(loadProviderData);
                                         <p class="text-sm font-bold text-slate-800">{{ programTask(scholarship).title }}</p>
                                         <p class="mt-0.5 truncate text-xs text-slate-500">{{ programTask(scholarship).detail }}</p>
                                     </div>
-                                    <div class="grid grid-cols-1 gap-2 sm:ml-14 sm:flex sm:w-fit lg:ml-0 lg:w-full lg:justify-center">
+                                    <div class="portal-record-actions grid grid-cols-1 sm:ml-14 sm:flex sm:w-fit lg:ml-0 lg:w-full">
                                         <a
                                             v-if="programEditAction(scholarship)"
                                             :href="programEditAction(scholarship).href"

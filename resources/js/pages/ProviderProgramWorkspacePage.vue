@@ -122,6 +122,29 @@ const workflowQueues = computed(() => [
         href: `${applicantWorkspaceUrl.value}/decisions`,
     },
 ]);
+const openWorkflowCount = computed(() => workflowQueues.value.reduce(
+    (total, queue) => total + Number(queue.count || 0),
+    0,
+));
+const waitingActivityCount = computed(() => activityStatuses.value.reduce(
+    (total, activity) => total + Number(activity.waiting_applicants || 0),
+    0,
+));
+const programFacts = computed(() => {
+    const program = scholarship.value;
+    if (!program) return [];
+
+    const educationLevels = Array.isArray(program.eligible_education_levels)
+        ? program.eligible_education_levels.map(readableLabel).join(', ')
+        : '';
+
+    return [
+        { label: 'Category', value: readableLabel(program.category) || 'Not specified' },
+        { label: 'Education level', value: educationLevels || 'Open to all' },
+        { label: 'Program cycle', value: program.program_cycle || 'Not specified' },
+        { label: 'Support', value: program.benefit_summary || 'See program setup' },
+    ];
+});
 const recommendedAction = computed(() => {
     const program = scholarship.value;
 
@@ -258,6 +281,12 @@ function dateLabel(value) {
         day: 'numeric',
         year: 'numeric',
     }).format(parsed);
+}
+
+function readableLabel(value) {
+    return String(value ?? '')
+        .replaceAll('_', ' ')
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 async function loadProgram() {
@@ -400,16 +429,16 @@ onMounted(loadProgram);
                     />
 
                     <div v-if="!isUpdatesView" class="mt-3 space-y-3">
-                        <section v-if="recommendedAction" class="provider-panel overflow-hidden">
-                            <div v-if="recommendedAction" class="grid bg-slate-50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
-                                <span class="hidden h-full min-h-24 w-14 place-items-center border-r border-slate-200 bg-white text-slate-700 sm:grid"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
-                                <div class="min-w-0 px-4 py-4 sm:px-5">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ recommendedAction.eyebrow }}</p>
-                                    <h2 class="mt-1 text-base font-bold text-slate-950 sm:text-lg">{{ recommendedAction.title }}</h2>
-                                    <p class="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{{ recommendedAction.description }}</p>
+                        <section v-if="recommendedAction" class="overflow-hidden rounded-md border border-slate-800 bg-slate-950 shadow-[0_12px_28px_rgba(8,20,38,0.10)]">
+                            <div class="grid border-t-4 border-amber-400 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+                                <span class="mx-4 mt-4 grid h-10 w-10 place-items-center rounded bg-amber-400 text-slate-950 sm:my-4 sm:ml-5 sm:mr-0"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+                                <div class="min-w-0 px-4 py-3 sm:px-5 sm:py-4">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">{{ recommendedAction.eyebrow }}</p>
+                                    <h2 class="mt-1 text-base font-bold text-white sm:text-lg">{{ recommendedAction.title }}</h2>
+                                    <p class="mt-1 line-clamp-1 max-w-3xl text-sm text-slate-300">{{ recommendedAction.description }}</p>
                                 </div>
                                 <div class="px-4 pb-4 sm:px-5 sm:py-4">
-                                    <a :href="recommendedAction.href" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto">
+                                    <a :href="recommendedAction.href" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded bg-white px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-100 sm:w-auto">
                                         {{ recommendedAction.label }}
                                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                     </a>
@@ -417,13 +446,37 @@ onMounted(loadProgram);
                             </div>
                         </section>
 
-                        <section v-if="canAccessApplicantWorkspace && ['published', 'closed'].includes(scholarship.status)" class="provider-panel overflow-hidden">
-                            <header class="flex flex-col gap-2 border-b border-slate-200 px-4 py-3.5 sm:flex-row sm:items-end sm:justify-between sm:px-5">
-                                <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Applicant operations</p>
-                                    <h2 class="mt-1 text-base font-bold text-slate-950">Application queues</h2>
+                        <section class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                            <div class="flex items-start justify-between gap-4 px-4 py-4 sm:px-5">
+                                <div class="flex min-w-0 items-start gap-3">
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded bg-amber-100 text-amber-800">
+                                        <i class="fa-solid fa-graduation-cap text-sm" aria-hidden="true"></i>
+                                    </span>
+                                    <div class="min-w-0">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program at a glance</p>
+                                        <p class="mt-1 line-clamp-2 max-w-5xl text-sm leading-6 text-slate-600">{{ scholarship.description || 'No program summary has been added yet.' }}</p>
+                                    </div>
                                 </div>
-                                <p class="text-xs font-semibold text-slate-500">Open a queue to continue its task</p>
+                                <a v-if="canManagePrograms" :href="`/provider/programs/${scholarship.id}/edit`" class="hidden shrink-0 items-center gap-2 rounded border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 sm:inline-flex">
+                                    Edit setup
+                                    <i class="fa-solid fa-arrow-up-right-from-square text-[9px]" aria-hidden="true"></i>
+                                </a>
+                            </div>
+                            <dl class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+                                <div v-for="fact in programFacts" :key="fact.label" class="min-w-0 bg-slate-50 px-4 py-3 sm:px-5">
+                                    <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ fact.label }}</dt>
+                                    <dd class="mt-1 line-clamp-2 text-sm font-bold leading-5 text-slate-900">{{ fact.value }}</dd>
+                                </div>
+                            </dl>
+                        </section>
+
+                        <section v-if="canAccessApplicantWorkspace && ['published', 'closed'].includes(scholarship.status)" class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                            <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3.5 sm:px-5">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant workflow</p>
+                                    <h2 class="mt-1 text-base font-bold text-slate-950">Work by stage</h2>
+                                </div>
+                                <span class="rounded bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ openWorkflowCount }} open</span>
                             </header>
 
                             <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
@@ -431,41 +484,45 @@ onMounted(loadProgram);
                                     v-for="queue in workflowQueues"
                                     :key="queue.key"
                                     :href="queue.href"
-                                    class="group flex min-h-24 items-center gap-3 bg-white px-4 py-4 transition hover:bg-slate-50"
+                                    class="group flex min-h-20 items-center gap-3 bg-white px-4 py-3.5 transition hover:bg-slate-50"
                                 >
-                                    <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md text-sm transition', queue.count ? 'bg-slate-100 text-slate-700' : 'bg-slate-50 text-slate-400 group-hover:bg-white']"><i :class="queue.icon" aria-hidden="true"></i></span>
+                                    <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded text-sm transition', queue.count ? 'bg-amber-100 text-amber-800' : 'bg-slate-50 text-slate-400 group-hover:bg-white']"><i :class="queue.icon" aria-hidden="true"></i></span>
                                     <span class="min-w-0 flex-1">
                                         <span class="flex items-center justify-between gap-3">
                                             <strong class="text-sm text-slate-950">{{ queue.label }}</strong>
                                             <strong :class="['text-lg leading-none', queue.count ? 'text-slate-950' : 'text-slate-400']">{{ queue.count }}</strong>
                                         </span>
-                                        <span class="mt-1 block truncate text-xs text-slate-500">{{ queue.description }}</span>
+                                        <span class="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 transition group-hover:text-slate-700">Open queue <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></span>
                                     </span>
                                 </a>
                             </div>
 
-                            <div v-if="activityStatuses.length" class="border-t border-slate-200 px-4 py-3.5 sm:px-5">
-                                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                    <div class="shrink-0">
-                                        <p class="text-sm font-bold text-slate-950">Program activities</p>
-                                        <p class="mt-0.5 text-xs text-slate-500">Shared exam and interview schedules</p>
+                            <details v-if="activityStatuses.length" class="group border-t border-slate-200">
+                                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 transition hover:bg-slate-50 sm:px-5 [&::-webkit-details-marker]:hidden">
+                                    <div class="flex items-center gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded bg-slate-100 text-slate-700"><i class="fa-regular fa-calendar text-xs" aria-hidden="true"></i></span>
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Activity schedules</p>
+                                            <p class="mt-0.5 text-xs text-slate-500">{{ waitingActivityCount }} applicant{{ waitingActivityCount === 1 ? '' : 's' }} waiting</p>
+                                        </div>
                                     </div>
-                                    <div class="grid flex-1 gap-2 sm:grid-cols-2 lg:max-w-3xl">
-                                        <a v-for="activity in activityStatuses" :key="activity.type" :href="`${applicantWorkspaceUrl}/activities`" class="flex min-w-0 items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 transition hover:border-slate-300 hover:bg-white">
+                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                </summary>
+                                <div class="grid gap-2 border-t border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 sm:px-5">
+                                        <a v-for="activity in activityStatuses" :key="activity.type" :href="`${applicantWorkspaceUrl}/activities`" class="flex min-w-0 items-center justify-between gap-3 rounded border border-slate-200 bg-white px-3 py-2.5 transition hover:border-slate-300">
                                             <span class="min-w-0">
                                                 <strong class="block truncate text-xs text-slate-900">{{ activity.label }}</strong>
                                                 <span class="mt-0.5 block truncate text-[11px] text-slate-500">{{ activity.event?.scheduled_label || 'Schedule not published' }}</span>
                                             </span>
                                             <span class="shrink-0 text-[10px] font-bold uppercase text-slate-500">{{ activity.waiting_applicants }} waiting</span>
                                         </a>
-                                    </div>
                                 </div>
-                            </div>
+                            </details>
 
                             <div class="border-t border-slate-200 bg-slate-50 px-4 py-3.5 sm:px-5">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div class="flex items-center gap-3">
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-amber-800 ring-1 ring-slate-200"><i class="fa-solid fa-award text-xs" aria-hidden="true"></i></span>
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded bg-white text-amber-800 ring-1 ring-slate-200"><i class="fa-solid fa-award text-xs" aria-hidden="true"></i></span>
                                         <div>
                                             <p class="text-sm font-bold text-slate-950">Selection progress</p>
                                             <p class="mt-0.5 text-xs text-slate-500">{{ selectedCount }} selected<span v-if="slotCapacity > 0">, {{ remainingSlotCount }} slot{{ remainingSlotCount === 1 ? '' : 's' }} remaining</span></p>
@@ -493,8 +550,8 @@ onMounted(loadProgram);
                             <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ announcements.length }} published</span>
                         </header>
 
-                        <div class="overflow-x-auto">
-                            <table class="w-full min-w-[820px] text-left text-sm">
+                        <div class="portal-table-scroll">
+                            <table class="portal-data-table min-w-[820px]">
                                 <colgroup>
                                     <col class="w-[42%]">
                                     <col class="w-[22%]">
