@@ -1,9 +1,10 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
+import ProviderProgramHeader from '../components/ProviderProgramHeader.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
+import ProviderSectionGuide from '../components/ProviderSectionGuide.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -60,59 +61,76 @@ const viewTabs = computed(() => [
     {
         value: 'summary',
         label: 'Overview',
-        icon: 'fa-solid fa-table-columns',
+        shortLabel: 'Overview',
         count: Number(programSummary.value?.attention_count ?? 0),
         href: monitoringBaseUrl,
     },
     {
         value: 'monitoring',
         label: 'Academic checks',
-        icon: 'fa-solid fa-chart-line',
+        shortLabel: 'Academic',
         count: cycles.value.reduce((total, cycle) => total + Number(cycle.action_needed_count ?? 0), 0),
         href: `${monitoringBaseUrl}/academic`,
     },
     {
         value: 'releases',
         label: 'Benefit releases',
-        icon: 'fa-solid fa-hand-holding-heart',
+        shortLabel: 'Releases',
         count: benefitReleases.value.reduce((total, release) => total + Number(release.pending_count ?? 0), 0),
         href: `${monitoringBaseUrl}/releases`,
     },
     {
         value: 'outcomes',
         label: 'Support outcomes',
-        icon: 'fa-solid fa-flag-checkered',
+        shortLabel: 'Outcomes',
         count: renewalReadyCount.value,
         href: `${monitoringBaseUrl}/outcomes`,
     },
 ]);
-const activeView = computed(() => viewTabs.value.find((view) => view.value === activeTab.value) ?? viewTabs.value[0]);
-const activeViewCopy = computed(() => ({
-    summary: {
-        eyebrow: 'Recipient monitoring',
-        title: 'Monitoring overview',
-        description: 'See urgent records, upcoming work, and the current recipient lifecycle.',
-        icon: 'fa-solid fa-table-columns',
-    },
-    monitoring: {
-        eyebrow: 'Academic monitoring',
-        title: 'Academic checks',
-        description: 'Request grade records and review recipient submissions.',
-        icon: 'fa-solid fa-graduation-cap',
-    },
-    releases: {
-        eyebrow: 'Recipient support',
-        title: 'Benefit releases',
-        description: 'Schedule support and record release evidence for each recipient.',
-        icon: 'fa-solid fa-hand-holding-heart',
-    },
-    outcomes: {
-        eyebrow: 'Recipient lifecycle',
-        title: 'Support outcomes',
-        description: 'Renew, complete, or end recipient support using the recorded history.',
-        icon: 'fa-solid fa-flag-checkered',
-    },
+const activeViewTitle = computed(() => ({
+    summary: 'Monitoring overview',
+    monitoring: 'Academic checks',
+    releases: 'Benefit releases',
+    outcomes: 'Support outcomes',
 }[activeTab.value]));
+const monitoringGuide = computed(() => ({
+    summary: [
+        { label: 'Purpose', text: 'See the recipient work that needs attention across the program.' },
+        { label: 'Records shown', text: 'Upcoming deadlines, pending reviews, releases, and outcomes.' },
+        { label: 'Next action', text: 'Open an attention item or choose a monitoring section below.' },
+    ],
+    monitoring: [
+        { label: 'Purpose', text: 'Check whether recipients continue to meet the academic requirement.' },
+        { label: 'Records shown', text: 'Requested periods, submitted grade records, and provider reviews.' },
+        { label: 'Next action', text: 'Create a period, then review each submitted academic record.' },
+    ],
+    releases: [
+        { label: 'Purpose', text: 'Prepare benefits and document what each recipient received.' },
+        { label: 'Records shown', text: 'Release schedules, recipient status, and receipt evidence.' },
+        { label: 'Next action', text: 'Schedule a release and record the result for each recipient.' },
+    ],
+    outcomes: [
+        { label: 'Purpose', text: 'Close the current support cycle using the recipient history.' },
+        { label: 'Records shown', text: 'Academic checks, releases received, and current support status.' },
+        { label: 'Next action', text: 'Renew, complete, or end support with a recorded reason.' },
+    ],
+}[activeTab.value] ?? []));
+const overviewWorkItems = computed(() => [
+    ...(programSummary.value?.attention ?? []).map((item, index) => ({
+        ...item,
+        row_key: `attention-${item.type}-${index}`,
+        queue_label: 'Needs attention',
+        timing_label: 'Action needed',
+        tone: 'bg-amber-100 text-amber-800',
+    })),
+    ...(programSummary.value?.upcoming ?? []).map((item, index) => ({
+        ...item,
+        row_key: `upcoming-${item.type}-${index}`,
+        queue_label: 'Upcoming',
+        timing_label: item.date_label || 'Scheduled',
+        tone: 'bg-sky-100 text-sky-800',
+    })),
+]);
 
 function defaultForm() {
     return {
@@ -170,6 +188,16 @@ function recordStatusClass(status) {
     if (['not_met', 'missed', 'withheld', 'terminated', 'declined'].includes(status)) return 'bg-rose-100 text-rose-700';
     if (['needs_correction', 'prepared'].includes(status)) return 'bg-amber-100 text-amber-800';
     return 'bg-slate-100 text-slate-600';
+}
+
+function personInitials(person) {
+    return String(person?.name || person?.email || 'Applicant')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0))
+        .join('')
+        .toUpperCase();
 }
 
 function recordEventIcon(type) {
@@ -503,34 +531,23 @@ onMounted(loadMonitoring);
 
         <section class="provider-page">
             <div class="provider-container">
-                <nav class="flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
-                    <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
-                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <a :href="`/provider/programs/${scholarshipId}`" class="truncate font-semibold text-slate-600 transition hover:text-slate-950">{{ scholarship?.title || 'Program' }}</a>
-                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="font-semibold text-slate-950">{{ activeView.label }}</span>
-                </nav>
-
-                <div v-if="isLoading" class="provider-panel mt-4 p-6 text-sm text-slate-500">Loading recipient monitoring...</div>
-                <div v-else-if="errorMessage && !scholarship" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
+                <div v-if="isLoading" class="provider-panel p-6 text-sm text-slate-500">Loading recipient monitoring...</div>
+                <div v-else-if="errorMessage && !scholarship" class="rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
                     {{ errorMessage }}
                 </div>
 
                 <template v-else-if="scholarship">
-                    <TaskPageHeader
-                        class="mt-4"
-                        theme="provider"
-                        :eyebrow="activeViewCopy.eyebrow"
-                        :title="activeViewCopy.title"
-                        :description="activeViewCopy.description"
-                        :icon="activeViewCopy.icon"
+                    <ProviderProgramHeader
+                        :program-id="scholarship.id"
+                        :title="scholarship.title"
+                        :status="scholarship.status"
+                        :section="activeViewTitle"
                     >
                         <template #meta>
-                            <span>{{ scholarship.title }}</span>
                             <span>{{ scholarship.selected_recipients_count }} selected recipient{{ Number(scholarship.selected_recipients_count) === 1 ? '' : 's' }}</span>
                             <span v-if="activeTab === 'summary' || activeTab === 'outcomes'">{{ activeSupportCount }} active support record{{ activeSupportCount === 1 ? '' : 's' }}</span>
                         </template>
-                        <template #actions>
+                        <template v-if="activeTab !== 'summary'" #actions>
                             <button v-if="activeTab === 'monitoring'" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openComposer">
                                 <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
                                 New period
@@ -544,59 +561,39 @@ onMounted(loadMonitoring);
                                 Record outcome
                             </button>
                         </template>
-                    </TaskPageHeader>
+                    </ProviderProgramHeader>
 
                     <ProviderProgramNav
                         :program-id="scholarship.id"
                         active="monitoring"
                     />
 
-                    <p v-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
+                    <p v-if="errorMessage" class="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
 
-                    <nav class="provider-panel mt-4 overflow-x-auto p-1.5" aria-label="Recipient monitoring views">
-                        <div class="flex min-w-max items-center gap-1 lg:min-w-0">
-                        <a
-                            v-for="view in viewTabs"
-                            :key="view.value"
-                            :href="view.href"
-                            :aria-current="activeTab === view.value ? 'page' : undefined"
-                            :class="['flex min-h-10 min-w-40 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition lg:min-w-0 lg:flex-1', activeTab === view.value ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100']"
-                        >
-                            <i :class="[view.icon, 'text-xs', activeTab === view.value ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
-                            <span>{{ view.label }}</span>
-                            <span v-if="view.count" :class="['rounded px-1.5 py-0.5 text-[10px]', activeTab === view.value ? 'bg-white/10 text-white' : 'bg-amber-100 text-amber-800']">{{ view.count }}</span>
-                        </a>
+                    <nav class="provider-panel mt-3 p-1.5" aria-label="Recipient monitoring views">
+                        <div class="grid grid-cols-4 gap-1">
+                            <a
+                                v-for="view in viewTabs"
+                                :key="view.value"
+                                :href="view.href"
+                                :aria-current="activeTab === view.value ? 'page' : undefined"
+                                :class="['flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-center text-[11px] font-bold leading-4 transition sm:text-sm', activeTab === view.value ? 'bg-amber-50 text-slate-950 ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900']"
+                            >
+                                <span class="sm:hidden">{{ view.shortLabel }}</span>
+                                <span class="hidden sm:inline">{{ view.label }}</span>
+                                <span v-if="view.count" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">{{ view.count }}</span>
+                            </a>
                         </div>
                     </nav>
 
+                    <ProviderSectionGuide :items="monitoringGuide" />
+
                     <template v-if="activeTab === 'summary'">
-                        <section class="provider-panel mt-4 overflow-hidden">
-                            <header class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Action queue</p><h2 class="mt-1 text-lg font-bold text-slate-950">Needs attention</h2><p class="mt-1 text-sm text-slate-500">Overdue, unreviewed, or incomplete recipient records.</p></div>
-                                <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold', programSummary?.attention_count ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800']">{{ programSummary?.attention_count || 0 }} open</span>
+                        <section class="provider-panel mt-3 overflow-hidden">
+                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Recipient status</p>
+                                <h2 class="mt-1 text-lg font-bold text-slate-950">Support snapshot</h2>
                             </header>
-                            <div v-if="!programSummary?.attention?.length" class="px-5 py-8 text-center sm:px-6"><span class="mx-auto grid h-10 w-10 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span><p class="mt-3 font-bold text-slate-950">No urgent recipient records</p><p class="mt-1 text-sm text-slate-500">Current agreements, reviews, and release results are up to date.</p></div>
-                            <div v-else class="divide-y divide-slate-200">
-                                <article v-for="(item, index) in programSummary.attention" :key="`${item.type}-${item.title}-${index}`" class="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                                    <div class="flex min-w-0 items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i :class="['fa-solid text-xs', recordEventIcon(item.type)]" aria-hidden="true"></i></span><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h3 class="font-bold text-slate-950">{{ item.title }}</h3><span class="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{{ item.type_label }}</span></div><p class="mt-1 text-sm leading-5 text-slate-600">{{ item.detail }}</p></div></div>
-                                    <button type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openSummaryItem(item)">Open record <i class="fa-solid fa-arrow-right ml-1.5" aria-hidden="true"></i></button>
-                                </article>
-                            </div>
-                        </section>
-
-                        <section class="provider-panel mt-4 overflow-hidden">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Calendar</p><h2 class="mt-1 text-lg font-bold text-slate-950">Upcoming work</h2></header>
-                            <div v-if="!programSummary?.upcoming?.length" class="px-5 py-8 text-center text-sm text-slate-500">No upcoming monitoring deadline or benefit release is currently scheduled.</div>
-                            <div v-else class="divide-y divide-slate-200">
-                                <article v-for="item in programSummary.upcoming" :key="`${item.type}-${item.title}-${item.date}`" class="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                                    <div class="flex min-w-0 items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i :class="['fa-solid text-xs', recordEventIcon(item.type)]" aria-hidden="true"></i></span><div><div class="flex flex-wrap items-center gap-2"><h3 class="font-bold text-slate-950">{{ item.title }}</h3><span class="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{{ item.type_label }}</span></div><p class="mt-1 text-sm text-slate-600">{{ item.detail }}</p></div></div>
-                                    <div class="flex shrink-0 items-center gap-3"><span class="text-xs font-bold text-slate-600">{{ item.date_label }}</span><button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openSummaryItem(item)">Open</button></div>
-                                </article>
-                            </div>
-                        </section>
-
-                        <section class="provider-panel mt-4 overflow-hidden">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Lifecycle</p><h2 class="mt-1 text-lg font-bold text-slate-950">Recipient outcomes</h2></header>
                             <dl class="grid gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-4">
                                 <div class="bg-white px-5 py-4"><dt class="text-xs font-bold text-slate-500">Active</dt><dd class="mt-1 text-xl font-bold text-slate-950">{{ programSummary?.outcomes?.active || 0 }}</dd></div>
                                 <div class="bg-white px-5 py-4"><dt class="text-xs font-bold text-slate-500">Renewed</dt><dd class="mt-1 text-xl font-bold text-sky-800">{{ programSummary?.outcomes?.renewed || 0 }}</dd></div>
@@ -604,17 +601,74 @@ onMounted(loadMonitoring);
                                 <div class="bg-white px-5 py-4"><dt class="text-xs font-bold text-slate-500">Ended early</dt><dd class="mt-1 text-xl font-bold text-rose-700">{{ programSummary?.outcomes?.terminated || 0 }}</dd></div>
                             </dl>
                         </section>
+
+                        <section class="provider-panel mt-3 overflow-hidden">
+                            <header class="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 sm:px-6">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Work queue</p>
+                                    <h2 class="mt-1 text-lg font-bold text-slate-950">Monitoring tasks</h2>
+                                </div>
+                                <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ overviewWorkItems.length }} item{{ overviewWorkItems.length === 1 ? '' : 's' }}</span>
+                            </header>
+                            <div class="overflow-x-auto">
+                                <table class="w-full min-w-[760px] text-left text-sm">
+                                    <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                        <tr>
+                                            <th class="px-5 py-3">Work item</th>
+                                            <th class="px-4 py-3">Type</th>
+                                            <th class="px-4 py-3">Timing</th>
+                                            <th class="px-5 py-3 text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-200 bg-white">
+                                        <tr v-if="!overviewWorkItems.length">
+                                            <td colspan="4" class="px-5 py-8 text-center">
+                                                <p class="font-bold text-slate-900">No monitoring work is due</p>
+                                                <p class="mt-1 text-sm text-slate-500">Academic checks, releases, and support outcomes are currently up to date.</p>
+                                            </td>
+                                        </tr>
+                                        <tr v-for="item in overviewWorkItems" :key="item.row_key">
+                                            <td class="px-5 py-3.5">
+                                                <p class="font-bold text-slate-950">{{ item.title }}</p>
+                                                <p class="mt-0.5 line-clamp-1 text-xs text-slate-500">{{ item.detail }}</p>
+                                            </td>
+                                            <td class="px-4 py-3.5"><span class="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{{ item.type_label }}</span></td>
+                                            <td class="px-4 py-3.5"><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', item.tone]">{{ item.timing_label }}</span></td>
+                                            <td class="px-5 py-3.5 text-right"><button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openSummaryItem(item)">Open</button></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
                     </template>
 
                     <template v-else-if="activeTab === 'monitoring'">
-                        <section v-if="!cycles.length" class="provider-panel mt-4 px-5 py-10 text-center sm:px-6">
-                            <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
-                            <h2 class="mt-4 text-lg font-bold text-slate-950">No monitoring periods yet</h2>
-                            <p class="mx-auto mt-1 max-w-xl text-sm text-slate-600">Request the next academic record from selected recipients.</p>
-                            <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openComposer">Create first period</button>
+                        <section v-if="!cycles.length" class="provider-panel mt-3 overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full min-w-[760px] text-left text-sm">
+                                    <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                        <tr>
+                                            <th class="px-5 py-3">Monitoring period</th>
+                                            <th class="px-4 py-3">Grade requirement</th>
+                                            <th class="px-4 py-3">Due date</th>
+                                            <th class="px-4 py-3">Submissions</th>
+                                            <th class="px-5 py-3 text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white">
+                                        <tr>
+                                            <td colspan="5" class="px-5 py-8 text-center">
+                                                <p class="font-bold text-slate-900">No monitoring periods yet</p>
+                                                <p class="mt-1 text-sm text-slate-500">Create a period when recipients need to submit an academic update.</p>
+                                                <button type="button" class="mt-3 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openComposer">Create first period</button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </section>
 
-                        <section v-else class="mt-4 space-y-3">
+                        <section v-else class="mt-3 space-y-3">
                             <article v-for="cycle in cycles" :key="cycle.id" class="provider-panel overflow-hidden">
                                 <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleCycle(cycle.id)">
                                     <div class="flex min-w-0 items-start gap-3">
@@ -673,13 +727,22 @@ onMounted(loadMonitoring);
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-slate-200 bg-white">
+                                                <tr v-if="!cycle.recipients.length">
+                                                    <td colspan="4" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this monitoring period.</td>
+                                                </tr>
                                                 <tr v-for="recipient in cycle.recipients" :key="recipient.application_id">
                                                     <td class="align-top px-5 py-3.5">
-                                                        <div class="flex min-h-6 flex-wrap items-center gap-2">
-                                                            <p class="font-bold leading-5 text-slate-950">{{ recipient.name }}</p>
-                                                            <span v-if="recipient.agreement_status !== 'accepted'" class="inline-flex rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">Agreement {{ recipient.agreement_status }}</span>
+                                                        <div class="flex items-start gap-3">
+                                                            <img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
+                                                            <span v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold text-white">{{ personInitials(recipient) }}</span>
+                                                            <div class="min-w-0">
+                                                                <div class="flex min-h-6 flex-wrap items-center gap-2">
+                                                                    <p class="font-bold leading-5 text-slate-950">{{ recipient.name }}</p>
+                                                                    <span v-if="recipient.agreement_status !== 'accepted'" class="inline-flex rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">Agreement {{ recipient.agreement_status }}</span>
+                                                                </div>
+                                                                <p class="mt-0.5 text-xs text-slate-500">{{ recipient.email }}</p>
+                                                            </div>
                                                         </div>
-                                                        <p class="mt-0.5 text-xs text-slate-500">{{ recipient.email }}</p>
                                                     </td>
                                                     <td class="align-top px-4 py-3.5">
                                                         <div class="flex min-h-6 items-center">
@@ -715,14 +778,32 @@ onMounted(loadMonitoring);
                     </template>
 
                     <template v-else-if="activeTab === 'releases'">
-                        <section v-if="!benefitReleases.length" class="provider-panel mt-4 px-5 py-10 text-center sm:px-6">
-                            <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span>
-                            <h2 class="mt-4 text-lg font-bold text-slate-950">No benefit releases scheduled</h2>
-                            <p class="mx-auto mt-1 max-w-xl text-sm text-slate-600">Schedule support for recipients with confirmed requirements.</p>
-                            <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openReleaseComposer">Schedule first release</button>
+                        <section v-if="!benefitReleases.length" class="provider-panel mt-3 overflow-hidden">
+                            <div class="overflow-x-auto">
+                                <table class="w-full min-w-[760px] text-left text-sm">
+                                    <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                        <tr>
+                                            <th class="px-5 py-3">Benefit release</th>
+                                            <th class="px-4 py-3">Schedule</th>
+                                            <th class="px-4 py-3">Recipients</th>
+                                            <th class="px-4 py-3">Release status</th>
+                                            <th class="px-5 py-3 text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white">
+                                        <tr>
+                                            <td colspan="5" class="px-5 py-8 text-center">
+                                                <p class="font-bold text-slate-900">No benefit releases scheduled</p>
+                                                <p class="mt-1 text-sm text-slate-500">Schedule a release after recipient requirements are confirmed.</p>
+                                                <button type="button" class="mt-3 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReleaseComposer">Schedule first release</button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </section>
 
-                        <section v-else class="mt-4 space-y-3">
+                        <section v-else class="mt-3 space-y-3">
                             <article v-for="release in benefitReleases" :key="release.id" class="provider-panel overflow-hidden">
                                 <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleRelease(release.id)">
                                     <div class="flex min-w-0 items-start gap-3">
@@ -762,10 +843,19 @@ onMounted(loadMonitoring);
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-slate-200 bg-white">
+                                                <tr v-if="!release.records.length">
+                                                    <td colspan="4" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this benefit release.</td>
+                                                </tr>
                                                 <tr v-for="record in release.records" :key="record.id">
                                                     <td class="align-top px-5 py-3.5">
-                                                        <div class="flex min-h-6 items-center"><p class="font-bold leading-5 text-slate-950">{{ record.name }}</p></div>
-                                                        <p class="mt-0.5 text-xs text-slate-500">{{ record.email }}</p>
+                                                        <div class="flex items-start gap-3">
+                                                            <img v-if="record.profile_photo_url" :src="record.profile_photo_url" :alt="`${record.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
+                                                            <span v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold text-white">{{ personInitials(record) }}</span>
+                                                            <div class="min-w-0">
+                                                                <p class="font-bold leading-5 text-slate-950">{{ record.name }}</p>
+                                                                <p class="mt-0.5 text-xs text-slate-500">{{ record.email }}</p>
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                     <td class="align-top px-4 py-3.5">
                                                         <div class="flex min-h-6 items-center"><span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(record.status)]">{{ record.status_label }}</span></div>
@@ -797,14 +887,13 @@ onMounted(loadMonitoring);
                     </template>
 
                     <template v-else>
-                        <section class="provider-panel mt-4 overflow-hidden">
+                        <section class="provider-panel mt-3 overflow-hidden">
                             <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                                 <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">End-of-cycle decision</p><h2 class="mt-1 text-lg font-bold text-slate-950">Renew or close recipient support</h2></div>
                                 <span class="w-fit rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">{{ renewalReadyCount }} ready for renewal</span>
                             </header>
 
-                            <div v-if="!supportRecipients.length" class="px-5 py-10 text-center"><p class="font-bold text-slate-950">No selected recipients yet</p><p class="mt-1 text-sm text-slate-500">Recipients appear here after accepting their scholarship offer.</p></div>
-                            <div v-else class="overflow-x-auto">
+                            <div class="overflow-x-auto">
                                 <table class="w-full min-w-[1080px] text-left text-sm">
                                     <colgroup>
                                         <col class="w-[24%]">
@@ -821,10 +910,22 @@ onMounted(loadMonitoring);
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-slate-200 bg-white">
+                                        <tr v-if="!supportRecipients.length">
+                                            <td colspan="4" class="px-5 py-8 text-center">
+                                                <p class="font-bold text-slate-900">No recipient outcomes yet</p>
+                                                <p class="mt-1 text-sm text-slate-500">Recipients appear here after accepting their scholarship offer.</p>
+                                            </td>
+                                        </tr>
                                         <tr v-for="recipient in supportRecipients" :key="recipient.application_id">
                                             <td class="align-top px-5 py-3.5">
-                                                <div class="flex min-h-6 items-center"><p class="font-bold leading-5 text-slate-950">{{ recipient.name }}</p></div>
-                                                <p class="mt-0.5 text-xs text-slate-500">{{ recipient.email }}</p>
+                                                <div class="flex items-start gap-3">
+                                                    <img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
+                                                    <span v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold text-white">{{ personInitials(recipient) }}</span>
+                                                    <div class="min-w-0">
+                                                        <p class="font-bold leading-5 text-slate-950">{{ recipient.name }}</p>
+                                                        <p class="mt-0.5 text-xs text-slate-500">{{ recipient.email }}</p>
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td class="align-top px-4 py-3.5">
                                                 <div class="flex min-h-6 items-center"><p class="font-bold text-slate-950">{{ recipient.requirements_met }} of {{ recipient.requirements_total }} checks confirmed</p></div>
@@ -835,11 +936,9 @@ onMounted(loadMonitoring);
                                                     <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', supportStatusClass(recipient.support_status)]">{{ recipient.support_status_label }}</span>
                                                     <span :class="['text-xs font-bold', recipient.renewal_eligible ? 'text-emerald-700' : 'text-slate-500']">{{ recipient.renewal_eligibility_label }}</span>
                                                 </div>
-                                                <p class="mt-0.5 text-xs leading-5 text-slate-500">
+                                                <p class="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-500">
                                                     {{ recipient.latest_decision ? `${recipient.latest_decision.decision_label} effective ${recipient.latest_decision.effective_label}${recipient.latest_decision.decided_by ? ` by ${recipient.latest_decision.decided_by}` : ''}` : recipient.renewal_eligibility_reason }}
                                                 </p>
-                                                <p v-if="recipient.latest_decision?.next_period_terms" class="mt-0.5 text-xs leading-5 text-slate-500">{{ recipient.latest_decision.next_period_terms }}</p>
-                                                <p v-if="recipient.latest_decision?.reason" class="mt-0.5 text-xs leading-5 text-slate-500">{{ recipient.latest_decision.reason }}</p>
                                             </td>
                                             <td class="align-top px-5 py-3.5">
                                                 <div class="flex min-h-9 flex-wrap items-start justify-end gap-2">

@@ -19,6 +19,12 @@ class RecipientAgreement
             'support_starts_at' => $scholarship->support_starts_at?->format('Y-m-d'),
             'support_ends_at' => $scholarship->support_ends_at?->format('Y-m-d'),
             'recipient_expectation' => $scholarship->recipient_agreement ?? [],
+            'provider_contact' => [
+                'name' => $scholarship->contact_person,
+                'department' => $scholarship->contact_department,
+                'email' => $scholarship->contact_email,
+                'number' => $scholarship->contact_number,
+            ],
             'renewal_policy' => $scholarship->renewal_policy,
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,

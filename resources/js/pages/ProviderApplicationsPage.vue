@@ -2,7 +2,9 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
+import ProviderProgramHeader from '../components/ProviderProgramHeader.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
+import ProviderSectionGuide from '../components/ProviderSectionGuide.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
@@ -56,6 +58,7 @@ const allowedInitialQueueSorts = {
 const isLoading = ref(true);
 const errorMessage = ref('');
 const applications = ref([]);
+const programOptions = ref([]);
 const reviewers = ref([]);
 const assigningReviewerApplicationId = ref(null);
 const canAssignReviewers = computed(() => reviewers.value.length > 0);
@@ -70,6 +73,7 @@ const selectedQueueFilter = ref(
 );
 const selectedQueueSort = ref(allowedInitialQueueSorts.includes(requestedQueueSort) ? requestedQueueSort : defaultQueueSort);
 const applicationSearch = ref(pageSearchParams.get('search') ?? '');
+const selectedProgramFilter = ref(initialScholarshipId ? '' : (pageSearchParams.get('program_id') ?? ''));
 const applicationPage = ref(Number.isInteger(requestedApplicationPage) && requestedApplicationPage > 0 ? requestedApplicationPage : 1);
 const applicationPagination = ref({ current_page: 1, last_page: 1, per_page: 10, total: 0, from: null, to: null });
 const queueFilterCounts = ref({ needs_review: 0, waiting_activity: 0, ready_result: 0, final_decision: 0, selected: 0, waitlisted: 0, all: 0 });
@@ -94,7 +98,6 @@ const selectedBulkApplicationIds = ref([]);
 const bulkAdvanceTarget = ref('pass_prescreening');
 const bulkAdvancing = ref(false);
 const bulkAdvanceError = ref('');
-const showBulkActions = ref(false);
 const {
     confirmation,
     requestConfirmation,
@@ -141,9 +144,15 @@ const availableBulkAdvanceTargets = computed(() => {
         (application.bulk_advance_targets ?? []).includes(target.value)
     )));
 });
+const selectedBulkAdvanceLabel = computed(() => (
+    availableBulkAdvanceTargets.value.find((target) => target.value === bulkAdvanceTarget.value)?.label
+        ?? 'Apply workflow action'
+));
 const exportApplicationsUrl = computed(() => {
     if (!hasProgramContext.value) {
-        return '/provider/export/applications';
+        return selectedProgramFilter.value
+            ? `/provider/export/applications?scholarship_id=${encodeURIComponent(selectedProgramFilter.value)}`
+            : '/provider/export/applications';
     }
 
     return `/provider/export/applications?scholarship_id=${encodeURIComponent(selectedScholarshipId.value)}`;
@@ -193,6 +202,39 @@ const workspaceCopy = {
     },
 };
 const focusedWorkspaceCopy = computed(() => workspaceCopy[applicationWorkspaceMode] ?? null);
+const workspaceGuides = {
+    review: [
+        { label: 'Purpose', text: 'Confirm the applicant profile, eligibility, and required files.' },
+        { label: 'Records shown', text: 'New submissions and returned corrections that need review.' },
+        { label: 'Next action', text: 'Open an applicant and record the pre-screening result.' },
+    ],
+    activities: [
+        { label: 'Purpose', text: 'Coordinate an exam or interview included in the selection plan.' },
+        { label: 'Records shown', text: 'Applicants who passed the previous stage and are waiting.' },
+        { label: 'Next action', text: 'Publish one shared schedule, then mark the activity complete.' },
+    ],
+    results: [
+        { label: 'Purpose', text: 'Record the result of a completed exam, interview, or handoff.' },
+        { label: 'Records shown', text: 'Applicants whose current activity is already complete.' },
+        { label: 'Next action', text: 'Review the record and decide who proceeds to the next stage.' },
+    ],
+    decisions: [
+        { label: 'Purpose', text: 'Complete the provider decision after all required stages.' },
+        { label: 'Records shown', text: 'Applicants ready to be selected, waitlisted, or declined.' },
+        { label: 'Next action', text: 'Open each record and save the final award outcome.' },
+    ],
+    recipients: [
+        { label: 'Purpose', text: 'Keep selected applicant records separate from active reviews.' },
+        { label: 'Records shown', text: 'Applicants selected to receive the scholarship support.' },
+        { label: 'Next action', text: 'Open a recipient record or continue to monitoring after acceptance.' },
+    ],
+    waitlist: [
+        { label: 'Purpose', text: 'Manage qualified alternates without mixing them with recipients.' },
+        { label: 'Records shown', text: 'Applicants saved as possible replacements for open slots.' },
+        { label: 'Next action', text: 'Review the alternate record before changing its final decision.' },
+    ],
+};
+const activeWorkspaceGuide = computed(() => workspaceGuides[applicationWorkspaceMode] ?? []);
 const focusedWorkflowModes = ['review', 'activities', 'results', 'decisions'];
 const focusedOutcomeModes = ['recipients', 'waitlist'];
 const isFocusedWorkflowWorkspace = computed(() => (
@@ -204,6 +246,10 @@ const isFocusedOutcomeWorkspace = computed(() => (
 const isDedicatedQueueWorkspace = computed(() => (
     isFocusedWorkflowWorkspace.value || isFocusedOutcomeWorkspace.value
 ));
+const recordStatusColumnLabel = computed(() => ({
+    recipients: 'Recipient status',
+    waitlist: 'Waitlist status',
+}[applicationWorkspaceMode] ?? 'Current task'));
 const pageIcon = computed(() => ({
     review: 'fa-solid fa-file-circle-check',
     activities: 'fa-solid fa-calendar-check',
@@ -303,12 +349,6 @@ const queueSortOptions = computed(() => {
 const showReviewerAssignment = computed(() => (
     canAssignReviewers.value
     && selectedQueueFilter.value === 'needs_review'
-));
-const showSubmissionMetric = computed(() => (
-    ['review', 'all'].includes(applicationWorkspaceMode)
-));
-const showReadinessMetrics = computed(() => (
-    ['review', 'decisions', 'all'].includes(applicationWorkspaceMode)
 ));
 const outcomeFilterOptions = computed(() => [
     {
@@ -449,6 +489,91 @@ function providerNextAction(application) {
     return application?.workflow?.provider_action?.label ?? 'Review application';
 }
 
+function applicantSecondaryLabel(application) {
+    const email = application.applicant?.email || 'No email provided';
+
+    if (hasProgramContext.value) return email;
+
+    return `${application.scholarship?.title || 'Scholarship'} · ${email}`;
+}
+
+function applicationPrioritySignal(application) {
+    if (application.correction_status === 'submitted') {
+        return { label: 'Correction ready to review', tone: 'text-sky-700' };
+    }
+
+    const issueCount = documentIssueCount(application);
+    if (issueCount > 0) {
+        return {
+            label: `${issueCount} file issue${issueCount === 1 ? '' : 's'}`,
+            tone: 'text-amber-700',
+        };
+    }
+
+    if (application.documents_changed_since_review) {
+        return { label: 'Files updated since review', tone: 'text-amber-700' };
+    }
+
+    if (application.correction_status === 'requested') {
+        return { label: 'Correction requested', tone: 'text-amber-700' };
+    }
+
+    if (application.status === 'waitlisted' && application.waitlist_position) {
+        return { label: `Alternate #${application.waitlist_position}`, tone: 'text-sky-700' };
+    }
+
+    if (applicationWorkspaceMode === 'recipients' && application.outcome_at) {
+        return { label: `Selected ${application.outcome_at}`, tone: 'text-emerald-700' };
+    }
+
+    if (showWaitingTime(application)) {
+        return { label: `Waiting ${application.waiting_days}d`, tone: 'text-amber-700' };
+    }
+
+    return { label: `Next: ${providerNextAction(application)}`, tone: 'text-slate-600' };
+}
+
+function outcomeRecordStatus(application) {
+    if (applicationWorkspaceMode === 'waitlist') {
+        return application.waitlist_position
+            ? `Alternate #${application.waitlist_position}`
+            : 'Waitlisted alternate';
+    }
+
+    if (application.status === 'benefits_terminated') {
+        return 'Support ended';
+    }
+
+    return application.recipient_agreement?.status_label
+        ?? application.workflow?.final_outcome_label
+        ?? 'Selected recipient';
+}
+
+function outcomeRecordDetail(application) {
+    if (applicationWorkspaceMode === 'waitlist') {
+        return application.waitlisted_at
+            ? `Waitlisted ${application.waitlisted_at}`
+            : 'Qualified alternate record';
+    }
+
+    if (application.outcome_at) {
+        return `Selected ${application.outcome_at}`;
+    }
+
+    return application.requires_student_response
+        ? 'Waiting for the recipient agreement response'
+        : 'Award outcome recorded';
+}
+
+function outcomeRecordStatusClass(application) {
+    if (applicationWorkspaceMode === 'waitlist') return 'bg-sky-100 text-sky-800';
+    if (application.status === 'benefits_terminated') return 'bg-rose-100 text-rose-800';
+    if (application.recipient_agreement?.status === 'accepted') return 'bg-emerald-100 text-emerald-800';
+    if (application.requires_student_response) return 'bg-amber-100 text-amber-800';
+
+    return 'bg-emerald-100 text-emerald-800';
+}
+
 function canBulkAdvance(application) {
     return (application.bulk_advance_targets ?? []).includes(bulkAdvanceTarget.value);
 }
@@ -556,15 +681,6 @@ function applicationDetailUrl(application) {
         : (applicationWaitingForActivity(application) || workflowStage(application) === 'screening' ? 'applicant' : 'decision'));
 
     return `${url.pathname}${url.search}${url.hash}`;
-}
-
-function toggleBulkActions() {
-    showBulkActions.value = !showBulkActions.value;
-
-    if (!showBulkActions.value) {
-        selectedBulkApplicationIds.value = [];
-        bulkAdvanceError.value = '';
-    }
 }
 
 function emptyScheduleForm(type = '') {
@@ -920,6 +1036,7 @@ async function loadProviderData(showLoading = true) {
         const response = await window.axios.get('/provider/applications/data', {
             params: {
                 ...(hasProgramContext.value ? { scholarship_id: selectedScholarshipId.value } : {}),
+                ...(!hasProgramContext.value && selectedProgramFilter.value ? { program_id: selectedProgramFilter.value } : {}),
                 filter: selectedQueueFilter.value,
                 sort: selectedQueueSort.value,
                 search: applicationSearch.value.trim() || undefined,
@@ -933,6 +1050,7 @@ async function loadProviderData(showLoading = true) {
         }
 
         applications.value = response.data.applications;
+        programOptions.value = Array.isArray(response.data.scholarships) ? response.data.scholarships : [];
         reviewers.value = Array.isArray(response.data.reviewers) ? response.data.reviewers : [];
         selectedScholarshipContext.value = response.data.selected_scholarship ?? selectedScholarshipContext.value;
         programEvents.value = response.data.program_events ?? [];
@@ -992,7 +1110,7 @@ async function assignReviewer(application, event) {
     }
 }
 
-watch([selectedQueueFilter, selectedQueueSort, applicationSearch], ([, , search], [, , previousSearch]) => {
+watch([selectedQueueFilter, selectedQueueSort, applicationSearch, selectedProgramFilter], ([, , search], [, , previousSearch]) => {
     if (applicationPage.value !== 1) {
         applicationPage.value = 1;
 
@@ -1004,7 +1122,7 @@ watch([selectedQueueFilter, selectedQueueSort, applicationSearch], ([, , search]
 
 watch(applicationPage, () => scheduleProviderDataLoad());
 
-watch([selectedQueueFilter, selectedQueueSort, applicationSearch, applicationPage], ([filter, sort, search, page]) => {
+watch([selectedQueueFilter, selectedQueueSort, applicationSearch, selectedProgramFilter, applicationPage], ([filter, sort, search, programId, page]) => {
     const url = new URL(window.location.href);
 
     url.searchParams.set('filter', filter);
@@ -1014,6 +1132,12 @@ watch([selectedQueueFilter, selectedQueueSort, applicationSearch, applicationPag
         url.searchParams.set('search', search.trim());
     } else {
         url.searchParams.delete('search');
+    }
+
+    if (!hasProgramContext.value && programId) {
+        url.searchParams.set('program_id', programId);
+    } else {
+        url.searchParams.delete('program_id');
     }
 
     if (page > 1) {
@@ -1049,17 +1173,27 @@ onMounted(loadProviderData);
 
         <section class="provider-page">
             <div class="provider-container">
-                <nav v-if="hasProgramContext" class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
-                    <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
-                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <a :href="`/provider/programs/${selectedScholarshipId}`" class="max-w-72 truncate font-bold text-slate-600 transition hover:text-slate-950">
-                        {{ selectedScholarshipContext?.title || 'Program workspace' }}
-                    </a>
-                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="font-semibold text-slate-950">{{ focusedWorkspaceCopy?.kicker || (activeWorkspaceSection === 'schedule' ? 'Activities' : 'Applicants') }}</span>
-                </nav>
+                <ProviderProgramHeader
+                    v-if="hasProgramContext"
+                    :program-id="selectedScholarshipId"
+                    :title="selectedScholarshipContext?.title || 'Scholarship program'"
+                    :status="selectedScholarshipContext?.status"
+                    :section="pageTitle"
+                >
+                    <template v-if="isDedicatedQueueWorkspace" #meta>
+                        <span>{{ focusedQueueCount }} in queue</span>
+                        <span>{{ visibleApplicationRange }}</span>
+                    </template>
+                    <template v-if="applicationWorkspaceMode === 'recipients'" #actions>
+                        <a :href="`/provider/programs/${selectedScholarshipId}/monitoring`" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                            Open monitoring
+                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </a>
+                    </template>
+                </ProviderProgramHeader>
 
                 <TaskPageHeader
+                    v-else
                     theme="provider"
                     :eyebrow="pageKicker"
                     :title="pageTitle"
@@ -1078,29 +1212,29 @@ onMounted(loadProviderData);
                     :active="activeWorkspaceSection === 'schedule' ? 'schedule' : 'applicants'"
                 />
 
-                <div v-if="isLoading" class="provider-panel mt-4 p-6 text-sm text-slate-500">
+                <ProviderSectionGuide v-if="hasProgramContext && activeWorkspaceGuide.length" :items="activeWorkspaceGuide" />
+
+                <div v-if="isLoading" class="provider-panel mt-3 p-6 text-sm text-slate-500">
                     Loading applicants...
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
+                <div v-else-if="errorMessage" class="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
                     {{ errorMessage }}
                 </div>
 
-                <div v-else class="mt-5 flex flex-col gap-4">
+                <div v-else class="mt-3 flex flex-col gap-3">
                     <section v-if="hasProgramContext && activeWorkspaceSection === 'schedule'" class="provider-panel p-4 sm:p-5">
-                        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program activities</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">Publish exam or interview details</h3>
-                                <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
-                                    Add shared details when applicants reach an exam or interview.
-                                </p>
-                            </div>
+                        <p v-if="scheduleError" class="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ scheduleError }}</p>
+
+                        <div
+                            v-if="configuredScheduleTypes.length === 0"
+                            :class="['rounded-md border border-dashed border-slate-300 bg-slate-50 p-5', scheduleError ? 'mt-4' : '']"
+                        >
+                            <p class="text-sm font-bold text-slate-900">No scheduled activities are used in this program</p>
+                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">This selection flow does not include an exam or interview, so there is nothing to publish here.</p>
                         </div>
 
-                        <p v-if="scheduleError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ scheduleError }}</p>
-
-                        <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div v-else :class="['grid gap-3 sm:grid-cols-2', scheduleError ? 'mt-4' : '']">
                             <button
                                 v-for="type in configuredScheduleTypes"
                                 :key="type.value"
@@ -1267,7 +1401,12 @@ onMounted(loadProviderData);
                         </div>
                     </section>
 
-                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications'" class="provider-panel p-4 sm:p-5">
+                    <section v-if="!hasProgramContext || activeWorkspaceSection === 'applications' || applicationWorkspaceMode === 'activities'" class="provider-panel p-4 sm:p-5">
+                        <div v-if="hasProgramContext && applicationWorkspaceMode === 'activities'" class="mb-4 border-b border-slate-200 pb-4">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Activity queue</p>
+                            <h2 class="mt-1 text-lg font-bold text-slate-950">Applicants waiting for this stage</h2>
+                            <p class="mt-1 text-sm leading-5 text-slate-500">Open a record when you need to confirm who is included before completing the activity.</p>
+                        </div>
                         <div v-if="!isDedicatedQueueWorkspace">
                             <h3 class="text-xl font-bold text-slate-950">{{ listTitle }}</h3>
                             <p v-if="applicationWorkspaceMode === 'all' || hasProgramContext" class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
@@ -1301,8 +1440,8 @@ onMounted(loadProviderData);
                             </div>
                         </div>
 
-                        <div :class="['flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between', isDedicatedQueueWorkspace ? '' : 'mt-4']">
-                            <label class="relative w-full lg:max-w-md">
+                        <div v-if="!hasProgramContext || rankedApplications.length > 0 || applicationSearch" :class="['grid gap-3 lg:grid-cols-[minmax(18rem,1fr)_auto] lg:items-center', isDedicatedQueueWorkspace ? '' : 'mt-4']">
+                            <label class="relative w-full">
                                 <span class="sr-only">Search applicants</span>
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
                                 <input
@@ -1313,6 +1452,13 @@ onMounted(loadProviderData);
                                 >
                             </label>
                             <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                                <label v-if="!hasProgramContext">
+                                    <span class="sr-only">Filter applicants by program</span>
+                                    <select v-model="selectedProgramFilter" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-500 sm:w-56">
+                                        <option value="">All programs</option>
+                                        <option v-for="program in programOptions" :key="program.id" :value="String(program.id)">{{ program.title }}</option>
+                                    </select>
+                                </label>
                                 <button
                                     v-if="applicationWorkspaceMode === 'all'"
                                     type="button"
@@ -1335,49 +1481,39 @@ onMounted(loadProviderData);
                                         <option v-for="option in queueSortOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                     </select>
                                 </label>
-                                <button
-                                    v-if="hasProgramContext && availableBulkAdvanceTargets.length"
-                                    type="button"
-                                    :class="[
-                                        'rounded-md border px-4 py-2.5 text-center text-sm font-bold transition',
-                                        showBulkActions
-                                            ? 'border-slate-900 bg-slate-900 text-white'
-                                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100',
-                                    ]"
-                                    @click="toggleBulkActions"
-                                >
-                                    <i class="fa-solid fa-check-double mr-1.5" aria-hidden="true"></i>
-                                    Bulk actions
-                                </button>
-                                <a
-                                    :href="exportApplicationsUrl"
-                                    class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                                >
-                                    <i class="fa-solid fa-file-excel mr-1.5" aria-hidden="true"></i>
-                                    Export Excel
-                                </a>
+                                <label v-if="hasProgramContext && availableBulkAdvanceTargets.length > 1">
+                                    <span class="sr-only">Bulk workflow action</span>
+                                    <select v-model="bulkAdvanceTarget" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none transition focus:border-slate-500 sm:w-48">
+                                        <option v-for="target in availableBulkAdvanceTargets" :key="target.value" :value="target.value">Bulk: {{ target.label }}</option>
+                                    </select>
+                                </label>
+                                <details class="group relative">
+                                    <summary class="inline-flex min-h-10 w-full cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 [&::-webkit-details-marker]:hidden">
+                                        More
+                                        <i class="fa-solid fa-chevron-down text-[9px] text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                    </summary>
+                                    <div class="absolute right-0 z-30 mt-1 w-48 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-xl">
+                                        <a :href="exportApplicationsUrl" class="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950">
+                                            <i class="fa-solid fa-file-excel w-4 text-center text-xs text-slate-400" aria-hidden="true"></i>
+                                            Export Excel
+                                        </a>
+                                    </div>
+                                </details>
                             </div>
                         </div>
 
-                        <div v-if="hasProgramContext && availableBulkAdvanceTargets.length && showBulkActions" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <div v-if="hasProgramContext && availableBulkAdvanceTargets.length && selectedBulkApplicationIds.length" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                             <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-                                    <span class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Bulk approval</span>
-                                    <label class="shrink-0">
-                                        <span class="sr-only">Bulk approval action</span>
-                                        <select v-model="bulkAdvanceTarget" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-slate-500 sm:w-52">
-                                            <option v-for="target in availableBulkAdvanceTargets" :key="target.value" :value="target.value">{{ target.label }}</option>
-                                        </select>
-                                    </label>
-                                    <p class="text-xs leading-5 text-slate-500">
-                                        Only applicants ready for this exact workflow action are selectable.
-                                    </p>
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Bulk action</p>
+                                    <p class="mt-1 text-sm font-bold text-slate-900">{{ selectedBulkAdvanceLabel }}</p>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-2">
                                     <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50" :disabled="bulkEligibleVisibleApplications.length === 0" @click="toggleVisibleBulkSelection">
                                         {{ allVisibleBulkSelected ? 'Clear page' : 'Select page' }}
                                     </button>
                                     <span class="text-xs font-bold text-slate-500">{{ selectedBulkApplicationIds.length }} selected</span>
+                                    <button type="button" class="px-2 py-2 text-xs font-bold text-slate-500 hover:text-slate-900" @click="selectedBulkApplicationIds = []">Clear</button>
                                     <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" :disabled="selectedBulkApplicationIds.length === 0 || bulkAdvancing" @click="applyBulkAdvance">
                                         {{ bulkAdvancing ? 'Saving...' : 'Apply to selected' }}
                                     </button>
@@ -1386,46 +1522,51 @@ onMounted(loadProviderData);
                             <p v-if="bulkAdvanceError" class="mt-2 text-xs font-semibold text-rose-700">{{ bulkAdvanceError }}</p>
                         </div>
 
-                        <div v-if="totalProviderApplications === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6">
-                            <p class="text-sm font-bold text-slate-900">No applicants yet</p>
-                            <p class="mt-1 text-sm leading-6 text-slate-500">
-                                {{ hasProgramContext
-                                    ? 'Applicants for this program will appear here after students submit the portal pre-screening form.'
-                                    : 'Applicants will appear after a published scholarship receives a pre-screening submission.' }}
-                            </p>
-                            <div class="mt-4 flex flex-wrap gap-2">
-                                <a href="/provider/programs" class="rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">Check programs</a>
-                                <a href="/provider/programs/create" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100">Create scholarship</a>
+                        <div class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
+                            <div class="hidden gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_auto]">
+                                <span>Applicant</span>
+                                <span>{{ recordStatusColumnLabel }}</span>
+                                <span class="text-right">Action</span>
                             </div>
-                        </div>
 
-                        <div v-else-if="rankedApplications.length === 0" class="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-500">
-                            {{ emptyQueueMessage }}
-                        </div>
+                            <div v-if="rankedApplications.length === 0" class="px-5 py-8 text-center">
+                                <p class="text-sm font-bold text-slate-900">
+                                    {{ totalProviderApplications === 0 ? 'No applicants yet' : 'No applicants in this queue' }}
+                                </p>
+                                <p class="mx-auto mt-1 max-w-2xl text-sm leading-5 text-slate-500">
+                                    {{ totalProviderApplications === 0
+                                        ? (hasProgramContext
+                                            ? 'Applicants will appear here after they submit the program pre-screening form.'
+                                            : 'Applicants will appear after a published scholarship receives a submission.')
+                                        : emptyQueueMessage }}
+                                </p>
+                            </div>
 
-                        <div v-else class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
                             <article
                                 v-for="application in visibleApplications"
                                 :key="application.id"
                                 :class="[
-                                    'grid gap-3 border-b border-slate-200 px-3 py-2.5 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:items-center',
-                                    showReviewerAssignment
-                                        ? 'lg:grid-cols-[minmax(0,1fr)_18rem]'
-                                        : 'lg:grid-cols-[minmax(0,1fr)_auto]',
+                                    'grid gap-3 border-b border-slate-200 px-3 py-3 transition last:border-b-0 hover:bg-slate-50 sm:px-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_auto] lg:items-center',
                                 ]"
                             >
                                 <div class="flex min-w-0 items-center gap-3">
-                                    <label v-if="hasProgramContext && showBulkActions" :title="canBulkAdvance(application) ? 'Select applicant' : 'This applicant is not ready for the selected bulk action.'" class="grid h-8 w-8 shrink-0 place-items-center">
+                                    <label v-if="hasProgramContext && availableBulkAdvanceTargets.length" :title="canBulkAdvance(application) ? 'Select applicant' : 'This applicant is not ready for the selected bulk action.'" class="grid h-8 w-8 shrink-0 place-items-center">
                                         <input v-model="selectedBulkApplicationIds" type="checkbox" :value="application.id" :disabled="!canBulkAdvance(application)" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-30">
                                         <span class="sr-only">Select {{ application.applicant?.name || 'applicant' }}</span>
                                     </label>
-                                    <div class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
+                                    <img
+                                        v-if="application.applicant?.profile_photo_url"
+                                        :src="application.applicant.profile_photo_url"
+                                        :alt="`${application.applicant?.name || 'Applicant'} profile photo`"
+                                        class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200"
+                                    >
+                                    <div v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
                                         {{ applicantInitials(application) }}
                                     </div>
 
                                     <div class="min-w-0 flex-1">
                                         <div class="flex min-w-0 items-start gap-2">
-                                            <h4 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">
+                                            <h4 class="min-w-0 flex-1 line-clamp-2 text-sm font-bold leading-5 text-slate-950">
                                                 {{ application.applicant?.name || 'Applicant' }}
                                             </h4>
                                             <i
@@ -1434,35 +1575,26 @@ onMounted(loadProviderData);
                                                 title="Verified academic record"
                                                 aria-label="Verified academic record"
                                             ></i>
-                                            <span :class="['hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', statusClass(application.status)]">
-                                                {{ applicationQueueLabel(application) }}
-                                            </span>
                                         </div>
                                         <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">
-                                            {{ application.scholarship?.title || 'Scholarship' }} - {{ application.applicant?.email || 'No email provided' }}
+                                            {{ applicantSecondaryLabel(application) }}
                                         </p>
-                                        <div class="mt-1 hidden flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-500 sm:flex">
-                                            <span v-if="showSubmissionMetric">Submitted {{ application.submitted_at || 'recently' }}</span>
-                                            <span v-if="showWaitingTime(application)">Waiting {{ application.waiting_days }}d</span>
-                                            <span v-if="showReadinessMetrics">Match {{ application.dss_score ?? 0 }}%</span>
-                                            <span v-if="showReadinessMetrics">Files {{ application.document_readiness?.percent ?? 0 }}%</span>
-                                            <span v-if="documentIssueCount(application)" class="text-amber-700">
-                                                {{ documentIssueCount(application) }} file issue{{ documentIssueCount(application) === 1 ? '' : 's' }}
-                                            </span>
-                                            <span v-if="application.documents_changed_since_review" class="text-amber-700">Files updated</span>
-                                            <span v-if="application.correction_status === 'requested'" class="text-amber-700">Correction requested</span>
-                                            <span v-if="application.correction_status === 'submitted'" class="text-sky-700">Correction ready to review</span>
-                                            <span v-if="application.status === 'waitlisted' && application.waitlist_position" class="text-sky-700">Alternate #{{ application.waitlist_position }}</span>
-                                            <span v-if="applicationWorkspaceMode === 'recipients' && application.outcome_at" class="text-emerald-700">Selected {{ application.outcome_at }}</span>
-                                            <span class="text-slate-700">Next: {{ providerNextAction(application) }}</span>
-                                        </div>
                                     </div>
+                                </div>
+
+                                <div v-if="isFocusedOutcomeWorkspace" :class="['min-w-0', hasProgramContext && availableBulkAdvanceTargets.length ? 'pl-24 lg:pl-0' : 'pl-14 lg:pl-0']">
+                                    <span :class="['inline-flex rounded-md px-2 py-1 text-[9px] font-bold uppercase', outcomeRecordStatusClass(application)]">{{ outcomeRecordStatus(application) }}</span>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ outcomeRecordDetail(application) }}</p>
+                                </div>
+                                <div v-else :class="['flex min-w-0 flex-wrap items-center gap-2', hasProgramContext && availableBulkAdvanceTargets.length ? 'pl-24 lg:pl-0' : 'pl-14 lg:pl-0']">
+                                    <span :class="['inline-flex rounded-md px-2 py-1 text-[9px] font-bold uppercase', statusClass(application.status)]">{{ applicationQueueLabel(application) }}</span>
+                                    <span :class="['text-xs font-semibold', applicationPrioritySignal(application).tone]">{{ applicationPrioritySignal(application).label }}</span>
                                 </div>
 
                                 <div :class="[
                                     'flex w-full shrink-0 gap-2 lg:justify-end',
                                     showReviewerAssignment ? 'lg:w-72' : 'lg:w-auto',
-                                    hasProgramContext && showBulkActions ? 'pl-11 lg:pl-0' : 'pl-14 lg:pl-0',
+                                    hasProgramContext && availableBulkAdvanceTargets.length ? 'pl-24 lg:pl-0' : 'pl-14 lg:pl-0',
                                 ]">
                                     <label v-if="showReviewerAssignment && reviewersForApplication(application).length" class="min-w-0 flex-1 lg:w-44 lg:flex-none">
                                         <span class="sr-only">Assigned reviewer for {{ application.applicant?.name || 'applicant' }}</span>
@@ -1488,7 +1620,7 @@ onMounted(loadProviderData);
                                 </div>
                             </article>
 
-                            <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div v-if="visibleApplications.length" class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                                 <p class="text-xs font-semibold text-slate-500">Showing {{ visibleApplicationRange }}</p>
                                 <div v-if="totalApplicationPages > 1" class="flex gap-2">
                                     <button

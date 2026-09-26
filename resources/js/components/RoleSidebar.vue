@@ -34,6 +34,10 @@ const props = defineProps({
         type: String,
         required: true,
     },
+    mobileCollapsible: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const currentUrl = new URL(window.location.href);
@@ -126,6 +130,7 @@ const expandedGroups = ref(new Set(
         .filter((link) => link.children?.length && isGroupActive(link))
         .map(groupKey),
 ));
+const mobileMenuOpen = ref(false);
 
 function isGroupExpanded(link) {
     return expandedGroups.value.has(groupKey(link));
@@ -165,9 +170,9 @@ async function requestLogout() {
     <aside class="relative overflow-visible border-r border-white/10 bg-[#081426] text-white lg:sticky lg:top-0 lg:h-screen">
         <div class="absolute inset-x-0 top-0 h-0.5 bg-amber-300"></div>
 
-        <div class="relative flex min-h-64 flex-col px-4 pb-4 pt-5 lg:h-full lg:min-h-0">
-            <header class="shrink-0 pb-4">
-                <a :href="homeHref" class="group flex items-center gap-3 rounded-md px-1 py-1">
+        <div :class="['relative flex flex-col px-4 lg:h-full lg:min-h-0', mobileCollapsible ? 'min-h-0 py-3 lg:pb-4 lg:pt-5' : 'min-h-64 pb-4 pt-5']">
+            <header :class="['flex shrink-0 items-center justify-between gap-3', mobileCollapsible && !mobileMenuOpen ? 'pb-0 lg:pb-4' : 'pb-4']">
+                <a :href="homeHref" class="group flex min-w-0 items-center gap-3 rounded-md px-1 py-1">
                     <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-300 text-sm font-black text-slate-950 transition group-hover:bg-amber-200">
                         <i :class="icon" aria-hidden="true"></i>
                     </span>
@@ -180,9 +185,27 @@ async function requestLogout() {
                         </span>
                     </span>
                 </a>
+                <button
+                    v-if="mobileCollapsible"
+                    type="button"
+                    class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.1] hover:text-white lg:hidden"
+                    :aria-expanded="mobileMenuOpen"
+                    aria-controls="portal-mobile-navigation"
+                    @click="mobileMenuOpen = !mobileMenuOpen"
+                >
+                    <i :class="['fa-solid text-xs', mobileMenuOpen ? 'fa-xmark' : 'fa-bars']" aria-hidden="true"></i>
+                    {{ mobileMenuOpen ? 'Close' : 'Menu' }}
+                </button>
             </header>
 
-            <nav class="grid content-start gap-1 border-t border-white/10 pt-4 sm:grid-cols-2 lg:min-h-0 lg:flex-1 lg:grid-cols-1 lg:overflow-y-auto [scrollbar-color:rgba(148,163,184,0.25)_transparent] [scrollbar-width:thin]" aria-label="Portal navigation">
+            <nav
+                id="portal-mobile-navigation"
+                :class="[
+                    'content-start gap-1 border-t border-white/10 pt-4 sm:grid-cols-2 lg:min-h-0 lg:flex-1 lg:grid lg:grid-cols-1 lg:overflow-y-auto [scrollbar-color:rgba(148,163,184,0.25)_transparent] [scrollbar-width:thin]',
+                    mobileCollapsible && !mobileMenuOpen ? 'hidden' : 'grid',
+                ]"
+                aria-label="Portal navigation"
+            >
                 <div
                     v-for="link in navLinks"
                     :key="link.href"
@@ -244,7 +267,7 @@ async function requestLogout() {
                 </div>
             </nav>
 
-            <div class="mt-4 shrink-0 border-t border-white/10 pt-3">
+            <div :class="['mt-4 shrink-0 border-t border-white/10 pt-3 lg:block', mobileCollapsible && !mobileMenuOpen ? 'hidden' : 'block']">
                 <div class="flex min-w-0 items-center gap-2.5 px-2 py-1.5">
                     <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/[0.08] text-[11px] font-black text-amber-200">
                         {{ accountInitials }}

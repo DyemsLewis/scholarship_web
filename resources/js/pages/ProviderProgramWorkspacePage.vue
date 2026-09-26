@@ -1,11 +1,10 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import ProviderProgramHeader from '../components/ProviderProgramHeader.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
-import { labelFromKey } from '../support/display';
 
 const scholarshipId = document.getElementById('app')?.dataset.scholarshipId;
 const isUpdatesView = window.location.pathname.replace(/\/$/, '').endsWith('/updates')
@@ -85,6 +84,7 @@ const slotUsagePercent = computed(() => {
 
     return Math.min(100, Math.round((selectedCount.value / slotCapacity.value) * 100));
 });
+const remainingSlotCount = computed(() => Math.max(0, slotCapacity.value - selectedCount.value));
 const workflowCounts = computed(() => scholarship.value?.workflow_counts ?? {});
 const activityStatuses = computed(() => scholarship.value?.activity_statuses ?? []);
 const applicantWorkspaceUrl = computed(() => `/provider/programs/${scholarshipId}/applications`);
@@ -132,8 +132,10 @@ const recommendedAction = computed(() => {
             eyebrow: program.status === 'rejected' ? 'Changes required' : 'Finish setup',
             title: program.status === 'rejected' ? 'Update and resubmit this program' : 'Complete the program details',
             description: statusGuidance(program.status),
-            label: 'Return to programs',
-            href: '/provider/programs?status=drafts',
+            label: canManagePrograms.value ? 'Edit program' : 'Return to programs',
+            href: canManagePrograms.value
+                ? `/provider/programs/${scholarshipId}/edit`
+                : '/provider/programs?status=drafts',
         };
     }
 
@@ -235,26 +237,6 @@ const recommendedAction = computed(() => {
         href: '/provider/programs',
     };
 });
-
-function statusLabel(status) {
-    return {
-        draft: 'Draft',
-        pending_review: 'In admin review',
-        published: 'Published',
-        rejected: 'Needs changes',
-        closed: 'Closed',
-    }[status] ?? labelFromKey(status || 'draft');
-}
-
-function statusClass(status) {
-    if (status === 'published') return 'bg-emerald-100 text-emerald-800';
-    if (status === 'pending_review') return 'bg-sky-100 text-sky-800';
-    if (status === 'rejected') return 'bg-rose-100 text-rose-800';
-    if (status === 'closed') return 'bg-slate-200 text-slate-700';
-
-    return 'bg-amber-100 text-amber-800';
-}
-
 function statusGuidance(status) {
     return {
         draft: 'Complete the setup and submit this program for administrator review.',
@@ -276,18 +258,6 @@ function dateLabel(value) {
         day: 'numeric',
         year: 'numeric',
     }).format(parsed);
-}
-
-function targetLabel(program) {
-    const levels = String(program?.eligible_education_levels ?? '')
-        .split(/\r?\n|,/)
-        .map((item) => item.trim())
-        .filter(Boolean);
-
-    if (!levels.length || levels.length >= 7) return 'All learners';
-
-    return levels.slice(0, 2).map(labelFromKey).join(', ')
-        + (levels.length > 2 ? ` +${levels.length - 2}` : '');
 }
 
 async function loadProgram() {
@@ -376,161 +346,197 @@ onMounted(loadProgram);
 
         <section class="provider-page">
             <div class="provider-container">
-                <nav class="flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
-                    <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
-                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <a
-                        v-if="isUpdatesView && scholarship"
-                        :href="`/provider/programs/${scholarship.id}`"
-                        class="max-w-72 truncate font-bold text-slate-600 transition hover:text-slate-950"
-                    >
-                        {{ scholarship.title }}
-                    </a>
-                    <span v-else class="truncate font-semibold text-slate-950">{{ scholarship?.title || 'Program workspace' }}</span>
-                    <template v-if="isUpdatesView && scholarship">
-                        <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                        <span class="font-semibold text-slate-950">Updates</span>
-                    </template>
-                </nav>
-
-                <div v-if="isLoading" class="mt-5 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
+                <div v-if="isLoading" class="provider-panel mt-3 p-6 text-sm text-slate-500">
                     Loading program workspace...
                 </div>
-                <div v-else-if="errorMessage" class="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
+                <div v-else-if="errorMessage" class="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
                     {{ errorMessage }}
                 </div>
 
                 <template v-else-if="scholarship">
-                    <TaskPageHeader
-                        v-if="isUpdatesView"
-                        class="mt-5"
-                        theme="provider"
-                        eyebrow="Program communication"
-                        title="Applicant updates"
-                        description="Send stage-specific announcements and review what your team already published."
-                        icon="fa-solid fa-bullhorn"
+                    <ProviderProgramHeader
+                        :program-id="scholarship.id"
+                        :title="scholarship.title"
+                        :status="scholarship.status"
+                        :section="isUpdatesView ? 'Program updates' : 'Program overview'"
                     >
                         <template #meta>
-                            <span>{{ scholarship.title }}</span>
-                            <span>{{ announcements.length }} published</span>
+                            <template v-if="isUpdatesView">
+                                <span>{{ announcements.length }} published update{{ announcements.length === 1 ? '' : 's' }}</span>
+                            </template>
+                            <template v-else>
+                                <span class="inline-flex items-center gap-1.5"><i class="fa-regular fa-calendar text-slate-400" aria-hidden="true"></i>Deadline <strong class="text-slate-800">{{ dateLabel(scholarship.deadline) }}</strong></span>
+                                <span class="inline-flex items-center gap-1.5"><i class="fa-solid fa-users text-slate-400" aria-hidden="true"></i><strong class="text-slate-800">{{ scholarship.applications_count ?? 0 }}</strong> applicant{{ Number(scholarship.applications_count ?? 0) === 1 ? '' : 's' }}</span>
+                            </template>
                         </template>
-                        <template v-if="canSendAnnouncements" #actions>
+                        <template #actions>
                             <button
+                                v-if="isUpdatesView && canSendAnnouncements"
                                 type="button"
                                 class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                                 @click="openAnnouncementComposer"
                             >
                                 <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-                                New announcement
+                                New update
                             </button>
-                        </template>
-                    </TaskPageHeader>
-
-                    <section v-if="!isUpdatesView" class="provider-panel mt-5 overflow-visible">
-                        <header class="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                            <div class="flex min-w-0 items-center gap-4">
-                                <img :src="scholarship.image_url" :alt="scholarship.title" class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200">
-                                <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Program workspace</p>
-                                        <span :class="['rounded-md px-2 py-1 text-[9px] font-bold uppercase', statusClass(scholarship.status)]">{{ statusLabel(scholarship.status) }}</span>
-                                    </div>
-                                    <h1 class="mt-1.5 truncate font-display text-xl font-bold leading-tight text-slate-950 sm:text-2xl">{{ scholarship.title }}</h1>
-                                    <p class="mt-1 text-xs font-semibold text-slate-500 sm:text-sm">{{ scholarship.category || 'Scholarship program' }} <span class="mx-1 text-slate-300">/</span> {{ targetLabel(scholarship) }}</p>
-                                </div>
-                            </div>
-
-                            <details class="group relative shrink-0">
-                                <summary class="inline-flex min-h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-                                    More actions
+                            <details v-else-if="canManagePrograms" class="group relative z-20">
+                                <summary class="inline-flex min-h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                                    More
                                     <i class="fa-solid fa-chevron-down text-[9px] text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
                                 </summary>
-                                <div class="absolute right-0 z-50 mt-1 w-56 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-xl">
-                                    <button v-if="canManagePrograms" type="button" :disabled="isDuplicating" class="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950 disabled:opacity-60" @click="duplicateProgram">
+                                <div class="absolute right-0 z-50 mt-1 w-52 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-xl">
+                                    <button type="button" :disabled="isDuplicating" class="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-bold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950 disabled:opacity-60" @click="duplicateProgram">
                                         <i class="fa-regular fa-copy w-4 text-center text-xs text-slate-400" aria-hidden="true"></i>
                                         {{ isDuplicating ? 'Duplicating...' : 'Duplicate as draft' }}
                                     </button>
-                                    <a href="/provider/programs" class="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950">
-                                        <i class="fa-solid fa-arrow-left w-4 text-center text-xs text-slate-400" aria-hidden="true"></i>
-                                        All programs
-                                    </a>
                                 </div>
                             </details>
-                        </header>
-
-                        <dl class="grid gap-px bg-slate-200 sm:grid-cols-3">
-                            <div class="bg-white px-4 py-3">
-                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i class="fa-regular fa-calendar text-amber-700" aria-hidden="true"></i>Deadline</dt>
-                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ dateLabel(scholarship.deadline) }}</dd>
-                            </div>
-                            <div class="bg-white px-4 py-3">
-                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[canAccessApplicantWorkspace ? 'fa-solid fa-users' : 'fa-solid fa-eye', 'text-amber-700']" aria-hidden="true"></i>{{ canAccessApplicantWorkspace ? 'Applicants' : 'Visibility' }}</dt>
-                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ canAccessApplicantWorkspace ? `${scholarship.applications_count ?? 0} total` : statusLabel(scholarship.status) }}</dd>
-                            </div>
-                            <div class="bg-white px-4 py-3">
-                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[canAccessApplicantWorkspace ? 'fa-solid fa-user-check' : 'fa-regular fa-clock', 'text-amber-700']" aria-hidden="true"></i>{{ canAccessApplicantWorkspace ? 'Selected' : 'Updated' }}</dt>
-                                <dd class="mt-1.5 text-sm font-bold text-slate-950">{{ canAccessApplicantWorkspace ? `${selectedCount}${slotCapacity > 0 ? ` of ${slotCapacity}` : ''}` : (scholarship.updated_at || 'Recently') }}</dd>
-                                <div v-if="canAccessApplicantWorkspace && slotCapacity > 0" class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-amber-400" :style="{ width: `${slotUsagePercent}%` }"></div></div>
-                            </div>
-                        </dl>
-                    </section>
+                        </template>
+                    </ProviderProgramHeader>
 
                     <ProviderProgramNav
                         :program-id="scholarship.id"
                         :active="isUpdatesView ? 'announcements' : 'overview'"
                     />
 
-                    <div v-if="!isUpdatesView" class="mt-4">
-                        <section v-if="recommendedAction" class="provider-panel overflow-hidden border-l-4 border-l-amber-400">
-                            <div class="flex flex-col justify-between gap-4 p-4 sm:flex-row sm:items-center sm:px-5">
-                                <div class="flex min-w-0 items-start gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
-                                    <div>
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">{{ recommendedAction.eyebrow }}</p>
-                                        <h2 class="mt-1 text-base font-bold text-slate-950 sm:text-lg">{{ recommendedAction.title }}</h2>
-                                        <p class="mt-1 max-w-2xl text-sm leading-5 text-slate-500">{{ recommendedAction.description }}</p>
-                                    </div>
+                    <div v-if="!isUpdatesView" class="mt-3 space-y-3">
+                        <section v-if="recommendedAction" class="provider-panel overflow-hidden">
+                            <div v-if="recommendedAction" class="grid bg-slate-50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+                                <span class="hidden h-full min-h-24 w-14 place-items-center border-r border-slate-200 bg-white text-slate-700 sm:grid"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
+                                <div class="min-w-0 px-4 py-4 sm:px-5">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ recommendedAction.eyebrow }}</p>
+                                    <h2 class="mt-1 text-base font-bold text-slate-950 sm:text-lg">{{ recommendedAction.title }}</h2>
+                                    <p class="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{{ recommendedAction.description }}</p>
                                 </div>
-                                <a :href="recommendedAction.href" class="inline-flex w-fit shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
-                                    {{ recommendedAction.label }}
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </a>
+                                <div class="px-4 pb-4 sm:px-5 sm:py-4">
+                                    <a :href="recommendedAction.href" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto">
+                                        {{ recommendedAction.label }}
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </a>
+                                </div>
                             </div>
                         </section>
-                    </div>
 
-                    <section v-if="isUpdatesView" id="announcements" class="provider-panel mt-4 overflow-hidden">
-                        <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3.5 sm:px-6">
-                            <h2 class="text-base font-bold text-slate-950">Published announcements</h2>
-                            <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ announcements.length }}</span>
-                        </header>
+                        <section v-if="canAccessApplicantWorkspace && ['published', 'closed'].includes(scholarship.status)" class="provider-panel overflow-hidden">
+                            <header class="flex flex-col gap-2 border-b border-slate-200 px-4 py-3.5 sm:flex-row sm:items-end sm:justify-between sm:px-5">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Applicant operations</p>
+                                    <h2 class="mt-1 text-base font-bold text-slate-950">Application queues</h2>
+                                </div>
+                                <p class="text-xs font-semibold text-slate-500">Open a queue to continue its task</p>
+                            </header>
 
-                        <div v-if="announcements.length" class="divide-y divide-slate-200">
-                            <article v-for="announcement in announcements" :key="announcement.id" class="grid gap-3 px-5 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
-                                <div class="flex min-w-0 items-start gap-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                        <i class="fa-regular fa-bell text-xs" aria-hidden="true"></i>
+                            <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+                                <a
+                                    v-for="queue in workflowQueues"
+                                    :key="queue.key"
+                                    :href="queue.href"
+                                    class="group flex min-h-24 items-center gap-3 bg-white px-4 py-4 transition hover:bg-slate-50"
+                                >
+                                    <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md text-sm transition', queue.count ? 'bg-slate-100 text-slate-700' : 'bg-slate-50 text-slate-400 group-hover:bg-white']"><i :class="queue.icon" aria-hidden="true"></i></span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="flex items-center justify-between gap-3">
+                                            <strong class="text-sm text-slate-950">{{ queue.label }}</strong>
+                                            <strong :class="['text-lg leading-none', queue.count ? 'text-slate-950' : 'text-slate-400']">{{ queue.count }}</strong>
+                                        </span>
+                                        <span class="mt-1 block truncate text-xs text-slate-500">{{ queue.description }}</span>
                                     </span>
-                                    <div class="min-w-0">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <h3 class="truncate text-sm font-bold text-slate-950">{{ announcement.title }}</h3>
-                                            <span class="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-bold uppercase text-slate-600">{{ announcement.audience_label }}</span>
-                                        </div>
-                                        <p class="mt-1 line-clamp-1 text-xs leading-5 text-slate-500">{{ announcement.message }}</p>
-                                        <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-400">
-                                            <span>{{ announcement.recipient_count }} recipient{{ announcement.recipient_count === 1 ? '' : 's' }}</span>
-                                            <span>{{ announcement.published_at }}</span>
-                                            <span v-if="announcement.publisher">By {{ announcement.publisher }}</span>
-                                        </div>
+                                </a>
+                            </div>
+
+                            <div v-if="activityStatuses.length" class="border-t border-slate-200 px-4 py-3.5 sm:px-5">
+                                <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                    <div class="shrink-0">
+                                        <p class="text-sm font-bold text-slate-950">Program activities</p>
+                                        <p class="mt-0.5 text-xs text-slate-500">Shared exam and interview schedules</p>
+                                    </div>
+                                    <div class="grid flex-1 gap-2 sm:grid-cols-2 lg:max-w-3xl">
+                                        <a v-for="activity in activityStatuses" :key="activity.type" :href="`${applicantWorkspaceUrl}/activities`" class="flex min-w-0 items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 transition hover:border-slate-300 hover:bg-white">
+                                            <span class="min-w-0">
+                                                <strong class="block truncate text-xs text-slate-900">{{ activity.label }}</strong>
+                                                <span class="mt-0.5 block truncate text-[11px] text-slate-500">{{ activity.event?.scheduled_label || 'Schedule not published' }}</span>
+                                            </span>
+                                            <span class="shrink-0 text-[10px] font-bold uppercase text-slate-500">{{ activity.waiting_applicants }} waiting</span>
+                                        </a>
                                     </div>
                                 </div>
-                                <button type="button" class="ml-12 w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 sm:ml-0" @click="openAnnouncement(announcement)">View message</button>
-                            </article>
-                        </div>
-                        <div v-else class="px-5 py-8 text-center sm:px-6">
-                            <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-regular fa-bell" aria-hidden="true"></i></span>
-                            <p class="mt-3 text-sm font-bold text-slate-800">No announcements yet</p>
-                            <p class="mt-1 text-xs leading-5 text-slate-500">Published updates will remain here for provider reference.</p>
+                            </div>
+
+                            <div class="border-t border-slate-200 bg-slate-50 px-4 py-3.5 sm:px-5">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-amber-800 ring-1 ring-slate-200"><i class="fa-solid fa-award text-xs" aria-hidden="true"></i></span>
+                                        <div>
+                                            <p class="text-sm font-bold text-slate-950">Selection progress</p>
+                                            <p class="mt-0.5 text-xs text-slate-500">{{ selectedCount }} selected<span v-if="slotCapacity > 0">, {{ remainingSlotCount }} slot{{ remainingSlotCount === 1 ? '' : 's' }} remaining</span></p>
+                                        </div>
+                                    </div>
+                                    <div v-if="slotCapacity > 0" class="flex w-full items-center gap-3 sm:max-w-sm">
+                                        <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-200" role="progressbar" aria-label="Selection capacity used" aria-valuemin="0" :aria-valuemax="slotCapacity" :aria-valuenow="Math.min(selectedCount, slotCapacity)">
+                                            <div class="h-full rounded-full bg-slate-800" :style="{ width: `${slotUsagePercent}%` }"></div>
+                                        </div>
+                                        <span class="shrink-0 text-xs font-bold text-slate-600">{{ selectedCount }}/{{ slotCapacity }}</span>
+                                    </div>
+                                    <span v-else class="text-xs font-semibold text-slate-500">Capacity not set</span>
+                                </div>
+                            </div>
+                        </section>
+
+                    </div>
+
+                    <section v-if="isUpdatesView" id="announcements" class="provider-panel mt-3 overflow-hidden">
+                        <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Communication record</p>
+                                <h2 class="mt-1 text-lg font-bold text-slate-950">Update history</h2>
+                            </div>
+                            <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ announcements.length }} published</span>
+                        </header>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full min-w-[820px] text-left text-sm">
+                                <colgroup>
+                                    <col class="w-[42%]">
+                                    <col class="w-[22%]">
+                                    <col class="w-[12%]">
+                                    <col class="w-[16%]">
+                                    <col class="w-[8%]">
+                                </colgroup>
+                                <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                    <tr>
+                                        <th class="px-5 py-3">Update</th>
+                                        <th class="px-4 py-3">Audience</th>
+                                        <th class="px-4 py-3 text-center">Reach</th>
+                                        <th class="px-4 py-3">Published</th>
+                                        <th class="px-5 py-3 text-right">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200 bg-white">
+                                    <tr v-if="!announcements.length">
+                                        <td colspan="5" class="px-5 py-8 text-center">
+                                            <p class="font-bold text-slate-900">No updates published yet</p>
+                                            <p class="mt-1 text-sm text-slate-500">New applicant updates will appear here.</p>
+                                        </td>
+                                    </tr>
+                                    <tr v-for="announcement in announcements" :key="announcement.id">
+                                        <td class="px-5 py-3.5">
+                                            <p class="truncate font-bold text-slate-950">{{ announcement.title }}</p>
+                                            <p class="mt-0.5 line-clamp-1 text-xs leading-5 text-slate-500">{{ announcement.message }}</p>
+                                        </td>
+                                        <td class="px-4 py-3.5">
+                                            <span class="inline-flex rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">{{ announcement.audience_label }}</span>
+                                        </td>
+                                        <td class="px-4 py-3.5 text-center font-bold text-slate-800">{{ announcement.recipient_count }}</td>
+                                        <td class="px-4 py-3.5">
+                                            <p class="text-xs font-semibold text-slate-700">{{ announcement.published_at }}</p>
+                                            <p v-if="announcement.publisher" class="mt-0.5 truncate text-[11px] text-slate-500">{{ announcement.publisher }}</p>
+                                        </td>
+                                        <td class="px-5 py-3.5 text-right">
+                                            <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50" @click="openAnnouncement(announcement)">Open</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </section>
                 </template>
@@ -549,7 +555,7 @@ onMounted(loadProgram);
                 <section class="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="announcement-detail-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
                         <div class="min-w-0">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Published announcement</p>
+                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program update</p>
                             <h2 id="announcement-detail-title" class="mt-1 text-xl font-bold text-slate-950">{{ selectedAnnouncement.title }}</h2>
                             <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-slate-500">
                                 <span>{{ selectedAnnouncement.audience_label }}</span>
@@ -592,8 +598,8 @@ onMounted(loadProgram);
                                 <i class="fa-solid fa-bullhorn" aria-hidden="true"></i>
                             </span>
                             <div class="min-w-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant update</p>
-                                <h2 id="announcement-modal-title" class="mt-1 text-xl font-bold text-slate-950">New announcement</h2>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant communication</p>
+                                <h2 id="announcement-modal-title" class="mt-1 text-xl font-bold text-slate-950">New program update</h2>
                                 <p class="mt-1 text-sm leading-5 text-slate-600">Applicants in the selected group will receive this update.</p>
                             </div>
                         </div>
@@ -609,7 +615,7 @@ onMounted(loadProgram);
                             </p>
                             <div class="space-y-4">
                                 <label class="block">
-                                    <span class="mb-2 block text-xs font-bold text-slate-700">Announcement title</span>
+                                    <span class="mb-2 block text-xs font-bold text-slate-700">Update title</span>
                                     <input ref="announcementTitleInput" v-model="announcementForm.title" type="text" maxlength="120" required placeholder="Example: Interview schedule reminder" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-600 focus:ring-3 focus:ring-slate-100">
                                 </label>
                                 <label class="block">
@@ -634,7 +640,7 @@ onMounted(loadProgram);
                             </button>
                             <button type="submit" :disabled="isPublishingAnnouncement" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60">
                                 <i class="fa-solid fa-paper-plane text-xs" aria-hidden="true"></i>
-                                {{ isPublishingAnnouncement ? 'Publishing...' : 'Publish announcement' }}
+                                {{ isPublishingAnnouncement ? 'Publishing...' : 'Publish update' }}
                             </button>
                         </footer>
                     </form>

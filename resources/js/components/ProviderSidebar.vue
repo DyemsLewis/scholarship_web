@@ -25,7 +25,7 @@ const navLinks = computed(() => [
     }] : []),
     ...(canReviewApplications ? [{
         href: '/provider/applications/review',
-        label: 'Applications',
+        label: 'All applications',
         icon: 'fa-solid fa-user-check',
         children: [
             { href: '/provider/applications/review', label: 'Applicant review', exact: true },
@@ -36,7 +36,7 @@ const navLinks = computed(() => [
     }] : []),
     ...(canReviewApplications ? [{
         href: '/provider/applications/recipients',
-        label: 'Recipients',
+        label: 'All recipients',
         icon: 'fa-solid fa-award',
         children: [
             { href: '/provider/applications/recipients', label: 'Selected recipients', exact: true },
@@ -79,5 +79,6 @@ const navLinks = computed(() => [
         home-href="/provider"
         :nav-links="navLinks"
         logout-message="You will need to sign in again to continue using the provider portal."
+        mobile-collapsible
     />
 </template>

@@ -201,27 +201,27 @@ const commitmentOptions = [
     },
     {
         value: 'renewal',
-        label: 'Renewal requirement may apply',
+        label: 'Enrollment or renewal requirements',
         field: 'renewalPolicy',
-        text: 'Renewal requirements may apply. The provider will explain the final conditions after acceptance.',
+        text: 'Maintain the stated enrollment and academic requirements and submit the records listed for renewal review.',
     },
     {
         value: 'service',
-        label: 'Service or community duty may apply',
+        label: 'Service or community commitment',
         field: 'returnServiceContract',
-        text: 'A service or community commitment may apply. The provider will explain the final duties after acceptance.',
+        text: 'Complete the specific service or community activities listed in the recipient agreement.',
     },
     {
         value: 'activities',
-        label: 'Progress updates or activities may apply',
+        label: 'Required program activities',
         field: 'otherContractTerms',
-        text: 'Progress updates or program activities may apply. The provider will explain the final expectations after acceptance.',
+        text: 'Attend the specific orientation or program activities listed in the recipient agreement.',
     },
     {
         value: 'reporting',
         label: 'Progress or utilization report',
         field: 'otherContractTerms',
-        text: 'The recipient must submit the progress or utilization update described in the final agreement.',
+        text: 'Submit the academic progress or benefit-use records listed in the recipient agreement.',
     },
     {
         value: 'custom',
@@ -816,20 +816,23 @@ const supportPeriodReady = computed(() => hasText(scholarshipForm.value.supportS
     && hasText(scholarshipForm.value.supportEndsAt)
     && scholarshipForm.value.supportEndsAt >= scholarshipForm.value.supportStartsAt);
 const recipientAgreementReady = computed(() => {
+    if (!hasText(scholarshipForm.value.recipientAgreement.release_conditions)) {
+        return false;
+    }
+
     if (selectedCommitmentOption.value === 'none') {
         return true;
     }
 
     return selectedCommitmentOption.value !== 'provider_briefing'
-        && commitmentEntries().length > 0
+        && hasText(scholarshipForm.value.recipientAgreement.responsibilities)
+        && hasText(scholarshipForm.value.recipientAgreement.required_evidence)
         && hasText(scholarshipForm.value.recipientAgreement.duration)
         && hasText(scholarshipForm.value.recipientAgreement.noncompliance_consequence)
         && hasText(scholarshipForm.value.recipientAgreement.exit_or_exception_process);
 });
-const recipientCommitmentPreview = computed(() => commitmentEntries()
-    .map((entry) => entry.value)
-    .filter(Boolean)
-    .join(' '));
+const recipientCommitmentPreview = computed(() => scholarshipForm.value.recipientAgreement.responsibilities
+    || commitmentEntries().map((entry) => entry.value).filter(Boolean).join(' '));
 const programReadinessItems = computed(() => [
     {
         label: 'Program overview',
@@ -1314,6 +1317,9 @@ function emptyScholarshipForm() {
         otherContractTerms: defaultCommitmentText,
         recipientAgreement: {
             commitment_type: 'provider_briefing',
+            responsibilities: '',
+            required_evidence: '',
+            release_conditions: '',
             duration: '',
             noncompliance_consequence: '',
             exit_or_exception_process: '',
@@ -1842,6 +1848,8 @@ function applySelectedCommitment() {
     scholarshipForm.value.recipientAgreement.commitment_type = option.value;
 
     if (option.value === 'none' || option.value === 'provider_briefing') {
+        scholarshipForm.value.recipientAgreement.responsibilities = '';
+        scholarshipForm.value.recipientAgreement.required_evidence = '';
         scholarshipForm.value.recipientAgreement.duration = '';
         scholarshipForm.value.recipientAgreement.noncompliance_consequence = '';
         scholarshipForm.value.recipientAgreement.exit_or_exception_process = '';
@@ -1854,6 +1862,7 @@ function applySelectedCommitment() {
 
         clearCommitmentFields();
         scholarshipForm.value.otherContractTerms = customCommitmentText.value;
+        scholarshipForm.value.recipientAgreement.responsibilities = customCommitmentText.value;
         return;
     }
 
@@ -1861,6 +1870,7 @@ function applySelectedCommitment() {
 
     if (option.field && option.text) {
         scholarshipForm.value[option.field] = option.text;
+        scholarshipForm.value.recipientAgreement.responsibilities = option.text;
     }
 
     customCommitmentText.value = '';
@@ -1869,6 +1879,7 @@ function applySelectedCommitment() {
 function applyCustomCommitment() {
     clearCommitmentFields();
     scholarshipForm.value.otherContractTerms = customCommitmentText.value;
+    scholarshipForm.value.recipientAgreement.responsibilities = customCommitmentText.value;
 }
 
 function composeProgramAddress(form = scholarshipForm.value) {
@@ -2089,6 +2100,13 @@ function fillScholarshipForm(scholarship) {
         otherContractTerms: scholarship.other_contract_terms ?? '',
         recipientAgreement: {
             commitment_type: scholarship.recipient_agreement?.commitment_type ?? 'provider_briefing',
+            responsibilities: scholarship.recipient_agreement?.responsibilities
+                ?? scholarship.return_service_contract
+                ?? scholarship.other_contract_terms
+                ?? scholarship.renewal_policy
+                ?? '',
+            required_evidence: scholarship.recipient_agreement?.required_evidence ?? '',
+            release_conditions: scholarship.recipient_agreement?.release_conditions ?? '',
             duration: scholarship.recipient_agreement?.duration ?? '',
             noncompliance_consequence: scholarship.recipient_agreement?.noncompliance_consequence ?? '',
             exit_or_exception_process: scholarship.recipient_agreement?.exit_or_exception_process ?? '',

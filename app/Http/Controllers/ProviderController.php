@@ -1213,6 +1213,7 @@ class ProviderController extends Controller
             ])],
             'sort' => ['sometimes', Rule::in(['priority', 'dss', 'documents', 'oldest'])],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:5', 'max:50'],
         ]);
@@ -1234,6 +1235,10 @@ class ProviderController extends Controller
 
         if ($selectedScholarship) {
             $applicationsBase->where('scholarship_id', $selectedScholarship->id);
+        } elseif (! empty($validated['program_id'])) {
+            $programId = (int) $validated['program_id'];
+            abort_unless($scholarships->contains(fn (Scholarship $scholarship): bool => $scholarship->id === $programId), 403);
+            $applicationsBase->where('scholarship_id', $programId);
         }
 
         $statusCounts = (clone $applicationsBase)
@@ -3567,7 +3572,7 @@ class ProviderController extends Controller
             ->with(['creator', 'submissions.reviewer', 'submissions.reviews.reviewer'])
             ->get();
         $releases = $scholarship->benefitReleases()
-            ->with(['creator', 'records.applicant', 'records.recorder'])
+            ->with(['creator', 'records.applicant.studentProfile', 'records.recorder'])
             ->get();
         $supportRecipients = $this->supportRecipientApplications($scholarship);
         $cyclePayloads = $cycles
@@ -4841,7 +4846,7 @@ class ProviderController extends Controller
             'renewal_policy' => ['nullable', 'string', 'max:2000'],
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
             'other_contract_terms' => ['nullable', 'string', 'max:3000'],
-            'recipient_agreement' => ['nullable', 'string', 'max:6000', 'json'],
+            'recipient_agreement' => ['nullable', 'string', 'max:12000', 'json'],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:30', new PhoneNumber],
             'application_opens_at' => ['nullable', 'date'],
@@ -4899,6 +4904,9 @@ class ProviderController extends Controller
         $decoded = json_decode((string) ($validated['recipient_agreement'] ?? '{}'), true);
         $agreement = validator(['agreement' => is_array($decoded) ? $decoded : []], [
             'agreement.commitment_type' => ['required', Rule::in(self::RECIPIENT_COMMITMENT_TYPES)],
+            'agreement.responsibilities' => ['nullable', 'string', 'max:2000'],
+            'agreement.required_evidence' => ['nullable', 'string', 'max:1500'],
+            'agreement.release_conditions' => ['nullable', 'string', 'max:1500'],
             'agreement.duration' => ['nullable', 'string', 'max:500'],
             'agreement.noncompliance_consequence' => ['nullable', 'string', 'max:1000'],
             'agreement.exit_or_exception_process' => ['nullable', 'string', 'max:1000'],
@@ -4906,6 +4914,9 @@ class ProviderController extends Controller
 
         $validated['recipient_agreement'] = [
             'commitment_type' => $agreement['commitment_type'],
+            'responsibilities' => Str::squish((string) ($agreement['responsibilities'] ?? '')) ?: null,
+            'required_evidence' => Str::squish((string) ($agreement['required_evidence'] ?? '')) ?: null,
+            'release_conditions' => Str::squish((string) ($agreement['release_conditions'] ?? '')) ?: null,
             'duration' => Str::squish((string) ($agreement['duration'] ?? '')) ?: null,
             'noncompliance_consequence' => Str::squish((string) ($agreement['noncompliance_consequence'] ?? '')) ?: null,
             'exit_or_exception_process' => Str::squish((string) ($agreement['exit_or_exception_process'] ?? '')) ?: null,
@@ -5862,6 +5873,9 @@ class ProviderController extends Controller
             'applicant_id' => $application->applicant_id,
             'name' => $application->applicant?->name ?? 'Applicant',
             'email' => $application->applicant?->email,
+            'profile_photo_url' => $application->applicant?->studentProfile?->profile_photo_path
+                ? route('provider.applications.profile-photo.view', $application, false)
+                : null,
             'application_url' => route('provider.applications.show', $application, false),
             'agreement_status' => $agreement['status'] ?? 'pending',
             'agreement_status_label' => $agreement['status_label'] ?? 'Awaiting response',
@@ -6367,6 +6381,9 @@ class ProviderController extends Controller
                 'applicant_id' => $application->applicant_id,
                 'name' => $application->applicant?->name ?? 'Applicant',
                 'email' => $application->applicant?->email,
+                'profile_photo_url' => $application->applicant?->studentProfile?->profile_photo_path
+                    ? route('provider.applications.profile-photo.view', $application, false)
+                    : null,
                 'agreement_status' => $agreement['status'] ?? 'pending',
                 'benefits_active' => $application->status !== 'benefits_terminated',
                 'application_url' => route('provider.applications.show', $application, false),
@@ -6564,7 +6581,7 @@ class ProviderController extends Controller
 
     private function recipientBenefitReleasePayload(RecipientBenefitRelease $release): array
     {
-        $release->loadMissing(['creator', 'records.applicant', 'records.recorder']);
+        $release->loadMissing(['creator', 'records.applicant.studentProfile', 'records.recorder']);
         $statusLabels = [
             'scheduled' => 'Scheduled',
             'prepared' => 'Prepared',
@@ -6606,6 +6623,9 @@ class ProviderController extends Controller
                 'applicant_id' => $record->applicant_id,
                 'name' => $record->applicant?->name ?? 'Applicant',
                 'email' => $record->applicant?->email,
+                'profile_photo_url' => $record->applicant?->studentProfile?->profile_photo_path
+                    ? route('provider.applications.profile-photo.view', $record->scholarship_application_id, false)
+                    : null,
                 'status' => $record->status,
                 'status_label' => $statusLabels[$record->status] ?? Str::headline($record->status),
                 'originals_verified' => $record->originals_verified,

@@ -53,6 +53,32 @@ class ProviderProgramDirectoryTest extends TestCase
         }
     }
 
+    public function test_program_overview_and_updates_have_dedicated_pages(): void
+    {
+        $provider = User::factory()->create([
+            'role' => 'provider',
+            'account_status' => 'active',
+        ]);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Focused Program Workspace',
+            'description' => 'A scholarship used to verify the overview and updates pages.',
+            'status' => 'published',
+        ]);
+
+        foreach (['', '/updates'] as $workspace) {
+            $this->actingAs($provider)
+                ->get("/provider/programs/{$scholarship->id}{$workspace}")
+                ->assertOk()
+                ->assertViewIs('provider-program-workspace')
+                ->assertViewHas('scholarship', fn (Scholarship $viewScholarship): bool => (
+                    $viewScholarship->is($scholarship)
+                ));
+        }
+    }
+
     public function test_legacy_program_application_entries_redirect_to_a_focused_page(): void
     {
         $provider = User::factory()->create([
@@ -124,6 +150,47 @@ class ProviderProgramDirectoryTest extends TestCase
                 ->assertViewHas('scholarship', fn (Scholarship $viewScholarship): bool => (
                     $viewScholarship->is($scholarship)
                 ));
+        }
+    }
+
+    public function test_provider_cannot_open_another_organization_program_workspace(): void
+    {
+        $provider = User::factory()->create([
+            'role' => 'provider',
+            'account_status' => 'active',
+        ]);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+
+        $otherProvider = User::factory()->create([
+            'role' => 'provider',
+            'account_status' => 'active',
+        ]);
+        $scholarship = Scholarship::create([
+            'provider_id' => $otherProvider->id,
+            'title' => 'Private Program Workspace',
+            'description' => 'A scholarship owned by a different provider organization.',
+            'status' => 'published',
+        ]);
+
+        $workspaces = [
+            '',
+            '/updates',
+            '/applications/review',
+            '/applications/activities',
+            '/applications/results',
+            '/applications/decisions',
+            '/applications/recipients',
+            '/applications/waitlist',
+            '/monitoring',
+            '/monitoring/academic',
+            '/monitoring/releases',
+            '/monitoring/outcomes',
+        ];
+
+        foreach ($workspaces as $workspace) {
+            $this->actingAs($provider)
+                ->get("/provider/programs/{$scholarship->id}{$workspace}")
+                ->assertForbidden();
         }
     }
 }

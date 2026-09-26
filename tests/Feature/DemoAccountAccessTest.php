@@ -88,7 +88,8 @@ class DemoAccountAccessTest extends TestCase
 
             foreach ($ownPrograms as $program) {
                 $this->get("/provider/programs/{$program->id}/edit")->assertOk();
-                $this->get("/provider/programs/{$program->id}/applications")->assertOk();
+                $this->get("/provider/programs/{$program->id}/applications")
+                    ->assertRedirect("/provider/programs/{$program->id}/applications/review");
                 $this->getJson("/provider/scholarships/{$program->id}")
                     ->assertOk()
                     ->assertJsonPath('scholarship.id', $program->id);

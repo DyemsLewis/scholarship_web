@@ -16,6 +16,61 @@ class ProviderApplicationScaleTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_global_applicant_directory_can_filter_records_by_program(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $firstProgram = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'First Program',
+            'description' => 'First applicant directory program.',
+            'status' => 'published',
+        ]);
+        $secondProgram = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Second Program',
+            'description' => 'Second applicant directory program.',
+            'status' => 'published',
+        ]);
+
+        foreach ([$firstProgram, $secondProgram] as $index => $program) {
+            ScholarshipApplication::create([
+                'scholarship_id' => $program->id,
+                'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
+                'status' => 'submitted',
+                'workflow_version' => 2,
+                'application_state' => 'submitted',
+                'workflow_stage' => 'screening',
+                'eligibility_score' => 90 + $index,
+                'eligibility_breakdown' => ['score' => 90 + $index, 'criteria' => []],
+                'dss_score' => 90 + $index,
+                'dss_recommendation' => 'recommended',
+                'dss_breakdown' => ['score' => 90 + $index, 'recommendation' => 'recommended', 'criteria' => []],
+                'document_checklist' => [],
+                'submitted_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($provider)
+            ->getJson("/provider/applications/data?filter=all&program_id={$secondProgram->id}")
+            ->assertOk()
+            ->assertJsonCount(1, 'applications')
+            ->assertJsonPath('applications.0.scholarship.id', $secondProgram->id)
+            ->assertJsonPath('filter_counts.all', 1)
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonCount(2, 'scholarships');
+
+        $otherProviderProgram = Scholarship::create([
+            'provider_id' => User::factory()->create(['role' => 'provider'])->id,
+            'title' => 'Private Program',
+            'description' => 'Not available to this provider.',
+            'status' => 'published',
+        ]);
+
+        $this->actingAs($provider)
+            ->getJson("/provider/applications/data?program_id={$otherProviderProgram->id}")
+            ->assertForbidden();
+    }
+
     public function test_provider_queue_paginates_and_searches_twelve_hundred_applications_with_bounded_queries(): void
     {
         Mail::fake();

@@ -20,78 +20,74 @@ const canReviewApplications = computed(() => Boolean(
         ),
 ));
 const programBase = computed(() => `/provider/programs/${props.programId}`);
-const directLinks = computed(() => [
+const applicationLinks = computed(() => canReviewApplications.value ? [
+    {
+        key: 'applicants',
+        label: 'Review',
+        href: `${programBase.value}/applications/review`,
+    },
+    {
+        key: 'schedule',
+        label: 'Activities',
+        href: `${programBase.value}/applications/activities`,
+    },
+    {
+        key: 'results',
+        label: 'Results',
+        href: `${programBase.value}/applications/results`,
+    },
+    {
+        key: 'decisions',
+        label: 'Decisions',
+        href: `${programBase.value}/applications/decisions`,
+    },
+] : []);
+const recipientLinks = computed(() => canReviewApplications.value ? [
+    {
+        key: 'recipients',
+        label: 'Selected',
+        href: `${programBase.value}/applications/recipients`,
+    },
+    {
+        key: 'waitlist',
+        label: 'Waitlist',
+        href: `${programBase.value}/applications/waitlist`,
+    },
+] : []);
+const primaryLinks = computed(() => [
     {
         key: 'overview',
-        label: 'Home',
+        label: 'Overview',
         icon: 'fa-solid fa-house',
         href: programBase.value,
     },
-    ...(canReviewApplications.value ? [{
-        key: 'announcements',
-        label: 'Updates',
-        icon: 'fa-solid fa-bullhorn',
-        href: `${programBase.value}/updates`,
-    }] : []),
+    ...(canReviewApplications.value ? [
+        {
+            key: 'applications',
+            label: 'Applications',
+            icon: 'fa-solid fa-user-check',
+            href: applicationLinks.value[0].href,
+        },
+        {
+            key: 'recipients-section',
+            label: 'Recipients',
+            icon: 'fa-solid fa-award',
+            href: recipientLinks.value[0].href,
+        },
+        {
+            key: 'monitoring',
+            label: 'Monitoring',
+            icon: 'fa-solid fa-chart-line',
+            href: `${programBase.value}/monitoring`,
+        },
+        {
+            key: 'announcements',
+            label: 'Updates',
+            icon: 'fa-solid fa-bullhorn',
+            href: `${programBase.value}/updates`,
+        },
+    ] : []),
 ]);
-const groups = computed(() => canReviewApplications.value ? [
-    {
-        key: 'applications-group',
-        label: 'Applications',
-        icon: 'fa-solid fa-user-check',
-        items: [
-            {
-                key: 'applicants',
-                label: 'Review applicants',
-                icon: 'fa-solid fa-file-circle-check',
-                href: `${programBase.value}/applications/review`,
-            },
-            {
-                key: 'schedule',
-                label: 'Activities',
-                icon: 'fa-regular fa-calendar',
-                href: `${programBase.value}/applications/activities`,
-            },
-            {
-                key: 'results',
-                label: 'Record results',
-                icon: 'fa-solid fa-clipboard-check',
-                href: `${programBase.value}/applications/results`,
-            },
-            {
-                key: 'decisions',
-                label: 'Final decisions',
-                icon: 'fa-solid fa-gavel',
-                href: `${programBase.value}/applications/decisions`,
-            },
-        ],
-    },
-    {
-        key: 'recipients-group',
-        label: 'Recipients',
-        icon: 'fa-solid fa-award',
-        items: [
-            {
-                key: 'recipients',
-                label: 'Selected recipients',
-                icon: 'fa-solid fa-user-graduate',
-                href: `${programBase.value}/applications/recipients`,
-            },
-            {
-                key: 'waitlist',
-                label: 'Waitlist',
-                icon: 'fa-solid fa-list-ol',
-                href: `${programBase.value}/applications/waitlist`,
-            },
-            {
-                key: 'monitoring',
-                label: 'Monitoring',
-                icon: 'fa-solid fa-chart-line',
-                href: `${programBase.value}/monitoring`,
-            },
-        ],
-    },
-] : []);
 
 const activeKey = computed(() => {
     const path = window.location.pathname.replace(/\/$/, '');
@@ -122,169 +118,63 @@ const activeKey = computed(() => {
     return props.active || 'overview';
 });
 
-const allLinks = computed(() => [
-    ...directLinks.value,
-    ...groups.value.flatMap((group) => group.items),
-]);
-const activeLink = computed(() => (
-    allLinks.value.find((item) => item.key === activeKey.value)
-        ?? directLinks.value[0]
-));
+const activePrimaryKey = computed(() => {
+    if (applicationLinks.value.some((item) => item.key === activeKey.value)) return 'applications';
+    if (recipientLinks.value.some((item) => item.key === activeKey.value)) return 'recipients-section';
 
-function groupIsActive(group) {
-    return group.items.some((item) => item.key === activeKey.value);
-}
+    return activeKey.value;
+});
+const secondaryLinks = computed(() => {
+    if (activePrimaryKey.value === 'applications') return applicationLinks.value;
+    if (activePrimaryKey.value === 'recipients-section') return recipientLinks.value;
+
+    return [];
+});
+const secondaryLabel = computed(() => (
+    activePrimaryKey.value === 'applications' ? 'Application workflow' : 'Recipient records'
+));
 </script>
 
 <template>
-    <nav class="mt-4 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm" aria-label="Program workspace navigation">
-        <details class="group sm:hidden">
-            <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-md bg-slate-950 px-3 py-2 text-sm font-bold text-white [&::-webkit-details-marker]:hidden">
-                <span class="flex min-w-0 items-center gap-2.5">
-                    <span class="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-white/10 text-xs text-amber-300">
-                        <i :class="activeLink.icon" aria-hidden="true"></i>
-                    </span>
-                    <span class="truncate">{{ activeLink.label }}</span>
-                </span>
-                <span class="flex shrink-0 items-center gap-2 text-xs font-semibold text-slate-300">
-                    Change
-                    <i class="fa-solid fa-chevron-down text-[9px] transition group-open:rotate-180" aria-hidden="true"></i>
-                </span>
-            </summary>
-
-            <div class="mt-1.5 space-y-1 rounded-md bg-slate-50 p-1.5">
+    <nav class="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" aria-label="Program workspace navigation">
+        <div class="overflow-x-auto overscroll-x-contain p-1.5 [scrollbar-width:thin]">
+            <div class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${primaryLinks.length}, minmax(7rem, 1fr))`, minWidth: `${primaryLinks.length * 7}rem` }">
                 <a
-                    v-for="link in directLinks.slice(0, 1)"
+                    v-for="link in primaryLinks"
                     :key="link.key"
                     :href="link.href"
                     :aria-current="activeKey === link.key ? 'page' : undefined"
                     :class="[
-                        'flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-bold transition',
+                        'inline-flex min-h-10 min-w-0 items-center justify-center rounded-md px-2 py-2 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 sm:text-sm',
                         activeKey === link.key
-                            ? 'bg-amber-100 text-slate-950'
+                            ? 'bg-slate-950 text-white shadow-sm'
+                            : activePrimaryKey === link.key
+                                ? 'text-slate-950'
+                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                    ]"
+                >
+                    <span class="truncate">{{ link.label }}</span>
+                </a>
+            </div>
+        </div>
+
+        <div v-if="secondaryLinks.length" class="overflow-x-auto overscroll-x-contain border-t border-slate-200 bg-slate-50 px-2 py-1.5 [scrollbar-width:thin]">
+            <div class="grid gap-1" :style="{ gridTemplateColumns: `repeat(${secondaryLinks.length}, minmax(7rem, 1fr))`, minWidth: `${secondaryLinks.length * 7}rem` }" role="navigation" :aria-label="secondaryLabel">
+                <a
+                    v-for="link in secondaryLinks"
+                    :key="link.key"
+                    :href="link.href"
+                    :aria-current="activeKey === link.key ? 'page' : undefined"
+                    :class="[
+                        'inline-flex min-h-9 min-w-0 items-center justify-center rounded-md px-2 py-1.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1',
+                        activeKey === link.key
+                            ? 'bg-slate-950 text-white shadow-sm'
                             : 'text-slate-600 hover:bg-white hover:text-slate-950',
                     ]"
                 >
-                    <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-md text-[11px]', activeKey === link.key ? 'bg-amber-200 text-amber-900' : 'bg-white text-slate-500 ring-1 ring-slate-200']">
-                        <i :class="link.icon" aria-hidden="true"></i>
-                    </span>
-                    {{ link.label }}
+                    <span class="truncate">{{ link.label }}</span>
                 </a>
-
-                <section v-for="group in groups" :key="group.key" class="pt-1">
-                    <p class="px-3 pb-1 pt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{{ group.label }}</p>
-                    <a
-                        v-for="item in group.items"
-                        :key="item.key"
-                        :href="item.href"
-                        :aria-current="activeKey === item.key ? 'page' : undefined"
-                        :class="[
-                            'flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-bold transition',
-                            activeKey === item.key
-                                ? 'bg-amber-100 text-slate-950'
-                                : 'text-slate-600 hover:bg-white hover:text-slate-950',
-                        ]"
-                    >
-                        <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-md text-[11px]', activeKey === item.key ? 'bg-amber-200 text-amber-900' : 'bg-white text-slate-500 ring-1 ring-slate-200']">
-                            <i :class="item.icon" aria-hidden="true"></i>
-                        </span>
-                        {{ item.label }}
-                    </a>
-                </section>
-
-                <section v-if="directLinks.length > 1" class="border-t border-slate-200 pt-1">
-                    <a
-                        v-for="link in directLinks.slice(1)"
-                        :key="link.key"
-                        :href="link.href"
-                        :aria-current="activeKey === link.key ? 'page' : undefined"
-                        :class="[
-                            'flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-bold transition',
-                            activeKey === link.key
-                                ? 'bg-amber-100 text-slate-950'
-                                : 'text-slate-600 hover:bg-white hover:text-slate-950',
-                        ]"
-                    >
-                        <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-md text-[11px]', activeKey === link.key ? 'bg-amber-200 text-amber-900' : 'bg-white text-slate-500 ring-1 ring-slate-200']">
-                            <i :class="link.icon" aria-hidden="true"></i>
-                        </span>
-                        {{ link.label }}
-                    </a>
-                </section>
             </div>
-        </details>
-
-        <div class="hidden flex-wrap items-center gap-1 sm:flex">
-            <a
-                v-for="link in directLinks.slice(0, 1)"
-                :key="link.key"
-                :href="link.href"
-                :aria-current="activeKey === link.key ? 'page' : undefined"
-                :class="[
-                    'inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition sm:flex-none',
-                    activeKey === link.key
-                        ? 'bg-slate-950 text-white shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
-                ]"
-            >
-                <i :class="[link.icon, activeKey === link.key ? 'text-amber-300' : 'text-slate-400', 'text-xs']" aria-hidden="true"></i>
-                {{ link.label }}
-            </a>
-
-            <details
-                v-for="group in groups"
-                :key="group.key"
-                class="group relative flex-1 sm:flex-none"
-            >
-                <summary
-                    :class="[
-                        'flex min-h-10 cursor-pointer list-none items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition [&::-webkit-details-marker]:hidden',
-                        groupIsActive(group)
-                            ? 'bg-slate-950 text-white shadow-sm'
-                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
-                    ]"
-                >
-                    <i :class="[group.icon, groupIsActive(group) ? 'text-amber-300' : 'text-slate-400', 'text-xs']" aria-hidden="true"></i>
-                    <span>{{ group.label }}</span>
-                    <i class="fa-solid fa-chevron-down ml-1 text-[9px] opacity-60 transition group-open:rotate-180" aria-hidden="true"></i>
-                </summary>
-
-                <div class="z-40 mt-1 min-w-full overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-xl sm:absolute sm:left-0 sm:w-60">
-                    <a
-                        v-for="item in group.items"
-                        :key="item.key"
-                        :href="item.href"
-                        :aria-current="activeKey === item.key ? 'page' : undefined"
-                        :class="[
-                            'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-bold transition',
-                            activeKey === item.key
-                                ? 'bg-amber-50 text-slate-950'
-                                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
-                        ]"
-                    >
-                        <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-md text-[11px]', activeKey === item.key ? 'bg-amber-200 text-amber-900' : 'bg-slate-100 text-slate-500']">
-                            <i :class="item.icon" aria-hidden="true"></i>
-                        </span>
-                        {{ item.label }}
-                    </a>
-                </div>
-            </details>
-
-            <a
-                v-for="link in directLinks.slice(1)"
-                :key="link.key"
-                :href="link.href"
-                :aria-current="activeKey === link.key ? 'page' : undefined"
-                :class="[
-                    'inline-flex min-h-10 flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-bold transition sm:flex-none',
-                    activeKey === link.key
-                        ? 'bg-slate-950 text-white shadow-sm'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
-                ]"
-            >
-                <i :class="[link.icon, activeKey === link.key ? 'text-amber-300' : 'text-slate-400', 'text-xs']" aria-hidden="true"></i>
-                {{ link.label }}
-            </a>
         </div>
     </nav>
 </template>
