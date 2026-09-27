@@ -739,6 +739,14 @@ class AdminController extends Controller
             }
         }
 
+        if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()
+            ->where('document_type', 'recent_school_id')
+            ->exists()) {
+            return response()->json([
+                'message' => 'The applicant must upload a recent school ID before the profile can be verified.',
+            ], 422);
+        }
+
         $previousAcademicResult = [
             'grading_scale' => $applicant->studentProfile?->grading_scale,
             'gwa' => $applicant->studentProfile?->gwa !== null

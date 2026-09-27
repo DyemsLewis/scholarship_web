@@ -24,10 +24,12 @@ const isPdf = computed(() => {
 });
 const proofLabel = computed(() => ({
     academic_record: 'Academic record',
+    recent_school_id: 'Recent school ID',
     school_record: 'School enrollment proof',
     achievement_evidence: 'Achievement evidence',
 }[props.proof?.document_type] ?? 'Profile proof'));
 const proofContext = computed(() => ({
+    recent_school_id: 'This file supports the applicant\'s current student identity.',
     school_record: 'This file supports the applicant\'s current school or learning-center information and is separate from the scholarship requirement checklist.',
     achievement_evidence: 'This file supports the achievement entered in the applicant profile. Compare the record with the applicant\'s written achievement before making a decision.',
     academic_record: 'This file supports the academic result saved in the applicant profile and is separate from the scholarship requirement checklist.',

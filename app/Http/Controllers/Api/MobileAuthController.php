@@ -84,23 +84,27 @@ class MobileAuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'login' => ['nullable', 'string', 'max:255', 'required_without:email'],
+            'email' => ['nullable', 'string', 'max:255', 'required_without:login'],
             'password' => ['required', 'string'],
         ]);
 
-        $user = User::query()->where('email', $validated['email'])->first();
+        $login = trim((string) ($validated['login'] ?? $validated['email']));
+        $loginField = filter_var($login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        $loginValue = $loginField === 'email' ? strtolower($login) : $login;
+        $user = User::query()->where($loginField, $loginValue)->first();
 
         if (! $user || ! Hash::check($validated['password'], $user->password)) {
             ActivityLog::record(
                 null,
                 'mobile_login_failed',
-                "Failed mobile login attempt for {$validated['email']}.",
+                "Failed mobile login attempt for {$loginValue}.",
                 $request,
-                ['email' => $validated['email']],
+                ['login_type' => $loginField, 'login' => $loginValue],
             );
 
             return response()->json([
-                'message' => 'The email or password is incorrect.',
+                'message' => 'The username, email, or password is incorrect.',
             ], 422);
         }
 

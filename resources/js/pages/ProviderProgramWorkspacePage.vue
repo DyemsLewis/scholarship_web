@@ -100,7 +100,7 @@ const workflowQueues = computed(() => [
     {
         key: 'waiting_activity',
         label: 'Waiting for activity',
-        description: 'Publish or complete an exam or interview.',
+        description: 'Publish or complete the formal application, exam, or interview.',
         icon: 'fa-regular fa-calendar',
         count: Number(workflowCounts.value.waiting_activity ?? 0),
         href: `${applicantWorkspaceUrl.value}/activities`,

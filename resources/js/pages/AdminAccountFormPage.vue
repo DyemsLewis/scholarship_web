@@ -223,6 +223,7 @@ const applicantVerificationClass = computed(() => {
 });
 const applicantVerificationDocumentOptions = {
     academic_record: 'Academic record',
+    recent_school_id: 'Recent school ID',
     school_record: 'School enrollment proof',
     achievement_evidence: 'Achievement evidence',
 };

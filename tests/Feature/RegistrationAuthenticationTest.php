@@ -13,6 +13,23 @@ class RegistrationAuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_user_can_log_in_with_a_unique_username(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'student.login',
+            'password' => 'password123',
+        ]);
+
+        $this->postJson('/login', [
+            'login' => $user->username,
+            'password' => 'password123',
+        ])
+            ->assertOk()
+            ->assertJsonPath('redirect', '/dashboard');
+
+        $this->assertAuthenticatedAs($user);
+    }
+
     public function test_applicant_account_is_created_only_after_email_code_verification(): void
     {
         Mail::fake();

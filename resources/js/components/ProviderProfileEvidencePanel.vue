@@ -4,6 +4,7 @@ import { formatFileSize, labelFromKey } from '../support/display';
 defineProps({
     proofs: { type: Array, default: () => [] },
     academicProof: { type: Object, default: null },
+    schoolIdProof: { type: Object, default: null },
     scanRequired: { type: Boolean, default: false },
     scanReady: { type: Boolean, default: true },
     profileStatus: { type: String, default: 'pending' },
@@ -86,6 +87,9 @@ function extractedAcademicResult(proof) {
 
         <p v-if="scanRequired && academicProof && !scanReady" class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">
             No usable result was extracted. Check the record manually or request a clearer file.
+        </p>
+        <p v-if="!schoolIdProof" class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900">
+            A recent school ID is required before verification.
         </p>
 
         <div v-if="academicProof && profileStatus === 'pending'" class="border-b border-slate-200 bg-slate-50 p-4 sm:px-5">

@@ -274,9 +274,9 @@ const profileSections = [
     {
         id: 'verification',
         label: 'Supporting evidence',
-        detail: 'Profile records',
+        detail: 'Required records',
         icon: 'fa-solid fa-file-circle-check',
-        impact: 'Add records that support the academic and enrollment information in your profile.',
+        impact: 'Upload the records providers need to check.',
         required: false,
         fields: [],
     },
@@ -350,29 +350,39 @@ const academicProofOption = computed(() => {
         description: recordCopy.detail,
         icon: 'fa-solid fa-file-lines',
         context,
+        required: true,
     };
 });
+const recentSchoolIdOption = computed(() => ({
+    value: 'recent_school_id',
+    label: 'Recent school ID',
+    description: 'Clear front of your current school ID.',
+    icon: 'fa-solid fa-id-card',
+    context: [],
+    required: true,
+}));
 const schoolProofOption = computed(() => {
     const educationLevel = form.value.education_level;
-    const learnerLabel = ['tvet', 'als'].includes(educationLevel) ? 'learning center' : 'school';
 
     return {
         value: 'school_record',
         label: educationLevel === 'tvet' ? 'Training enrollment proof' : 'School enrollment proof',
-        description: `Certificate of enrollment, ${learnerLabel} ID, admission letter, or official enrollment record.`,
+        description: 'Enrollment certificate, registration form, or admission record.',
         icon: 'fa-solid fa-school',
         context: [form.value.school, form.value.enrollment_status].filter(hasValue),
+        required: false,
     };
 });
 const achievementEvidenceOption = computed(() => ({
     value: 'achievement_evidence',
     label: 'Achievement evidence',
-    description: 'Certificate, award notice, competition result, project proof, or another readable record supporting the achievement you listed.',
+    description: 'Certificate or record for the achievement you listed.',
     icon: 'fa-solid fa-award',
     context: hasValue(form.value.achievements) ? ['Required for the achievement entered'] : [],
+    required: true,
 }));
 const verificationDocumentOptions = computed(() => {
-    const options = [academicProofOption.value, schoolProofOption.value];
+    const options = [academicProofOption.value, recentSchoolIdOption.value, schoolProofOption.value];
     const hasAchievementEvidence = verificationDocuments.value
         .some((document) => document.document_type === 'achievement_evidence');
 
@@ -420,19 +430,26 @@ const schoolVerificationDocument = computed(() => verificationDocuments.value
 const achievementEvidenceDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'achievement_evidence') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
-    .filter((document) => !['academic_record', 'school_record', 'achievement_evidence'].includes(document.document_type)));
+    .filter((document) => !['academic_record', 'recent_school_id', 'school_record', 'achievement_evidence'].includes(document.document_type)));
 const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
     ...option,
     document: verificationDocuments.value.find((document) => document.document_type === option.value) ?? null,
 })));
 const missingVerificationDocumentRows = computed(() => verificationDocumentRows.value
-    .filter((row) => !row.document));
+    .filter((row) => row.required && !row.document));
 const needsVerificationUpload = computed(() => missingVerificationDocumentRows.value.length > 0);
 const verificationUploadCopy = computed(() => {
     if (profileVerificationStatus.value === 'rejected') {
         return {
             title: 'Replace the academic record',
-            detail: 'Review the reviewer note, then submit a clearer or updated academic record.',
+            detail: 'Use the reviewer note and upload a clearer file.',
+        };
+    }
+
+    if (needsVerificationUpload.value) {
+        return {
+            title: `Upload ${missingVerificationDocumentRows.value[0].label.toLowerCase()}`,
+            detail: 'This file is required.',
         };
     }
 
@@ -440,34 +457,26 @@ const verificationUploadCopy = computed(() => {
         if (academicScanNeedsAttention.value) {
             return {
                 title: 'Academic result needs attention',
-                detail: 'Retry the scan, upload a clearer record, or enter the result manually below. A reviewer will still check it against your file.',
+                detail: 'Retry the scan, replace the file, or enter the result below.',
             };
         }
 
         return {
-            title: 'Files submitted',
-            detail: academicOcrActive.value
-                ? 'The result was read from your academic record and is waiting for reviewer confirmation.'
-                : 'An authorized reviewer is checking your academic record.',
+            title: 'Records under review',
+            detail: 'You can replace a file if it changes.',
         };
     }
 
     if (profileVerificationStatus.value === 'approved') {
         return {
-            title: 'Academic information supported',
-            detail: 'Replace it only when your academic information changes.',
+            title: 'Records reviewed',
+            detail: 'Replace a file only when it changes.',
         };
     }
 
     return {
-        title: 'Upload your records',
-        detail: requiresGrades.value
-            ? academicOcrActive.value
-                ? 'Upload a clear academic record. The portal will read the result so you do not need to type it.'
-                : 'Use records that support the result saved in Learning.'
-            : hasValue(form.value.education_level)
-                ? 'Use recent records for the selected education level.'
-                : 'Complete Learning first to see the correct record type.',
+        title: 'Add required files',
+        detail: 'Use clear, recent documents.',
     };
 });
 const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && savedFormSnapshot.value !== formSnapshot());
@@ -642,7 +651,7 @@ const profileNavigationSteps = computed(() => visibleProfileSections.value.map((
     const isVerification = section.id === 'verification';
     const isReview = section.id === 'review';
     const complete = isVerification
-        ? profileVerificationStatus.value === 'approved'
+        ? !needsVerificationUpload.value && profileVerificationStatus.value === 'approved'
         : isReview
             ? profileComplete.value
             : section.required
@@ -653,11 +662,13 @@ const profileNavigationSteps = computed(() => visibleProfileSections.value.map((
         ...section,
         number: index + 1,
         complete,
-        attention: hasErrors || (isVerification && profileVerificationStatus.value === 'rejected'),
+        attention: hasErrors || (isVerification && (profileVerificationStatus.value === 'rejected' || needsVerificationUpload.value)),
         status: hasErrors
             ? 'Needs attention'
             : isVerification
-                ? verificationStatusLabel(profileVerificationStatus.value)
+                ? needsVerificationUpload.value
+                    ? 'Files needed'
+                    : verificationStatusLabel(profileVerificationStatus.value)
                 : sectionStatusLabel(section),
     };
 }));
@@ -1820,7 +1831,7 @@ function extractedAcademicResult(document = academicVerificationDocument.value) 
 }
 
 function verificationFileAccept(documentType) {
-    if (academicOcrActive.value && documentType === 'academic_record') {
+    if ((academicOcrActive.value && documentType === 'academic_record') || documentType === 'recent_school_id') {
         return '.pdf,.jpg,.jpeg,.png';
     }
 
@@ -1856,7 +1867,7 @@ async function uploadVerificationDocument(documentType, event) {
     }
 
     if (!verificationDocumentTermsAccepted.value) {
-        const message = 'Agree to the document terms before uploading supporting evidence.';
+        const message = 'Agree to the upload terms first.';
         errorMessage.value = message;
         showPortalToast({ type: 'error', message });
         input.value = '';
@@ -1905,14 +1916,17 @@ async function retryAcademicRecordScan(document) {
 
 async function deleteVerificationDocument(document) {
     const isAcademicRecord = document.document_type === 'academic_record';
+    const isRecentSchoolId = document.document_type === 'recent_school_id';
     const isSchoolRecord = document.document_type === 'school_record';
     const isAchievementEvidence = document.document_type === 'achievement_evidence';
     const confirmed = await requestConfirmation({
         title: isAcademicRecord
             ? 'Remove academic record?'
-            : (isSchoolRecord
-                ? 'Remove school proof?'
-                : (isAchievementEvidence ? 'Remove achievement evidence?' : 'Remove older proof file?')),
+            : (isRecentSchoolId
+                ? 'Remove recent school ID?'
+                : (isSchoolRecord
+                    ? 'Remove school proof?'
+                    : (isAchievementEvidence ? 'Remove achievement evidence?' : 'Remove older proof file?'))),
         message: `${document.original_name || 'This file'} will be removed from supporting evidence. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic record review will return to not submitted.' : ''}`,
         confirmLabel: 'Remove file',
         tone: 'danger',
@@ -2128,16 +2142,19 @@ watch(() => form.value.grading_scale, (scale) => {
                 @click.self="showProviderPreview = false"
             >
                 <section
-                    class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-slate-50 shadow-2xl"
+                    class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-md bg-slate-50 shadow-2xl"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="provider-preview-title"
                 >
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
-                        <div>
-                            <p class="student-kicker">Provider view</p>
-                            <h2 id="provider-preview-title" class="mt-1 text-xl font-bold text-slate-950">Applicant profile preview</h2>
-                            <p class="mt-1 text-sm text-slate-500">This is the profile summary a provider can review after you apply.</p>
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-eye" aria-hidden="true"></i></span>
+                            <div>
+                                <p class="student-kicker">Provider view</p>
+                                <h2 id="provider-preview-title" class="mt-1 text-xl font-bold text-slate-950">Applicant profile preview</h2>
+                                <p class="mt-1 text-sm text-slate-500">Review what a provider can see after you apply.</p>
+                            </div>
                         </div>
                         <button
                             type="button"
@@ -2150,10 +2167,9 @@ watch(() => form.value.grading_scale, (scale) => {
                     </header>
 
                     <div class="overflow-y-auto p-4 sm:p-6">
-                        <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                            <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                                <div class="flex min-w-0 items-center gap-4">
-                                    <div class="grid h-24 w-24 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-xl font-bold text-white">
+                        <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+                            <div class="flex min-w-0 items-start gap-4 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-5 sm:p-6">
+                                    <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-sm bg-slate-950 text-xl font-bold text-white ring-1 ring-slate-200">
                                         <img
                                             v-if="profilePhotoUrl"
                                             :src="profilePhotoUrl"
@@ -2163,28 +2179,26 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <span v-else>{{ profileInitials }}</span>
                                     </div>
                                     <div class="min-w-0">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant record</p>
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <h3 class="text-xl font-bold text-slate-950">{{ profileDisplayName }}</h3>
-                                            <span :class="['rounded-md px-2 py-1 text-xs font-bold', verificationStatusClass(profileVerificationStatus)]">
+                                            <h3 class="mt-1 text-xl font-bold text-slate-950">{{ profileDisplayName }}</h3>
+                                            <span :class="['rounded-sm px-2 py-1 text-[10px] font-bold uppercase', verificationStatusClass(profileVerificationStatus)]">
                                                 {{ verificationStatusLabel(profileVerificationStatus) }}
                                             </span>
                                         </div>
                                         <p class="mt-1 text-sm font-semibold text-slate-600">{{ profileEducationSummary }}</p>
-                                        <p class="mt-1 text-sm text-slate-500">{{ user?.email || 'Email not provided' }}</p>
-                                        <p class="mt-0.5 text-sm text-slate-500">{{ form.contact_number || 'Contact not provided' }}</p>
+                                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                                            <span><i class="fa-solid fa-envelope mr-1.5 text-slate-400" aria-hidden="true"></i>{{ user?.email || 'Email not provided' }}</span>
+                                            <span><i class="fa-solid fa-phone mr-1.5 text-slate-400" aria-hidden="true"></i>{{ form.contact_number || 'Contact not provided' }}</span>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600 sm:max-w-56">
-                                    <p class="font-bold text-slate-900">Application profile</p>
-                                    <p class="mt-1 text-xs leading-5">Providers see this only inside an application submitted to their program.</p>
-                                </div>
                             </div>
                         </section>
 
-                        <div class="mt-4 grid gap-4 md:grid-cols-2">
-                            <section class="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Applicant details</p>
-                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                        <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-300 bg-white">
+                            <section class="p-4 sm:p-5">
+                                <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-address-card text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Personal information</h3></div>
+                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
                                     <div>
                                         <dt class="text-slate-500">Birthdate</dt>
                                         <dd class="mt-1 font-bold text-slate-950">
@@ -2206,9 +2220,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </dl>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-4">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Learning record</p>
-                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                            <section class="p-4 sm:p-5">
+                                <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-graduation-cap text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Learning record</h3></div>
+                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
                                     <div>
                                         <dt class="text-slate-500">Education level</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ educationLevelLabel(form.education_level) || 'Not provided' }}</dd>
@@ -2217,7 +2231,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <dt class="text-slate-500">Enrollment</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.enrollment_status || 'Not provided' }}</dd>
                                     </div>
-                                    <div>
+                                    <div class="xl:col-span-2">
                                         <dt class="text-slate-500">School</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd>
                                     </div>
@@ -2247,20 +2261,16 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <dt class="text-slate-500">Record period</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ academicTermLabel(form.academic_term) || 'Not provided' }}</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div class="xl:col-span-2">
                                         <dt class="text-slate-500">Learner / student ID</dt>
                                         <dd class="mt-1 break-words font-bold text-slate-950">{{ form.learner_reference_number || 'Not provided' }}</dd>
                                     </div>
                                 </dl>
-                                <p class="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
-                                    <i class="fa-solid fa-file-shield mr-1.5" aria-hidden="true"></i>
-                                    Academic values are applicant-declared until they are supported by a reviewed academic record.
-                                </p>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-4">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Household and location</p>
-                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                            <section class="p-4 sm:p-5">
+                                <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-house-chimney-user text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Household and address</h3></div>
+                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
                                     <div>
                                         <dt class="text-slate-500">Income bracket</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.income_bracket || 'Not provided' }}</dd>
@@ -2269,11 +2279,11 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <dt class="text-slate-500">Household size</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.household_size || 'Not provided' }}</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div class="xl:col-span-2">
                                         <dt class="text-slate-500">Outside-platform scholarship declaration</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ currentScholarshipLabel(form.current_scholarship_status) || 'Not provided' }}</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div class="sm:col-span-2 xl:col-span-4">
                                         <dt class="text-slate-500">Active awards detected in this portal</dt>
                                         <dd v-if="platformActiveScholarships.length" class="mt-2 flex flex-wrap gap-2">
                                             <span v-for="record in platformActiveScholarships" :key="record.application_id" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
@@ -2282,49 +2292,45 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </dd>
                                         <dd v-else class="mt-1 font-bold text-slate-950">No active portal award detected</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div class="sm:col-span-2 xl:col-span-2">
                                         <dt class="text-slate-500">Location</dt>
                                         <dd class="mt-1 font-bold leading-6 text-slate-950">{{ profileLocationSummary }}</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div class="sm:col-span-2 xl:col-span-2">
                                         <dt class="text-slate-500">Support needed</dt>
                                         <dd class="mt-1 font-bold leading-6 text-slate-950">{{ listFromText(form.support_needs).join(', ') || 'Not provided' }}</dd>
                                     </div>
-                                    <div v-if="form.current_scholarship_details" class="sm:col-span-2">
+                                    <div v-if="form.current_scholarship_details" class="sm:col-span-2 xl:col-span-4">
                                         <dt class="text-slate-500">Scholarship details</dt>
                                         <dd class="mt-1 font-bold leading-6 text-slate-950">{{ form.current_scholarship_details }}</dd>
                                     </div>
                                 </dl>
-                                <p class="mt-3 border-t border-slate-200 pt-3 text-xs leading-5 text-slate-500">
-                                    <i class="fa-solid fa-user-pen mr-1.5" aria-hidden="true"></i>
-                                    Household and citizenship details are applicant-declared unless a program requests supporting proof.
-                                </p>
                             </section>
 
-                            <section class="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
+                            <section class="p-4 sm:p-5">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Goals and involvement</p>
-                                    <span class="rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">Applicant-declared</span>
+                                    <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-bullseye text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Goals and involvement</h3></div>
+                                    <span class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Applicant-declared</span>
                                 </div>
-                                <dl class="mt-3 grid gap-4 text-sm lg:grid-cols-3">
-                                    <div>
+                                <dl class="mt-3 divide-y divide-slate-200 text-sm">
+                                    <div class="py-3 first:pt-0">
                                         <dt class="font-semibold text-slate-500">Applicant goal</dt>
                                         <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.scholarship_goal || 'Not provided' }}</dd>
                                     </div>
-                                    <div>
+                                    <div class="py-3">
                                         <dt class="font-semibold text-slate-500">Achievements or strengths</dt>
                                         <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.achievements || 'Not provided' }}</dd>
                                     </div>
-                                    <div>
+                                    <div class="pt-3">
                                         <dt class="font-semibold text-slate-500">Activities and responsibilities</dt>
                                         <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.activities_and_responsibilities || 'Not provided' }}</dd>
                                     </div>
                                 </dl>
                             </section>
 
-                            <section v-if="needsGuardianContext || hasGuardianDetails" class="rounded-lg border border-slate-200 bg-white p-4 md:col-span-2">
-                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Parent or guardian</p>
-                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+                            <section v-if="needsGuardianContext || hasGuardianDetails" class="p-4 sm:p-5">
+                                <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-people-roof text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Parent or guardian</h3></div>
+                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
                                     <div>
                                         <dt class="text-slate-500">Name</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.guardian_name || 'Not provided' }}</dd>
@@ -2337,15 +2343,17 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <dt class="text-slate-500">Contact</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ form.guardian_contact || 'Not provided' }}</dd>
                                     </div>
+                                    <div>
+                                        <dt class="text-slate-500">Email</dt>
+                                        <dd class="mt-1 break-words font-bold text-slate-950">{{ form.guardian_email || 'Not provided' }}</dd>
+                                    </div>
                                 </dl>
                             </section>
                         </div>
                     </div>
 
                     <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                        <p class="text-xs leading-5 text-slate-500">
-                            Unsaved form changes appear in this preview but must be saved before a provider can receive them.
-                        </p>
+                        <p class="text-xs leading-5 text-slate-500">Save profile changes before a provider can receive them.</p>
                         <button
                             type="button"
                             class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
@@ -2433,13 +2441,13 @@ watch(() => form.value.grading_scale, (scale) => {
                             </button>
                         </header>
 
-                        <div class="grid gap-px bg-slate-200 lg:grid-cols-2">
+                        <div class="divide-y divide-slate-200">
                             <section class="bg-white p-4 sm:p-5">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-address-card text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Personal and contact</h4></div>
+                                <div class="flex min-h-9 items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-address-card w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Personal and contact</h4></div>
                                     <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('personal')">Edit</button>
                                 </div>
-                                <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
                                     <div><dt class="text-xs text-slate-500">Age</dt><dd class="mt-1 font-bold text-slate-950">{{ applicantAge !== null ? `${applicantAge} years old` : 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Contact number</dt><dd class="mt-1 font-bold text-slate-950">{{ form.contact_number || 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Account managed by</dt><dd class="mt-1 font-bold text-slate-950">{{ accountManagerLabel(form.account_managed_by) || 'Not provided' }}</dd></div>
@@ -2448,33 +2456,34 @@ watch(() => form.value.grading_scale, (scale) => {
                             </section>
 
                             <section class="bg-white p-4 sm:p-5">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-graduation-cap text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Learning record</h4></div>
+                                <div class="flex min-h-9 items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-graduation-cap w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Learning record</h4></div>
                                     <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('academic')">Edit</button>
                                 </div>
-                                <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                                    <div class="sm:col-span-2"><dt class="text-xs text-slate-500">School</dt><dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd></div>
+                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
+                                    <div><dt class="text-xs text-slate-500">School</dt><dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Education</dt><dd class="mt-1 font-bold text-slate-950">{{ profileEducationSummary }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Academic result</dt><dd class="mt-1 font-bold text-slate-950">{{ form.gwa ? `${form.gwa} - ${gradingScaleLabel(form.grading_scale)}` : 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Enrollment</dt><dd class="mt-1 font-bold text-slate-950">{{ form.enrollment_status || 'Not provided' }}</dd></div>
                                 </dl>
                             </section>
 
                             <section class="bg-white p-4 sm:p-5">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-house-chimney-user text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Household and support</h4></div>
+                                <div class="flex min-h-9 items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-house-chimney-user w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Household and support</h4></div>
                                     <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('personal')">Edit</button>
                                 </div>
-                                <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
                                     <div><dt class="text-xs text-slate-500">Income bracket</dt><dd class="mt-1 font-bold text-slate-950">{{ form.income_bracket || 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Household size</dt><dd class="mt-1 font-bold text-slate-950">{{ form.household_size ? `${form.household_size} members` : 'Not provided' }}</dd></div>
-                                    <div class="sm:col-span-2"><dt class="text-xs text-slate-500">Location</dt><dd class="mt-1 font-bold text-slate-950">{{ profileLocationSummary }}</dd></div>
-                                    <div class="sm:col-span-2"><dt class="text-xs text-slate-500">Support needed</dt><dd class="mt-1 font-bold text-slate-950">{{ listFromText(form.support_needs).join(', ') || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Location</dt><dd class="mt-1 font-bold text-slate-950">{{ profileLocationSummary }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Support needed</dt><dd class="mt-1 font-bold text-slate-950">{{ listFromText(form.support_needs).join(', ') || 'Not provided' }}</dd></div>
                                 </dl>
                             </section>
 
                             <section class="bg-white p-4 sm:p-5">
-                                <div class="flex items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-bullseye text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Goals and involvement</h4></div>
+                                <div class="flex min-h-9 items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-bullseye w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Goals and involvement</h4></div>
                                     <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('background')">Edit</button>
                                 </div>
                                 <dl class="mt-4 grid gap-3 text-sm">
@@ -3266,11 +3275,11 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <p class="student-kicker">Profile records</p>
                                     <h3 class="mt-2 text-xl font-bold text-slate-950">Supporting evidence</h3>
                                     <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Add records that support the academic, enrollment, and achievement information saved in your profile.
+                                        Upload the records providers need to check.
                                     </p>
                                 </div>
-                                <span :class="[sectionStatusPillClass, verificationStatusClass(profileVerificationStatus)]">
-                                    {{ verificationStatusLabel(profileVerificationStatus) }}
+                                <span :class="[sectionStatusPillClass, needsVerificationUpload ? 'bg-amber-100 text-amber-800' : verificationStatusClass(profileVerificationStatus)]">
+                                    {{ needsVerificationUpload ? 'Files needed' : verificationStatusLabel(profileVerificationStatus) }}
                                 </span>
                             </div>
 
@@ -3304,7 +3313,6 @@ watch(() => form.value.grading_scale, (scale) => {
 
                                     <div class="mt-4">
                                         <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" />
-                                        <p class="mt-2 text-xs text-slate-500">Accept once. Reusable copies are also saved in Documents.</p>
                                     </div>
 
                                     <div class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -3320,20 +3328,14 @@ watch(() => form.value.grading_scale, (scale) => {
                                                 <div class="min-w-0">
                                                     <div class="flex flex-wrap items-center gap-2">
                                                         <h5 class="text-sm font-bold text-slate-950">{{ row.label }}</h5>
+                                                        <span :class="['rounded px-2 py-0.5 text-[10px] font-bold uppercase', row.required ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-500']">
+                                                            {{ row.required ? 'Required' : 'Optional' }}
+                                                        </span>
                                                         <span v-if="row.document" :class="['rounded px-2 py-0.5 text-[10px] font-bold uppercase', verificationDocumentStatusClass(row.document.status)]">
                                                             {{ verificationDocumentStatusLabel(row.document.status) }}
                                                         </span>
                                                     </div>
                                                     <p class="mt-1 text-xs leading-5 text-slate-500">{{ row.description }}</p>
-                                                    <div v-if="row.context?.length" class="mt-2 flex flex-wrap gap-1.5">
-                                                        <span
-                                                            v-for="item in row.context"
-                                                            :key="item"
-                                                            class="rounded border border-amber-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600"
-                                                        >
-                                                            {{ item }}
-                                                        </span>
-                                                    </div>
                                                     <p v-if="row.document" class="mt-1 max-w-xl truncate text-xs font-semibold text-slate-700">
                                                         {{ row.document.original_name }} <span class="font-normal text-slate-400">- {{ formatFileSize(row.document.size) }}</span>
                                                     </p>
@@ -3456,33 +3458,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                             {{ isSaving ? 'Saving...' : 'Save entered result' }}
                                         </button>
                                     </div>
-                                </div>
-
-                                <div :class="formPanelClass">
-                                    <h4 :class="formPanelTitleClass">Accepted records</h4>
-                                    <p :class="formPanelDescriptionClass">Use recent, readable files that support the information in your profile.</p>
-                                    <ul class="mt-4 grid gap-3 text-sm text-slate-600 sm:grid-cols-2">
-                                        <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
-                                            <i class="fa-solid fa-file-lines mt-1 text-slate-700" aria-hidden="true"></i>
-                                            <span>Report card, transcript, grade report, or assessment with a readable overall result.</span>
-                                        </li>
-                                        <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
-                                            <i class="fa-solid fa-school mt-1 text-slate-700" aria-hidden="true"></i>
-                                            <span>Enrollment certificate, recent school ID, admission letter, or learning-center record.</span>
-                                        </li>
-                                        <li v-if="hasValue(form.achievements) || achievementEvidenceDocument" class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
-                                            <i class="fa-solid fa-award mt-1 text-amber-700" aria-hidden="true"></i>
-                                            <span>Certificate, award notice, official result, or project record that supports the achievement entered in your profile.</span>
-                                        </li>
-                                        <li class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
-                                            <i class="fa-solid fa-shield-halved mt-1 text-emerald-700" aria-hidden="true"></i>
-                                            <span>Do not upload IDs, birth certificates, income proof, or unrelated files.</span>
-                                        </li>
-                                        <li v-if="academicOcrActive" class="flex items-start gap-3 rounded-md border border-slate-200 bg-white p-3">
-                                            <i class="fa-solid fa-wand-magic-sparkles mt-1 text-sky-700" aria-hidden="true"></i>
-                                            <span>Use a clear file up to {{ academicOcr.max_file_size_mb }} MB. Only the extracted overall result is saved for matching.</span>
-                                        </li>
-                                    </ul>
                                 </div>
 
                             <div v-if="legacyVerificationDocuments.length" class="rounded-lg border border-amber-200 bg-amber-50/60 p-4 sm:p-5">

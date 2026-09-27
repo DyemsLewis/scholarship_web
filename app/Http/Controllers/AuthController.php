@@ -241,27 +241,31 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $credentials = $request->validate([
-            'email' => ['required', 'email'],
+            'login' => ['nullable', 'string', 'max:255', 'required_without:email'],
+            'email' => ['nullable', 'string', 'max:255', 'required_without:login'],
             'password' => ['required', 'string'],
             'remember' => ['sometimes', 'boolean'],
         ]);
 
+        $login = trim((string) ($credentials['login'] ?? $credentials['email']));
+        $loginField = filter_var($login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
+        $loginValue = $loginField === 'email' ? strtolower($login) : $login;
         $remember = (bool) ($credentials['remember'] ?? false);
 
         if (! Auth::attempt([
-            'email' => $credentials['email'],
+            $loginField => $loginValue,
             'password' => $credentials['password'],
         ], $remember)) {
             ActivityLog::record(
                 null,
                 'login_failed',
-                "Failed login attempt for {$credentials['email']}.",
+                "Failed login attempt for {$loginValue}.",
                 $request,
-                ['email' => $credentials['email']],
+                ['login_type' => $loginField, 'login' => $loginValue],
             );
 
             return response()->json([
-                'message' => 'The email or password is incorrect.',
+                'message' => 'The username, email, or password is incorrect.',
             ], 422);
         }
 

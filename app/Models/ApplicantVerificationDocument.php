@@ -9,6 +9,7 @@ class ApplicantVerificationDocument extends Model
 {
     public const PROFILE_EVIDENCE_TYPES = [
         'academic_record',
+        'recent_school_id',
         'school_record',
         'achievement_evidence',
     ];

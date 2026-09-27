@@ -6,7 +6,7 @@ class ScholarshipSelectionPlan
 {
     public const STAGES = ['screening', 'formal_application', 'exam', 'interview', 'decision'];
 
-    public const SCHEDULABLE_STAGES = ['exam', 'interview'];
+    public const SCHEDULABLE_STAGES = ['formal_application', 'exam', 'interview'];
 
     public const DEFAULT = ['screening', 'formal_application', 'decision'];
 

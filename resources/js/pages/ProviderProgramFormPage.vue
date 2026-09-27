@@ -693,10 +693,14 @@ const reviewRubricReady = computed(() => scholarshipForm.value.reviewRubric.leng
 const canPostScholarships = computed(() => user.value?.can_post_scholarships);
 const selectionPlanLocked = computed(() => isEditMode.value && existingApplicationCount.value > 0);
 const schedulableSelectionStages = computed(() => scholarshipForm.value.selectionStages
-    .filter((stage) => ['exam', 'interview'].includes(stage)));
+    .filter((stage) => ['formal_application', 'exam', 'interview'].includes(stage)));
 const hasSchedulableSelectionStage = computed(() => schedulableSelectionStages.value.length > 0);
 const schedulableSelectionStageLabel = computed(() => schedulableSelectionStages.value
-    .map((stage) => stage === 'exam' ? 'exam' : 'interview')
+    .map((stage) => ({
+        formal_application: 'formal application',
+        exam: 'exam',
+        interview: 'interview',
+    }[stage]))
     .join(' and '));
 const minimumAwardSlots = computed(() => Math.max(1, awardedSlotsCount.value));
 const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
@@ -3532,13 +3536,10 @@ onBeforeUnmount(() => {
                                         </span>
                                         <div>
                                             <p class="text-sm font-bold text-slate-950">
-                                                {{ hasSchedulableSelectionStage ? 'Publish activity dates when confirmed' : 'No exam or interview schedule required' }}
+                                                Publish activity dates when confirmed
                                             </p>
-                                            <p v-if="hasSchedulableSelectionStage" class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Save the program first, then announce one shared date for each exam or interview stage from the program workspace.
-                                            </p>
-                                            <p v-else class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Qualified applicants continue using the formal application instructions set in Application files.
+                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
+                                                Save the program first, then schedule the {{ schedulableSelectionStageLabel }} from Activities.
                                             </p>
                                         </div>
                                     </div>
@@ -3550,11 +3551,8 @@ onBeforeUnmount(() => {
                                         Open schedule workspace
                                         <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
                                     </a>
-                                    <span v-else-if="hasSchedulableSelectionStage" class="shrink-0 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                        Available after saving
-                                    </span>
                                     <span v-else class="shrink-0 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                        Formal handoff only
+                                        Available after saving
                                     </span>
                                 </div>
 

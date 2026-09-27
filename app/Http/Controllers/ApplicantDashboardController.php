@@ -505,12 +505,14 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
 
+        $documentType = (string) $request->input('document_type');
         $usesAcademicOcr = $this->academicRecordOcrService->configured()
-            && $request->input('document_type') === 'academic_record';
+            && $documentType === 'academic_record';
+        $requiresImageOrPdf = $usesAcademicOcr || $documentType === 'recent_school_id';
         $maximumFileSize = $usesAcademicOcr
             ? max(1, (int) config('services.academic_ocr.max_file_size_kb', 1024))
             : 5120;
-        $allowedFileTypes = $usesAcademicOcr ? 'pdf,jpg,jpeg,png' : 'pdf,jpg,jpeg,png,doc,docx';
+        $allowedFileTypes = $requiresImageOrPdf ? 'pdf,jpg,jpeg,png' : 'pdf,jpg,jpeg,png,doc,docx';
         $validated = $request->validate([
             'document_type' => ['required', Rule::in(ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)],
             'document_file' => ['required', 'file', "max:{$maximumFileSize}", "mimes:{$allowedFileTypes}"],
@@ -519,9 +521,11 @@ class ApplicantDashboardController extends Controller
 
         $user = $request->user();
         $isAcademicRecord = $validated['document_type'] === 'academic_record';
+        $isRecentSchoolId = $validated['document_type'] === 'recent_school_id';
         $isAchievementEvidence = $validated['document_type'] === 'achievement_evidence';
         $documentLabel = match ($validated['document_type']) {
             'academic_record' => 'academic record',
+            'recent_school_id' => 'recent school ID',
             'school_record' => 'school enrollment proof',
             'achievement_evidence' => 'achievement evidence',
         };
@@ -540,7 +544,7 @@ class ApplicantDashboardController extends Controller
         }
 
         try {
-            $document = DB::transaction(function () use ($user, $validated, $file, $path, $isAcademicRecord, $isAchievementEvidence): ApplicantVerificationDocument {
+            $document = DB::transaction(function () use ($user, $validated, $file, $path, $isAcademicRecord, $isRecentSchoolId, $isAchievementEvidence): ApplicantVerificationDocument {
                 $document = ApplicantVerificationDocument::query()->updateOrCreate([
                     'applicant_id' => $user->id,
                     'document_type' => $validated['document_type'],
@@ -590,6 +594,15 @@ class ApplicantDashboardController extends Controller
 
                 if ($isAchievementEvidence && filled($user->studentProfile?->achievements)) {
                     $user->studentProfile()->update([
+                        'verification_status' => 'pending',
+                        'verification_notes' => null,
+                        'verified_at' => null,
+                        'verified_by' => null,
+                    ]);
+                }
+
+                if ($isRecentSchoolId) {
+                    $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
                         'verification_status' => 'pending',
                         'verification_notes' => null,
                         'verified_at' => null,
@@ -720,7 +733,7 @@ class ApplicantDashboardController extends Controller
         $path = $document->path;
         $user = $request->user();
         $removedAcademicRecord = $document->document_type === 'academic_record';
-        $removedSchoolRecord = $document->document_type === 'school_record';
+        $removedRecentSchoolId = $document->document_type === 'recent_school_id';
         $removedAchievementEvidence = $document->document_type === 'achievement_evidence';
 
         if ($removedAchievementEvidence && filled($user->studentProfile?->achievements)) {
@@ -728,7 +741,7 @@ class ApplicantDashboardController extends Controller
                 'document' => 'Clear and save the achievement entry before removing its supporting evidence.',
             ]);
         }
-        DB::transaction(function () use ($document, $user, $removedAcademicRecord): void {
+        DB::transaction(function () use ($document, $user, $removedAcademicRecord, $removedRecentSchoolId): void {
             $document->delete();
             $hasAcademicRecord = $user->applicantVerificationDocuments()
                 ->where('document_type', 'academic_record')
@@ -764,30 +777,45 @@ class ApplicantDashboardController extends Controller
                 }
             }
 
+            if ($removedRecentSchoolId) {
+                $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
+                    'verification_status' => $hasAcademicRecord ? 'pending' : 'unsubmitted',
+                    'verification_notes' => null,
+                    'verified_at' => null,
+                    'verified_by' => null,
+                ]);
+                $user->applicantVerificationDocuments()
+                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
+                    ->update([
+                        'status' => 'submitted',
+                        'review_notes' => null,
+                    ]);
+            }
+
         });
         Storage::disk('local')->delete($path);
 
         ActivityLog::record(
             $user,
             'applicant_verification_document_deleted',
-            $removedAcademicRecord
-                ? "{$user->name} removed an academic verification record."
-                : ($removedSchoolRecord
-                    ? "{$user->name} removed a school enrollment proof."
-                    : ($removedAchievementEvidence
-                        ? "{$user->name} removed achievement evidence."
-                        : "{$user->name} removed a legacy profile verification file.")),
+            match ($document->document_type) {
+                'academic_record' => "{$user->name} removed an academic verification record.",
+                'recent_school_id' => "{$user->name} removed a recent school ID.",
+                'school_record' => "{$user->name} removed a school enrollment proof.",
+                'achievement_evidence' => "{$user->name} removed achievement evidence.",
+                default => "{$user->name} removed a legacy profile verification file.",
+            },
             $request,
         );
 
         return response()->json([
-            'message' => $removedAcademicRecord
-                ? 'Academic record removed. Upload a current record when you are ready for verification.'
-                : ($removedSchoolRecord
-                    ? 'School enrollment proof removed. Your academic verification was not changed.'
-                    : ($removedAchievementEvidence
-                        ? 'Achievement evidence removed.'
-                        : 'Older proof file removed. Your academic verification was not changed.')),
+            'message' => match ($document->document_type) {
+                'academic_record' => 'Academic record removed. Upload a current record when you are ready for verification.',
+                'recent_school_id' => 'Recent school ID removed. Upload a current ID to complete your required evidence.',
+                'school_record' => 'School enrollment proof removed. Your academic verification was not changed.',
+                'achievement_evidence' => 'Achievement evidence removed.',
+                default => 'Older proof file removed. Your academic verification was not changed.',
+            },
             'user' => $user->fresh(['studentProfile'])->publicPayload(),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
             'prepared_documents_count' => $user->studentDocuments()->count(),

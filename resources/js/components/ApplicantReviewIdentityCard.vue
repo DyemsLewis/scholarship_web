@@ -27,12 +27,21 @@ const initials = computed(() => applicantName.value
     .join('')
     .toUpperCase());
 const photoStatus = computed(() => props.applicant?.profile_photo_review_status || 'unreviewed');
-const photoStatusDisplay = computed(() => ({
-    approved: { label: 'Photo checked', className: 'bg-emerald-100 text-emerald-800' },
-    needs_replacement: { label: 'Replacement requested', className: 'bg-rose-100 text-rose-800' },
-    resubmitted: { label: 'New photo ready', className: 'bg-amber-100 text-amber-800' },
-    unreviewed: { label: props.applicant?.profile_photo_url ? 'Not checked' : 'Photo missing', className: 'bg-slate-100 text-slate-700' },
-}[photoStatus.value]));
+const photoStatusDisplay = computed(() => {
+    const defaultStatus = {
+        label: props.applicant?.profile_photo_url ? 'Not checked' : 'Photo missing',
+        className: 'bg-slate-100 text-slate-700',
+    };
+    const statuses = {
+        approved: { label: 'Photo checked', className: 'bg-emerald-100 text-emerald-800' },
+        needs_replacement: { label: 'Replacement requested', className: 'bg-rose-100 text-rose-800' },
+        resubmitted: { label: 'New photo ready', className: 'bg-amber-100 text-amber-800' },
+        pending: defaultStatus,
+        unreviewed: defaultStatus,
+    };
+
+    return statuses[photoStatus.value] ?? defaultStatus;
+});
 
 function openPhotoReview() {
     localError.value = '';
@@ -73,12 +82,12 @@ watch(() => props.applicant?.profile_photo_review_status, () => {
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
-        <div class="flex flex-col gap-4 border-l-4 border-l-amber-400 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-            <div class="flex min-w-0 items-center gap-4">
+    <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
+        <div class="flex flex-col gap-5 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+            <div class="flex min-w-0 items-start gap-4">
                 <button
                     type="button"
-                    class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-lg font-black tracking-[0.08em] text-white ring-1 ring-slate-200 transition hover:ring-2 hover:ring-amber-400"
+                    class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-sm bg-slate-950 text-lg font-black tracking-[0.08em] text-white ring-1 ring-slate-200 transition hover:ring-2 hover:ring-amber-400"
                     aria-label="Review applicant 2x2 photo"
                     @click="openPhotoReview"
                 >
@@ -86,40 +95,35 @@ watch(() => props.applicant?.profile_photo_review_status, () => {
                     <span v-else>{{ initials }}</span>
                 </button>
                 <div class="min-w-0">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">{{ eyebrow }}</p>
-                    <h2 class="mt-1 truncate text-xl font-bold text-slate-950">{{ applicantName }}</h2>
-                    <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                        <span>{{ applicant.email || 'Email not provided' }}</span>
-                        <span>{{ applicant.contact_number || 'Contact not provided' }}</span>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">{{ eyebrow }}</p>
+                    <div class="mt-1 flex flex-wrap items-center gap-2">
+                        <h2 class="truncate text-2xl font-bold text-slate-950">{{ applicantName }}</h2>
+                        <span :class="['rounded-sm px-2 py-1 text-[10px] font-bold uppercase', photoStatusDisplay.className]">{{ photoStatusDisplay.label }}</span>
+                        <span v-if="statusLabel" :class="['rounded-sm px-2 py-1 text-[10px] font-bold uppercase', statusClass]">{{ statusLabel }}</span>
                     </div>
-                    <button type="button" class="mt-2 inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-slate-950" @click="openPhotoReview">
-                        <i class="fa-regular fa-image text-amber-700" aria-hidden="true"></i>
-                        Review 2x2 photo
-                    </button>
+                    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                        <span><i class="fa-solid fa-envelope mr-1.5 text-slate-400" aria-hidden="true"></i>{{ applicant.email || 'Email not provided' }}</span>
+                        <span><i class="fa-solid fa-phone mr-1.5 text-slate-400" aria-hidden="true"></i>{{ applicant.contact_number || 'Contact not provided' }}</span>
+                    </div>
                 </div>
             </div>
-            <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                <span :class="['rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase', photoStatusDisplay.className]">{{ photoStatusDisplay.label }}</span>
-                <span v-if="statusLabel" :class="['rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase', statusClass]">{{ statusLabel }}</span>
-            </div>
+            <button type="button" class="inline-flex w-fit shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 hover:text-slate-950" @click="openPhotoReview">
+                <i class="fa-regular fa-image text-amber-700" aria-hidden="true"></i>
+                Review 2x2 photo
+            </button>
         </div>
 
         <dl
             v-if="facts.length"
-            :class="[
-                'border-t border-slate-200 text-sm',
-                stackFacts
-                    ? 'divide-y divide-slate-200 bg-slate-50 px-4 sm:px-5'
-                    : 'grid gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-4',
-            ]"
+            class="flex flex-col divide-y divide-slate-200 border-t border-slate-200 bg-white text-sm lg:flex-row lg:divide-x lg:divide-y-0"
         >
             <div
                 v-for="fact in facts"
                 :key="fact.label"
-                :class="stackFacts ? 'grid gap-1 py-3 sm:grid-cols-[13rem_minmax(0,1fr)] sm:items-start' : 'bg-slate-50 p-3'"
+                class="min-w-0 flex-1 px-5 py-3.5"
             >
                 <dt class="text-xs font-semibold text-slate-500">{{ fact.label }}</dt>
-                <dd :class="['break-words font-bold text-slate-950', stackFacts ? '' : 'mt-1']">{{ fact.value || 'Not provided' }}</dd>
+                <dd class="mt-1 break-words font-bold text-slate-950">{{ fact.value || 'Not provided' }}</dd>
             </div>
         </dl>
 

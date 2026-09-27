@@ -273,24 +273,25 @@ class ProviderApplicationScaleTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'applications')
             ->assertJsonPath('filter_counts.needs_review', 1)
-            ->assertJsonPath('filter_counts.waiting_activity', 2)
-            ->assertJsonPath('filter_counts.ready_result', 2)
+            ->assertJsonPath('filter_counts.waiting_activity', 3)
+            ->assertJsonPath('filter_counts.ready_result', 1)
             ->assertJsonPath('filter_counts.final_decision', 2)
             ->assertJsonPath('filter_counts.selected', 1)
             ->assertJsonPath('filter_counts.waitlisted', 1)
             ->assertJsonPath('filter_counts.all', 8)
             ->assertJsonPath('activity_waiting_counts.exam', 1)
-            ->assertJsonPath('activity_waiting_counts.interview', 1);
+            ->assertJsonPath('activity_waiting_counts.interview', 1)
+            ->assertJsonPath('activity_waiting_counts.formal_application', 1);
 
         $this->actingAs($provider)
             ->getJson('/provider/applications/data?filter=waiting_activity')
             ->assertOk()
-            ->assertJsonCount(2, 'applications');
+            ->assertJsonCount(3, 'applications');
 
         $this->actingAs($provider)
             ->getJson('/provider/applications/data?filter=ready_result')
             ->assertOk()
-            ->assertJsonCount(2, 'applications');
+            ->assertJsonCount(1, 'applications');
 
         $this->actingAs($provider)
             ->getJson('/provider/applications/data?filter=final_decision')

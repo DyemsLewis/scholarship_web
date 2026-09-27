@@ -29,7 +29,7 @@ const navLinks = computed(() => [
         icon: 'fa-solid fa-user-check',
         children: [
             { href: '/provider/applications/review', label: 'Applicant review', exact: true },
-            { href: '/provider/applications/activities', label: 'Activity schedules', exact: true },
+            { href: '/provider/applications/activities', label: 'Activities and schedules', exact: true },
             { href: '/provider/applications/results', label: 'Record results', exact: true },
             { href: '/provider/applications/decisions', label: 'Final decisions', exact: true },
         ],

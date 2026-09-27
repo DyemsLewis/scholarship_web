@@ -55,7 +55,7 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       if (isLogin) {
         await widget.apiClient.login(
-          email: emailController.text.trim(),
+          login: emailController.text.trim(),
           password: passwordController.text,
         );
       } else {
@@ -187,9 +187,15 @@ class _AuthScreenState extends State<AuthScreen> {
                               ],
                               _TextField(
                                 controller: emailController,
-                                label: 'Email address',
-                                keyboardType: TextInputType.emailAddress,
-                                validator: emailValidator,
+                                label: isLogin
+                                    ? 'Email or username'
+                                    : 'Email address',
+                                keyboardType: isLogin
+                                    ? TextInputType.text
+                                    : TextInputType.emailAddress,
+                                validator: isLogin
+                                    ? requiredValidator
+                                    : emailValidator,
                               ),
                               const SizedBox(height: 12),
                               _TextField(

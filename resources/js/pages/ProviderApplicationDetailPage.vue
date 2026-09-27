@@ -281,6 +281,9 @@ const applicantProfileProofs = computed(() => application.value?.applicant?.prof
 const academicProfileProof = computed(() => applicantProfileProofs.value.find(
     (proof) => proof.document_type === 'academic_record',
 ) ?? null);
+const recentSchoolIdProfileProof = computed(() => applicantProfileProofs.value.find(
+    (proof) => proof.document_type === 'recent_school_id',
+) ?? null);
 const academicScanRequired = computed(() => Boolean(application.value?.applicant?.academic_scan_required));
 const academicScanReady = computed(() => !academicScanRequired.value || academicProfileProof.value?.ocr_status === 'succeeded');
 const reviewedAcademicResultIsNumeric = computed(() => ['percentage', 'grade_point'].includes(reviewedAcademicScale.value));
@@ -303,6 +306,16 @@ const applicantApplicationAnswers = computed(() => (
         ? application.value.application_answers
         : []
 ).filter((answer) => answer?.prompt));
+const applicantReviewFacts = computed(() => {
+    const applicant = application.value?.applicant ?? {};
+
+    return [
+        { label: 'Birthdate', value: applicant.birthdate || 'Not provided' },
+        { label: 'Age', value: applicant.age ? `${applicant.age} years old` : 'Not provided' },
+        { label: 'Gender', value: applicant.gender ? labelFromKey(applicant.gender) : 'Not provided' },
+        { label: 'Citizenship', value: applicant.citizenship_status ? labelFromKey(applicant.citizenship_status) : 'Not provided' },
+    ];
+});
 const academicEvidenceState = computed(() => {
     const status = application.value?.applicant?.profile_verification_status;
 
@@ -319,6 +332,7 @@ const academicEvidenceState = computed(() => {
 const canVerifyAcademicRecord = computed(() => (
     application.value?.applicant?.profile_verification_status === 'pending'
         && Boolean(academicProfileProof.value)
+        && Boolean(recentSchoolIdProfileProof.value)
         && (academicScanReady.value || reviewedAcademicResultReady.value)
 ));
 const hasGuardianDetails = computed(() => {
@@ -1316,6 +1330,7 @@ onMounted(loadApplication);
                     theme="provider"
                     eyebrow="Applications"
                     title="Review record"
+                    description="Check the applicant, eligibility, and supporting files before recording the next result."
                     icon="fa-solid fa-user-check"
                 >
                     <template v-if="application" #actions>
@@ -2051,6 +2066,7 @@ onMounted(loadApplication);
                                 v-if="activeSection === 'documents'"
                                 :proofs="applicantProfileProofs"
                                 :academic-proof="academicProfileProof"
+                                :school-id-proof="recentSchoolIdProfileProof"
                                 :scan-required="academicScanRequired"
                                 :scan-ready="academicScanReady"
                                 :profile-status="application.applicant?.profile_verification_status"
@@ -2109,18 +2125,6 @@ onMounted(loadApplication);
                             v-if="activeSection === 'applicant'"
                             class="space-y-5"
                         >
-                            <ApplicantReviewIdentityCard
-                                v-if="activeSection === 'applicant'"
-                                :applicant="application.applicant"
-                                eyebrow="Provider applicant review"
-                                :status-label="profileVerificationLabel(application.applicant?.profile_verification_status)"
-                                :status-class="profileVerificationClass(application.applicant?.profile_verification_status)"
-                                :busy="isReviewingPhoto"
-                                :error="photoReviewError"
-                                @approve-photo="updatePhotoReview('approve')"
-                                @request-photo-replacement="updatePhotoReview('request_replacement', $event)"
-                            />
-
                             <nav class="provider-panel flex gap-1 overflow-x-auto p-1" aria-label="Applicant record sections">
                                 <button
                                     v-for="view in applicantDetailViews"
@@ -2140,178 +2144,155 @@ onMounted(loadApplication);
                                 </button>
                             </nav>
 
-                            <section v-if="activeApplicantView === 'profile'" class="provider-panel p-5">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Learning record</p>
-                                    <span :class="['rounded px-2 py-1 text-[11px] font-bold', evidenceClass(academicEvidenceState)]">
-                                        {{ evidenceLabel(academicEvidenceState) }}
-                                    </span>
-                                </div>
-                                <dl class="mt-3 divide-y divide-slate-200 border-t border-slate-200 text-sm [&>div]:grid [&>div]:gap-1 [&>div]:py-3 sm:[&>div]:grid-cols-[13rem_minmax(0,1fr)] sm:[&>div]:items-start">
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Education level</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.education_level || 'not set') }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Grade / year</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.year_level || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Course / strand</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.course_or_strand || 'Not applicable or not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Enrollment</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.enrollment_status || 'not provided') }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Academic year</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.academic_year || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Record period</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.academic_term || 'not provided') }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">School</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.school || 'Not provided' }}</dd>
-                                        <dd class="mt-1 text-xs text-slate-500">{{ labelFromKey(application.applicant?.school_type || 'school type not provided') }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Academic result</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ applicantAcademicLabel(application.applicant) }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Learner reference number</dt>
-                                        <dd class="mt-1 break-words font-bold text-slate-950">{{ application.applicant?.learner_reference_number || 'Not provided' }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
+                            <ApplicantReviewIdentityCard
+                                :applicant="application.applicant"
+                                eyebrow="Applicant record"
+                                :status-label="profileVerificationLabel(application.applicant?.profile_verification_status)"
+                                :status-class="profileVerificationClass(application.applicant?.profile_verification_status)"
+                                :busy="isReviewingPhoto"
+                                :error="photoReviewError"
+                                @approve-photo="updatePhotoReview('approve')"
+                                @request-photo-replacement="updatePhotoReview('request_replacement', $event)"
+                            />
 
-                            <section v-if="activeApplicantView === 'profile'" class="provider-panel p-5">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Household, location, and support
-                                </p>
-                                <dl class="mt-3 divide-y divide-slate-200 border-t border-slate-200 text-sm [&>div]:grid [&>div]:gap-1 [&>div]:py-3 sm:[&>div]:grid-cols-[13rem_minmax(0,1fr)] sm:[&>div]:items-start">
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Income bracket</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.income_bracket || 'Not provided' }}</dd>
+                            <section v-if="activeApplicantView === 'profile'" class="provider-panel overflow-hidden">
+                                <div class="border-b border-slate-200">
+                                    <div class="flex items-center gap-3 bg-slate-50/70 px-5 py-4">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
+                                            <i class="fa-solid fa-address-card" aria-hidden="true"></i>
+                                        </span>
+                                        <h3 class="font-bold text-slate-950">Personal information</h3>
                                     </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Household size</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.household_size ?? 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Address</dt>
-                                        <dd class="mt-1 leading-6 font-bold text-slate-950">{{ application.applicant?.address || application.applicant?.location || 'Not provided' }}</dd>
-                                        <dd v-if="application.applicant?.address && application.applicant?.location" class="mt-1 text-xs text-slate-500">{{ application.applicant.location }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Outside-platform scholarship declaration</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.current_scholarship_status || 'not provided') }}</dd>
-                                        <dd v-if="application.applicant?.current_scholarship_details" class="mt-1 text-xs leading-5 text-slate-500">{{ application.applicant.current_scholarship_details }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Other active awards detected by the portal</dt>
-                                        <dd v-if="application.applicant?.platform_active_scholarships?.length" class="mt-2 flex flex-wrap gap-2">
-                                            <span v-for="record in application.applicant.platform_active_scholarships" :key="record.application_id" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
-                                                {{ record.title }} · {{ labelFromKey(record.status) }}
+                                    <dl class="grid gap-x-8 gap-y-4 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                        <div v-for="fact in applicantReviewFacts" :key="fact.label">
+                                            <dt class="text-xs font-semibold text-slate-500">{{ fact.label }}</dt>
+                                            <dd class="mt-1 font-bold text-slate-950">{{ fact.value }}</dd>
+                                        </div>
+                                    </dl>
+                                </div>
+
+                                <div class="border-b border-slate-200">
+                                    <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 px-5 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
+                                                <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
                                             </span>
-                                        </dd>
-                                        <dd v-else class="mt-1 font-bold text-slate-950">No other active portal award detected</dd>
+                                            <h3 class="font-bold text-slate-950">Learning record</h3>
+                                        </div>
+                                        <span :class="['rounded-sm px-2 py-1 text-[10px] font-bold uppercase', evidenceClass(academicEvidenceState)]">
+                                            {{ evidenceLabel(academicEvidenceState) }}
+                                        </span>
                                     </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Study support needed</dt>
-                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.support_needs || 'Not provided' }}</dd>
+                                    <dl class="grid gap-x-8 gap-y-4 px-5 py-5 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                                        <div><dt class="text-xs font-semibold text-slate-500">Education level</dt><dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.education_level || 'not set') }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Grade / year</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.year_level || 'Not provided' }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Course / strand</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.course_or_strand || 'Not applicable or not provided' }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Enrollment</dt><dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.enrollment_status || 'not provided') }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Academic year</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.academic_year || 'Not provided' }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Record period</dt><dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.academic_term || 'not provided') }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">School</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.school || 'Not provided' }}</dd><dd class="mt-1 text-xs text-slate-500">{{ labelFromKey(application.applicant?.school_type || 'school type not provided') }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Academic result</dt><dd class="mt-1 font-bold text-slate-950">{{ applicantAcademicLabel(application.applicant) }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Learner reference number</dt><dd class="mt-1 break-words font-bold text-slate-950">{{ application.applicant?.learner_reference_number || 'Not provided' }}</dd></div>
+                                    </dl>
+                                </div>
+
+                                <div>
+                                    <div class="flex items-center gap-3 bg-slate-50/70 px-5 py-4">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
+                                            <i class="fa-solid fa-house-chimney-user" aria-hidden="true"></i>
+                                        </span>
+                                        <h3 class="font-bold text-slate-950">Household and support</h3>
                                     </div>
-                                </dl>
+                                    <dl class="grid gap-x-8 gap-y-4 px-5 py-5 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                                        <div><dt class="text-xs font-semibold text-slate-500">Income bracket</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.income_bracket || 'Not provided' }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Household size</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.household_size ?? 'Not provided' }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Outside-platform scholarship</dt><dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.current_scholarship_status || 'not provided') }}</dd><dd v-if="application.applicant?.current_scholarship_details" class="mt-1 text-xs leading-5 text-slate-500">{{ application.applicant.current_scholarship_details }}</dd></div>
+                                        <div class="sm:col-span-2 xl:col-span-3">
+                                            <dt class="text-xs font-semibold text-slate-500">Other active awards detected by the portal</dt>
+                                            <dd v-if="application.applicant?.platform_active_scholarships?.length" class="mt-2 flex flex-wrap gap-2">
+                                                <span v-for="record in application.applicant.platform_active_scholarships" :key="record.application_id" class="rounded-sm bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">{{ record.title }} · {{ labelFromKey(record.status) }}</span>
+                                            </dd>
+                                            <dd v-else class="mt-1 font-bold text-slate-950">No other active portal award detected</dd>
+                                        </div>
+                                        <div class="sm:col-span-2 xl:col-span-3"><dt class="text-xs font-semibold text-slate-500">Study support needed</dt><dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.support_needs || 'Not provided' }}</dd></div>
+                                    </dl>
+                                </div>
                             </section>
 
                             <section v-if="activeApplicantView === 'background'" class="provider-panel overflow-hidden">
-                                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-4">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Goals and involvement</p>
-                                    <span class="rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">Applicant-declared</span>
+                                <div class="border-b border-slate-200">
+                                    <div class="flex items-center gap-3 bg-slate-50/70 px-5 py-4">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span>
+                                        <h3 class="font-bold text-slate-950">Address</h3>
+                                    </div>
+                                    <dl class="grid gap-x-8 gap-y-4 px-5 py-5 text-sm sm:grid-cols-2">
+                                        <div><dt class="text-xs font-semibold text-slate-500">Residential address</dt><dd class="mt-1 font-bold leading-6 text-slate-950">{{ application.applicant?.address || 'Not provided' }}</dd></div>
+                                        <div v-if="application.applicant?.location"><dt class="text-xs font-semibold text-slate-500">General location</dt><dd class="mt-1 font-bold leading-6 text-slate-950">{{ application.applicant.location }}</dd></div>
+                                    </dl>
                                 </div>
-                                <dl class="divide-y divide-slate-200 text-sm">
-                                    <div class="px-5 py-3.5">
-                                        <dt class="font-semibold text-slate-500">Applicant goal</dt>
-                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.scholarship_goal || 'Not provided' }}</dd>
-                                    </div>
-                                    <div class="px-5 py-3.5">
-                                        <dt class="font-semibold text-slate-500">Achievements or strengths</dt>
-                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.achievements || 'Not provided' }}</dd>
-                                    </div>
-                                    <div class="px-5 py-3.5">
-                                        <dt class="font-semibold text-slate-500">Activities and responsibilities</dt>
-                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.activities_and_responsibilities || 'Not provided' }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
 
-                            <section v-if="activeApplicantView === 'background' && hasGuardianDetails" class="provider-panel p-5">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Parent or guardian</p>
-                                    <span v-if="application.applicant?.guardian_is_account_owner" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                        Manages applicant account
-                                    </span>
-                                </div>
-                                <dl class="mt-3 divide-y divide-slate-200 border-t border-slate-200 text-sm [&>div]:grid [&>div]:gap-1 [&>div]:py-3 sm:[&>div]:grid-cols-[13rem_minmax(0,1fr)] sm:[&>div]:items-start">
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Name</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_name || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Relationship</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_relationship || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Contact</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_contact || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="font-semibold text-slate-500">Email</dt>
-                                        <dd class="mt-1 break-words font-bold text-slate-950">{{ application.applicant?.guardian_email || 'Not provided' }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
-
-                            <section v-if="activeApplicantView === 'responses' && applicantApplicationAnswers.length" class="provider-panel overflow-hidden">
-                                <div class="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program questions</p>
-                                        <p class="mt-2 text-sm leading-6 text-slate-600">Responses submitted specifically for this scholarship application.</p>
-                                    </div>
-                                    <span class="w-fit rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">Self-declared</span>
-                                </div>
-                                <dl class="divide-y divide-slate-200">
-                                    <div v-for="(answer, index) in applicantApplicationAnswers" :key="answer.question_id || index" class="grid gap-2 px-5 py-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
-                                        <span class="grid h-7 w-7 place-items-center rounded bg-slate-950 text-[11px] font-bold text-white">{{ index + 1 }}</span>
-                                        <div>
-                                            <dt class="text-xs font-bold leading-5 text-slate-600">{{ answer.prompt }}</dt>
-                                            <dd class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-900">{{ answer.answer || 'No response provided' }}</dd>
+                                <div :class="hasGuardianDetails ? 'border-b border-slate-200' : ''">
+                                    <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 px-5 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-bullseye" aria-hidden="true"></i></span>
+                                            <h3 class="font-bold text-slate-950">Goals and involvement</h3>
                                         </div>
+                                        <span class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Applicant-declared</span>
                                     </div>
-                                </dl>
-                            </section>
+                                    <dl class="divide-y divide-slate-200 text-sm">
+                                        <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Applicant goal</dt><dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.scholarship_goal || 'Not provided' }}</dd></div>
+                                        <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Achievements or strengths</dt><dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.achievements || 'Not provided' }}</dd></div>
+                                        <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Activities and responsibilities</dt><dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.activities_and_responsibilities || 'Not provided' }}</dd></div>
+                                    </dl>
+                                </div>
 
-                            <section
-                                v-if="activeApplicantView === 'responses' && (application.notes || application.review_notes)"
-                                class="provider-panel p-5"
-                            >
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Notes</p>
-                                <p v-if="application.notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">{{ application.notes }}</p>
-                                <div v-if="application.review_notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                                    <p class="font-semibold text-slate-700">Provider review note</p>
-                                    <p class="mt-1 leading-6 text-slate-600">{{ application.review_notes }}</p>
+                                <div v-if="hasGuardianDetails">
+                                    <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 px-5 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-people-roof" aria-hidden="true"></i></span>
+                                            <h3 class="font-bold text-slate-950">Parent or guardian</h3>
+                                        </div>
+                                        <span v-if="application.applicant?.guardian_is_account_owner" class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Manages applicant account</span>
+                                    </div>
+                                    <dl class="grid gap-x-8 gap-y-4 px-5 py-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                        <div><dt class="text-xs font-semibold text-slate-500">Name</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_name || 'Not provided' }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Relationship</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_relationship || 'Not provided' }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Contact</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_contact || 'Not provided' }}</dd></div>
+                                        <div><dt class="text-xs font-semibold text-slate-500">Email</dt><dd class="mt-1 break-words font-bold text-slate-950">{{ application.applicant?.guardian_email || 'Not provided' }}</dd></div>
+                                    </dl>
                                 </div>
                             </section>
 
-                            <section
-                                v-if="activeApplicantView === 'responses' && !applicantApplicationAnswers.length && !application.notes && !application.review_notes"
-                                class="provider-panel p-5"
-                            >
-                                <p class="font-bold text-slate-950">No application responses</p>
-                                <p class="mt-1 text-sm text-slate-600">This program did not collect additional written responses.</p>
+                            <section v-if="activeApplicantView === 'responses'" class="provider-panel overflow-hidden">
+                                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4">
+                                    <div class="flex items-center gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-message" aria-hidden="true"></i></span>
+                                        <h3 class="font-bold text-slate-950">Program responses</h3>
+                                    </div>
+                                    <span v-if="applicantApplicationAnswers.length" class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Applicant-declared</span>
+                                </div>
+
+                                <dl v-if="applicantApplicationAnswers.length" class="divide-y divide-slate-200">
+                                    <div v-for="(answer, index) in applicantApplicationAnswers" :key="answer.question_id || index" class="grid gap-3 px-5 py-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
+                                        <span class="grid h-7 w-7 place-items-center rounded-sm bg-slate-950 text-[11px] font-bold text-white">{{ index + 1 }}</span>
+                                        <div><dt class="text-xs font-bold leading-5 text-slate-600">{{ answer.prompt }}</dt><dd class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-900">{{ answer.answer || 'No response provided' }}</dd></div>
+                                    </div>
+                                </dl>
+                                <div v-else class="px-5 py-6">
+                                    <p class="font-bold text-slate-950">No program responses</p>
+                                    <p class="mt-1 text-sm text-slate-600">This scholarship did not collect additional written answers.</p>
+                                </div>
+
+                                <div v-if="application.notes || application.review_notes" class="border-t border-slate-200">
+                                    <div class="flex items-center gap-3 bg-slate-50/70 px-5 py-4">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-note-sticky" aria-hidden="true"></i></span>
+                                        <h3 class="font-bold text-slate-950">Notes</h3>
+                                    </div>
+                                    <dl class="divide-y divide-slate-200 text-sm">
+                                        <div v-if="application.notes" class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Applicant note</dt><dd class="mt-1 whitespace-pre-line leading-6 text-slate-900">{{ application.notes }}</dd></div>
+                                        <div v-if="application.review_notes" class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Provider review note</dt><dd class="mt-1 whitespace-pre-line leading-6 text-slate-900">{{ application.review_notes }}</dd></div>
+                                    </dl>
+                                </div>
                             </section>
                         </aside>
                     </div>

@@ -121,6 +121,7 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $admin = User::factory()->create(['role' => 'admin']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
@@ -189,6 +190,7 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $admin = User::factory()->create(['role' => 'admin']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
@@ -278,6 +280,7 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $admin = User::factory()->create(['role' => 'admin']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
@@ -375,6 +378,75 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->assertDatabaseCount('applicant_verification_documents', 0);
     }
 
+    public function test_recent_school_id_is_saved_as_required_profile_evidence(): void
+    {
+        Storage::fake('local');
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $response = $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'recent_school_id',
+                'document_file' => UploadedFile::fake()->image('current-school-id.jpg'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('verification_documents.0.document_type', 'recent_school_id')
+            ->assertJsonPath('prepared_document.document_name', 'Recent school ID')
+            ->assertJsonPath('user.applicant_verification_status', 'unsubmitted');
+
+        $schoolId = ApplicantVerificationDocument::query()
+            ->where('applicant_id', $applicant->id)
+            ->where('document_type', 'recent_school_id')
+            ->firstOrFail();
+
+        $this->assertDatabaseHas('student_documents', [
+            'user_id' => $applicant->id,
+            'document_name' => 'Recent school ID',
+        ]);
+
+        $this->actingAs($admin)
+            ->getJson("/admin/applicants/{$applicant->id}/review/data")
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $schoolId->id,
+                'document_type' => 'recent_school_id',
+            ]);
+
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'School ID Review Scholarship',
+            'description' => 'Tests access to required profile evidence.',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $providerResponse = $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $schoolId->id,
+                'document_type' => 'recent_school_id',
+            ]);
+
+        $schoolIdPayload = collect($providerResponse->json('application.applicant.profile_proofs'))
+            ->firstWhere('document_type', 'recent_school_id');
+
+        $this->actingAs($provider)
+            ->get($schoolIdPayload['view_url'])
+            ->assertOk();
+
+        $this->assertNotNull($response->json('prepared_document.id'));
+    }
+
     public function test_optional_school_proof_is_reusable_without_resetting_academic_verification(): void
     {
         Storage::fake('local');
@@ -383,6 +455,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $provider = User::factory()->create(['role' => 'provider']);
         $otherProvider = User::factory()->create(['role' => 'provider']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
@@ -554,6 +627,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         $provider = User::factory()->create(['role' => 'provider']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
@@ -603,6 +677,7 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $admin = User::factory()->create(['role' => 'admin']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
 
         $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
@@ -750,6 +825,7 @@ class ApplicantProfileVerificationTest extends TestCase
         ]);
         $otherProvider = User::factory()->create(['role' => 'provider']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
         $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
             'verification_status' => 'pending',
         ]);
@@ -828,6 +904,7 @@ class ApplicantProfileVerificationTest extends TestCase
 
         $provider = User::factory()->create(['role' => 'provider']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
         $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
             'verification_status' => 'pending',
         ]);
@@ -891,6 +968,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         $provider = User::factory()->create(['role' => 'provider']);
         $applicant = User::factory()->create(['role' => 'applicant']);
+        $this->createRecentSchoolId($applicant);
         $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], [
             'verification_status' => 'pending',
         ]);
@@ -1009,6 +1087,31 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertUnprocessable();
     }
 
+    public function test_admin_cannot_verify_applicant_without_a_recent_school_id(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        ApplicantVerificationDocument::create([
+            'applicant_id' => $applicant->id,
+            'uploaded_by' => $applicant->id,
+            'document_type' => 'academic_record',
+            'original_name' => 'latest-grades.pdf',
+            'path' => "applicant-verification/{$applicant->id}/latest-grades.pdf",
+            'mime_type' => 'application/pdf',
+            'size' => 1024,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'approved',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'The applicant must upload a recent school ID before the profile can be verified.');
+    }
+
     public function test_admin_cannot_use_a_legacy_identity_file_to_verify_academic_results(): void
     {
         $admin = User::factory()->create(['role' => 'admin']);
@@ -1043,6 +1146,21 @@ class ApplicantProfileVerificationTest extends TestCase
             'services.academic_ocr.engine' => 2,
             'services.academic_ocr.language' => 'eng',
             'services.academic_ocr.max_file_size_kb' => 1024,
+        ]);
+    }
+
+    private function createRecentSchoolId(User $applicant): ApplicantVerificationDocument
+    {
+        return ApplicantVerificationDocument::create([
+            'applicant_id' => $applicant->id,
+            'uploaded_by' => $applicant->id,
+            'document_type' => 'recent_school_id',
+            'original_name' => 'current-school-id.jpg',
+            'path' => "applicant-verification/{$applicant->id}/current-school-id.jpg",
+            'mime_type' => 'image/jpeg',
+            'size' => 1024,
+            'status' => 'submitted',
+            'uploaded_at' => now()->subSecond(),
         ]);
     }
 }

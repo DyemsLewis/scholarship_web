@@ -40,11 +40,15 @@ const academicRecord = computed(() => academicVerificationDocument(applicant.val
 const schoolRecord = computed(() => applicant.value?.verification_documents?.find(
     (document) => document.document_type === 'school_record',
 ) ?? null);
+const recentSchoolId = computed(() => applicant.value?.verification_documents?.find(
+    (document) => document.document_type === 'recent_school_id',
+) ?? null);
 const achievementEvidence = computed(() => applicant.value?.verification_documents?.find(
     (document) => document.document_type === 'achievement_evidence',
 ) ?? null);
-const profileEvidenceDocuments = computed(() => [schoolRecord.value, academicRecord.value, achievementEvidence.value].filter(Boolean));
+const profileEvidenceDocuments = computed(() => [academicRecord.value, recentSchoolId.value, schoolRecord.value, achievementEvidence.value].filter(Boolean));
 const profileEvidenceReady = computed(() => Boolean(academicRecord.value)
+    && Boolean(recentSchoolId.value)
     && (!applicant.value?.achievements || achievementEvidence.value));
 const savedAcademicResult = computed(() => academicResultLabel(applicant.value));
 const academicScanRequired = computed(() => Boolean(applicant.value?.academic_scan_required));
@@ -244,6 +248,7 @@ function extractedAcademicResult(document) {
 function documentTypeLabel(type) {
     return {
         academic_record: 'Academic record',
+        recent_school_id: 'Recent school ID',
         school_record: 'School enrollment proof',
         achievement_evidence: 'Achievement evidence',
     }[type] ?? 'Older verification file';
@@ -320,7 +325,7 @@ async function updateApplicant(verificationStatus) {
     }
 
     if (!profileEvidenceReady.value) {
-        decisionError.value = 'The applicant must upload an academic record before profile verification.';
+        decisionError.value = 'The applicant must upload the required academic record, school ID, and achievement evidence before profile verification.';
         return;
     }
 
@@ -917,7 +922,7 @@ onMounted(loadApplicant);
                         </div>
 
                         <div v-else class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-                            The applicant must upload an academic record before the profile can be verified. School enrollment proof can provide additional support when available.
+                            The applicant must upload an academic record and recent school ID before the profile can be verified.
                         </div>
                     </section>
 

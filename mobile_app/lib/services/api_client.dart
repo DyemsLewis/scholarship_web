@@ -40,10 +40,10 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> login({
-    required String email,
+    required String login,
     required String password,
   }) async {
-    final data = await _post('/login', {'email': email, 'password': password});
+    final data = await _post('/login', {'login': login, 'password': password});
 
     await _storeToken(data['token'] as String?);
     return data;

@@ -73,7 +73,7 @@ const applicantWorkQueues = computed(() => [
     {
         key: 'ready_result',
         label: 'Ready for result',
-        description: 'Record completed activity or formal application results.',
+        description: 'Record results for completed scheduled activities.',
         icon: 'fa-solid fa-clipboard-check',
         href: '/provider/applications/results',
     },
@@ -87,7 +87,7 @@ const applicantWorkQueues = computed(() => [
     {
         key: 'waiting_activity',
         label: 'Waiting for activity',
-        description: 'Applicants are waiting for an exam or interview.',
+        description: 'Applicants are waiting for a formal application, exam, or interview.',
         icon: 'fa-solid fa-calendar-day',
         href: '/provider/applications/activities',
     },
@@ -228,7 +228,7 @@ const nextAction = computed(() => {
         return {
             eyebrow: 'Priority - Record results',
             title: `${applicationWorkflowCounts.value.ready_result} applicant${applicationWorkflowCounts.value.ready_result === 1 ? '' : 's'} ready for a result`,
-            description: 'A formal application, exam, or interview is complete and ready for your decision.',
+            description: 'A scheduled formal application, exam, or interview is complete and ready for your decision.',
             href: '/provider/applications/results',
             label: 'Record results',
             icon: 'fa-solid fa-clipboard-check',
@@ -274,7 +274,7 @@ const nextAction = computed(() => {
         return {
             eyebrow: 'Applicant activities',
             title: `${applicationWorkflowCounts.value.waiting_activity} applicant${applicationWorkflowCounts.value.waiting_activity === 1 ? '' : 's'} waiting for an activity`,
-            description: 'Check the shared exam or interview schedule and keep applicants moving through the selection process.',
+            description: 'Check formal application, exam, and interview schedules to keep applicants moving.',
             href: '/provider/applications/activities',
             label: 'Check activities',
             icon: 'fa-solid fa-calendar-day',

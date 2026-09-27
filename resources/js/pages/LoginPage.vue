@@ -5,7 +5,7 @@ import ToastMessage from '../components/ToastMessage.vue';
 
 const formElement = ref(null);
 const form = ref({
-    email: '',
+    login: '',
     password: '',
     remember: true,
 });
@@ -61,7 +61,7 @@ async function submitForm() {
 
     try {
         const response = await window.axios.post('/login', {
-            email: form.value.email,
+            login: form.value.login,
             password: form.value.password,
             remember: form.value.remember,
         });
@@ -146,16 +146,16 @@ onBeforeUnmount(() => {
         <form ref="formElement" class="space-y-4" @submit.prevent="submitForm">
             <div class="grid gap-4">
                 <div>
-                    <label :class="labelClass" for="email">
-                        Email address
+                    <label :class="labelClass" for="login">
+                        Email or username
                     </label>
                     <input
-                        id="email"
-                        v-model="form.email"
-                        type="email"
-                        autocomplete="email"
+                        id="login"
+                        v-model="form.login"
+                        type="text"
+                        autocomplete="username"
                         required
-                        placeholder="student@example.com"
+                        placeholder="Email address or username"
                         :class="inputClass"
                     >
                 </div>

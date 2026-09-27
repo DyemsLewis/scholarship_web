@@ -69,4 +69,18 @@ class AccountSafeguardsTest extends TestCase
 
         $this->assertNotNull(MobileApiToken::first()?->expires_at);
     }
+
+    public function test_mobile_login_accepts_an_applicant_username(): void
+    {
+        $user = User::factory()->create([
+            'role' => 'applicant',
+            'username' => 'mobile.student',
+            'password' => 'password',
+        ]);
+
+        $this->postJson('/api/mobile/login', [
+            'login' => $user->username,
+            'password' => 'password',
+        ])->assertOk()->assertJsonStructure(['token']);
+    }
 }

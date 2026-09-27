@@ -33,7 +33,7 @@ const legacyQueueAliases = {
     pending_review: 'needs_review',
     document_issues: 'needs_review',
     active_stages: 'waiting_activity',
-    formal_application: 'ready_result',
+    formal_application: 'waiting_activity',
     decided: 'all',
 };
 const normalizedRequestedQueueFilter = legacyQueueAliases[requestedQueueFilter] ?? requestedQueueFilter;
@@ -112,6 +112,7 @@ let providerLoadRequestId = 0;
 let scheduleLocationRequestId = 0;
 
 const scheduleTypeCatalog = [
+    { value: 'formal_application', label: 'Formal application', icon: 'fa-solid fa-file-signature', help: 'Shared appointment or submission schedule' },
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question', help: 'Provider-managed exam schedule' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments', help: 'Shared interview instructions' },
 ];
@@ -131,7 +132,9 @@ const scheduleMapAddress = computed(() => {
 const configuredScheduleTypes = computed(() => {
     const configured = selectedScholarshipContext.value?.selection_stages ?? ['screening'];
 
-    return scheduleTypeCatalog.filter((type) => configured.includes(type.value));
+    return configured
+        .map((stage) => scheduleTypeCatalog.find((type) => type.value === stage))
+        .filter(Boolean);
 });
 const availableBulkAdvanceTargets = computed(() => {
     const catalog = [
@@ -166,11 +169,11 @@ const workspaceCopy = {
         listDescription: 'Open a record to verify its details and record the pre-screening decision.',
     },
     activities: {
-        kicker: 'Activity schedules',
-        title: 'Manage activity schedules',
-        description: 'Find applicants waiting for an exam or interview schedule.',
+        kicker: 'Application activities',
+        title: 'Manage application activities',
+        description: 'Schedule formal applications, exams, and interviews in one place.',
         listTitle: 'Applicants waiting for an activity',
-        listDescription: 'Open a program workspace to publish or review its shared schedule.',
+        listDescription: 'Open a program workspace to publish or review the shared schedule.',
     },
     results: {
         kicker: 'Activity results',
@@ -209,7 +212,7 @@ const workspaceGuides = {
         { label: 'Next action', text: 'Open an applicant and record the pre-screening result.' },
     ],
     activities: [
-        { label: 'Purpose', text: 'Coordinate an exam or interview included in the selection plan.' },
+        { label: 'Purpose', text: 'Coordinate the formal application, exam, or interview in the selection plan.' },
         { label: 'Records shown', text: 'Applicants who passed the previous stage and are waiting.' },
         { label: 'Next action', text: 'Publish one shared schedule, then mark the activity complete.' },
     ],
@@ -278,7 +281,7 @@ const reviewFilterOptions = computed(() => [
     {
         value: 'waiting_activity',
         label: 'Waiting for activity',
-        description: 'Applicants awaiting an exam or interview.',
+        description: 'Applicants awaiting a formal application, exam, or interview.',
         icon: 'fa-regular fa-calendar',
         count: Number(queueFilterCounts.value.waiting_activity ?? 0),
     },
@@ -370,8 +373,8 @@ const outcomeFilterOptions = computed(() => [
 ]);
 const emptyQueueMessage = computed(() => ({
     needs_review: 'No applicants currently need pre-screening review.',
-    waiting_activity: 'No applicants are waiting for an exam or interview.',
-    ready_result: 'No completed activities or formal handoffs need a result.',
+    waiting_activity: 'No applicants are waiting for a formal application, exam, or interview.',
+    ready_result: 'No completed activities need a result.',
     final_decision: 'No applicants are waiting for a final decision.',
     selected: 'No applicants have been selected yet.',
     waitlisted: 'No applicants are currently waitlisted.',
@@ -662,7 +665,7 @@ function showWaitingTime(application) {
 function applicationWaitingForActivity(application) {
     const stage = workflowStage(application);
 
-    if (workflowClosed(application) || !['exam', 'interview'].includes(stage)) {
+    if (workflowClosed(application) || !['formal_application', 'exam', 'interview'].includes(stage)) {
         return false;
     }
 
@@ -866,15 +869,27 @@ function eventStatusClass(status) {
 
 function defaultScheduleDetails(type) {
     const scholarship = selectedScholarshipContext.value ?? {};
+    const isFormalApplication = type === 'formal_application';
+    const formalApplicationMode = {
+        onsite: 'onsite',
+        online: 'online',
+        provider_contact: 'provider_managed',
+    }[scholarship.handoff_mode] ?? 'provider_managed';
 
     return {
         title: `${scheduleTypeLabel(type)} schedule`,
-        mode: 'onsite',
-        venue: scholarship.location_name ?? '',
-        locationAddress: scholarship.location_address ?? '',
+        mode: isFormalApplication ? formalApplicationMode : 'onsite',
+        venue: isFormalApplication
+            ? scholarship.handoff_location_name ?? scholarship.location_name ?? ''
+            : scholarship.location_name ?? '',
+        locationAddress: isFormalApplication
+            ? scholarship.handoff_location_address ?? scholarship.location_address ?? ''
+            : scholarship.location_address ?? '',
         latitude: scholarship.latitude ?? '',
         longitude: scholarship.longitude ?? '',
+        onlineUrl: isFormalApplication ? scholarship.handoff_url ?? '' : '',
         instructions: {
+            formal_application: scholarship.handoff_instructions || 'Follow the provider instructions and bring the required original documents for verification.',
             exam: 'Review the provider exam instructions and arrive or sign in at least 15 minutes before the scheduled time.',
             interview: 'Bring your recent school ID and be ready to discuss your application and scholarship goals.',
         }[type] ?? '',
@@ -1231,7 +1246,7 @@ onMounted(loadProviderData);
                             :class="['rounded-md border border-dashed border-slate-300 bg-slate-50 p-5', scheduleError ? 'mt-4' : '']"
                         >
                             <p class="text-sm font-bold text-slate-900">No scheduled activities are used in this program</p>
-                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">This selection flow does not include an exam or interview, so there is nothing to publish here.</p>
+                            <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">This selection flow has no formal application, exam, or interview to schedule.</p>
                         </div>
 
                         <div v-else :class="['grid gap-3 sm:grid-cols-2', scheduleError ? 'mt-4' : '']">

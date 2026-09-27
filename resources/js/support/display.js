@@ -1,7 +1,8 @@
 export function labelFromKey(value) {
     return String(value ?? '')
         .replace(/_/g, ' ')
-        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+        .replace(/\b\w/g, (letter) => letter.toUpperCase())
+        .replace(/\bId\b/g, 'ID');
 }
 
 export function formatFileSize(size) {

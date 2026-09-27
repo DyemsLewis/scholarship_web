@@ -194,7 +194,53 @@ class ApplicationScheduleWorkflowTest extends TestCase
         $this->assertSame('exam', $application->fresh()->workflow_stage);
     }
 
-    public function test_only_exam_and_interview_can_be_published_as_schedules(): void
+    public function test_formal_application_can_use_the_shared_activity_schedule(): void
+    {
+        [$provider, , $application, $scholarship] = $this->applicationAt('formal_application');
+
+        $response = $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/events", [
+                'type' => 'formal_application',
+                'title' => 'Formal application appointment',
+                'scheduled_at' => now()->addMinute()->format('Y-m-d H:i:s'),
+                'mode' => 'onsite',
+                'venue' => 'Scholarship office',
+                'instructions' => 'Bring the original documents listed in the program.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('audience_count', 1)
+            ->assertJsonPath('event.type', 'formal_application');
+
+        $eventId = $response->json('event.id');
+
+        $this->assertDatabaseHas('application_schedules', [
+            'scholarship_application_id' => $application->id,
+            'type' => 'formal_application',
+            'status' => 'scheduled',
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/stages/formal_application/result", [
+                'result' => 'passed',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('result');
+
+        $this->travel(2)->minutes();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/scholarships/{$scholarship->id}/events/{$eventId}/complete")
+            ->assertOk();
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/stages/formal_application/result", [
+                'result' => 'passed',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.workflow.current_stage', 'decision');
+    }
+
+    public function test_only_selection_activities_can_be_published_as_schedules(): void
     {
         [$provider, , $application, $scholarship] = $this->applicationAt('exam');
 

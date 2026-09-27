@@ -231,8 +231,8 @@ class ProviderController extends Controller
                 $request->routeIs('provider.applications.decisions') => 'decisions',
                 $request->routeIs('provider.applications.recipients') => 'recipients',
                 $request->routeIs('provider.applications.waitlist-directory') => 'waitlist',
-                in_array($request->query('filter'), ['waiting_activity', 'active_stages'], true) => 'activities',
-                in_array($request->query('filter'), ['ready_result', 'formal_application'], true) => 'results',
+                in_array($request->query('filter'), ['waiting_activity', 'active_stages', 'formal_application'], true) => 'activities',
+                $request->query('filter') === 'ready_result' => 'results',
                 $request->query('filter') === 'final_decision' => 'decisions',
                 $request->query('filter') === 'selected' => 'recipients',
                 $request->query('filter') === 'waitlisted' => 'waitlist',
@@ -1432,6 +1432,13 @@ class ProviderController extends Controller
                                 ->whereDoesntHave('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
                                     ->where('type', 'interview')
                                     ->where('status', 'completed'));
+                        })
+                        ->orWhere(function (Builder $formalApplicationQuery): void {
+                            $formalApplicationQuery
+                                ->where('workflow_stage', 'formal_application')
+                                ->whereDoesntHave('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
+                                    ->where('type', 'formal_application')
+                                    ->where('status', 'completed'));
                         });
                 });
 
@@ -1443,7 +1450,13 @@ class ProviderController extends Controller
                 ->whereNotIn('application_state', ['closed', 'withdrawn'])
                 ->where(function (Builder $query): void {
                     $query
-                        ->where('workflow_stage', 'formal_application')
+                        ->where(function (Builder $formalApplicationQuery): void {
+                            $formalApplicationQuery
+                                ->where('workflow_stage', 'formal_application')
+                                ->whereHas('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
+                                    ->where('type', 'formal_application')
+                                    ->where('status', 'completed'));
+                        })
                         ->orWhere(function (Builder $examQuery): void {
                             $examQuery
                                 ->where('workflow_stage', 'exam')
@@ -1514,7 +1527,7 @@ class ProviderController extends Controller
 
         if ($filter === 'active_stages') {
             $query
-                ->whereIn('workflow_stage', ['exam', 'interview'])
+                ->whereIn('workflow_stage', ScholarshipSelectionPlan::SCHEDULABLE_STAGES)
                 ->whereNotIn('application_state', ['closed', 'withdrawn']);
 
             return;
@@ -1600,7 +1613,7 @@ class ProviderController extends Controller
 
     private function providerActivityWaitingCounts(Builder $baseQuery): Collection
     {
-        return collect(['exam', 'interview'])->mapWithKeys(function (string $stage) use ($baseQuery): array {
+        return collect(ScholarshipSelectionPlan::SCHEDULABLE_STAGES)->mapWithKeys(function (string $stage) use ($baseQuery): array {
             $query = (clone $baseQuery)
                 ->where('workflow_stage', $stage)
                 ->whereNotIn('application_state', ['closed', 'withdrawn'])
@@ -2688,6 +2701,14 @@ class ProviderController extends Controller
                     'verification' => 'The scan did not produce a usable result. Enter the verified academic result from the uploaded record before approving it.',
                 ]);
             }
+        }
+
+        if (! $applicant->applicantVerificationDocuments()
+            ->where('document_type', 'recent_school_id')
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'verification' => 'The applicant must upload a recent school ID before the profile can be verified.',
+            ]);
         }
 
         $academicRecord ??= $applicant->applicantVerificationDocuments
@@ -5905,10 +5926,6 @@ class ProviderController extends Controller
             return ['pass_prescreening'];
         }
 
-        if ($workflow['current_stage'] === 'formal_application') {
-            return ['pass_stage'];
-        }
-
         if (ScholarshipSelectionPlan::isSchedulable($workflow['current_stage'])) {
             return $this->stageActivityIsComplete($application, $workflow['current_stage'])
                 ? ['pass_stage']
@@ -7477,12 +7494,26 @@ class ProviderController extends Controller
         }
 
         if ($application->relationLoaded('schedules')) {
-            return $application->schedules->contains(fn (ApplicationSchedule $schedule): bool => (
+            $stageSchedules = $application->schedules->where('type', $stage);
+
+            // Existing formal handoffs did not require a dated schedule. Once one is
+            // published, it follows the same completion rule as exams and interviews.
+            if ($stage === 'formal_application' && $stageSchedules->isEmpty()) {
+                return true;
+            }
+
+            return $stageSchedules->contains(fn (ApplicationSchedule $schedule): bool => (
                 $schedule->type === $stage && $schedule->status === 'completed'
             ));
         }
 
-        return $application->schedules()
+        $stageSchedules = $application->schedules()->where('type', $stage);
+
+        if ($stage === 'formal_application' && ! (clone $stageSchedules)->exists()) {
+            return true;
+        }
+
+        return $stageSchedules
             ->where('type', $stage)
             ->where('status', 'completed')
             ->exists();
@@ -7643,6 +7674,7 @@ class ProviderController extends Controller
     private function scheduleTypeLabel(string $type): string
     {
         return match ($type) {
+            'formal_application' => 'formal application',
             'exam' => 'exam',
             'interview' => 'interview',
             'distribution' => 'award release',
