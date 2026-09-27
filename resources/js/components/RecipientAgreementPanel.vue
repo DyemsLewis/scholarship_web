@@ -11,6 +11,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    hideHeader: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const clarity = computed(() => agreementClarity(props.scholarship));
@@ -27,7 +31,7 @@ const detailChecks = computed(() => clarity.value.checks.filter((check) => !['su
 
 <template>
     <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-        <header class="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
+        <header v-if="!hideHeader" class="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">
             <div class="flex items-start gap-3">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
                     <i class="fa-solid fa-file-signature" aria-hidden="true"></i>

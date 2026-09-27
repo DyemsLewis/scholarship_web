@@ -154,7 +154,33 @@ class ApplicantDashboardController extends Controller
             return $redirect;
         }
 
+        if ($request->query('view') === 'monitoring') {
+            return redirect()->route('dashboard.monitoring');
+        }
+
         return view('dashboard-applications');
+    }
+
+    public function monitoring(Request $request): View|RedirectResponse
+    {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        return view('dashboard-monitoring');
+    }
+
+    public function monitoringDetail(Request $request, ScholarshipApplication $application): View|RedirectResponse
+    {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        return view('dashboard-monitoring-detail', [
+            'application' => $application,
+        ]);
     }
 
     public function documents(Request $request): View|RedirectResponse
@@ -809,6 +835,10 @@ class ApplicantDashboardController extends Controller
         }
 
         $oldPath = $profile->profile_photo_path;
+        $photoReviewStatus = $profile->profile_photo_review_status;
+        $photoReviewerId = $profile->profile_photo_reviewed_by;
+        $photoReviewApplicationId = $profile->profile_photo_review_application_id;
+        $isRequestedReplacement = in_array($photoReviewStatus, ['needs_replacement', 'resubmitted'], true);
 
         try {
             $profile->update([
@@ -817,6 +847,11 @@ class ApplicantDashboardController extends Controller
                 'profile_photo_mime_type' => $file->getMimeType(),
                 'profile_photo_size' => $file->getSize() ?: 0,
                 'profile_photo_updated_at' => now(),
+                'profile_photo_review_status' => $isRequestedReplacement ? 'resubmitted' : null,
+                'profile_photo_review_note' => $isRequestedReplacement ? $profile->profile_photo_review_note : null,
+                'profile_photo_reviewed_by' => $isRequestedReplacement ? $photoReviewerId : null,
+                'profile_photo_reviewed_at' => $isRequestedReplacement ? now() : null,
+                'profile_photo_review_application_id' => $isRequestedReplacement ? $photoReviewApplicationId : null,
             ]);
         } catch (Throwable $error) {
             Storage::disk('local')->delete($path);
@@ -833,7 +868,39 @@ class ApplicantDashboardController extends Controller
             'applicant_profile_photo_updated',
             "{$user->name} updated their applicant profile photo.",
             $request,
+            ['replacement_requested' => $isRequestedReplacement],
         );
+
+        PortalNotification::query()
+            ->where('user_id', $user->id)
+            ->where('deduplication_key', "profile-photo-review:{$user->id}")
+            ->update(['read_at' => now()]);
+
+        if ($isRequestedReplacement && $photoReviewerId) {
+            $reviewer = User::query()->find($photoReviewerId);
+
+            if ($reviewer) {
+                $reviewUrl = $reviewer->isAdmin()
+                    ? route('admin.applicants.review.show', $user, false)
+                    : ($photoReviewApplicationId
+                        ? route('provider.applications.show', $photoReviewApplicationId, false).'?section=applicant'
+                        : '/provider/applications/review');
+
+                PortalNotification::updateOrCreate(
+                    [
+                        'user_id' => $reviewer->id,
+                        'deduplication_key' => "profile-photo-resubmitted:{$user->id}:{$reviewer->id}",
+                    ],
+                    [
+                        'type' => 'profile_photo_resubmitted',
+                        'title' => 'Applicant uploaded a new 2x2 photo',
+                        'message' => "{$user->name} uploaded the requested replacement photo. Open the applicant review to check it.",
+                        'action_url' => $reviewUrl,
+                        'read_at' => null,
+                    ],
+                );
+            }
+        }
 
         $user->unsetRelation('studentProfile');
 
@@ -1718,7 +1785,7 @@ class ApplicantDashboardController extends Controller
             'type' => 'recipient_monitoring_submission',
             'title' => 'Academic progress record submitted',
             'message' => $providerMessage,
-            'action_url' => route('provider.programs.monitoring', $application->scholarship_id, false),
+            'action_url' => route('provider.monitoring.show', $application->scholarship_id, false),
             'read_at' => null,
         ]);
         $this->notifyAdditionalProviderReviewers(
@@ -1811,7 +1878,7 @@ class ApplicantDashboardController extends Controller
             'type' => 'recipient_monitoring_submission',
             'title' => 'Academic result updated',
             'message' => "{$request->user()->name} entered the result shown on the {$cycle->title} grade record.",
-            'action_url' => route('provider.programs.monitoring', $application->scholarship_id, false),
+            'action_url' => route('provider.monitoring.show', $application->scholarship_id, false),
         ]);
 
         ActivityLog::record(

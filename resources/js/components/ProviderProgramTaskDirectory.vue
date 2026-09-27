@@ -103,7 +103,7 @@ function statusClass(status) {
 
 function programUrl(program) {
     if (props.mode === 'edit') return `/provider/programs/${program.id}/edit`;
-    if (props.mode === 'monitoring') return `/provider/programs/${program.id}/monitoring`;
+    if (props.mode === 'monitoring') return `/provider/monitoring/${program.id}`;
 
     return `/provider/programs/${program.id}`;
 }

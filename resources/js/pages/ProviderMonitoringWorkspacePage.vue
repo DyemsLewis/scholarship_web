@@ -1,10 +1,9 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
-import ProviderProgramHeader from '../components/ProviderProgramHeader.vue';
-import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSectionGuide from '../components/ProviderSectionGuide.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -16,7 +15,7 @@ const releaseCandidates = ref([]);
 const supportRecipients = ref([]);
 const programSummary = ref(null);
 const monitoringViews = ['summary', 'monitoring', 'releases', 'outcomes'];
-const monitoringBaseUrl = `/provider/programs/${scholarshipId}/monitoring`;
+const monitoringBaseUrl = `/provider/monitoring/${scholarshipId}`;
 const monitoringPathSection = window.location.pathname.replace(/\/$/, '').split('/').at(-1);
 const routeMonitoringView = {
     academic: 'monitoring',
@@ -537,17 +536,23 @@ onMounted(loadMonitoring);
                 </div>
 
                 <template v-else-if="scholarship">
-                    <ProviderProgramHeader
-                        :program-id="scholarship.id"
+                    <TaskPageHeader
+                        theme="provider"
+                        eyebrow="Recipient monitoring"
                         :title="scholarship.title"
-                        :status="scholarship.status"
-                        :section="activeViewTitle"
+                        description="Manage continuing requirements, benefit releases, and support outcomes after selection."
+                        icon="fa-solid fa-heart-pulse"
                     >
                         <template #meta>
+                            <span>{{ activeViewTitle }}</span>
                             <span>{{ scholarship.selected_recipients_count }} selected recipient{{ Number(scholarship.selected_recipients_count) === 1 ? '' : 's' }}</span>
                             <span v-if="activeTab === 'summary' || activeTab === 'outcomes'">{{ activeSupportCount }} active support record{{ activeSupportCount === 1 ? '' : 's' }}</span>
                         </template>
-                        <template v-if="activeTab !== 'summary'" #actions>
+                        <template #actions>
+                            <a href="/provider/monitoring" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
+                                All monitoring
+                            </a>
                             <button v-if="activeTab === 'monitoring'" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openComposer">
                                 <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
                                 New period
@@ -561,12 +566,7 @@ onMounted(loadMonitoring);
                                 Record outcome
                             </button>
                         </template>
-                    </ProviderProgramHeader>
-
-                    <ProviderProgramNav
-                        :program-id="scholarship.id"
-                        active="monitoring"
-                    />
+                    </TaskPageHeader>
 
                     <p v-if="errorMessage" class="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
 

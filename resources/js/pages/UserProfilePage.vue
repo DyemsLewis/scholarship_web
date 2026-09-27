@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
@@ -34,14 +34,21 @@ const locationMessage = ref('');
 const showProfileMapModal = ref(false);
 const user = ref(null);
 const form = ref(emptyForm());
-const profileView = ref('overview');
-const requestedProfileSection = new URLSearchParams(window.location.search).get('section');
+const profileSearchParams = new URLSearchParams(window.location.search);
+const requestedProfileSection = profileSearchParams.get('section');
+const profileView = ref(requestedProfileSection ? 'edit' : 'overview');
 const activeSection = ref(['personal', 'academic', 'background', 'location', 'verification'].includes(requestedProfileSection)
     ? requestedProfileSection
     : 'personal');
 const showProviderPreview = ref(false);
 const isUploadingProfilePhoto = ref(false);
 const isDeletingProfilePhoto = ref(false);
+const showProfileCamera = ref(false);
+const profileCameraVideo = ref(null);
+const profileCameraStream = ref(null);
+const isStartingProfileCamera = ref(false);
+const isCapturingProfilePhoto = ref(false);
+const profileCameraError = ref('');
 const applicantProvinceOptions = ref([]);
 const applicantCityOptions = ref([]);
 const isLoadingApplicantProvinces = ref(false);
@@ -485,14 +492,6 @@ const profileEducationSummary = computed(() => [
 const profileLocationSummary = computed(() => [form.value.city, form.value.province, form.value.region]
     .filter(hasValue)
     .join(', ') || 'Location not completed');
-const profileOverviewSections = computed(() => visibleProfileSections.value
-    .filter((section) => !['verification', 'review'].includes(section.id))
-    .map((section) => ({
-        ...section,
-        status: sectionStatusLabel(section),
-        statusClass: sectionStatusClass(section),
-        summary: overviewSectionSummary(section.id),
-    })));
 const applicationSetupItems = computed(() => [
     {
         id: 'profile',
@@ -608,6 +607,31 @@ const profileRecommendedAction = computed(() => {
         label: 'Review saved profile',
         section: 'review',
         detail: 'Your required information is complete. Check the saved details before applying.',
+    };
+});
+const overviewProfileAction = computed(() => {
+    if (profileRecommendedAction.value.section !== 'review') {
+        return {
+            ...profileRecommendedAction.value,
+            eyebrow: 'Next step',
+            actionable: true,
+        };
+    }
+
+    if (profileVerificationStatus.value === 'pending') {
+        return {
+            eyebrow: 'Profile status',
+            label: 'Supporting evidence is being reviewed',
+            detail: 'Your required profile details are complete. You can still update information while the records are reviewed.',
+            actionable: false,
+        };
+    }
+
+    return {
+        eyebrow: 'Profile status',
+        label: 'Your profile is ready for applications',
+        detail: 'Required details are complete and can be reused when you apply.',
+        actionable: false,
     };
 });
 const activeProfileSection = computed(() => profileSections.find((section) => section.id === activeSection.value) ?? profileSections[0]);
@@ -980,34 +1004,6 @@ async function goToNextSection() {
     }
 
     openSection(next.id);
-}
-
-function overviewSectionSummary(sectionId) {
-    const summaries = {
-        personal: [
-            applicantAge.value !== null ? `${applicantAge.value} years old` : '',
-            form.value.contact_number,
-            form.value.income_bracket,
-            form.value.household_size ? `${form.value.household_size} household members` : '',
-            (needsGuardianContext.value || hasGuardianDetails.value) && form.value.guardian_name
-                ? `Guardian: ${form.value.guardian_name}`
-                : '',
-        ],
-        academic: [
-            educationLevelLabel(form.value.education_level),
-            form.value.school,
-            [form.value.course_or_strand, form.value.year_level].filter(hasValue).join(' - '),
-            form.value.academic_year ? `AY ${form.value.academic_year}` : '',
-        ],
-        background: [
-            form.value.scholarship_goal ? 'Goal added' : '',
-            form.value.achievements ? 'Achievements added' : '',
-            form.value.activities_and_responsibilities ? 'Activities and responsibilities added' : '',
-        ],
-        location: [form.value.city, form.value.province, form.value.region],
-    };
-
-    return (summaries[sectionId] ?? []).filter(hasValue).join(' - ') || 'No details added yet.';
 }
 
 function gradingScaleLabel(value) {
@@ -1404,12 +1400,9 @@ function handlePhoneInput(key, event) {
     form.value[key] = limitPhoneNumber(event.target.value);
 }
 
-async function uploadProfilePhoto(event) {
-    const input = event.target;
-    const file = input.files?.[0] ?? null;
-
+async function saveProfilePhoto(file, input = null) {
     if (!file) {
-        return;
+        return false;
     }
 
     isUploadingProfilePhoto.value = true;
@@ -1423,13 +1416,128 @@ async function uploadProfilePhoto(event) {
         });
 
         user.value = response.data.user;
+        return true;
     } catch (error) {
         errorMessage.value = error.response?.data?.errors?.profile_photo?.[0]
             ?? error.response?.data?.message
             ?? 'Unable to upload the applicant photo.';
+        return false;
     } finally {
         isUploadingProfilePhoto.value = false;
-        input.value = '';
+        if (input) {
+            input.value = '';
+        }
+    }
+}
+
+async function uploadProfilePhoto(event) {
+    const input = event.target;
+    const file = input.files?.[0] ?? null;
+
+    await saveProfilePhoto(file, input);
+}
+
+function stopProfileCamera() {
+    profileCameraStream.value?.getTracks().forEach((track) => track.stop());
+    profileCameraStream.value = null;
+
+    if (profileCameraVideo.value) {
+        profileCameraVideo.value.srcObject = null;
+    }
+}
+
+function closeProfileCamera() {
+    stopProfileCamera();
+    showProfileCamera.value = false;
+    profileCameraError.value = '';
+}
+
+async function openProfileCamera() {
+    showProfileCamera.value = true;
+    profileCameraError.value = '';
+    isStartingProfileCamera.value = true;
+    await nextTick();
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+        profileCameraError.value = 'Camera access is unavailable in this browser. Use Choose photo instead.';
+        isStartingProfileCamera.value = false;
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+                facingMode: 'user',
+                width: { ideal: 1280 },
+                height: { ideal: 1280 },
+            },
+        });
+
+        if (!showProfileCamera.value || !profileCameraVideo.value) {
+            stream.getTracks().forEach((track) => track.stop());
+            return;
+        }
+
+        profileCameraStream.value = stream;
+        profileCameraVideo.value.srcObject = stream;
+        await profileCameraVideo.value.play();
+    } catch (error) {
+        if (error?.name === 'NotAllowedError') {
+            profileCameraError.value = 'Camera permission was not allowed. Enable it in your browser or choose an existing photo.';
+        } else if (error?.name === 'NotFoundError') {
+            profileCameraError.value = 'No camera was found on this device. Use Choose photo instead.';
+        } else {
+            profileCameraError.value = 'The camera could not be opened. Camera access requires a secure HTTPS connection.';
+        }
+    } finally {
+        isStartingProfileCamera.value = false;
+    }
+}
+
+async function captureProfilePhoto() {
+    const video = profileCameraVideo.value;
+
+    if (!video?.videoWidth || !video?.videoHeight) {
+        profileCameraError.value = 'The camera is still loading. Wait a moment and try again.';
+        return;
+    }
+
+    isCapturingProfilePhoto.value = true;
+    profileCameraError.value = '';
+
+    try {
+        const sourceSize = Math.min(video.videoWidth, video.videoHeight);
+        const sourceX = Math.round((video.videoWidth - sourceSize) / 2);
+        const sourceY = Math.round((video.videoHeight - sourceSize) / 2);
+        const canvas = document.createElement('canvas');
+        canvas.width = 800;
+        canvas.height = 800;
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+            throw new Error('Canvas is unavailable.');
+        }
+
+        context.drawImage(video, sourceX, sourceY, sourceSize, sourceSize, 0, 0, canvas.width, canvas.height);
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+
+        if (!blob) {
+            throw new Error('The photo could not be captured.');
+        }
+
+        const photo = new File([blob], `applicant-photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        const uploaded = await saveProfilePhoto(photo);
+
+        if (uploaded) {
+            closeProfileCamera();
+        } else {
+            profileCameraError.value = errorMessage.value || 'The captured photo could not be uploaded.';
+        }
+    } catch (error) {
+        profileCameraError.value = error?.message || 'The photo could not be captured. Please try again.';
+    } finally {
+        isCapturingProfilePhoto.value = false;
     }
 }
 
@@ -1460,6 +1568,10 @@ async function deleteProfilePhoto() {
 
 function handleProfileEscape(event) {
     if (event.key === 'Escape') {
+        if (showProfileCamera.value) {
+            closeProfileCamera();
+        }
+
         showProviderPreview.value = false;
     }
 }
@@ -1922,6 +2034,7 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+    stopProfileCamera();
     window.removeEventListener('beforeunload', handleBeforeUnload);
     window.removeEventListener('keydown', handleProfileEscape);
 });
@@ -1949,6 +2062,63 @@ watch(() => form.value.grading_scale, (scale) => {
             @confirm="confirmConfirmation"
             @cancel="cancelConfirmation"
         />
+
+        <Teleport to="body">
+            <div
+                v-if="showProfileCamera"
+                class="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 p-3 sm:p-6"
+                role="presentation"
+                @click.self="closeProfileCamera"
+            >
+                <section class="w-full max-w-lg overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="profile-camera-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                        <div>
+                            <p class="student-kicker">Applicant photo</p>
+                            <h2 id="profile-camera-title" class="mt-1 text-xl font-bold text-slate-950">Take a profile photo</h2>
+                            <p class="mt-1 text-sm text-slate-500">Center your face and use a clear, well-lit background.</p>
+                        </div>
+                        <button type="button" class="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-300 text-slate-600 transition hover:bg-slate-100" aria-label="Close camera" @click="closeProfileCamera">
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="bg-slate-950 p-4 sm:p-5">
+                        <div class="relative mx-auto aspect-square w-full max-w-sm overflow-hidden rounded-md bg-slate-900 ring-1 ring-white/20">
+                            <video
+                                ref="profileCameraVideo"
+                                class="h-full w-full -scale-x-100 object-cover"
+                                autoplay
+                                muted
+                                playsinline
+                            ></video>
+                            <div v-if="isStartingProfileCamera" class="absolute inset-0 grid place-items-center bg-slate-950 text-sm font-bold text-white">
+                                <span><i class="fa-solid fa-spinner fa-spin mr-2" aria-hidden="true"></i>Opening camera...</span>
+                            </div>
+                            <div v-else-if="profileCameraError && !profileCameraStream" class="absolute inset-0 grid place-items-center p-6 text-center text-sm leading-6 text-white">
+                                <span><i class="fa-solid fa-camera-slash mb-3 block text-2xl text-amber-300" aria-hidden="true"></i>{{ profileCameraError }}</span>
+                            </div>
+                            <div v-if="profileCameraStream" class="pointer-events-none absolute inset-5 rounded-full border border-dashed border-white/60"></div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-3 border-t border-slate-200 px-5 py-4">
+                        <p v-if="profileCameraError && profileCameraStream" class="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ profileCameraError }}</p>
+                        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <button type="button" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100" @click="closeProfileCamera">Cancel</button>
+                            <button
+                                type="button"
+                                class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                :disabled="!profileCameraStream || isStartingProfileCamera || isCapturingProfilePhoto || isUploadingProfilePhoto"
+                                @click="captureProfilePhoto"
+                            >
+                                <i :class="isCapturingProfilePhoto || isUploadingProfilePhoto ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-camera'" class="mr-2" aria-hidden="true"></i>
+                                {{ isCapturingProfilePhoto || isUploadingProfilePhoto ? 'Saving photo...' : 'Take photo' }}
+                            </button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </Teleport>
 
         <Teleport to="body">
             <div
@@ -2210,143 +2380,134 @@ watch(() => form.value.grading_scale, (scale) => {
                         <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
                     </div>
 
-                    <section class="student-card overflow-hidden">
-                        <div class="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+                    <section class="student-card overflow-hidden rounded-md border-slate-300 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
+                        <div class="flex flex-col gap-5 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
                             <div class="flex min-w-0 items-start gap-4">
-                                <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-xl font-bold text-white">
-                                    <img
-                                        v-if="profilePhotoUrl"
-                                        :src="profilePhotoUrl"
-                                        :alt="`${profileDisplayName} applicant photo`"
-                                        class="h-full w-full object-cover"
-                                    >
+                                <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-sm bg-slate-950 text-xl font-bold text-white ring-1 ring-slate-200">
+                                    <img v-if="profilePhotoUrl" :src="profilePhotoUrl" :alt="`${profileDisplayName} applicant photo`" class="h-full w-full object-cover">
                                     <span v-else>{{ profileInitials }}</span>
                                 </div>
                                 <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant record</p>
+                                    <div class="mt-1 flex flex-wrap items-center gap-2">
                                         <h2 class="truncate text-2xl font-bold text-slate-950">{{ profileDisplayName }}</h2>
-                                        <span
-                                            v-if="profileVerificationStatus === 'approved'"
-                                            class="rounded-md bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800"
-                                        >
-                                            <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
-                                            Evidence reviewed
-                                        </span>
+                                        <span v-if="profileVerificationStatus === 'approved'" class="rounded-sm bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800"><i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>Evidence reviewed</span>
                                     </div>
                                     <p class="mt-1 text-sm font-semibold text-slate-600">{{ profileEducationSummary }}</p>
-                                    <p class="mt-1 text-sm text-slate-500">
-                                        <i class="fa-solid fa-location-dot mr-1.5 text-slate-400" aria-hidden="true"></i>
-                                        {{ profileLocationSummary }}
-                                    </p>
-                                    <p class="mt-1 truncate text-xs text-slate-400">{{ user?.email }}</p>
+                                    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                                        <span><i class="fa-solid fa-location-dot mr-1.5 text-slate-400" aria-hidden="true"></i>{{ profileLocationSummary }}</span>
+                                        <span><i class="fa-solid fa-envelope mr-1.5 text-slate-400" aria-hidden="true"></i>{{ user?.email }}</span>
+                                    </div>
                                 </div>
                             </div>
 
                             <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                                <button
-                                    type="button"
-                                    class="w-full rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"
-                                    @click="openVerificationRecords"
-                                >
-                                    <i class="fa-solid fa-file-shield mr-2" aria-hidden="true"></i>
-                                    Supporting evidence
-                                </button>
-                                <button
-                                    type="button"
-                                    class="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
-                                    @click="openProfileEditor(profileComplete ? 'personal' : profileRecommendedAction.section)"
-                                >
-                                    <i class="fa-solid fa-pen mr-2" aria-hidden="true"></i>
-                                    {{ profileComplete ? 'Edit profile' : 'Continue setup' }}
-                                </button>
+                                <button type="button" class="w-full rounded-sm border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto" @click="showProviderPreview = true"><i class="fa-solid fa-eye mr-2" aria-hidden="true"></i>Provider preview</button>
+                                <button type="button" class="w-full rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto" @click="openProfileEditor(profileComplete ? 'personal' : profileRecommendedAction.section)"><i class="fa-solid fa-pen mr-2" aria-hidden="true"></i>{{ profileComplete ? 'Edit profile' : 'Continue setup' }}</button>
                             </div>
                         </div>
+                    </section>
 
-                        <div class="grid border-t border-slate-200 bg-slate-50 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                            <div class="px-5 py-3 text-sm font-bold text-slate-700 sm:px-6">Provider-facing profile</div>
-                            <a
-                                href="/dashboard/scholarships"
-                                class="flex h-full items-center justify-between gap-5 border-t border-slate-200 px-5 py-4 text-sm font-bold text-slate-900 transition hover:bg-white md:border-l md:border-t-0 sm:px-6"
-                            >
-                                <span>{{ matchSummary.eligible_programs }} eligible scholarship{{ matchSummary.eligible_programs === 1 ? '' : 's' }}</span>
-                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                    <section :class="['rounded-md border border-l-4 p-4 shadow-sm sm:p-5', overviewProfileAction.actionable ? 'border-amber-200 border-l-amber-400 bg-amber-50' : 'border-emerald-200 border-l-emerald-500 bg-emerald-50/60']">
+                        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-sm', overviewProfileAction.actionable ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800']"><i :class="overviewProfileAction.actionable ? 'fa-solid fa-arrow-right' : 'fa-solid fa-check'" aria-hidden="true"></i></span>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ overviewProfileAction.eyebrow }}</p><h3 class="mt-1 font-bold text-slate-950">{{ overviewProfileAction.label }}</h3><p class="mt-1 text-sm text-slate-600">{{ overviewProfileAction.detail }}</p></div>
+                            </div>
+                            <button v-if="overviewProfileAction.actionable" type="button" class="shrink-0 rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openProfileEditor(overviewProfileAction.section)">Continue</button>
+                        </div>
+                    </section>
+
+                    <section class="student-card overflow-hidden rounded-md border-slate-300">
+                        <header class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-eye" aria-hidden="true"></i></span>
+                                <div>
+                                    <p class="student-kicker">Provider view</p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">How providers see your profile</h3>
+                                    <p class="mt-1 text-sm text-slate-500">This saved summary is shared only with a provider after you apply.</p>
+                                </div>
+                            </div>
+                            <button type="button" class="inline-flex w-fit items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100" @click="showProviderPreview = true">
+                                Full preview<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                            </button>
+                        </header>
+
+                        <div class="grid gap-px bg-slate-200 lg:grid-cols-2">
+                            <section class="bg-white p-4 sm:p-5">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-address-card text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Personal and contact</h4></div>
+                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('personal')">Edit</button>
+                                </div>
+                                <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                                    <div><dt class="text-xs text-slate-500">Age</dt><dd class="mt-1 font-bold text-slate-950">{{ applicantAge !== null ? `${applicantAge} years old` : 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Contact number</dt><dd class="mt-1 font-bold text-slate-950">{{ form.contact_number || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Account managed by</dt><dd class="mt-1 font-bold text-slate-950">{{ accountManagerLabel(form.account_managed_by) || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Parent or guardian</dt><dd class="mt-1 font-bold text-slate-950">{{ (needsGuardianContext || hasGuardianDetails) ? (form.guardian_name || 'Not provided') : 'Not required' }}</dd></div>
+                                </dl>
+                            </section>
+
+                            <section class="bg-white p-4 sm:p-5">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-graduation-cap text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Learning record</h4></div>
+                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('academic')">Edit</button>
+                                </div>
+                                <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                                    <div class="sm:col-span-2"><dt class="text-xs text-slate-500">School</dt><dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Education</dt><dd class="mt-1 font-bold text-slate-950">{{ profileEducationSummary }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Academic result</dt><dd class="mt-1 font-bold text-slate-950">{{ form.gwa ? `${form.gwa} - ${gradingScaleLabel(form.grading_scale)}` : 'Not provided' }}</dd></div>
+                                </dl>
+                            </section>
+
+                            <section class="bg-white p-4 sm:p-5">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-house-chimney-user text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Household and support</h4></div>
+                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('personal')">Edit</button>
+                                </div>
+                                <dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                                    <div><dt class="text-xs text-slate-500">Income bracket</dt><dd class="mt-1 font-bold text-slate-950">{{ form.income_bracket || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Household size</dt><dd class="mt-1 font-bold text-slate-950">{{ form.household_size ? `${form.household_size} members` : 'Not provided' }}</dd></div>
+                                    <div class="sm:col-span-2"><dt class="text-xs text-slate-500">Location</dt><dd class="mt-1 font-bold text-slate-950">{{ profileLocationSummary }}</dd></div>
+                                    <div class="sm:col-span-2"><dt class="text-xs text-slate-500">Support needed</dt><dd class="mt-1 font-bold text-slate-950">{{ listFromText(form.support_needs).join(', ') || 'Not provided' }}</dd></div>
+                                </dl>
+                            </section>
+
+                            <section class="bg-white p-4 sm:p-5">
+                                <div class="flex items-center justify-between gap-3">
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-bullseye text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Goals and involvement</h4></div>
+                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('background')">Edit</button>
+                                </div>
+                                <dl class="mt-4 grid gap-3 text-sm">
+                                    <div><dt class="text-xs text-slate-500">Scholarship goal</dt><dd class="mt-1 line-clamp-2 font-bold leading-5 text-slate-950">{{ form.scholarship_goal || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Achievements and activities</dt><dd class="mt-1 line-clamp-2 font-bold leading-5 text-slate-950">{{ [form.achievements, form.activities_and_responsibilities].filter(hasValue).join(' - ') || 'Not provided' }}</dd></div>
+                                </dl>
+                            </section>
+                        </div>
+                    </section>
+
+                    <section class="student-card grid overflow-hidden rounded-md border-slate-300 sm:grid-cols-2 lg:grid-cols-4" aria-label="Profile readiness">
+                        <div class="border-b border-slate-200 px-4 py-4 sm:border-r lg:border-b-0"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Required details</p><p class="mt-1 text-xl font-bold text-slate-950">{{ profileCompletion }}%</p><p class="mt-1 text-xs text-slate-500">{{ missingProfileFields.length ? `${missingProfileFields.length} remaining` : 'Complete' }}</p></div>
+                        <div class="border-b border-slate-200 px-4 py-4 lg:border-b-0 lg:border-r"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Supporting evidence</p><p class="mt-1 text-sm font-bold text-slate-950">{{ verificationStatusLabel(profileVerificationStatus) }}</p><p class="mt-1 text-xs text-slate-500">{{ verificationDocuments.length }} file{{ verificationDocuments.length === 1 ? '' : 's' }} saved</p></div>
+                        <div class="border-b border-slate-200 px-4 py-4 sm:border-b-0 sm:border-r"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Eligible matches</p><p class="mt-1 text-xl font-bold text-slate-950">{{ matchSummary.eligible_programs }}</p><a href="/dashboard/scholarships" class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-amber-800">View scholarships<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></div>
+                        <div class="px-4 py-4"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Prepared files</p><p class="mt-1 text-xl font-bold text-slate-950">{{ preparedDocumentsCount }}</p><a href="/dashboard/documents" class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-slate-600">Open documents<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></div>
+                    </section>
+
+                    <section class="student-card overflow-hidden rounded-md border-slate-300">
+                        <header class="border-b border-slate-200 bg-slate-50/70 px-4 py-3 sm:px-5"><p class="text-sm font-bold text-slate-950">Profile records</p></header>
+                        <div class="divide-y divide-slate-200">
+                            <button type="button" class="flex w-full items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5" @click="openVerificationRecords">
+                                <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-sm', profileVerificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span>
+                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Supporting evidence</span><span class="mt-1 block text-xs text-slate-500">Academic, enrollment, and achievement records</span></span>
+                                <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
+                                <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
+                            </button>
+                            <a href="/dashboard/documents" class="flex items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span>
+                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Prepared documents</span><span class="mt-1 block text-xs text-slate-500">Reusable files for future applications</span></span>
+                                <span class="shrink-0 text-xs font-bold text-slate-600">{{ preparedDocumentsCount }} saved</span>
+                                <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                             </a>
                         </div>
-                    </section>
-
-                    <section class="student-card overflow-hidden">
-                        <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                            <div>
-                                <p class="student-kicker">Shared profile</p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">Information providers will review</h3>
-                            </div>
-                            <span class="inline-flex w-fit items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                <i class="fa-solid fa-lock" aria-hidden="true"></i>
-                                Shared only after applying
-                            </span>
-                        </div>
-
-                        <div class="divide-y divide-slate-200">
-                            <article
-                                v-for="group in reviewGroups"
-                                :key="group.id"
-                                class="grid gap-5 px-5 py-5 sm:px-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-8"
-                            >
-                                <div class="flex items-start justify-between gap-3 lg:block">
-                                    <div class="flex min-w-0 items-center gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-white">
-                                            <i :class="group.icon" aria-hidden="true"></i>
-                                        </span>
-                                        <h4 class="text-sm font-bold text-slate-950">{{ group.title }}</h4>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        class="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 lg:mt-4"
-                                        @click="openProfileEditor(group.id)"
-                                    >
-                                        <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
-                                        Edit
-                                    </button>
-                                </div>
-
-                                <dl class="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-                                    <div v-for="item in group.items" :key="`${group.title}-${item[0]}`" class="min-w-0">
-                                        <dt class="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">{{ item[0] }}</dt>
-                                        <dd :class="['mt-1 break-words text-sm font-semibold leading-5', hasValue(item[1]) ? 'text-slate-900' : 'italic text-slate-400']">
-                                            {{ hasValue(item[1]) ? item[1] : 'Not provided' }}
-                                        </dd>
-                                    </div>
-                                </dl>
-                            </article>
-                        </div>
-                    </section>
-
-                    <section class="grid gap-4 md:grid-cols-2">
-                        <button
-                            type="button"
-                            class="student-card flex items-center gap-4 p-5 text-left transition hover:border-slate-300 hover:bg-white"
-                            @click="openVerificationRecords"
-                        >
-                            <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md', profileVerificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
-                                <i class="fa-solid fa-file-shield" aria-hidden="true"></i>
-                            </span>
-                            <span class="min-w-0 flex-1">
-                                <span class="block text-sm font-bold text-slate-950">Supporting evidence</span>
-                            </span>
-                            <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
-                            <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
-                        </button>
-
-                        <a href="/dashboard/documents" class="student-card flex items-center gap-4 p-5 text-left transition hover:border-slate-300 hover:bg-white">
-                            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
-                                <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
-                            </span>
-                            <span class="min-w-0 flex-1">
-                                <span class="block text-sm font-bold text-slate-950">Prepared documents</span>
-                            </span>
-                            <span class="shrink-0 text-xs font-bold text-slate-600">{{ preparedDocumentsCount }} saved</span>
-                            <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
-                        </a>
                     </section>
                 </div>
 
@@ -2485,6 +2646,20 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </div>
 
                                 <div :class="formPanelClass">
+                                    <div
+                                        v-if="['needs_replacement', 'resubmitted'].includes(user?.profile_photo_review_status)"
+                                        :class="[
+                                            'mb-4 border-l-4 px-3 py-3 text-sm',
+                                            user.profile_photo_review_status === 'resubmitted'
+                                                ? 'border-amber-400 bg-amber-50 text-amber-950'
+                                                : 'border-rose-500 bg-rose-50 text-rose-950',
+                                        ]"
+                                    >
+                                        <p class="font-bold">
+                                            {{ user.profile_photo_review_status === 'resubmitted' ? 'Your new 2x2 photo was sent for review.' : 'A reviewer requested a new 2x2 photo.' }}
+                                        </p>
+                                        <p v-if="user.profile_photo_review_note" class="mt-1 leading-5">{{ user.profile_photo_review_note }}</p>
+                                    </div>
                                     <div class="grid gap-4 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center lg:grid-cols-[6rem_minmax(0,1fr)_auto]">
                                         <div class="grid aspect-square w-24 place-items-center overflow-hidden rounded-md border border-slate-200 bg-white text-lg font-bold text-slate-500">
                                             <img
@@ -2519,9 +2694,18 @@ watch(() => form.value.grading_scale, (scale) => {
                                                     :disabled="isUploadingProfilePhoto"
                                                     @change="uploadProfilePhoto"
                                                 >
-                                                <i :class="isUploadingProfilePhoto ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-camera'" aria-hidden="true"></i>
-                                                {{ isUploadingProfilePhoto ? 'Uploading...' : profilePhotoUrl ? 'Replace photo' : 'Upload photo' }}
+                                                <i :class="isUploadingProfilePhoto ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-image'" aria-hidden="true"></i>
+                                                {{ isUploadingProfilePhoto ? 'Uploading...' : profilePhotoUrl ? 'Choose replacement' : 'Choose photo' }}
                                             </label>
+                                            <button
+                                                type="button"
+                                                class="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                                :disabled="isUploadingProfilePhoto || isDeletingProfilePhoto"
+                                                @click="openProfileCamera"
+                                            >
+                                                <i class="fa-solid fa-camera" aria-hidden="true"></i>
+                                                Open camera
+                                            </button>
                                             <button
                                                 v-if="profilePhotoUrl"
                                                 type="button"

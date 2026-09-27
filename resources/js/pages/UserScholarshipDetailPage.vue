@@ -21,10 +21,11 @@ const user = ref(null);
 const scholarship = ref(null);
 const showMapModal = ref(false);
 const showProfileCheckModal = ref(false);
+const showRecipientTermsModal = ref(false);
 const detailSections = [
     { id: 'overview', label: 'Overview', icon: 'fa-solid fa-gift' },
     { id: 'eligibility', label: 'Eligibility', icon: 'fa-solid fa-user-check' },
-    { id: 'requirements', label: 'Requirements', icon: 'fa-solid fa-folder-open' },
+    { id: 'requirements', label: 'Files', icon: 'fa-solid fa-folder-open' },
     { id: 'process', label: 'Process', icon: 'fa-solid fa-route' },
     { id: 'provider', label: 'Provider', icon: 'fa-solid fa-building-shield' },
 ];
@@ -230,26 +231,26 @@ const applyPanelTitle = computed(() => {
 });
 const applyPanelDescription = computed(() => {
     if (scholarship.value?.has_applied) {
-        return 'You can review this program in your submitted pre-screening records.';
+        return 'Open Applications to review your status and next step.';
     }
 
     if (isUpcomingProgram.value) {
-        return `You can review and save this program now. Pre-screening begins on ${scholarship.value.application_opens_at}.`;
+        return 'Save this scholarship and return when pre-screening opens.';
     }
 
     if (!isAcceptingApplications.value) {
-        return 'This program is no longer accepting new pre-screening submissions. You can still save it for reference.';
+        return 'New submissions are closed. You can still save this scholarship.';
     }
 
     if (!canApply.value) {
-        return 'Finish the required profile fields before starting pre-screening.';
+        return 'Complete the required profile details to continue.';
     }
 
     if (!isEligible.value) {
         return applicationBlockedLabel.value;
     }
 
-    return 'Your profile can start pre-screening. Review the details once more before submitting.';
+    return 'Review eligibility and files before submitting.';
 });
 function formatAmount(amount) {
     if (amount === null || amount === undefined || amount === '') {
@@ -424,6 +425,19 @@ function criterionStatusLabel(criterion) {
         : 'Open to all';
 }
 
+function selectDetailSection(sectionId, scrollToContent = false) {
+    activeDetailSection.value = sectionId;
+    const url = new URL(window.location.href);
+    url.hash = sectionId;
+    window.history.replaceState({}, '', url);
+
+    if (scrollToContent) {
+        window.requestAnimationFrame(() => {
+            document.getElementById('scholarship-detail-content')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+}
+
 async function loadScholarship() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -484,321 +498,227 @@ onMounted(loadScholarship);
                     {{ errorMessage }}
                 </div>
 
-                <div v-else-if="scholarship" class="mt-6 space-y-5">
-                    <header class="student-card overflow-hidden">
-                        <div>
-                            <div class="bg-white p-5 sm:p-6">
-                                <div class="flex items-start gap-4">
-                                    <img
-                                        :src="scholarship.image_url"
-                                        :alt="scholarship.title"
-                                        class="h-16 w-16 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200 sm:h-20 sm:w-20 sm:p-2"
-                                    >
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                                {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
-                                            </span>
-                                            <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                                {{ targetApplicantLabel(scholarship) }}
-                                            </span>
-                                            <span v-if="scholarship.program_cycle" class="rounded-md bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 ring-1 ring-amber-200">
-                                                {{ scholarship.program_cycle }}
-                                            </span>
-                                        </div>
-
-                                        <h1 class="mt-3 font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">
-                                            {{ scholarship.title }}
-                                        </h1>
-                                        <p class="mt-2 flex items-center gap-2 text-sm font-semibold text-slate-500">
-                                            <i class="fa-solid fa-building-shield text-amber-700" aria-hidden="true"></i>
-                                            {{ scholarship.provider?.name || 'Scholarship Provider' }}
-                                        </p>
+                <div v-else-if="scholarship" class="mt-5 space-y-4">
+                    <header class="student-card flex flex-col overflow-hidden rounded-md border-slate-300 shadow-[0_12px_28px_rgba(15,23,42,0.08)]">
+                        <div class="relative overflow-hidden bg-slate-950 p-4 text-white sm:p-5">
+                            <span class="pointer-events-none absolute -right-14 -top-20 h-52 w-52 rounded-full border-[26px] border-white/[0.04]"></span>
+                            <div class="relative flex flex-col gap-4 sm:flex-row sm:items-start">
+                                <img
+                                    :src="scholarship.image_url"
+                                    :alt="scholarship.title"
+                                    class="h-16 w-16 shrink-0 rounded-sm bg-white object-contain p-1.5 ring-1 ring-white/20 sm:h-18 sm:w-18"
+                                >
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <span class="rounded-sm bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-100 ring-1 ring-white/10">
+                                            {{ scholarship.category || providerTypeLabel(scholarship.provider?.type) }}
+                                        </span>
+                                        <span class="rounded-sm bg-white/10 px-2 py-0.5 text-[10px] font-bold text-slate-100 ring-1 ring-white/10">
+                                            {{ targetApplicantLabel(scholarship) }}
+                                        </span>
+                                        <span v-if="scholarship.program_cycle" class="rounded-sm bg-amber-300 px-2 py-0.5 text-[10px] font-bold text-slate-950">
+                                            {{ scholarship.program_cycle }}
+                                        </span>
                                     </div>
-                                </div>
 
-                                <p class="mt-5 max-w-4xl text-sm leading-6 text-slate-600">
-                                    {{ scholarship.description || 'No program description has been posted yet.' }}
-                                </p>
-                                <p v-if="scholarship.expected_results_at" class="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
-                                    <i class="fa-regular fa-calendar-check text-amber-700" aria-hidden="true"></i>
-                                    Initial results expected around {{ scholarship.expected_results_at }}
-                                </p>
-                            </div>
-
-                            <div class="border-t border-slate-800 bg-slate-950 p-5 text-white sm:p-6">
-                                <div class="flex items-center justify-between gap-3">
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
-                                        Can I apply?
+                                    <h1 class="mt-2 font-display text-2xl font-bold leading-tight text-white sm:text-[1.85rem]">
+                                        {{ scholarship.title }}
+                                    </h1>
+                                    <p class="mt-1.5 flex items-center gap-2 text-sm font-semibold text-slate-300">
+                                        <i class="fa-solid fa-building-shield text-amber-300" aria-hidden="true"></i>
+                                        {{ scholarship.provider?.name || 'Scholarship Provider' }}
                                     </p>
-                                    <span class="rounded-md bg-white/10 px-2.5 py-1 text-xs font-bold text-white ring-1 ring-white/15">
-                                        {{ scholarship.eligibility_match?.score ?? 0 }}% profile match
-                                    </span>
-                                </div>
-                                <h2 class="mt-3 text-xl font-bold text-white">
-                                    {{ applyPanelTitle }}
-                                </h2>
-                                <p class="mt-2 text-sm leading-6 text-slate-300">
-                                    {{ applyPanelDescription }}
-                                </p>
-
-                                <div v-if="!canApply && !scholarship.has_applied" class="mt-4 rounded-md bg-white/5 p-3 ring-1 ring-white/15">
-                                    <div class="flex items-center justify-between gap-3 text-xs font-bold">
-                                        <span class="text-slate-300">Profile readiness</span>
-                                        <span class="text-white">{{ profileReadiness.percent }}%</span>
-                                    </div>
-                                    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15">
-                                        <div class="h-full rounded-full bg-amber-300" :style="{ width: `${profileReadiness.percent}%` }"></div>
-                                    </div>
-                                </div>
-
-                                <div class="mt-4 grid gap-2 sm:grid-flow-col sm:auto-cols-fr">
-                                    <a
-                                        v-if="scholarship.has_applied"
-                                        href="/dashboard/applications"
-                                        class="rounded-md bg-amber-300 px-4 py-2.5 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-200"
-                                    >
-                                        View my application
-                                    </a>
-                                    <a
-                                        v-else-if="canStartApplication"
-                                        :href="`/dashboard/applications?scholarship=${scholarship.id}`"
-                                        class="rounded-md bg-amber-300 px-4 py-2.5 text-center text-sm font-bold text-slate-950 transition hover:bg-amber-200"
-                                    >
-                                        Start pre-screening
-                                    </a>
-                                    <span
-                                        v-else-if="isUpcomingProgram"
-                                        class="rounded-md bg-white/10 px-4 py-2.5 text-center text-sm font-bold text-amber-200 ring-1 ring-white/15"
-                                    >
-                                        Opens {{ scholarship.application_opens_at }}
-                                    </span>
-                                    <span
-                                        v-else-if="!isAcceptingApplications"
-                                        class="rounded-md bg-white/10 px-4 py-2.5 text-center text-sm font-bold text-slate-300 ring-1 ring-white/15"
-                                    >
-                                        Pre-screening closed
-                                    </span>
-                                    <a
-                                        v-else-if="!canApply"
-                                        href="/dashboard/profile"
-                                        class="rounded-md bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-950 transition hover:bg-slate-100"
-                                    >
-                                        Complete profile
-                                    </a>
-                                    <a
-                                        v-else-if="!isEligible"
-                                        href="#eligibility"
-                                        class="rounded-md bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-950 transition hover:bg-slate-100"
-                                    >
-                                        Review eligibility
-                                    </a>
-                                    <span v-else class="rounded-md bg-white/10 px-4 py-2.5 text-center text-sm font-bold text-slate-300 ring-1 ring-white/15">
-                                        Pre-screening unavailable
-                                    </span>
-
-                                    <button
-                                        type="button"
-                                        :disabled="isSaving"
-                                        class="inline-flex items-center justify-center gap-2 rounded-md border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10 disabled:opacity-60"
-                                        @click="toggleSave"
-                                    >
-                                        <i :class="scholarship.is_saved ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'" aria-hidden="true"></i>
-                                        {{ isSaving ? 'Saving...' : scholarship.is_saved ? 'Saved for later' : 'Save for later' }}
-                                    </button>
+                                    <p class="mt-3 line-clamp-2 max-w-4xl text-sm leading-5 text-slate-300">
+                                        {{ scholarship.description || 'No program description has been posted yet.' }}
+                                    </p>
+                                    <p v-if="scholarship.expected_results_at" class="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-slate-300">
+                                        <i class="fa-regular fa-calendar-check text-amber-300" aria-hidden="true"></i>
+                                        Initial results expected around {{ scholarship.expected_results_at }}
+                                    </p>
                                 </div>
                             </div>
                         </div>
 
-                        <section class="grid border-t border-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+                        <section class="grid bg-white sm:grid-cols-2 xl:grid-cols-4" aria-label="Scholarship facts">
                             <article
                                 v-for="fact in keyFacts"
                                 :key="fact.label"
-                                class="flex gap-3 border-b border-slate-200 p-4 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0 xl:border-r xl:last:border-r-0"
+                                class="flex gap-3 border-b border-slate-200 p-3 last:border-b-0 sm:[&:nth-child(odd)]:border-r sm:[&:nth-last-child(-n+2)]:border-b-0 xl:border-b-0 xl:border-r xl:last:border-r-0"
                             >
-                                <span class="student-icon-badge h-9 w-9">
+                                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-amber-100 text-xs text-amber-800">
                                     <i :class="fact.icon" aria-hidden="true"></i>
                                 </span>
                                 <div class="min-w-0">
-                                    <p class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ fact.label }}</p>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ fact.label }}</p>
                                     <p class="mt-1 text-sm font-bold leading-5 text-slate-950">{{ fact.value }}</p>
                                 </div>
                             </article>
                         </section>
+
                     </header>
 
-                    <nav class="student-card grid gap-1.5 p-1.5 sm:grid-cols-2 xl:grid-cols-5" aria-label="Scholarship details">
-                        <button
-                            v-for="section in detailSections"
-                            :key="section.id"
-                            type="button"
-                            :aria-current="activeDetailSection === section.id ? 'page' : undefined"
-                            :class="[
-                                'flex min-h-11 items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-sm font-bold transition',
-                                activeDetailSection === section.id
-                                    ? 'bg-slate-950 text-white shadow-sm'
-                                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
-                            ]"
-                            @click="activeDetailSection = section.id"
-                        >
-                            <i :class="[section.icon, activeDetailSection === section.id ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
-                            {{ section.label }}
-                        </button>
+                    <section class="student-card overflow-hidden rounded-md border-slate-300 border-l-4 border-l-amber-400 bg-white p-3.5 shadow-sm sm:p-4">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-sm', scholarship.has_applied || canStartApplication ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']">
+                                    <i :class="scholarship.has_applied ? 'fa-solid fa-check' : canStartApplication ? 'fa-solid fa-arrow-right' : 'fa-solid fa-circle-info'" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Your next step</p>
+                                        <span :class="['rounded-sm px-2 py-1 text-[10px] font-bold', matchClass(scholarship.eligibility_match?.score)]">
+                                            {{ scholarship.eligibility_match?.score ?? 0 }}% match
+                                        </span>
+                                    </div>
+                                    <h2 class="mt-1 text-base font-bold text-slate-950">{{ applyPanelTitle }}</h2>
+                                    <p class="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{{ applyPanelDescription }}</p>
+                                    <div v-if="!canApply && !scholarship.has_applied" class="mt-3 flex max-w-md items-center gap-3">
+                                        <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200"><div class="h-full bg-amber-400" :style="{ width: `${profileReadiness.percent}%` }"></div></div>
+                                        <span class="text-xs font-bold text-slate-600">Profile {{ profileReadiness.percent }}%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex shrink-0 flex-col gap-2 sm:flex-row">
+                                <a v-if="scholarship.has_applied" href="/dashboard/applications" class="rounded-sm bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-slate-800">View application</a>
+                                <a v-else-if="canStartApplication" :href="`/dashboard/applications?scholarship=${scholarship.id}`" class="rounded-sm bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-slate-800">Start pre-screening</a>
+                                <span v-else-if="isUpcomingProgram" class="rounded-sm bg-amber-100 px-4 py-2 text-center text-sm font-bold text-amber-900">Opens {{ scholarship.application_opens_at }}</span>
+                                <span v-else-if="!isAcceptingApplications" class="rounded-sm bg-slate-200 px-4 py-2 text-center text-sm font-bold text-slate-600">Pre-screening closed</span>
+                                <a v-else-if="!canApply" href="/dashboard/profile" class="rounded-sm bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-slate-800">Complete profile</a>
+                                <button v-else-if="!isEligible" type="button" class="rounded-sm bg-slate-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800" @click="selectDetailSection('eligibility', true)">Review eligibility</button>
+                                <span v-else class="rounded-sm bg-slate-200 px-4 py-2 text-center text-sm font-bold text-slate-600">Unavailable</span>
+
+                                <button type="button" :disabled="isSaving" class="inline-flex items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60" @click="toggleSave">
+                                    <i :class="scholarship.is_saved ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'" aria-hidden="true"></i>
+                                    {{ isSaving ? 'Saving...' : scholarship.is_saved ? 'Saved' : 'Save' }}
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <nav id="scholarship-detail-navigation" class="student-card overflow-hidden rounded-md border-slate-300 p-1.5" aria-label="Scholarship details">
+                        <div class="flex gap-1 overflow-x-auto">
+                            <button
+                                v-for="section in detailSections"
+                                :key="section.id"
+                                type="button"
+                                :aria-current="activeDetailSection === section.id ? 'page' : undefined"
+                                :class="[
+                                    'flex min-h-11 min-w-[8.5rem] flex-1 items-center justify-center gap-2 rounded-sm px-3 py-2.5 text-sm font-bold transition',
+                                    activeDetailSection === section.id
+                                        ? 'bg-slate-950 text-white'
+                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
+                                ]"
+                                @click="selectDetailSection(section.id)"
+                            >
+                                <i :class="[section.icon, activeDetailSection === section.id ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
+                                {{ section.label }}
+                            </button>
+                        </div>
                     </nav>
 
-                    <div class="space-y-5">
+                    <div id="scholarship-detail-content" class="scroll-mt-5 space-y-5">
                         <section class="space-y-5">
-                            <article v-if="activeDetailSection === 'overview' && scholarship.benefits?.length" class="student-card p-5 sm:p-6">
-                                <p class="student-kicker">Support package</p>
-                                <h2 class="mt-1 text-xl font-bold text-slate-950">What recipients receive</h2>
-                                <ScholarshipBenefitsPanel class="mt-5" :benefits="scholarship.benefits" uniform />
-                            </article>
-
-                            <article
-                                v-if="activeDetailSection === 'overview' && (selectedProviderObjectives.length || scholarship.provider_objective_notes)"
-                                class="student-card overflow-hidden"
-                            >
-                                <div class="student-section-head border-b border-slate-200 p-5 sm:p-6">
-                                    <div class="flex items-start gap-3">
-                                        <span class="student-section-mark">
-                                            <i class="fa-solid fa-bullseye" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="student-kicker">Provider purpose</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Why this scholarship is offered</h2>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="grid gap-px bg-slate-200 sm:grid-cols-2">
-                                    <div
-                                        v-for="objective in selectedProviderObjectives"
-                                        :key="objective.value"
-                                        class="flex items-start gap-3 bg-white p-4"
-                                    >
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
-                                            <i :class="objective.icon" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">{{ objective.label }}</p>
-                                            <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ objective.detail }}</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <p v-if="scholarship.provider_objective_notes" class="border-t border-slate-200 px-5 py-4 text-sm leading-6 text-slate-700 sm:px-6">
-                                    {{ scholarship.provider_objective_notes }}
-                                </p>
-                            </article>
-
-                            <RecipientAgreementPanel v-if="activeDetailSection === 'overview'" :scholarship="scholarship" />
-
-                            <article v-if="activeDetailSection === 'eligibility'" id="eligibility" class="student-card scroll-mt-6 p-5 sm:p-6">
-                                <div class="student-section-head">
-                                    <div class="flex items-start gap-3">
-                                        <span class="student-section-mark">
-                                            <i class="fa-solid fa-user-check" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="student-kicker">Eligibility</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Eligibility review</h2>
-                                            <p class="mt-1 text-sm text-slate-500">Profile matching and provider conditions are reviewed separately.</p>
-                                        </div>
-                                    </div>
-                                    <span :class="['w-fit rounded-md px-3 py-1.5 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">
-                                        {{ scholarship.eligibility_match?.score ?? 0 }}% profile match
-                                    </span>
-                                </div>
-
-                                <div class="mt-5 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                                    <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', eligibilityState.classes]">
-                                        <i :class="eligibilityState.icon" aria-hidden="true"></i>
-                                    </span>
+                            <article v-if="activeDetailSection === 'overview'" class="student-card overflow-hidden rounded-md border-slate-300">
+                                <header class="flex items-start gap-3 border-b border-slate-200 bg-slate-50 p-4 sm:p-5">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-gift" aria-hidden="true"></i></span>
                                     <div>
-                                        <p class="text-sm font-bold text-slate-950">
-                                            {{ eligibilityState.title }}
-                                        </p>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            {{ scholarship.eligibility_match?.difference_summary || scholarship.eligibility_match?.summary || 'Review the program rules against your profile.' }}
-                                        </p>
-                                        <p v-if="canApply && !isEligible" class="mt-1 text-sm font-semibold text-rose-700">{{ applicationBlockedLabel }}</p>
+                                        <p class="student-kicker">Program overview</p>
+                                        <h2 class="mt-1 text-xl font-bold text-slate-950">Support and purpose</h2>
                                     </div>
-                                </div>
+                                </header>
 
-                                <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-                                    <span v-if="eligibilityStatusCounts.matched" class="rounded-md bg-emerald-50 px-2.5 py-1.5 text-emerald-800 ring-1 ring-emerald-200">
-                                        {{ eligibilityStatusCounts.matched }} matched
-                                    </span>
-                                    <span v-if="eligibilityStatusCounts.different" class="rounded-md bg-rose-50 px-2.5 py-1.5 text-rose-800 ring-1 ring-rose-200">
-                                        {{ eligibilityStatusCounts.different }} different
-                                    </span>
-                                    <span v-if="eligibilityStatusCounts.missing" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-amber-800 ring-1 ring-amber-200">
-                                        {{ eligibilityStatusCounts.missing }} missing from profile
-                                    </span>
-                                    <span v-if="eligibilityStatusCounts.open" class="rounded-md bg-slate-100 px-2.5 py-1.5 text-slate-600 ring-1 ring-slate-200">
-                                        {{ eligibilityStatusCounts.open }} open to all
-                                    </span>
-                                </div>
+                                <section class="p-4 sm:p-5">
+                                    <div class="flex items-center justify-between gap-3">
+                                        <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Support package</p><h3 class="mt-1 font-bold text-slate-950">What recipients receive</h3></div>
+                                        <span class="rounded-sm bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ scholarship.benefits?.length || 0 }} item{{ scholarship.benefits?.length === 1 ? '' : 's' }}</span>
+                                    </div>
+                                    <ScholarshipBenefitsPanel v-if="scholarship.benefits?.length" class="mt-4" :benefits="scholarship.benefits" uniform dense />
+                                    <p v-else class="mt-4 rounded-sm bg-slate-50 p-4 text-sm text-slate-600">{{ formatAmount(scholarship.award_amount) }} listed by the provider.</p>
+                                </section>
 
-                                <div class="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                                    <div class="flex items-start gap-3">
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200 text-amber-900">
-                                            <i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Provider-required eligibility</p>
-                                            <p class="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">
-                                                {{ scholarship.eligibility || 'The provider has not posted separate written eligibility conditions.' }}
-                                            </p>
-                                            <p class="mt-2 text-xs leading-5 text-amber-900">The provider confirms conditions the portal cannot verify.</p>
+                                <section v-if="selectedProviderObjectives.length || scholarship.provider_objective_notes" class="border-t border-slate-200 p-4 sm:p-5">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Provider purpose</p>
+                                    <h3 class="mt-1 font-bold text-slate-950">Why this scholarship is offered</h3>
+                                    <div v-if="selectedProviderObjectives.length" class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                                        <div v-for="objective in selectedProviderObjectives" :key="objective.value" class="flex items-start gap-3 rounded-sm border border-slate-200 bg-slate-50 p-3.5">
+                                            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-white text-slate-700 ring-1 ring-slate-200"><i :class="objective.icon" aria-hidden="true"></i></span>
+                                            <p class="self-center text-sm font-bold text-slate-950">{{ objective.label }}</p>
                                         </div>
                                     </div>
-                                </div>
-
-                                <div v-if="eligibilityConditionResults.length" class="mt-4">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Condition review</p>
-                                    <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" />
-                                </div>
-
-                                <button
-                                    v-if="scholarship.eligibility_match?.criteria?.length"
-                                    type="button"
-                                    class="mt-4 flex w-full items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-slate-300 hover:bg-white"
-                                    @click="showProfileCheckModal = true"
-                                >
-                                    <span class="flex min-w-0 items-start gap-3">
-                                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-white text-amber-700 ring-1 ring-slate-200">
-                                            <i class="fa-solid fa-list-check" aria-hidden="true"></i>
-                                        </span>
-                                        <span class="min-w-0">
-                                            <span class="block text-sm font-bold text-slate-900">View profile comparison</span>
-                                        </span>
-                                    </span>
-                                    <span class="inline-flex shrink-0 items-center gap-2 text-xs font-bold text-slate-700">
-                                        Open
-                                        <i class="fa-solid fa-arrow-right text-[10px] text-amber-700" aria-hidden="true"></i>
-                                    </span>
-                                </button>
+                                    <p v-if="scholarship.provider_objective_notes" class="mt-4 line-clamp-3 border-l-2 border-amber-300 pl-3 text-sm leading-6 text-slate-700">{{ scholarship.provider_objective_notes }}</p>
+                                </section>
                             </article>
 
-                            <article v-if="activeDetailSection === 'requirements'" id="documents" class="student-card scroll-mt-6 p-5 sm:p-6">
+                            <article v-if="activeDetailSection === 'overview'" class="student-card flex flex-col gap-4 rounded-md border-slate-300 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                                <div class="flex min-w-0 items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-950 text-amber-300"><i class="fa-solid fa-file-signature" aria-hidden="true"></i></span>
+                                    <div><p class="student-kicker">Recipient terms</p><h3 class="mt-1 font-bold text-slate-950">Support and responsibilities</h3><p class="mt-1 text-sm text-slate-500">Review what you receive and what is expected if selected.</p></div>
+                                </div>
+                                <button type="button" class="shrink-0 rounded-sm border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100" @click="showRecipientTermsModal = true">Review terms</button>
+                            </article>
+
+                            <article v-if="activeDetailSection === 'eligibility'" id="eligibility" class="student-card scroll-mt-6 overflow-hidden rounded-md border-slate-300">
+                                <header class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                                    <div class="flex items-start gap-3">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-user-check" aria-hidden="true"></i></span>
+                                        <div><p class="student-kicker">Eligibility</p><h2 class="mt-1 text-xl font-bold text-slate-950">Can you apply?</h2></div>
+                                    </div>
+                                    <button v-if="scholarship.eligibility_match?.criteria?.length" type="button" class="inline-flex w-fit items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100" @click="showProfileCheckModal = true">
+                                        See profile comparison<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                    </button>
+                                </header>
+
+                                <section class="p-4 sm:p-5">
+                                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                        <div class="flex min-w-0 items-start gap-3">
+                                            <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-sm', eligibilityState.classes]"><i :class="eligibilityState.icon" aria-hidden="true"></i></span>
+                                            <div>
+                                                <h3 class="font-bold text-slate-950">{{ eligibilityState.title }}</h3>
+                                                <p class="mt-1 line-clamp-2 max-w-3xl text-sm leading-6 text-slate-600">{{ scholarship.eligibility_match?.difference_summary || scholarship.eligibility_match?.summary || 'Review the program rules against your profile.' }}</p>
+                                                <p v-if="canApply && !isEligible" class="mt-2 text-sm font-semibold text-rose-700">{{ applicationBlockedLabel }}</p>
+                                            </div>
+                                        </div>
+                                        <span :class="['w-fit shrink-0 rounded-sm px-3 py-1.5 text-xs font-bold', matchClass(scholarship.eligibility_match?.score)]">{{ scholarship.eligibility_match?.score ?? 0 }}% match</span>
+                                    </div>
+                                    <p class="mt-4 border-t border-slate-200 pt-3 text-xs font-semibold text-slate-500">
+                                        {{ eligibilityStatusCounts.matched }} matched
+                                        <span v-if="eligibilityStatusCounts.different"> / {{ eligibilityStatusCounts.different }} different</span>
+                                        <span v-if="eligibilityStatusCounts.missing"> / {{ eligibilityStatusCounts.missing }} missing</span>
+                                        <span v-if="eligibilityStatusCounts.open"> / {{ eligibilityStatusCounts.open }} unrestricted</span>
+                                    </p>
+                                </section>
+
+                                <section class="border-t border-slate-200 p-4 sm:p-5">
+                                    <div class="flex items-start gap-3">
+                                        <i class="fa-solid fa-file-circle-check mt-1 text-amber-700" aria-hidden="true"></i>
+                                        <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Required by the provider</p><p class="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">{{ scholarship.eligibility || 'No separate written eligibility conditions were posted.' }}</p><p class="mt-2 text-xs leading-5 text-slate-500">The provider reviews conditions the portal cannot confirm online.</p></div>
+                                    </div>
+                                </section>
+
+                                <section v-if="eligibilityConditionResults.length" class="border-t border-slate-200 bg-slate-50 p-4 sm:p-5">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Written condition review</p>
+                                    <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" />
+                                </section>
+                            </article>
+
+                            <article v-if="activeDetailSection === 'requirements'" id="documents" class="student-card scroll-mt-6 rounded-md border-slate-300 p-4 sm:p-5">
                                 <div class="student-section-head">
                                     <div class="flex items-start gap-3">
-                                        <span class="student-section-mark">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
                                             <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
                                         </span>
                                         <div>
                                             <p class="student-kicker">Documents</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">What should you prepare?</h2>
-                                            <p class="mt-1 text-sm text-slate-500">Upload only the files needed for initial eligibility checking.</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Files to prepare</h2>
                                         </div>
                                     </div>
-                                    <a href="/dashboard/documents" class="w-fit rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-500">
+                                    <a href="/dashboard/documents" class="w-fit rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-100">
                                         Manage files
                                     </a>
                                 </div>
 
-                                <div v-if="hasDocumentRequirements" class="mt-5 overflow-hidden rounded-lg border border-slate-200">
+                                <div v-if="hasDocumentRequirements" class="mt-5 overflow-hidden rounded-sm border border-slate-200">
                                     <div class="bg-slate-50 p-4">
                                         <div class="flex items-center justify-between gap-3">
                                             <div>
@@ -839,14 +759,14 @@ onMounted(loadScholarship);
                                     </div>
                                 </div>
 
-                                <div v-if="optionalDocumentItems.length" class="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                <div v-if="optionalDocumentItems.length" class="mt-4 rounded-sm border border-amber-200 bg-amber-50 p-4">
                                     <div class="flex items-start gap-3">
                                         <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
                                             <i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i>
                                         </span>
                                         <div>
                                             <p class="text-sm font-bold text-amber-950">Optional supporting files</p>
-                                            <p class="mt-1 text-xs leading-5 text-amber-900">These can support pre-screening but are not required to submit it.</p>
+                                            <p class="mt-1 text-xs leading-5 text-amber-900">Helpful, but not required.</p>
                                         </div>
                                     </div>
                                     <div class="mt-3 flex flex-wrap gap-2">
@@ -860,7 +780,7 @@ onMounted(loadScholarship);
                                     </div>
                                 </div>
 
-                                <div v-if="postQualificationDocumentItems.length" class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                <div v-if="postQualificationDocumentItems.length" class="mt-4 overflow-hidden rounded-sm border border-slate-200 bg-white">
                                     <div class="flex items-start gap-3 bg-slate-950 p-4 text-white">
                                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-300 text-slate-950">
                                             <i class="fa-solid fa-briefcase" aria-hidden="true"></i>
@@ -868,7 +788,7 @@ onMounted(loadScholarship);
                                         <div>
                                             <p class="text-sm font-bold">Prepare only if you qualify</p>
                                             <p class="mt-1 text-xs leading-5 text-slate-300">
-                                                Bring these directly to the provider for the formal application. Do not upload them here unless they are also listed above.
+                                                Bring these to the provider only after you qualify.
                                             </p>
                                         </div>
                                     </div>
@@ -880,7 +800,7 @@ onMounted(loadScholarship);
                                     </div>
                                 </div>
 
-                                <div v-if="!hasDocumentRequirements" class="mt-5 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                <div v-if="!hasDocumentRequirements" class="mt-5 flex items-start gap-3 rounded-sm border border-slate-200 bg-slate-50 p-4">
                                     <span class="student-icon-badge">
                                         <i class="fa-solid fa-check" aria-hidden="true"></i>
                                     </span>
@@ -896,30 +816,29 @@ onMounted(loadScholarship);
                                 </div>
                             </article>
 
-                            <article v-if="activeDetailSection === 'process'" class="student-card p-5 sm:p-6">
-                                <div class="student-section-head">
+                            <article v-if="activeDetailSection === 'process'" class="student-card overflow-hidden rounded-md border-slate-300">
+                                <div class="student-section-head border-b border-slate-200 bg-slate-50 p-4 sm:p-5">
                                     <div class="flex items-start gap-3">
-                                        <span class="student-section-mark">
+                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
                                             <i class="fa-solid fa-route" aria-hidden="true"></i>
                                         </span>
                                         <div>
                                             <p class="student-kicker">Selection process</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">What happens after pre-screening?</h2>
-                                            <p class="mt-1 text-sm text-slate-500">These stages determine whether you may continue with the provider's formal application.</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">After pre-screening</h2>
                                         </div>
                                     </div>
-                                    <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
+                                    <span class="w-fit rounded-sm bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
                                         {{ selectionPlan.length }} stages
                                     </span>
                                 </div>
 
-                                <ol class="mt-5 flex flex-wrap gap-3">
+                                <ol class="divide-y divide-slate-200 bg-white">
                                     <li
                                         v-for="(stage, index) in selectionPlan"
                                         :key="stage.value"
-                                        class="flex min-w-[14rem] flex-1 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4"
+                                        class="grid gap-3 p-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_minmax(10rem,auto)] sm:items-center sm:p-5"
                                     >
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-xs font-bold text-white">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-950 text-xs font-bold text-white">
                                             {{ index + 1 }}
                                         </span>
                                         <div class="min-w-0">
@@ -927,24 +846,19 @@ onMounted(loadScholarship);
                                                 <i :class="[stage.icon, 'text-xs text-amber-700']" aria-hidden="true"></i>
                                                 <p class="text-sm font-bold text-slate-950">{{ stage.label }}</p>
                                             </div>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">{{ stage.detail }}</p>
-                                            <p :class="['mt-2 text-xs font-bold', stage.event ? 'text-amber-800' : 'text-slate-400']">
-                                                {{ stage.event?.scheduled_label || 'Schedule to be announced' }}
-                                            </p>
-                                            <p v-if="stage.event && programEventPlaceLabel(stage.event)" class="mt-1 text-xs leading-5 text-slate-500">
-                                                {{ programEventPlaceLabel(stage.event) }}
-                                            </p>
+                                            <p class="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{{ stage.detail }}</p>
                                         </div>
+                                        <div class="sm:text-right"><p :class="['text-xs font-bold', stage.event ? 'text-amber-800' : 'text-slate-400']">{{ stage.event?.scheduled_label || 'Schedule to be announced' }}</p><p v-if="stage.event && programEventPlaceLabel(stage.event)" class="mt-1 text-xs leading-5 text-slate-500">{{ programEventPlaceLabel(stage.event) }}</p></div>
                                     </li>
                                 </ol>
 
                             </article>
                         </section>
 
-                        <section v-if="activeDetailSection === 'provider'" class="student-card overflow-hidden">
-                            <div class="student-section-head p-5 sm:p-6">
+                        <section v-if="activeDetailSection === 'provider'" class="student-card overflow-hidden rounded-md border-slate-300">
+                            <div class="student-section-head border-b border-slate-200 bg-slate-50 p-4 sm:p-5">
                                 <div class="flex items-start gap-3">
-                                    <span class="student-section-mark">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
                                         <i class="fa-solid fa-building-shield" aria-hidden="true"></i>
                                     </span>
                                     <div>
@@ -957,73 +871,46 @@ onMounted(loadScholarship);
                                     :href="scholarship.official_program_url"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
+                                    class="inline-flex w-fit items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
                                 >
                                     Official program page
                                     <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                 </a>
                             </div>
 
-                            <div class="grid gap-px border-t border-slate-200 bg-slate-200 lg:grid-cols-3">
-                                <section class="bg-white p-5 sm:p-6">
-                                    <div class="flex items-center gap-3">
-                                        <img
-                                            :src="scholarship.image_url"
-                                            :alt="scholarship.provider?.name || 'Scholarship provider'"
-                                            class="h-14 w-14 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
-                                        >
-                                        <div class="min-w-0">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Organization</p>
-                                            <h3 class="mt-1 text-base font-bold leading-5 text-slate-950">
-                                                {{ scholarship.provider?.name || 'Scholarship provider' }}
-                                            </h3>
-                                            <p class="mt-1 text-xs font-semibold text-slate-500">
-                                                {{ providerTypeLabel(scholarship.provider?.type) }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <section class="bg-white p-5 sm:p-6">
-                                    <div class="flex items-center gap-2">
-                                        <i class="fa-solid fa-address-card text-sm text-amber-700" aria-hidden="true"></i>
-                                        <h3 class="text-sm font-bold text-slate-950">Public contact</h3>
-                                    </div>
-                                    <div v-if="scholarship.contact_person || scholarship.contact_department || scholarship.contact_email || scholarship.contact_number" class="mt-3 grid gap-2 text-sm">
-                                        <p v-if="scholarship.contact_department || scholarship.contact_person" class="font-semibold leading-5 text-slate-700">
-                                            {{ scholarship.contact_department || scholarship.contact_person }}
-                                            <span v-if="scholarship.contact_department && scholarship.contact_person" class="font-normal text-slate-500"> | {{ scholarship.contact_person }}</span>
-                                        </p>
-                                        <a v-if="scholarship.contact_email" :href="`mailto:${scholarship.contact_email}`" class="flex min-w-0 items-center gap-2 text-slate-600 hover:text-slate-950">
-                                            <i class="fa-regular fa-envelope w-4 shrink-0 text-slate-400" aria-hidden="true"></i>
-                                            <span class="break-all">{{ scholarship.contact_email }}</span>
-                                        </a>
-                                        <a v-if="scholarship.contact_number" :href="`tel:${scholarship.contact_number}`" class="flex items-center gap-2 text-slate-600 hover:text-slate-950">
-                                            <i class="fa-solid fa-phone w-4 shrink-0 text-slate-400" aria-hidden="true"></i>
-                                            {{ scholarship.contact_number }}
-                                        </a>
-                                    </div>
-                                    <p v-else class="mt-3 text-sm text-slate-500">No public contact details listed.</p>
-                                </section>
-
-                                <section class="bg-white p-5 sm:p-6">
-                                    <div class="flex items-center gap-2">
-                                        <i class="fa-solid fa-location-dot text-sm text-amber-700" aria-hidden="true"></i>
-                                        <h3 class="text-sm font-bold text-slate-950">Program location</h3>
-                                    </div>
-                                    <p class="mt-3 text-sm font-bold leading-5 text-slate-800">{{ scholarship.location_name || 'Location not named' }}</p>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">{{ scholarship.location_address || scholarship.eligible_locations || 'No map address added yet.' }}</p>
-                                    <p v-if="scholarship.distance_label" class="mt-2 text-xs font-bold text-slate-700">About {{ scholarship.distance_label }} from your saved location</p>
-                                    <button
-                                        v-if="hasMapPreview"
-                                        type="button"
-                                        class="mt-3 inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
-                                        @click="showMapModal = true"
+                            <div class="p-4 sm:p-5">
+                                <div class="flex items-center gap-3">
+                                    <img
+                                        :src="scholarship.image_url"
+                                        :alt="scholarship.provider?.name || 'Scholarship provider'"
+                                        class="h-14 w-14 shrink-0 rounded-sm bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
                                     >
-                                        <i class="fa-solid fa-map-location-dot text-amber-700" aria-hidden="true"></i>
-                                        View map
-                                    </button>
-                                </section>
+                                    <div class="min-w-0">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Organization</p>
+                                        <h3 class="mt-1 text-base font-bold leading-5 text-slate-950">{{ scholarship.provider?.name || 'Scholarship provider' }}</h3>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ providerTypeLabel(scholarship.provider?.type) }}</p>
+                                    </div>
+                                </div>
+
+                                <dl class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-sm border border-slate-200">
+                                    <div class="grid gap-3 p-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-5">
+                                        <dt class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-address-card text-amber-700" aria-hidden="true"></i>Public contact</dt>
+                                        <dd v-if="scholarship.contact_person || scholarship.contact_department || scholarship.contact_email || scholarship.contact_number" class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
+                                            <span v-if="scholarship.contact_department || scholarship.contact_person" class="font-semibold text-slate-800">{{ scholarship.contact_department || scholarship.contact_person }}<span v-if="scholarship.contact_department && scholarship.contact_person" class="font-normal text-slate-500"> | {{ scholarship.contact_person }}</span></span>
+                                            <a v-if="scholarship.contact_email" :href="`mailto:${scholarship.contact_email}`" class="inline-flex min-w-0 items-center gap-2 hover:text-slate-950"><i class="fa-regular fa-envelope text-slate-400" aria-hidden="true"></i><span class="break-all">{{ scholarship.contact_email }}</span></a>
+                                            <a v-if="scholarship.contact_number" :href="`tel:${scholarship.contact_number}`" class="inline-flex items-center gap-2 hover:text-slate-950"><i class="fa-solid fa-phone text-slate-400" aria-hidden="true"></i>{{ scholarship.contact_number }}</a>
+                                        </dd>
+                                        <dd v-else class="text-sm text-slate-500">No public contact details listed.</dd>
+                                    </div>
+
+                                    <div class="grid gap-3 p-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-5">
+                                        <dt class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-location-dot text-amber-700" aria-hidden="true"></i>Program location</dt>
+                                        <dd class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div><p class="text-sm font-bold text-slate-800">{{ scholarship.location_name || 'Location not named' }}</p><p class="mt-1 text-sm leading-5 text-slate-600">{{ scholarship.location_address || scholarship.eligible_locations || 'No map address added yet.' }}</p><p v-if="scholarship.distance_label" class="mt-1 text-xs font-bold text-slate-600">About {{ scholarship.distance_label }} from your saved location</p></div>
+                                            <button v-if="hasMapPreview" type="button" class="inline-flex w-fit shrink-0 items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100" @click="showMapModal = true"><i class="fa-solid fa-map-location-dot text-amber-700" aria-hidden="true"></i>View map</button>
+                                        </dd>
+                                    </div>
+                                </dl>
                             </div>
 
                             <p class="border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs leading-5 text-slate-500 sm:px-6">
@@ -1035,6 +922,23 @@ onMounted(loadScholarship);
 
             </div>
         </section>
+
+        <Teleport to="body">
+            <div v-if="showRecipientTermsModal && scholarship" class="fixed inset-0 z-[2500] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5" @click.self="showRecipientTermsModal = false">
+                <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="recipient-terms-modal-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-950 text-amber-300"><i class="fa-solid fa-file-signature" aria-hidden="true"></i></span>
+                            <div><p class="student-kicker">Recipient terms</p><h2 id="recipient-terms-modal-title" class="mt-1 text-xl font-bold text-slate-950">Support and responsibilities</h2></div>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-sm border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-950" aria-label="Close recipient terms" @click="showRecipientTermsModal = false"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                    </header>
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-3 sm:p-5">
+                        <RecipientAgreementPanel :scholarship="scholarship" hide-header />
+                    </div>
+                </section>
+            </div>
+        </Teleport>
 
         <Teleport to="body">
             <div

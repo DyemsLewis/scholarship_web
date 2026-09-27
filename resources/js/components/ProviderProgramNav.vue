@@ -75,12 +75,6 @@ const primaryLinks = computed(() => [
             href: recipientLinks.value[0].href,
         },
         {
-            key: 'monitoring',
-            label: 'Monitoring',
-            icon: 'fa-solid fa-chart-line',
-            href: `${programBase.value}/monitoring`,
-        },
-        {
             key: 'announcements',
             label: 'Updates',
             icon: 'fa-solid fa-bullhorn',
@@ -112,7 +106,6 @@ const activeKey = computed(() => {
         return 'applicants';
     }
 
-    if (path.includes('/monitoring')) return 'monitoring';
     if (path.endsWith('/updates')) return 'announcements';
 
     return props.active || 'overview';

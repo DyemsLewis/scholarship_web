@@ -461,6 +461,9 @@ class User extends Authenticatable implements MustVerifyEmail
             'guardian_is_account_owner' => (bool) $this->studentProfile?->guardian_is_account_owner,
             'has_profile_photo' => filled($this->studentProfile?->profile_photo_path),
             'profile_photo_updated_at' => $this->studentProfile?->profile_photo_updated_at?->toISOString(),
+            'profile_photo_review_status' => $this->studentProfile?->profile_photo_review_status,
+            'profile_photo_review_note' => $this->studentProfile?->profile_photo_review_note,
+            'profile_photo_reviewed_at' => $this->studentProfile?->profile_photo_reviewed_at?->format('M d, Y h:i A'),
             'role' => $this->role,
             'is_admin' => $this->is_admin,
         ];

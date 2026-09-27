@@ -283,7 +283,7 @@ onMounted(loadInsights);
                             <article
                                 v-for="packet in documentReviewQueue"
                                 :key="packet.application_id"
-                                class="portal-record-row grid gap-3 xl:grid-cols-[minmax(0,1fr)_20rem_8rem] xl:items-center"
+                                class="portal-record-row grid gap-3 xl:grid-cols-[minmax(0,1fr)_20rem_8rem] xl:items-center xl:gap-4"
                             >
                                 <div class="flex min-w-0 gap-3">
                                     <img

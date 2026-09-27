@@ -59,6 +59,11 @@ class StudentProfile extends Model
         'profile_photo_mime_type',
         'profile_photo_size',
         'profile_photo_updated_at',
+        'profile_photo_review_status',
+        'profile_photo_review_note',
+        'profile_photo_reviewed_by',
+        'profile_photo_reviewed_at',
+        'profile_photo_review_application_id',
         'verification_status',
         'verification_notes',
         'verified_at',
@@ -77,6 +82,7 @@ class StudentProfile extends Model
             'guardian_is_account_owner' => 'boolean',
             'profile_photo_size' => 'integer',
             'profile_photo_updated_at' => 'datetime',
+            'profile_photo_reviewed_at' => 'datetime',
             'verified_at' => 'datetime',
         ];
     }

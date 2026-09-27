@@ -33,6 +33,31 @@ class RecipientMonitoringWorkflowTest extends TestCase
         config()->set('services.academic_ocr.max_file_size_kb', 1024);
     }
 
+    public function test_applicant_monitoring_uses_dedicated_private_pages(): void
+    {
+        [, $applicant, , $application] = $this->selectedApplication();
+
+        $this->actingAs($applicant)
+            ->get('/dashboard/monitoring')
+            ->assertOk()
+            ->assertViewIs('dashboard-monitoring');
+
+        $this->actingAs($applicant)
+            ->get("/dashboard/monitoring/{$application->id}")
+            ->assertOk()
+            ->assertViewIs('dashboard-monitoring-detail')
+            ->assertViewHas('application', fn (ScholarshipApplication $record): bool => $record->is($application));
+
+        $this->actingAs($applicant)
+            ->get('/dashboard/applications?view=monitoring')
+            ->assertRedirect('/dashboard/monitoring');
+
+        $otherApplicant = User::factory()->create(['role' => 'applicant']);
+        $this->actingAs($otherApplicant)
+            ->get("/dashboard/monitoring/{$application->id}")
+            ->assertForbidden();
+    }
+
     public function test_selected_recipient_can_upload_a_grade_record_that_ocr_space_extracts(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedApplication();

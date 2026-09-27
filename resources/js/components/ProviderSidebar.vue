@@ -41,7 +41,14 @@ const navLinks = computed(() => [
         children: [
             { href: '/provider/applications/recipients', label: 'Selected recipients', exact: true },
             { href: '/provider/applications/waitlist', label: 'Waitlist', exact: true },
-            { href: '/provider/monitoring', label: 'Recipient monitoring', exact: true },
+        ],
+    }] : []),
+    ...(canReviewApplications ? [{
+        href: '/provider/monitoring',
+        label: 'Monitoring',
+        icon: 'fa-solid fa-heart-pulse',
+        activePathPatterns: [
+            '^/provider/monitoring(?:/|$)',
         ],
     }] : []),
     {

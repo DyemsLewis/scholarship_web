@@ -31,8 +31,13 @@ const navLinks = [
             { href: '/dashboard/applications', label: 'Active applications', exact: true, queryless: true },
             { href: '/dashboard/applications?view=action', label: 'Needs my action', exact: true },
             { href: '/dashboard/applications?view=completed', label: 'Completed', exact: true },
-            { href: '/dashboard/applications?view=monitoring', label: 'Recipient monitoring', exact: true },
         ],
+    },
+    {
+        href: '/dashboard/monitoring',
+        label: 'Monitoring',
+        icon: 'fa-solid fa-heart-pulse',
+        activePaths: ['/dashboard/monitoring'],
     },
     {
         href: '/dashboard/documents',
@@ -84,20 +89,21 @@ onUnmounted(() => {
         home-href="/dashboard"
         :nav-links="navLinks"
         logout-message="You will need to sign in again to continue using the scholarship portal."
-    />
-
-    <button
-        v-if="!isReportModalOpen"
-        type="button"
-        class="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-amber-300 px-4 py-3 text-sm font-bold text-slate-950 shadow-[0_14px_35px_rgba(8,20,38,0.28)] ring-2 ring-white transition hover:-translate-y-0.5 hover:bg-amber-200 sm:bottom-6 sm:right-6"
-        aria-label="Report a problem"
-        @click="openReportModal"
+        mobile-collapsible
     >
-        <span class="flex h-7 w-7 items-center justify-center rounded-full bg-slate-950 text-amber-200">
-            <i class="fa-solid fa-circle-exclamation text-xs" aria-hidden="true"></i>
-        </span>
-        Report
-    </button>
+        <template #account-actions>
+            <button
+                type="button"
+                class="group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-slate-400 transition hover:bg-white/[0.05] hover:text-white"
+                @click="openReportModal"
+            >
+                <span class="grid h-6 w-6 shrink-0 place-items-center text-xs text-slate-500 transition group-hover:text-amber-300">
+                    <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>
+                </span>
+                Report a problem
+            </button>
+        </template>
+    </RoleSidebar>
 
     <ApplicantReportModal v-model="isReportModalOpen" :initial-category="reportCategory" />
 </template>

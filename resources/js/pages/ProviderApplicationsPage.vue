@@ -1185,7 +1185,7 @@ onMounted(loadProviderData);
                         <span>{{ visibleApplicationRange }}</span>
                     </template>
                     <template v-if="applicationWorkspaceMode === 'recipients'" #actions>
-                        <a :href="`/provider/programs/${selectedScholarshipId}/monitoring`" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                        <a :href="`/provider/monitoring/${selectedScholarshipId}`" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
                             Open monitoring
                             <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                         </a>
@@ -1523,7 +1523,14 @@ onMounted(loadProviderData);
                         </div>
 
                         <div class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
-                            <div class="portal-record-head hidden gap-4 lg:grid lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_auto]">
+                            <div
+                                :class="[
+                                    'portal-record-head hidden items-center gap-4 lg:grid',
+                                    showReviewerAssignment
+                                        ? 'lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_18rem]'
+                                        : 'lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_11rem]',
+                                ]"
+                            >
                                 <span>Applicant</span>
                                 <span>{{ recordStatusColumnLabel }}</span>
                                 <span class="text-right">Action</span>
@@ -1546,7 +1553,10 @@ onMounted(loadProviderData);
                                 v-for="application in visibleApplications"
                                 :key="application.id"
                                 :class="[
-                                    'portal-record-row grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_auto] lg:items-center',
+                                    'portal-record-row grid gap-3 lg:items-center lg:gap-4',
+                                    showReviewerAssignment
+                                        ? 'lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_18rem]'
+                                        : 'lg:grid-cols-[minmax(0,1.2fr)_minmax(12rem,0.8fr)_11rem]',
                                 ]"
                             >
                                 <div class="flex min-w-0 items-center gap-3">
@@ -1565,13 +1575,13 @@ onMounted(loadProviderData);
                                     </div>
 
                                     <div class="min-w-0 flex-1">
-                                        <div class="flex min-w-0 items-start gap-2">
-                                            <h4 class="min-w-0 flex-1 line-clamp-2 text-sm font-bold leading-5 text-slate-950">
+                                        <div class="flex min-w-0 items-center gap-2">
+                                            <h4 class="min-w-0 line-clamp-2 text-sm font-bold leading-5 text-slate-950">
                                                 {{ application.applicant?.name || 'Applicant' }}
                                             </h4>
                                             <i
                                                 v-if="application.applicant?.profile_verification_status === 'approved'"
-                                                class="fa-solid fa-circle-check mt-1 text-xs text-emerald-600"
+                                                class="fa-solid fa-circle-check shrink-0 text-xs text-emerald-600"
                                                 title="Verified academic record"
                                                 aria-label="Verified academic record"
                                             ></i>
@@ -1593,7 +1603,6 @@ onMounted(loadProviderData);
 
                                 <div :class="[
                                     'portal-record-actions w-full shrink-0 lg:justify-end',
-                                    showReviewerAssignment ? 'lg:w-72' : 'lg:w-auto',
                                     hasProgramContext && availableBulkAdvanceTargets.length ? 'pl-24 lg:pl-0' : 'pl-14 lg:pl-0',
                                 ]">
                                     <label v-if="showReviewerAssignment && reviewersForApplication(application).length" class="min-w-0 flex-1 lg:w-44 lg:flex-none">

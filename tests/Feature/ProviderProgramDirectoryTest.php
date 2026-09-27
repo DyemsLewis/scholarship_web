@@ -144,13 +144,17 @@ class ProviderProgramDirectoryTest extends TestCase
 
         foreach (['', '/academic', '/releases', '/outcomes'] as $workspace) {
             $this->actingAs($provider)
-                ->get("/provider/programs/{$scholarship->id}/monitoring{$workspace}")
+                ->get("/provider/monitoring/{$scholarship->id}{$workspace}")
                 ->assertOk()
-                ->assertViewIs('provider-program-monitoring')
+                ->assertViewIs('provider-monitoring-workspace')
                 ->assertViewHas('scholarship', fn (Scholarship $viewScholarship): bool => (
                     $viewScholarship->is($scholarship)
                 ));
         }
+
+        $this->actingAs($provider)
+            ->get("/provider/programs/{$scholarship->id}/monitoring")
+            ->assertRedirect("/provider/monitoring/{$scholarship->id}");
     }
 
     public function test_provider_cannot_open_another_organization_program_workspace(): void
@@ -181,10 +185,6 @@ class ProviderProgramDirectoryTest extends TestCase
             '/applications/decisions',
             '/applications/recipients',
             '/applications/waitlist',
-            '/monitoring',
-            '/monitoring/academic',
-            '/monitoring/releases',
-            '/monitoring/outcomes',
         ];
 
         foreach ($workspaces as $workspace) {
@@ -192,5 +192,15 @@ class ProviderProgramDirectoryTest extends TestCase
                 ->get("/provider/programs/{$scholarship->id}{$workspace}")
                 ->assertForbidden();
         }
+
+        foreach (['', '/academic', '/releases', '/outcomes'] as $workspace) {
+            $this->actingAs($provider)
+                ->get("/provider/monitoring/{$scholarship->id}{$workspace}")
+                ->assertForbidden();
+        }
+
+        $this->actingAs($provider)
+            ->get("/provider/programs/{$scholarship->id}/monitoring")
+            ->assertForbidden();
     }
 }

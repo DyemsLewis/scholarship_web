@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import ApplicantReviewIdentityCard from '../components/ApplicantReviewIdentityCard.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { formatFileSize } from '../support/display';
+import { showPortalToast } from '../support/portalToast';
 
 const appElement = document.getElementById('app');
 const applicantId = appElement?.dataset.applicantId;
@@ -11,6 +13,8 @@ const isLoading = ref(true);
 const isSaving = ref(false);
 const loadError = ref('');
 const decisionError = ref('');
+const photoReviewError = ref('');
+const isReviewingPhoto = ref(false);
 const applicant = ref(null);
 const reviewNote = ref('');
 const reviewedAcademicScale = ref('');
@@ -60,6 +64,12 @@ const reviewedAcademicResultReady = computed(() => {
 
     return reviewedAcademicResult.value !== '' && Number.isFinite(result) && result > 0 && result <= maximum;
 });
+const applicantIdentityFacts = computed(() => [
+    { label: 'Education', value: statusLabel(applicant.value?.education_level || 'not provided') },
+    { label: 'School', value: applicant.value?.school || 'Not provided' },
+    { label: 'Saved result', value: savedAcademicResult.value },
+    { label: 'Academic evidence', value: academicRecord.value ? 'Submitted' : 'Not submitted' },
+]);
 const hasGuardianDetails = computed(() => Boolean(
     applicant.value?.guardian_name
     || applicant.value?.guardian_relationship
@@ -247,16 +257,6 @@ function closeDocumentPreview() {
     previewDocument.value = null;
 }
 
-function applicantInitials(currentApplicant) {
-    return String(currentApplicant?.name || currentApplicant?.username || 'Applicant')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((word) => word.charAt(0))
-        .join('')
-        .toUpperCase();
-}
-
 function applicantActionOptions(currentApplicant) {
     if (!profileEvidenceReady.value) {
         return [];
@@ -360,6 +360,34 @@ async function updateApplicant(verificationStatus) {
     }
 }
 
+async function updatePhotoReview(action, reason = '') {
+    if (!applicant.value || isReviewingPhoto.value) {
+        return;
+    }
+
+    isReviewingPhoto.value = true;
+    photoReviewError.value = '';
+
+    try {
+        const response = await window.axios.patch(`/admin/applicants/${applicantId}/profile-photo-review`, {
+            action,
+            reason: reason || null,
+        }, { portalToast: false });
+
+        applyApplicant(response.data.applicant);
+        showPortalToast({
+            title: action === 'approve' ? 'Photo checked' : 'Replacement requested',
+            message: response.data.message,
+        });
+    } catch (error) {
+        photoReviewError.value = error.response?.data?.errors?.reason?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to update the 2x2 photo review.';
+    } finally {
+        isReviewingPhoto.value = false;
+    }
+}
+
 onMounted(loadApplicant);
 </script>
 
@@ -379,14 +407,14 @@ onMounted(loadApplicant);
                 <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
                     <a href="/admin/reviews?type=applicants" class="font-bold text-slate-600 transition hover:text-slate-950">Applicant reviews</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="truncate font-semibold text-slate-950">{{ applicant?.name || applicant?.username || 'Applicant record' }}</span>
+                    <span class="truncate font-semibold text-slate-950">Review record</span>
                 </nav>
 
                 <TaskPageHeader
                     theme="admin"
                     eyebrow="Applicant review"
-                    :title="applicant?.name || applicant?.username || 'Verify academic information'"
-                    description="Compare the saved profile with its supporting records, then record the verification decision."
+                    title="Verify applicant information"
+                    description="Compare the profile with its supporting records, then record the verification decision."
                     icon="fa-solid fa-user-check"
                 >
                     <template v-if="applicant" #meta>
@@ -450,72 +478,29 @@ onMounted(loadApplicant);
                             </nav>
                         </section>
 
-                        <section class="admin-panel overflow-hidden">
-                            <div class="flex flex-col gap-4 border-l-4 border-l-amber-400 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                                <div class="flex min-w-0 items-center gap-3">
-                                    <img
-                                        v-if="applicant.profile_photo_url"
-                                        :src="applicant.profile_photo_url"
-                                        :alt="`${applicant.name || applicant.username || 'Applicant'} profile photo`"
-                                        class="h-12 w-12 shrink-0 rounded-md bg-white object-cover ring-1 ring-slate-200"
-                                    >
-                                    <div v-else class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold tracking-[0.08em] text-white">
-                                        {{ applicantInitials(applicant) }}
-                                    </div>
-                                    <div class="min-w-0">
-                                        <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Applicant record</p>
-                                        <h3 class="mt-1 truncate text-lg font-bold text-slate-950">{{ applicant.name || applicant.username }}</h3>
-                                        <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500">
-                                            <span>{{ applicant.email }}</span>
-                                            <span>{{ applicant.contact_number || 'No contact number' }}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <span :class="['w-fit shrink-0 rounded-md px-3 py-1.5 text-xs font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
-                                    {{ applicantReviewStatusLabel(applicant) }}
-                                </span>
-                            </div>
+                        <ApplicantReviewIdentityCard
+                            :applicant="applicant"
+                            eyebrow="Admin applicant review"
+                            :status-label="applicantReviewStatusLabel(applicant)"
+                            :status-class="statusClass(applicantReviewStatus(applicant))"
+                            :facts="applicantIdentityFacts"
+                            :busy="isReviewingPhoto"
+                            :error="photoReviewError"
+                            @approve-photo="updatePhotoReview('approve')"
+                            @request-photo-replacement="updatePhotoReview('request_replacement', $event)"
+                        />
 
-                            <dl class="grid border-t border-slate-200 bg-slate-50/80 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                                <div class="border-b border-slate-200 p-3 sm:border-r lg:border-b-0">
-                                    <dt class="text-xs font-semibold text-slate-500">Education</dt>
-                                    <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.education_level || 'not provided') }}</dd>
+                        <section class="admin-panel flex flex-col gap-3 border-l-4 border-l-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex min-w-0 items-center gap-3">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-amber-300"><i :class="reviewFocus.icon" aria-hidden="true"></i></span>
+                                <div class="min-w-0">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">{{ reviewFocus.eyebrow }}</p>
+                                    <p class="mt-1 text-sm font-bold text-slate-950">{{ reviewFocus.title }}</p>
+                                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ reviewFocus.description }}</p>
                                 </div>
-                                <div class="border-b border-slate-200 p-3 lg:border-b-0 lg:border-r">
-                                    <dt class="text-xs font-semibold text-slate-500">School</dt>
-                                    <dd class="mt-1 truncate font-bold text-slate-950">{{ applicant.school || 'Not provided' }}</dd>
-                                </div>
-                                <div class="border-b border-slate-200 p-3 sm:border-b-0 sm:border-r">
-                                    <dt class="text-xs font-semibold text-slate-500">Saved result</dt>
-                                    <dd class="mt-1 font-bold text-slate-950">{{ savedAcademicResult }}</dd>
-                                </div>
-                                <div class="p-3">
-                                    <dt class="text-xs font-semibold text-slate-500">Academic evidence</dt>
-                                    <dd class="mt-1 font-bold text-slate-950">{{ academicRecord ? 'Submitted' : 'Not submitted' }}</dd>
-                                </div>
-                            </dl>
-
-                            <div class="flex flex-col gap-4 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                                <div class="flex min-w-0 items-start gap-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-amber-300">
-                                        <i :class="reviewFocus.icon" aria-hidden="true"></i>
-                                    </span>
-                                    <div class="min-w-0">
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{{ reviewFocus.eyebrow }}</p>
-                                        <p class="mt-1 text-sm font-bold text-slate-950">{{ reviewFocus.title }}</p>
-                                        <p class="mt-1 max-w-3xl text-xs leading-5 text-slate-500">{{ reviewFocus.description }}</p>
-                                    </div>
-                                </div>
-                                <button
-                                    v-if="reviewFocus.action"
-                                    type="button"
-                                    class="w-fit shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
-                                    @click="selectReviewSection(reviewFocus.section)"
-                                >
-                                    {{ reviewFocus.action }}
-                                </button>
-                                <span v-else class="w-fit shrink-0 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Waiting for evidence</span>
                             </div>
+                            <button v-if="reviewFocus.action" type="button" class="w-fit shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="selectReviewSection(reviewFocus.section)">{{ reviewFocus.action }}</button>
+                            <span v-else class="w-fit shrink-0 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Waiting for evidence</span>
                         </section>
 
                         <article v-if="activeReviewSection === 'profile'" id="applicant-details" class="admin-panel scroll-mt-6 overflow-hidden">

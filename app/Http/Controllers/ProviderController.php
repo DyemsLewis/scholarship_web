@@ -164,7 +164,7 @@ class ProviderController extends Controller
         ]);
     }
 
-    public function programMonitoring(Request $request, Scholarship $scholarship): View|RedirectResponse
+    public function recipientMonitoringWorkspace(Request $request, Scholarship $scholarship): View|RedirectResponse
     {
         if (! $request->user()) {
             return redirect()->route('login');
@@ -173,9 +173,24 @@ class ProviderController extends Controller
         abort_unless($request->user()->isProvider(), 403);
         abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
-        return view('provider-program-monitoring', [
+        return view('provider-monitoring-workspace', [
             'scholarship' => $scholarship,
         ]);
+    }
+
+    public function redirectLegacyProgramMonitoring(Request $request, Scholarship $scholarship): RedirectResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+
+        $routeName = match ($request->route('monitoringView')) {
+            'academic' => 'provider.monitoring.academic',
+            'releases' => 'provider.monitoring.releases',
+            'outcomes' => 'provider.monitoring.outcomes',
+            default => 'provider.monitoring.show',
+        };
+
+        return redirect()->route($routeName, $scholarship);
     }
 
     public function programForm(Request $request): View|RedirectResponse
@@ -2527,6 +2542,80 @@ class ProviderController extends Controller
         );
     }
 
+    public function reviewApplicantProfilePhoto(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
+
+        $applicant = $application->applicant;
+        abort_unless($applicant?->isApplicant(), 404);
+
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['approve', 'request_replacement'])],
+            'reason' => [
+                Rule::requiredIf($request->input('action') === 'request_replacement'),
+                'nullable',
+                'string',
+                'min:5',
+                'max:1000',
+            ],
+        ]);
+        $profile = $applicant->studentProfile()->firstOrCreate(['user_id' => $applicant->id]);
+
+        if ($validated['action'] === 'approve' && blank($profile->profile_photo_path)) {
+            return response()->json(['message' => 'The applicant has not uploaded a 2x2 photo yet.'], 422);
+        }
+
+        $needsReplacement = $validated['action'] === 'request_replacement';
+        $profile->update([
+            'profile_photo_review_status' => $needsReplacement ? 'needs_replacement' : 'approved',
+            'profile_photo_review_note' => $needsReplacement ? $validated['reason'] : null,
+            'profile_photo_reviewed_by' => $request->user()->id,
+            'profile_photo_reviewed_at' => now(),
+            'profile_photo_review_application_id' => $application->id,
+        ]);
+
+        $providerOwner = $request->user()->providerOrganizationOwner();
+        $providerName = $providerOwner->provider_name ?: $providerOwner->name;
+        PortalNotification::updateOrCreate(
+            [
+                'user_id' => $applicant->id,
+                'deduplication_key' => "profile-photo-review:{$applicant->id}",
+            ],
+            [
+                'type' => 'profile_photo_review',
+                'title' => $needsReplacement ? 'Replace your applicant photo' : 'Applicant photo reviewed',
+                'message' => $needsReplacement
+                    ? "{$providerName} requested a new 2x2 photo for your {$application->scholarship->title} application. Reason: {$validated['reason']}"
+                    : "{$providerName} checked your applicant photo for {$application->scholarship->title}.",
+                'action_url' => $needsReplacement ? '/dashboard/profile?section=personal&photo=replace' : route('dashboard.applications.show', $application, false),
+                'read_at' => null,
+            ],
+        );
+
+        ActivityLog::record(
+            $request->user(),
+            $needsReplacement ? 'applicant_profile_photo_replacement_requested' : 'applicant_profile_photo_approved',
+            $needsReplacement
+                ? "{$request->user()->name} requested a replacement 2x2 photo for application #{$application->id}."
+                : "{$request->user()->name} approved the 2x2 photo for application #{$application->id}.",
+            $request,
+            [
+                'application_id' => $application->id,
+                'applicant_id' => $applicant->id,
+                'photo_review_status' => $profile->profile_photo_review_status,
+                'reason' => $profile->profile_photo_review_note,
+            ],
+        );
+
+        return response()->json([
+            'message' => $needsReplacement
+                ? 'The applicant was asked to upload a new 2x2 photo.'
+                : 'The applicant photo was marked as acceptable.',
+            'application' => $this->freshApplicationPayload($application),
+        ]);
+    }
+
     public function verifyApplicantProfile(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -3667,7 +3756,7 @@ class ProviderController extends Controller
                     'type' => 'recipient_monitoring_request',
                     'title' => 'Academic progress update requested',
                     'message' => "{$scholarship->title}: upload your {$cycle->title} grade record by {$cycle->due_at->format('M d, Y')}.",
-                    'action_url' => route('dashboard.applications.show', $application, false).'?section=monitoring',
+                    'action_url' => route('dashboard.monitoring.show', $application, false),
                     'read_at' => null,
                 ]);
             }
@@ -3762,7 +3851,7 @@ class ProviderController extends Controller
             'type' => 'recipient_monitoring_review',
             'title' => $decisionLabels[$validated['decision']],
             'message' => $decisionMessages[$validated['decision']],
-            'action_url' => route('dashboard.applications.show', $application, false).'?section=monitoring',
+            'action_url' => route('dashboard.monitoring.show', $application, false),
             'read_at' => null,
         ]);
 
@@ -3867,7 +3956,7 @@ class ProviderController extends Controller
                     'type' => 'recipient_benefit_release',
                     'title' => 'Benefit release scheduled',
                     'message' => "{$scholarship->title}: {$release->title} is scheduled for {$release->release_at->format('M d, Y h:i A')}.",
-                    'action_url' => route('dashboard.applications.show', $application, false).'?section=monitoring',
+                    'action_url' => route('dashboard.monitoring.show', $application, false),
                     'read_at' => null,
                 ]);
             }
@@ -3993,7 +4082,7 @@ class ProviderController extends Controller
             'type' => 'recipient_benefit_release_result',
             'title' => $statusLabels[$status],
             'message' => "{$release->title}: the provider recorded your status as {$statusLabels[$status]}.",
-            'action_url' => route('dashboard.applications.show', $record->application, false).'?section=monitoring',
+            'action_url' => route('dashboard.monitoring.show', $record->application, false),
             'read_at' => null,
         ]);
 
@@ -4235,7 +4324,7 @@ class ProviderController extends Controller
             'type' => 'recipient_support_decision',
             'title' => $decisionLabels[$validated['decision']],
             'message' => "{$application->scholarship->title}: {$decisionLabels[$validated['decision']]} effective {$decision->effective_on->format('M d, Y')}.",
-            'action_url' => route('dashboard.applications.show', $application, false).'?section=monitoring',
+            'action_url' => route('dashboard.monitoring.show', $application, false),
             'deduplication_key' => "recipient-support-decision:{$decision->id}",
         ]);
         ActivityLog::record(
@@ -5757,6 +5846,9 @@ class ProviderController extends Controller
             'profile_photo_url' => $profile?->profile_photo_path
                 ? route('provider.applications.profile-photo.view', $application)
                 : null,
+            'profile_photo_review_status' => $profile?->profile_photo_review_status,
+            'profile_photo_review_note' => $profile?->profile_photo_review_note,
+            'profile_photo_reviewed_at' => $profile?->profile_photo_reviewed_at?->format('M d, Y h:i A'),
         ];
 
         if (! $includeProfileDetails) {

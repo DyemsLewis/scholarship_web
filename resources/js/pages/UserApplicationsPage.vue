@@ -46,7 +46,7 @@ const previewDocument = ref(null);
 const applicationUrlParams = new URLSearchParams(window.location.search);
 const requestedScholarshipId = applicationUrlParams.get('scholarship');
 const requestedApplicationView = applicationUrlParams.get('view');
-const applicationView = ['active', 'action', 'completed', 'monitoring'].includes(requestedApplicationView)
+const applicationView = ['active', 'action', 'completed'].includes(requestedApplicationView)
     ? requestedApplicationView
     : 'active';
 const applicationViewContent = {
@@ -73,14 +73,6 @@ const applicationViewContent = {
         sectionTitle: 'Application history',
         emptyTitle: 'No completed applications',
         emptyText: 'Applications appear here after their selection workflow is closed.',
-    },
-    monitoring: {
-        eyebrow: 'Recipient monitoring',
-        title: 'Maintain your scholarship support',
-        description: 'Open awarded scholarships to submit academic updates and review benefit records.',
-        sectionTitle: 'Scholarships under monitoring',
-        emptyTitle: 'No recipient monitoring records',
-        emptyText: 'Monitoring becomes available after a provider selects you and activates recipient requirements.',
     },
 }[applicationView];
 
@@ -226,10 +218,6 @@ const visibleApplicationQueue = computed(() => applicationQueue.value.filter((ap
 
     if (applicationView === 'completed') {
         return Boolean(application.workflow?.is_closed) && !applicationIsActive(application);
-    }
-
-    if (applicationView === 'monitoring') {
-        return Boolean(application.recipient_monitoring?.eligible);
     }
 
     return applicationIsActive(application);
@@ -462,8 +450,19 @@ function applicationCardAction(application) {
         return {
             eyebrow: 'Monitoring update',
             title: `${pendingMonitoring} requirement${pendingMonitoring === 1 ? '' : 's'} ready for submission`,
-            description: 'Open the scholarship record to submit the requested academic update.',
+            description: 'Open Monitoring to submit the requested academic update.',
             icon: 'fa-solid fa-graduation-cap',
+        };
+    }
+
+    const schedule = primarySchedule(application);
+
+    if (!application?.workflow?.is_closed && schedule?.status === 'scheduled') {
+        return {
+            eyebrow: 'Upcoming activity',
+            title: schedule.title || `${scheduleTypeLabel(schedule.type)} scheduled`,
+            description: `Review the instructions for ${schedule.scheduled_label || 'the scheduled date'}.`,
+            icon: scheduleTypeIcon(schedule.type),
         };
     }
 
@@ -471,7 +470,7 @@ function applicationCardAction(application) {
         return {
             eyebrow: 'Recipient support',
             title: application?.recipient_monitoring?.support_status_label || 'Scholarship support is active',
-            description: 'Review monitoring updates, benefit releases, and provider notices in your scholarship record.',
+            description: 'Review requirements, benefit releases, and provider notices in Monitoring.',
             icon: 'fa-solid fa-award',
         };
     }
@@ -487,6 +486,28 @@ function applicationCardAction(application) {
         description: nextAction.description || '',
         icon: application?.workflow?.is_closed ? 'fa-solid fa-flag-checkered' : 'fa-solid fa-arrow-right',
     };
+}
+
+function applicationActionUrl(application) {
+    if (application?.recipient_monitoring?.eligible
+        && (Number(application.recipient_monitoring.pending_count ?? 0) > 0 || applicationHasOngoingSupport(application))) {
+        return `/dashboard/monitoring/${application.id}`;
+    }
+
+    const url = new URL(
+        application?.detail_url || `/dashboard/applications/${application?.id}`,
+        window.location.origin,
+    );
+
+    if (application?.recipient_agreement?.can_respond || application?.requires_student_response) {
+        url.searchParams.set('action', 'agreement');
+    } else if (!application?.workflow?.is_closed && primarySchedule(application)?.status === 'scheduled') {
+        url.searchParams.set('section', 'schedule');
+    } else if (application?.correction_status === 'requested') {
+        url.searchParams.set('section', 'overview');
+    }
+
+    return `${url.pathname}${url.search}`;
 }
 
 function applicationStageLabel(application) {
@@ -1447,9 +1468,7 @@ watch(selectedScholarship, (scholarship) => {
                     <section v-if="activeWorkspace === 'applications'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                         <div class="flex flex-col gap-4 border-b border-slate-200 bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
                             <div>
-                                <p class="student-kicker">
-                                    Application tracker
-                                </p>
+                                <p class="student-kicker">What happens next</p>
                                 <h3 class="mt-1 text-xl font-bold text-slate-950">
                                     {{ applicationViewContent.sectionTitle }}
                                 </h3>
@@ -1535,9 +1554,14 @@ watch(selectedScholarship, (scholarship) => {
                                                 <i :class="applicationCardAction(application).icon" aria-hidden="true"></i>
                                             </span>
                                             <div class="min-w-0">
-                                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">
-                                                    {{ applicationCardAction(application).eyebrow }}
-                                                </p>
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">
+                                                        {{ applicationCardAction(application).eyebrow }}
+                                                    </p>
+                                                    <span :class="['rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide', applicationNeedsAction(application) ? 'bg-amber-100 text-amber-800' : application.workflow?.is_closed ? 'bg-slate-100 text-slate-600' : 'bg-sky-100 text-sky-800']">
+                                                        {{ applicationNeedsAction(application) ? 'Your action' : application.workflow?.is_closed ? 'Complete' : 'No action needed' }}
+                                                    </span>
+                                                </div>
                                                 <p class="mt-1 text-sm font-bold text-slate-950">
                                                     {{ applicationCardAction(application).title }}
                                                 </p>
@@ -1547,7 +1571,7 @@ watch(selectedScholarship, (scholarship) => {
                                             </div>
                                         </div>
                                         <a
-                                            :href="application.detail_url || `/dashboard/applications/${application.id}`"
+                                            :href="applicationActionUrl(application)"
                                             class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
                                         >
                                             {{ applicationActionLabel(application) }}
@@ -1563,7 +1587,7 @@ watch(selectedScholarship, (scholarship) => {
                                             <strong class="ml-1 text-slate-800">{{ applicationStageLabel(application) }}</strong>
                                         </span>
                                         <span class="inline-flex shrink-0 items-center gap-2 font-bold text-slate-700">
-                                            View flow
+                                            Application process
                                             <i class="fa-solid fa-chevron-down text-[10px] text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
                                         </span>
                                     </summary>

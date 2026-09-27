@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\MobileApiToken;
+use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -168,5 +169,100 @@ class ApplicantProfilePhotoTest extends TestCase
 
         $this->actingAs($admin)->get($photoUrl)->assertOk();
         $this->actingAs($provider)->get($photoUrl)->assertForbidden();
+    }
+
+    public function test_admin_can_request_and_approve_a_replacement_2x2_photo(): void
+    {
+        Storage::fake('local');
+        $admin = User::factory()->create(['role' => 'admin']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/photo', [
+                'profile_photo' => UploadedFile::fake()->image('blurred-photo.jpg', 600, 600),
+            ])
+            ->assertOk();
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.applicants.profile-photo-review', $applicant), [
+                'action' => 'request_replacement',
+                'reason' => 'The image is blurred and the face is not clear.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('applicant.profile_photo_review_status', 'needs_replacement');
+
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'profile_photo_review_status' => 'needs_replacement',
+            'profile_photo_reviewed_by' => $admin->id,
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $applicant->id,
+            'type' => 'profile_photo_review',
+            'title' => 'Replace your applicant photo',
+        ]);
+
+        $this->actingAs($applicant)
+            ->post('/dashboard/profile/photo', [
+                'profile_photo' => UploadedFile::fake()->image('clear-photo.jpg', 800, 800),
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.profile_photo_review_status', 'resubmitted');
+
+        $this->assertTrue(PortalNotification::query()
+            ->where('user_id', $admin->id)
+            ->where('type', 'profile_photo_resubmitted')
+            ->exists());
+
+        $this->actingAs($admin)
+            ->patchJson(route('admin.applicants.profile-photo-review', $applicant), [
+                'action' => 'approve',
+            ])
+            ->assertOk()
+            ->assertJsonPath('applicant.profile_photo_review_status', 'approved');
+    }
+
+    public function test_only_the_application_provider_can_request_a_replacement_2x2_photo(): void
+    {
+        Storage::fake('local');
+        $provider = User::factory()->create(['role' => 'provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Photo Review Scholarship',
+            'category' => 'Financial assistance',
+            'description' => 'Tests a provider photo replacement request.',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($otherProvider)
+            ->patchJson(route('provider.applications.profile-photo-review', $application), [
+                'action' => 'request_replacement',
+                'reason' => 'Please provide a clear photo.',
+            ])
+            ->assertForbidden();
+
+        $this->actingAs($provider)
+            ->patchJson(route('provider.applications.profile-photo-review', $application), [
+                'action' => 'request_replacement',
+                'reason' => 'Please provide a recent, clear, square photo.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.applicant.profile_photo_review_status', 'needs_replacement');
+
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'profile_photo_review_status' => 'needs_replacement',
+            'profile_photo_reviewed_by' => $provider->id,
+            'profile_photo_review_application_id' => $application->id,
+        ]);
     }
 }

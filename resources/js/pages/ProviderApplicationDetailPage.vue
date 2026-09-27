@@ -1,10 +1,11 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
+import ApplicantReviewIdentityCard from '../components/ApplicantReviewIdentityCard.vue';
 import ApplicantProfileProofModal from '../components/ApplicantProfileProofModal.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
-import PreScreeningHandoffRecord from '../components/PreScreeningHandoffRecord.vue';
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
+import ProviderProfileEvidencePanel from '../components/ProviderProfileEvidencePanel.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
@@ -32,6 +33,7 @@ const validSections = ['applicant', 'eligibility', 'documents', 'decision', 'his
 const activeSection = ref(validSections.includes(normalizedRequestedSection)
     ? normalizedRequestedSection
     : 'applicant');
+const activeApplicantView = ref('profile');
 const showDssDetails = ref(false);
 const reviewForm = ref(emptyReviewForm());
 const selectedDocument = ref(null);
@@ -54,6 +56,8 @@ const showBenefitTerminationForm = ref(false);
 const isStoppingBenefits = ref(false);
 const benefitTerminationForm = ref({ reason: '', explanation: '' });
 const isVerifyingAcademicRecord = ref(false);
+const isReviewingPhoto = ref(false);
+const photoReviewError = ref('');
 const reviewedAcademicScale = ref('');
 const reviewedAcademicResult = ref('');
 const {
@@ -72,6 +76,11 @@ const primaryDetailSections = [
 const secondaryDetailSections = [
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ];
+const applicantDetailViews = [
+    { key: 'profile', label: 'Profile', icon: 'fa-solid fa-graduation-cap' },
+    { key: 'background', label: 'Background', icon: 'fa-solid fa-house-user' },
+    { key: 'responses', label: 'Responses', icon: 'fa-solid fa-message' },
+];
 const scheduleTypeCatalog = [
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments' },
@@ -81,12 +90,6 @@ const scheduleModeOptions = [
     { value: 'online', label: 'Online' },
     { value: 'hybrid', label: 'Hybrid' },
     { value: 'provider_managed', label: 'Provider managed' },
-];
-const academicScaleOptions = [
-    { value: 'percentage', label: 'General average / percentage' },
-    { value: 'grade_point', label: 'GWA / GPA grade point' },
-    { value: 'pass_fail', label: 'Pass/fail or competency based' },
-    { value: 'other', label: 'Other grading scale' },
 ];
 const correctionTargetOptions = [
     { value: 'profile', label: 'Profile information', icon: 'fa-solid fa-user-pen' },
@@ -190,16 +193,6 @@ const dssComparison = computed(() => application.value?.dss_explanation?.compari
     manual_review: 0,
     not_applicable: 0,
 });
-const dssComparisonTotal = computed(() => [
-    dssComparison.value.met,
-    dssComparison.value.not_met,
-    dssComparison.value.missing,
-    dssComparison.value.manual_review,
-    dssComparison.value.not_applicable,
-].reduce((total, count) => total + Number(count ?? 0), 0));
-const dssAttentionCount = computed(() => Number(dssComparison.value.not_met ?? 0)
-    + Number(dssComparison.value.missing ?? 0)
-    + Number(dssComparison.value.manual_review ?? 0));
 const rubricReview = computed(() => application.value?.rubric_review ?? { criteria: [], completed: 0, total_criteria: 0 });
 const rubricDraftSummary = computed(() => {
     const criteria = rubricReview.value.criteria ?? [];
@@ -328,12 +321,6 @@ const canVerifyAcademicRecord = computed(() => (
         && Boolean(academicProfileProof.value)
         && (academicScanReady.value || reviewedAcademicResultReady.value)
 ));
-const applicantInitials = computed(() => String(application.value?.applicant?.name ?? 'Applicant')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join('') || 'AP');
 const hasGuardianDetails = computed(() => {
     const applicant = application.value?.applicant;
 
@@ -596,16 +583,6 @@ const applicationFileRows = computed(() => {
 
     return rows;
 });
-const providerContractSections = computed(() => {
-    const scholarship = application.value?.scholarship ?? {};
-
-    return [
-        { label: 'Possible service commitment', value: scholarship.return_service_contract },
-        { label: 'Commitment preview', value: scholarship.other_contract_terms },
-        { label: 'Possible renewal requirement', value: scholarship.renewal_policy },
-    ].filter((section) => section.value && String(section.value).trim());
-});
-
 function emptyReviewForm() {
     return {
         status: 'submitted',
@@ -785,42 +762,6 @@ function profileVerificationLabel(status) {
     }[status] ?? labelFromKey(status || 'unsubmitted');
 }
 
-function academicScanStatusLabel(status) {
-    return {
-        succeeded: 'Result extracted',
-        needs_review: 'Result not found',
-        failed: 'Scan failed',
-        unavailable: 'Scanner unavailable',
-        not_requested: 'Not scanned',
-    }[status] ?? 'Not scanned';
-}
-
-function academicScanStatusClass(status) {
-    if (status === 'succeeded') {
-        return 'bg-sky-100 text-sky-800';
-    }
-
-    if (['failed', 'needs_review'].includes(status)) {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
-function extractedAcademicResult(proof) {
-    if (proof?.ocr_grading_scale === 'pass_fail') {
-        return 'Pass / competency result';
-    }
-
-    if (proof?.ocr_grade !== null && proof?.ocr_grade !== undefined) {
-        return proof.ocr_grading_scale === 'percentage'
-            ? `${proof.ocr_grade}%`
-            : `${proof.ocr_grade} GWA / GPA`;
-    }
-
-    return 'No result extracted';
-}
-
 function evidenceLabel(status) {
     return {
         verified: 'Verified',
@@ -868,6 +809,7 @@ function resetCorrectionForm() {
     showCorrectionForm.value = false;
     correctionMessage.value = '';
     correctionTargets.value = [];
+    errorMessage.value = '';
 }
 
 function documentRequirements(requirements) {
@@ -913,6 +855,7 @@ function applyApplication(payload) {
 function resetBenefitTerminationForm() {
     showBenefitTerminationForm.value = false;
     benefitTerminationForm.value = { reason: '', explanation: '' };
+    errorMessage.value = '';
 }
 
 function decisionReasonLabel(reason) {
@@ -983,6 +926,35 @@ async function verifyApplicantAcademicRecord() {
         });
     } finally {
         isVerifyingAcademicRecord.value = false;
+    }
+}
+
+async function updatePhotoReview(action, reason = '') {
+    if (!application.value || isReviewingPhoto.value) {
+        return;
+    }
+
+    isReviewingPhoto.value = true;
+    photoReviewError.value = '';
+
+    try {
+        const response = await window.axios.patch(
+            `/provider/applications/${application.value.id}/profile-photo-review`,
+            { action, reason: reason || null },
+            { portalToast: false },
+        );
+
+        applyApplication(response.data.application);
+        showPortalToast({
+            title: action === 'approve' ? 'Photo checked' : 'Replacement requested',
+            message: response.data.message,
+        });
+    } catch (error) {
+        photoReviewError.value = error.response?.data?.errors?.reason?.[0]
+            ?? error.response?.data?.message
+            ?? 'Unable to update the 2x2 photo review.';
+    } finally {
+        isReviewingPhoto.value = false;
     }
 }
 
@@ -1337,59 +1309,29 @@ onMounted(loadApplication);
                         {{ application?.scholarship?.title || 'Program applicants' }}
                     </a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="truncate font-semibold text-slate-950">{{ application?.applicant?.name || 'Applicant record' }}</span>
+                    <span class="truncate font-semibold text-slate-950">Review application</span>
                 </nav>
 
                 <TaskPageHeader
                     theme="provider"
-                    eyebrow="Applicant review"
-                    :title="application?.applicant?.name || 'Applicant record'"
-                    :description="application?.scholarship?.title || 'Scholarship program'"
+                    eyebrow="Applications"
+                    title="Review record"
                     icon="fa-solid fa-user-check"
                 >
-                    <template v-if="application" #meta>
-                        <span>{{ application.applicant?.email || 'Email not provided' }}</span>
-                        <span>Submitted {{ application.submitted_at || 'recently' }}</span>
-                    </template>
                     <template v-if="application" #actions>
-                        <div class="flex flex-col items-start gap-2 lg:items-end">
-                            <div v-if="applicationNavigation.total > 1" class="flex items-center gap-2 rounded-md border border-slate-200 bg-white p-1 shadow-sm">
-                                <a
-                                    v-if="applicationNavigation.previous_application"
-                                    :href="applicationNavigationUrl(applicationNavigation.previous_application)"
-                                    class="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-                                    aria-label="Previous applicant"
-                                >
-                                    <i class="fa-solid fa-chevron-left text-xs" aria-hidden="true"></i>
-                                </a>
-                                <span v-else class="h-8 w-8" aria-hidden="true"></span>
-                                <span class="min-w-20 text-center text-xs font-bold text-slate-600">
-                                    {{ applicationNavigation.position }} of {{ applicationNavigation.total }}
-                                </span>
-                                <a
-                                    v-if="applicationNavigation.next_application"
-                                    :href="applicationNavigationUrl(applicationNavigation.next_application)"
-                                    class="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-                                    aria-label="Next applicant"
-                                >
-                                    <i class="fa-solid fa-chevron-right text-xs" aria-hidden="true"></i>
-                                </a>
-                                <span v-else class="h-8 w-8" aria-hidden="true"></span>
-                            </div>
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
-                                    {{ workflow.application_state_label || statusLabel(application.status) }}
-                                </span>
-                                <button
-                                    v-if="activeSection !== 'decision'"
-                                    type="button"
-                                    class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                    @click="activeSection = 'decision'"
-                                >
-                                    Record decision
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </button>
-                            </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
+                                {{ workflow.application_state_label || statusLabel(application.status) }}
+                            </span>
+                            <button
+                                v-if="activeSection !== 'decision'"
+                                type="button"
+                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                @click="activeSection = 'decision'"
+                            >
+                                Record decision
+                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                            </button>
                         </div>
                     </template>
                 </TaskPageHeader>
@@ -1407,17 +1349,22 @@ onMounted(loadApplication);
                         {{ errorMessage }}
                     </p>
                     <section class="provider-panel overflow-hidden">
-                        <div class="border-b border-slate-200 px-4 py-3">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Review steps</p>
+                            <div v-if="applicationNavigation.total > 1" class="flex items-center gap-1 text-xs font-bold text-slate-600">
+                                <a v-if="applicationNavigation.previous_application" :href="applicationNavigationUrl(applicationNavigation.previous_application)" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 bg-white hover:bg-slate-100" aria-label="Previous applicant"><i class="fa-solid fa-chevron-left text-[10px]" aria-hidden="true"></i></a>
+                                <span class="px-2">{{ applicationNavigation.position }} of {{ applicationNavigation.total }}</span>
+                                <a v-if="applicationNavigation.next_application" :href="applicationNavigationUrl(applicationNavigation.next_application)" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 bg-white hover:bg-slate-100" aria-label="Next applicant"><i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i></a>
+                            </div>
                         </div>
-                        <nav class="grid gap-1 p-1 sm:grid-cols-2 xl:grid-cols-4" aria-label="Applicant review steps">
+                        <nav class="flex gap-1 overflow-x-auto p-1" aria-label="Applicant review steps">
                             <button
                                 v-for="(section, index) in primaryDetailSections"
                                 :key="section.key"
                                 type="button"
                                 :aria-current="activeSection === section.key ? 'step' : undefined"
                                 :class="[
-                                    'flex min-w-0 items-center gap-2.5 rounded-md px-3 py-2.5 text-left transition',
+                                    'flex min-w-40 flex-1 items-center gap-2.5 rounded-md px-3 py-2.5 text-left transition',
                                     activeSection === section.key
                                         ? 'bg-slate-950 text-white'
                                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
@@ -1524,6 +1471,20 @@ onMounted(loadApplication);
                                     </article>
                                 </div>
                                 <p v-else class="p-5 text-sm leading-6 text-slate-600">This program does not have structured eligibility rules to compare.</p>
+
+                                <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <p class="text-sm leading-6 text-slate-600">
+                                        {{ application.dss_explanation?.next_action || 'Review differences and supporting documents before deciding.' }}
+                                    </p>
+                                    <button
+                                        type="button"
+                                        class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-100"
+                                        @click="showDssDetails = true"
+                                    >
+                                        View calculation
+                                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-amber-700" aria-hidden="true"></i>
+                                    </button>
+                                </div>
                             </section>
 
                             <section v-if="activeSection === 'eligibility' && application.exam" class="provider-panel order-3 overflow-hidden">
@@ -1676,50 +1637,11 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div v-if="showCorrectionForm" class="mt-5 rounded-md border border-slate-300 bg-slate-50 p-4">
-                                    <fieldset>
-                                        <legend :class="labelClass">What needs attention?</legend>
-                                        <div class="grid gap-2 sm:grid-cols-2">
-                                            <label v-for="option in correctionTargetOptions" :key="option.value" class="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:border-slate-400">
-                                                <input v-model="correctionTargets" type="checkbox" :value="option.value" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400">
-                                                <i :class="option.icon" class="w-4 text-center text-slate-400" aria-hidden="true"></i>
-                                                <span>{{ option.label }}</span>
-                                            </label>
-                                        </div>
-                                    </fieldset>
-                                    <label :class="[labelClass, 'mt-4']">What should the applicant correct?</label>
-                                    <textarea
-                                        v-model="correctionMessage"
-                                        rows="3"
-                                        maxlength="1500"
-                                        placeholder="Example: Replace the unreadable report card and update your current grade level."
-                                        :class="inputClass"
-                                    ></textarea>
-                                    <div class="mt-3 flex flex-wrap gap-2">
-                                        <button
-                                            type="button"
-                                            :disabled="isHandlingCorrection"
-                                            class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                                            @click="requestApplicationCorrection"
-                                        >
-                                            Send correction request
-                                        </button>
-                                        <button
-                                            type="button"
-                                            :disabled="isHandlingCorrection"
-                                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60"
-                                            @click="resetCorrectionForm"
-                                        >
-                                            Cancel
-                                        </button>
-                                    </div>
-                                </div>
-
                                 <div v-if="!postDecisionSummary" class="mt-5">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Available actions</p>
                                         <button
-                                            v-if="canRequestCorrection && !showCorrectionForm"
+                                            v-if="canRequestCorrection"
                                             type="button"
                                             class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
                                             @click="showCorrectionForm = true"
@@ -1756,14 +1678,14 @@ onMounted(loadApplication);
                                             <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                                         </a>
                                     </div>
-                                    <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-3 md:grid-cols-2">
+                                    <div v-if="suggestedReviewActions.length" class="mt-3 grid gap-2">
                                         <button
                                             v-for="action in suggestedReviewActions"
                                             :key="action.key"
                                             type="button"
                                             :disabled="action.blocked"
                                             :class="[
-                                                'group flex min-h-24 flex-col rounded-md border p-4 text-left transition',
+                                                'group flex items-center gap-3 rounded-md border p-3 text-left transition',
                                                 action.blocked
                                                     ? 'cursor-not-allowed border-slate-200 bg-slate-100 opacity-60'
                                                     : isSelectedReviewAction(action)
@@ -1790,11 +1712,13 @@ onMounted(loadApplication);
                                             >
                                                 <i :class="action.icon" aria-hidden="true"></i>
                                             </span>
-                                            <span :class="['mt-3 font-bold', isSelectedReviewAction(action) ? 'text-white' : 'text-slate-950']">
-                                                {{ action.label }}
-                                            </span>
-                                            <span :class="['mt-1 text-xs leading-5', isSelectedReviewAction(action) ? 'text-slate-300' : 'text-slate-600']">
-                                                {{ action.description }}
+                                            <span class="min-w-0">
+                                                <span :class="['block font-bold', isSelectedReviewAction(action) ? 'text-white' : 'text-slate-950']">
+                                                    {{ action.label }}
+                                                </span>
+                                                <span :class="['mt-0.5 block text-xs leading-5', isSelectedReviewAction(action) ? 'text-slate-300' : 'text-slate-600']">
+                                                    {{ action.description }}
+                                                </span>
                                             </span>
                                         </button>
                                     </div>
@@ -1851,7 +1775,7 @@ onMounted(loadApplication);
                                             </div>
                                         </div>
                                         <button
-                                            v-if="canStopBenefits && !showBenefitTerminationForm"
+                                            v-if="canStopBenefits"
                                             type="button"
                                             class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
                                             @click="showBenefitTerminationForm = true"
@@ -1861,49 +1785,6 @@ onMounted(loadApplication);
                                         </button>
                                     </div>
 
-                                    <div v-if="canStopBenefits && showBenefitTerminationForm" class="grid gap-4 border-t border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
-                                        <div class="md:col-span-2">
-                                            <p class="font-bold text-slate-950">Stop future recipient support</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-600">Provide a clear reason before notifying the applicant. Benefits already released will remain in the record.</p>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass">Reason <span class="text-rose-600">*</span></label>
-                                            <select v-model="benefitTerminationForm.reason" :class="inputClass">
-                                                <option value="">Select a reason</option>
-                                                <option v-for="option in benefitTerminationReasonOptions" :key="option.value" :value="option.value">
-                                                    {{ option.label }}
-                                                </option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass">Explanation for the applicant <span class="text-rose-600">*</span></label>
-                                            <textarea
-                                                v-model="benefitTerminationForm.explanation"
-                                                rows="3"
-                                                maxlength="2000"
-                                                placeholder="Explain the procedure or condition that was not followed."
-                                                :class="inputClass"
-                                            ></textarea>
-                                        </div>
-                                        <div class="flex flex-wrap gap-2 md:col-span-2">
-                                            <button
-                                                type="button"
-                                                :disabled="isStoppingBenefits"
-                                                class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-rose-800 disabled:opacity-60"
-                                                @click="stopBenefits"
-                                            >
-                                                {{ isStoppingBenefits ? 'Saving...' : 'Confirm and notify applicant' }}
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="isStoppingBenefits"
-                                                class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                                                @click="resetBenefitTerminationForm"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
                                 </div>
 
                                 <div class="mt-5 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
@@ -2083,54 +1964,6 @@ onMounted(loadApplication);
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'eligibility'" class="provider-panel order-1 p-5">
-                                <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                    <div class="flex min-w-0 items-start gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                            <i class="fa-solid fa-scale-balanced" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Decision support</p>
-                                            <h3 class="mt-1 text-xl font-bold text-slate-950">Pre-screening guidance</h3>
-                                        </div>
-                                    </div>
-
-                                    <span class="inline-flex w-fit shrink-0 items-baseline gap-2 rounded-md bg-slate-950 px-3 py-2 text-white">
-                                        <strong class="text-xl leading-none">{{ application.dss_score ?? 0 }}%</strong>
-                                        <span class="text-xs font-semibold text-slate-300">
-                                            {{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}
-                                        </span>
-                                    </span>
-                                </div>
-
-                                <div class="mt-4 border-l-4 border-amber-400 bg-slate-50 px-4 py-3">
-                                    <p class="text-sm font-bold leading-6 text-slate-950">
-                                        {{ application.dss_explanation?.headline || application.dss_breakdown?.summary || 'The available application data was compared.' }}
-                                    </p>
-                                    <p class="mt-1 text-sm leading-5 text-slate-600">
-                                        {{ application.dss_explanation?.next_action || 'Review eligibility and supporting files before deciding.' }}
-                                    </p>
-                                </div>
-
-                                <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <p class="text-xs font-semibold text-slate-500">
-                                        {{ dssComparisonTotal }} checks summarized
-                                        <span aria-hidden="true"> | </span>
-                                        <strong :class="dssAttentionCount ? 'text-amber-700' : 'text-emerald-700'">
-                                            {{ dssAttentionCount ? `${dssAttentionCount} need review` : 'No differences found' }}
-                                        </strong>
-                                    </p>
-                                    <button
-                                        type="button"
-                                        class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
-                                        @click="showDssDetails = true"
-                                    >
-                                        View calculation
-                                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-amber-700" aria-hidden="true"></i>
-                                    </button>
-                                </div>
-                            </section>
-
                             <section v-if="activeSection === 'documents'" class="provider-panel p-5">
                                 <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
@@ -2214,6 +2047,24 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
+                            <ProviderProfileEvidencePanel
+                                v-if="activeSection === 'documents'"
+                                :proofs="applicantProfileProofs"
+                                :academic-proof="academicProfileProof"
+                                :scan-required="academicScanRequired"
+                                :scan-ready="academicScanReady"
+                                :profile-status="application.applicant?.profile_verification_status"
+                                :grading-scale="reviewedAcademicScale"
+                                :academic-result="reviewedAcademicResult"
+                                :result-is-numeric="reviewedAcademicResultIsNumeric"
+                                :can-verify="canVerifyAcademicRecord"
+                                :verifying="isVerifyingAcademicRecord"
+                                @update:grading-scale="reviewedAcademicScale = $event; errorMessage = ''"
+                                @update:academic-result="reviewedAcademicResult = $event; errorMessage = ''"
+                                @verify="verifyApplicantAcademicRecord"
+                                @open="openProfileProof"
+                            />
+
                             <section v-if="activeSection === 'history' && timeline.length" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Timeline
@@ -2256,91 +2107,47 @@ onMounted(loadApplication);
 
                         <aside
                             v-if="activeSection === 'applicant'"
-                            class="grid gap-5 lg:grid-cols-2"
+                            class="space-y-5"
                         >
-                            <PreScreeningHandoffRecord
-                                v-if="activeSection === 'applicant' && application.pre_screening_handoff"
-                                :record="application.pre_screening_handoff"
-                                class="lg:col-span-2"
+                            <ApplicantReviewIdentityCard
+                                v-if="activeSection === 'applicant'"
+                                :applicant="application.applicant"
+                                eyebrow="Provider applicant review"
+                                :status-label="profileVerificationLabel(application.applicant?.profile_verification_status)"
+                                :status-class="profileVerificationClass(application.applicant?.profile_verification_status)"
+                                :busy="isReviewingPhoto"
+                                :error="photoReviewError"
+                                @approve-photo="updatePhotoReview('approve')"
+                                @request-photo-replacement="updatePhotoReview('request_replacement', $event)"
                             />
 
-                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5 lg:col-span-2">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                    <div class="flex min-w-0 items-center gap-4">
-                                        <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-md bg-slate-950 text-lg font-bold text-white">
-                                            <img
-                                                v-if="application.applicant?.profile_photo_url"
-                                                :src="application.applicant.profile_photo_url"
-                                                :alt="`${application.applicant?.name || 'Applicant'} photo`"
-                                                class="h-full w-full object-cover"
-                                            >
-                                            <span v-else>{{ applicantInitials }}</span>
-                                        </div>
-                                        <div class="min-w-0">
-                                            <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Applicant profile</p>
-                                            <h3 class="mt-2 text-xl font-bold text-slate-950">{{ application.applicant?.name || 'Applicant' }}</h3>
-                                            <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-600">
-                                                <span>{{ application.applicant?.email || 'Email not provided' }}</span>
-                                                <span>{{ application.applicant?.contact_number || 'Contact not provided' }}</span>
-                                            </div>
-                                            <p v-if="application.applicant?.profile_photo_url" class="mt-2 text-xs leading-5 text-slate-500">
-                                                The applicant photo is for reviewer reference and is not academic evidence.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <span
-                                        :class="['w-fit rounded-md px-2.5 py-1.5 text-xs font-bold', profileVerificationClass(application.applicant?.profile_verification_status)]"
-                                        :title="application.applicant?.profile_verified_at ? `Verified ${application.applicant.profile_verified_at}` : ''"
-                                    >
-                                        {{ profileVerificationLabel(application.applicant?.profile_verification_status) }}
-                                    </span>
-                                </div>
+                            <nav class="provider-panel flex gap-1 overflow-x-auto p-1" aria-label="Applicant record sections">
+                                <button
+                                    v-for="view in applicantDetailViews"
+                                    :key="view.key"
+                                    type="button"
+                                    :aria-current="activeApplicantView === view.key ? 'page' : undefined"
+                                    :class="[
+                                        'inline-flex min-w-36 flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition',
+                                        activeApplicantView === view.key
+                                            ? 'bg-slate-950 text-white'
+                                            : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                                    ]"
+                                    @click="activeApplicantView = view.key"
+                                >
+                                    <i :class="view.icon" aria-hidden="true"></i>
+                                    {{ view.label }}
+                                </button>
+                            </nav>
 
-                                <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4 text-[11px] font-semibold text-slate-500">
-                                    <span>Evidence:</span>
-                                    <span class="rounded bg-slate-100 px-2 py-1 text-slate-600">Self-declared</span>
-                                    <span class="rounded bg-amber-100 px-2 py-1 text-amber-800">Document submitted</span>
-                                    <span class="rounded bg-emerald-100 px-2 py-1 text-emerald-800">Verified</span>
-                                </div>
-
-                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                                    <div class="rounded-md bg-slate-50 p-3">
-                                        <dt class="font-semibold text-slate-500">Birthdate</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.birthdate || 'Not provided' }}</dd>
-                                        <dd v-if="application.applicant?.age !== null && application.applicant?.age !== undefined" class="mt-1 text-xs text-slate-500">Age {{ application.applicant.age }}</dd>
-                                    </div>
-                                    <div class="rounded-md bg-slate-50 p-3">
-                                        <dt class="font-semibold text-slate-500">Gender</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.gender || 'not provided') }}</dd>
-                                    </div>
-                                    <div class="rounded-md bg-slate-50 p-3">
-                                        <dt class="font-semibold text-slate-500">Account managed by</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.account_managed_by || 'applicant') }}</dd>
-                                    </div>
-                                    <div class="rounded-md bg-slate-50 p-3">
-                                        <dt class="font-semibold text-slate-500">Citizenship</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.citizenship_status || 'not provided') }}</dd>
-                                    </div>
-                                    <div class="rounded-md bg-slate-50 p-3">
-                                        <dt class="font-semibold text-slate-500">Profile updated</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.profile_updated_at || 'Not available' }}</dd>
-                                    </div>
-                                </dl>
-
-                                <p v-if="application.applicant?.profile_verification_notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-                                    <span class="font-bold">Verification note:</span>
-                                    {{ application.applicant.profile_verification_notes }}
-                                </p>
-                            </section>
-
-                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5">
+                            <section v-if="activeApplicantView === 'profile'" class="provider-panel p-5">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Learning record</p>
                                     <span :class="['rounded px-2 py-1 text-[11px] font-bold', evidenceClass(academicEvidenceState)]">
                                         {{ evidenceLabel(academicEvidenceState) }}
                                     </span>
                                 </div>
-                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                                <dl class="mt-3 divide-y divide-slate-200 border-t border-slate-200 text-sm [&>div]:grid [&>div]:gap-1 [&>div]:py-3 sm:[&>div]:grid-cols-[13rem_minmax(0,1fr)] sm:[&>div]:items-start">
                                     <div>
                                         <dt class="font-semibold text-slate-500">Education level</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.education_level || 'not set') }}</dd>
@@ -2365,7 +2172,7 @@ onMounted(loadApplication);
                                         <dt class="font-semibold text-slate-500">Record period</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.academic_term || 'not provided') }}</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div>
                                         <dt class="font-semibold text-slate-500">School</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.school || 'Not provided' }}</dd>
                                         <dd class="mt-1 text-xs text-slate-500">{{ labelFromKey(application.applicant?.school_type || 'school type not provided') }}</dd>
@@ -2381,11 +2188,11 @@ onMounted(loadApplication);
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5">
+                            <section v-if="activeApplicantView === 'profile'" class="provider-panel p-5">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Household, location, and support
                                 </p>
-                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                                <dl class="mt-3 divide-y divide-slate-200 border-t border-slate-200 text-sm [&>div]:grid [&>div]:gap-1 [&>div]:py-3 sm:[&>div]:grid-cols-[13rem_minmax(0,1fr)] sm:[&>div]:items-start">
                                     <div>
                                         <dt class="font-semibold text-slate-500">Income bracket</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.income_bracket || 'Not provided' }}</dd>
@@ -2394,17 +2201,17 @@ onMounted(loadApplication);
                                         <dt class="font-semibold text-slate-500">Household size</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.household_size ?? 'Not provided' }}</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div>
                                         <dt class="font-semibold text-slate-500">Address</dt>
                                         <dd class="mt-1 leading-6 font-bold text-slate-950">{{ application.applicant?.address || application.applicant?.location || 'Not provided' }}</dd>
                                         <dd v-if="application.applicant?.address && application.applicant?.location" class="mt-1 text-xs text-slate-500">{{ application.applicant.location }}</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div>
                                         <dt class="font-semibold text-slate-500">Outside-platform scholarship declaration</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.applicant?.current_scholarship_status || 'not provided') }}</dd>
                                         <dd v-if="application.applicant?.current_scholarship_details" class="mt-1 text-xs leading-5 text-slate-500">{{ application.applicant.current_scholarship_details }}</dd>
                                     </div>
-                                    <div class="sm:col-span-2">
+                                    <div>
                                         <dt class="font-semibold text-slate-500">Other active awards detected by the portal</dt>
                                         <dd v-if="application.applicant?.platform_active_scholarships?.length" class="mt-2 flex flex-wrap gap-2">
                                             <span v-for="record in application.applicant.platform_active_scholarships" :key="record.application_id" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
@@ -2413,14 +2220,14 @@ onMounted(loadApplication);
                                         </dd>
                                         <dd v-else class="mt-1 font-bold text-slate-950">No other active portal award detected</dd>
                                     </div>
-                                    <div class="sm:col-span-2 rounded-md bg-slate-50 p-3">
+                                    <div>
                                         <dt class="font-semibold text-slate-500">Study support needed</dt>
                                         <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.support_needs || 'Not provided' }}</dd>
                                     </div>
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="provider-panel overflow-hidden lg:col-span-2">
+                            <section v-if="activeApplicantView === 'background'" class="provider-panel overflow-hidden">
                                 <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-5 py-4">
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Goals and involvement</p>
                                     <span class="rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">Applicant-declared</span>
@@ -2441,14 +2248,14 @@ onMounted(loadApplication);
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant' && hasGuardianDetails" class="provider-panel p-5 lg:col-span-2">
+                            <section v-if="activeApplicantView === 'background' && hasGuardianDetails" class="provider-panel p-5">
                                 <div class="flex flex-wrap items-center justify-between gap-2">
                                     <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Parent or guardian</p>
                                     <span v-if="application.applicant?.guardian_is_account_owner" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         Manages applicant account
                                     </span>
                                 </div>
-                                <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                <dl class="mt-3 divide-y divide-slate-200 border-t border-slate-200 text-sm [&>div]:grid [&>div]:gap-1 [&>div]:py-3 sm:[&>div]:grid-cols-[13rem_minmax(0,1fr)] sm:[&>div]:items-start">
                                     <div>
                                         <dt class="font-semibold text-slate-500">Name</dt>
                                         <dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.guardian_name || 'Not provided' }}</dd>
@@ -2468,7 +2275,7 @@ onMounted(loadApplication);
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant' && applicantApplicationAnswers.length" class="provider-panel overflow-hidden lg:col-span-2">
+                            <section v-if="activeApplicantView === 'responses' && applicantApplicationAnswers.length" class="provider-panel overflow-hidden">
                                 <div class="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Program questions</p>
@@ -2487,108 +2294,12 @@ onMounted(loadApplication);
                                 </dl>
                             </section>
 
-                            <section v-if="activeSection === 'applicant'" class="provider-panel overflow-hidden lg:col-span-2">
-                                <div class="flex flex-col gap-2 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Profile supporting evidence</p>
-                                        <p class="mt-2 text-sm leading-6 text-slate-600">
-                                            Academic, enrollment, and achievement evidence saved in the applicant profile, shown separately from this program's requirements.
-                                        </p>
-                                    </div>
-                                    <div class="flex shrink-0 flex-wrap items-center gap-2">
-                                        <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                                            {{ applicantProfileProofs.length ? `${applicantProfileProofs.length} record${applicantProfileProofs.length === 1 ? '' : 's'}` : 'No record' }}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <p v-if="academicScanRequired && academicProfileProof && !academicScanReady" class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm leading-6 text-amber-900">
-                                    The automatic scan did not find a usable result. Read the uploaded record and enter the verified result below, or ask for a clearer replacement.
-                                </p>
-
-                                <div v-if="academicProfileProof && application.applicant?.profile_verification_status === 'pending'" class="border-b border-slate-200 bg-slate-50 p-4 sm:px-5">
-                                    <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
-                                        <label class="block flex-1">
-                                            <span class="mb-1.5 block text-xs font-bold text-slate-700">Verified grading scale</span>
-                                            <select v-model="reviewedAcademicScale" :class="inputClass" @change="errorMessage = ''">
-                                                <option value="">Select grading scale</option>
-                                                <option v-for="option in academicScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </label>
-                                        <label v-if="reviewedAcademicResultIsNumeric" class="block flex-1">
-                                            <span class="mb-1.5 block text-xs font-bold text-slate-700">Result shown on record</span>
-                                            <input
-                                                v-model="reviewedAcademicResult"
-                                                type="number"
-                                                min="0.01"
-                                                :max="reviewedAcademicScale === 'grade_point' ? 5 : 100"
-                                                step="0.01"
-                                                :placeholder="reviewedAcademicScale === 'grade_point' ? 'Example: 1.75' : 'Example: 89.50'"
-                                                :class="inputClass"
-                                                @input="errorMessage = ''"
-                                            >
-                                        </label>
-                                        <div v-else-if="reviewedAcademicScale" class="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-600">
-                                            Confirm this non-numeric result directly from the uploaded record.
-                                        </div>
-                                        <button
-                                            v-if="canVerifyAcademicRecord"
-                                            type="button"
-                                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                            :disabled="isVerifyingAcademicRecord"
-                                            @click="verifyApplicantAcademicRecord"
-                                        >
-                                            <i class="fa-solid fa-shield-check" aria-hidden="true"></i>
-                                            {{ isVerifyingAcademicRecord ? 'Verifying...' : 'Verify result' }}
-                                        </button>
-                                    </div>
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">Correct the result only after comparing it with the uploaded academic record.</p>
-                                </div>
-
-                                <div v-if="applicantProfileProofs.length" class="divide-y divide-slate-200">
-                                    <article v-for="proof in applicantProfileProofs" :key="proof.id" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                                        <div class="flex min-w-0 items-start gap-3">
-                                            <span class="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-100 text-slate-700">
-                                                <i class="fa-solid fa-file-lines" aria-hidden="true"></i>
-                                            </span>
-                                            <div class="min-w-0">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <p class="font-bold text-slate-950">{{ labelFromKey(proof.document_type) }}</p>
-                                                    <span :class="['rounded px-2 py-1 text-[11px] font-bold', profileVerificationClass(proof.status)]">
-                                                        {{ labelFromKey(proof.status || 'submitted') }}
-                                                    </span>
-                                                </div>
-                                                <p class="mt-1 truncate text-xs text-slate-500">{{ proof.original_name }}</p>
-                                                <p class="mt-1 text-xs text-slate-500">{{ formatFileSize(proof.size) }} - {{ proof.uploaded_at || 'Date unavailable' }}</p>
-                                                <div v-if="academicScanRequired && proof.document_type === 'academic_record'" class="mt-2 flex flex-wrap items-center gap-2">
-                                                    <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', academicScanStatusClass(proof.ocr_status)]">
-                                                        {{ academicScanStatusLabel(proof.ocr_status) }}
-                                                    </span>
-                                                    <strong v-if="proof.ocr_status === 'succeeded'" class="text-xs text-slate-900">
-                                                        {{ extractedAcademicResult(proof) }}
-                                                    </strong>
-                                                    <p v-if="proof.ocr_message" class="basis-full text-xs leading-5 text-slate-500">{{ proof.ocr_message }}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
-                                            @click="openProfileProof(proof)"
-                                        >
-                                            <i class="fa-regular fa-eye" aria-hidden="true"></i>
-                                            View record
-                                        </button>
-                                    </article>
-                                </div>
-                                <p v-else class="p-5 text-sm leading-6 text-slate-600">
-                                    No profile evidence is available. Review only the documents required by this program.
-                                </p>
-                            </section>
-
-                            <section v-if="activeSection === 'applicant'" class="provider-panel p-5 lg:col-span-2">
+                            <section
+                                v-if="activeApplicantView === 'responses' && (application.notes || application.review_notes)"
+                                class="provider-panel p-5"
+                            >
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Notes</p>
-                                <p class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">{{ application.notes || 'No applicant note added.' }}</p>
+                                <p v-if="application.notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">{{ application.notes }}</p>
                                 <div v-if="application.review_notes" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
                                     <p class="font-semibold text-slate-700">Provider review note</p>
                                     <p class="mt-1 leading-6 text-slate-600">{{ application.review_notes }}</p>
@@ -2596,17 +2307,11 @@ onMounted(loadApplication);
                             </section>
 
                             <section
-                                v-if="activeSection === 'applicant' && providerContractSections.length"
-                                class="provider-panel p-5 lg:col-span-2"
+                                v-if="activeApplicantView === 'responses' && !applicantApplicationAnswers.length && !application.notes && !application.review_notes"
+                                class="provider-panel p-5"
                             >
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Possible recipient commitments</p>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">A preview only. Explain and confirm the final agreement with the applicant after acceptance.</p>
-                                <div class="mt-3 grid gap-2">
-                                    <div v-for="section in providerContractSections" :key="section.label" class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                                        <p class="font-bold text-slate-800">{{ section.label }}</p>
-                                        <p class="mt-1 whitespace-pre-line leading-6 text-slate-600">{{ section.value }}</p>
-                                    </div>
-                                </div>
+                                <p class="font-bold text-slate-950">No application responses</p>
+                                <p class="mt-1 text-sm text-slate-600">This program did not collect additional written responses.</p>
                             </section>
                         </aside>
                     </div>
@@ -2759,6 +2464,97 @@ onMounted(loadApplication);
                             @click="showDssDetails = false"
                         >
                             Close
+                        </button>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div
+                v-if="showCorrectionForm"
+                class="fixed inset-0 z-[2700] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5"
+                @click.self="resetCorrectionForm"
+                @keydown.esc="resetCorrectionForm"
+            >
+                <section class="w-full max-w-2xl overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="correction-modal-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Applicant update</p>
+                            <h2 id="correction-modal-title" class="mt-1 text-xl font-bold text-slate-950">Request a correction</h2>
+                            <p class="mt-1 text-sm text-slate-600">Choose the affected area and give one clear instruction.</p>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900" aria-label="Close correction request" @click="resetCorrectionForm">
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="grid gap-4 p-5">
+                        <fieldset>
+                            <legend :class="labelClass">What needs attention?</legend>
+                            <div class="grid gap-2 sm:grid-cols-2">
+                                <label v-for="option in correctionTargetOptions" :key="option.value" class="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 hover:border-slate-400">
+                                    <input v-model="correctionTargets" type="checkbox" :value="option.value" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400">
+                                    <i :class="option.icon" class="w-4 text-center text-slate-400" aria-hidden="true"></i>
+                                    <span>{{ option.label }}</span>
+                                </label>
+                            </div>
+                        </fieldset>
+                        <div>
+                            <label :class="labelClass">Instruction for the applicant</label>
+                            <textarea v-model="correctionMessage" rows="4" maxlength="1500" placeholder="Example: Replace the unreadable report card and update your current grade level." :class="inputClass"></textarea>
+                        </div>
+                        <p v-if="errorMessage" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{{ errorMessage }}</p>
+                    </div>
+
+                    <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+                        <button type="button" :disabled="isHandlingCorrection" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-60" @click="resetCorrectionForm">Cancel</button>
+                        <button type="button" :disabled="isHandlingCorrection" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60" @click="requestApplicationCorrection">
+                            {{ isHandlingCorrection ? 'Sending...' : 'Send request' }}
+                        </button>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div
+                v-if="showBenefitTerminationForm"
+                class="fixed inset-0 z-[2700] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5"
+                @click.self="resetBenefitTerminationForm"
+                @keydown.esc="resetBenefitTerminationForm"
+            >
+                <section class="w-full max-w-xl overflow-hidden rounded-lg bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="benefit-termination-modal-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-rose-700">Recipient support</p>
+                            <h2 id="benefit-termination-modal-title" class="mt-1 text-xl font-bold text-slate-950">Stop future benefits</h2>
+                            <p class="mt-1 text-sm text-slate-600">Released benefits stay in the record. The applicant will be notified.</p>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-900" aria-label="Close benefit termination" @click="resetBenefitTerminationForm">
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </header>
+
+                    <div class="grid gap-4 p-5">
+                        <div>
+                            <label :class="labelClass">Reason <span class="text-rose-600">*</span></label>
+                            <select v-model="benefitTerminationForm.reason" :class="inputClass">
+                                <option value="">Select a reason</option>
+                                <option v-for="option in benefitTerminationReasonOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label :class="labelClass">Explanation for the applicant <span class="text-rose-600">*</span></label>
+                            <textarea v-model="benefitTerminationForm.explanation" rows="4" maxlength="2000" placeholder="Explain the procedure or condition that was not followed." :class="inputClass"></textarea>
+                        </div>
+                        <p v-if="errorMessage" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{{ errorMessage }}</p>
+                    </div>
+
+                    <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">
+                        <button type="button" :disabled="isStoppingBenefits" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-60" @click="resetBenefitTerminationForm">Cancel</button>
+                        <button type="button" :disabled="isStoppingBenefits" class="rounded-md bg-rose-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-rose-800 disabled:opacity-60" @click="stopBenefits">
+                            {{ isStoppingBenefits ? 'Saving...' : 'Stop and notify' }}
                         </button>
                     </footer>
                 </section>

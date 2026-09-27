@@ -133,7 +133,7 @@ onMounted(loadTeam);
                             <span>Program access</span>
                             <span class="text-center">Actions</span>
                         </div>
-                        <article v-for="account in accounts" :key="account.id" class="portal-record-row grid gap-3 xl:grid-cols-[minmax(16rem,1.3fr)_minmax(15rem,1fr)_minmax(10rem,.65fr)_11rem] xl:items-center xl:px-5">
+                        <article v-for="account in accounts" :key="account.id" class="portal-record-row grid gap-3 xl:grid-cols-[minmax(16rem,1.3fr)_minmax(15rem,1fr)_minmax(10rem,.65fr)_11rem] xl:items-center xl:gap-4 xl:px-5">
                             <div class="flex min-w-0 items-center gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-900 text-[11px] font-black text-amber-200">
                                     {{ accountInitials(account.name) }}

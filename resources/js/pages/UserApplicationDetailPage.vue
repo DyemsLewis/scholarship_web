@@ -1,13 +1,12 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
-import ApplicantRecipientMonitoring from '../components/ApplicantRecipientMonitoring.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
-import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
+import { labelFromKey as formatKeyLabel } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 import { progressStateLabel } from '../support/selectionPlan';
 
@@ -118,49 +117,77 @@ const applicationFileRows = computed(() => {
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const eligibilityConditionResults = computed(() => application.value?.eligibility_breakdown?.condition_results ?? []);
 const dssDecisionNotice = computed(() => application.value?.dss_breakdown?.decision_notice ?? 'This score supports screening only. The scholarship provider makes the final decision.');
-const rubricReview = computed(() => application.value?.rubric_review ?? null);
-const rubricCriteria = computed(() => rubricReview.value?.criteria ?? []);
 const workflow = computed(() => application.value?.workflow ?? {});
 const recipientAgreement = computed(() => application.value?.recipient_agreement ?? null);
 const recipientMonitoring = computed(() => application.value?.recipient_monitoring ?? { eligible: false, cycles: [], pending_count: 0 });
 const formalApplicationHandoff = computed(() => application.value?.formal_application_handoff ?? null);
-const handoffRequiresOriginalDocuments = computed(() => formalApplicationHandoff.value?.mode === 'onsite'
-    && (formalApplicationHandoff.value?.requirements?.length ?? 0) > 0);
 const applicantNextActionDetails = computed(() => workflow.value.next_action
     ?? application.value?.status_progress?.next_action_details
     ?? {});
 const applicantNextStep = computed(() => {
+    if (application.value?.correction_status === 'requested') {
+        return 'Update the information requested by the provider';
+    }
+
     if (recipientAgreement.value?.can_respond) {
         return 'Review your recipient agreement';
     }
 
     if (recipientMonitoring.value.pending_count > 0) {
-        return 'Submit your academic progress update';
+        return recipientMonitoring.value.pending_count === 1
+            ? 'Submit your current scholarship requirement'
+            : `Complete ${recipientMonitoring.value.pending_count} scholarship requirements`;
     }
 
-    return application.value?.correction_status === 'requested'
-        ? 'Update the information requested by the provider'
-        : (workflow.value.next_action?.label ?? applicantNextAction(application.value));
+    if (filesNeedingAction.value.length) {
+        return filesNeedingAction.value.length === 1
+            ? 'Upload or replace one required file'
+            : `Upload or replace ${filesNeedingAction.value.length} required files`;
+    }
+
+    if (currentSchedule.value) {
+        return currentSchedule.value.title || `Attend your scheduled ${scheduleTypeLabel(currentSchedule.value.type).toLowerCase()}`;
+    }
+
+    if (applicationIsClosed.value) {
+        return recipientMonitoring.value.eligible
+            ? (recipientMonitoring.value.support_status_label || 'Scholarship support is active')
+            : 'Review the application result';
+    }
+
+    return workflow.value.next_action?.label ?? applicantNextAction(application.value);
 });
-const applicantNextActor = computed(() => recipientAgreement.value?.can_respond
-    ? 'You'
-    : recipientMonitoring.value.pending_count > 0
-        ? 'You'
-    : application.value?.correction_status === 'requested'
-        ? 'You'
-        : (applicantNextActionDetails.value.actor_label ?? 'Check application'));
+const applicantNextActor = computed(() => {
+    if (application.value?.correction_status === 'requested'
+        || recipientAgreement.value?.can_respond
+        || recipientMonitoring.value.pending_count > 0
+        || filesNeedingAction.value.length > 0
+        || Boolean(currentSchedule.value)) {
+        return 'You';
+    }
+
+    if (applicationIsClosed.value) {
+        return 'Status';
+    }
+
+    return applicantNextActionDetails.value.actor_label ?? 'Check application';
+});
 const applicantOwnsNextAction = computed(() => {
     const actor = String(applicantNextActor.value ?? '').toLowerCase();
 
     return actor === 'you' || actor.includes('applicant') || actor.includes('recipient');
 });
 const applicantNextEyebrow = computed(() => {
-    if (applicationIsClosed.value && !recipientAgreement.value?.can_respond) {
-        return 'Application complete';
-    }
-
     if (applicantOwnsNextAction.value) {
         return 'Your next action';
+    }
+
+    if (applicationIsClosed.value && recipientMonitoring.value.eligible) {
+        return 'Scholarship support';
+    }
+
+    if (applicationIsClosed.value) {
+        return 'Final result';
     }
 
     const actor = String(applicantNextActor.value ?? '');
@@ -170,6 +197,10 @@ const applicantNextEyebrow = computed(() => {
         : 'Next step';
 });
 const applicantNextDescription = computed(() => {
+    if (application.value?.correction_status === 'requested') {
+        return application.value.correction_message || 'Review the provider request, update the affected details or files, then send your response.';
+    }
+
     if (recipientAgreement.value?.can_respond) {
         return 'Confirm the support and responsibilities recorded when the provider selected you.';
     }
@@ -178,9 +209,21 @@ const applicantNextDescription = computed(() => {
         return 'Upload the grade record requested by the provider before the listed deadline.';
     }
 
-    return application.value?.correction_status === 'requested'
-        ? (application.value.correction_message || 'Review the provider request, update the affected profile details or files, then send your response.')
-        : (applicantNextActionDetails.value.description ?? 'Open the application for the latest instructions.');
+    if (filesNeedingAction.value.length) {
+        return 'Open Files to review the provider note and upload the required replacement.';
+    }
+
+    if (currentSchedule.value) {
+        return `Review the date, location, and instructions${currentScheduleDate.value ? ` for ${currentScheduleDate.value}` : ''}.`;
+    }
+
+    if (applicationIsClosed.value) {
+        return recipientMonitoring.value.eligible
+            ? 'Use Monitoring for ongoing requirements and benefit releases.'
+            : (application.value?.outcome_notes || 'The provider has recorded the final result for this application.');
+    }
+
+    return applicantNextActionDetails.value.description ?? 'No action is required from you right now. We will show the next instruction here when the application changes.';
 });
 const timeline = computed(() => application.value?.timeline ?? []);
 const schedules = computed(() => application.value?.schedules ?? []);
@@ -215,24 +258,35 @@ const hasProviderUpdate = computed(() => Boolean(
     || application.value?.outcome_notes,
 ));
 const applicationSections = computed(() => [
-    { key: 'overview', label: 'Overview', icon: 'fa-solid fa-route' },
-    { key: 'files', label: 'Files', icon: 'fa-solid fa-folder-open', count: filesNeedingAction.value.length },
-    { key: 'schedule', label: 'Schedule', icon: 'fa-regular fa-calendar', count: currentSchedule.value ? 1 : 0 },
-    ...(recipientMonitoring.value.eligible ? [{ key: 'monitoring', label: 'Monitoring', icon: 'fa-solid fa-chart-line', count: recipientMonitoring.value.pending_count }] : []),
-    { key: 'program', label: 'Program', icon: 'fa-solid fa-graduation-cap' },
+    { key: 'overview', label: 'Next step', icon: 'fa-solid fa-arrow-right' },
+    ...(applicationFileRows.value.length ? [{ key: 'files', label: 'Files', icon: 'fa-solid fa-folder-open', count: filesNeedingAction.value.length }] : []),
+    ...(schedules.value.length ? [{ key: 'schedule', label: 'Schedule', icon: 'fa-regular fa-calendar', count: currentSchedule.value ? 1 : 0 }] : []),
+    { key: 'program', label: 'Scholarship', icon: 'fa-solid fa-graduation-cap' },
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ]);
 const nextActionButton = computed(() => {
+    if (application.value?.correction_status === 'requested') {
+        return { label: 'Review requested update', section: 'overview', target: 'application-correction' };
+    }
+
     if (recipientAgreement.value?.can_respond) {
         return { label: 'Review agreement', action: 'agreement' };
     }
 
     if (recipientMonitoring.value.pending_count > 0) {
-        return { label: 'Upload grade record', section: 'monitoring' };
+        return { label: 'Upload grade record', href: `/dashboard/monitoring/${application.value.id}` };
     }
 
-    if (application.value?.correction_status === 'requested') {
-        return { label: 'Review requested update', action: 'correction' };
+    if (filesNeedingAction.value.length) {
+        return { label: 'Review required files', section: 'files' };
+    }
+
+    if (currentSchedule.value) {
+        return { label: 'View schedule', section: 'schedule', target: 'application-schedules' };
+    }
+
+    if (applicationIsClosed.value && recipientMonitoring.value.eligible) {
+        return { label: 'View monitoring', href: `/dashboard/monitoring/${application.value.id}` };
     }
 
     if (applicationIsClosed.value) {
@@ -243,17 +297,19 @@ const nextActionButton = computed(() => {
         return { label: 'View formal application steps', section: 'overview', target: 'formal-application-handoff' };
     }
 
-    if (!applicationIsClosed.value && filesNeedingAction.value.length) {
-        return { label: 'Review required files', section: 'files' };
-    }
-
-    if (currentSchedule.value) {
-        return { label: 'View schedule', section: 'schedule', target: 'application-schedules' };
-    }
-
     return null;
 });
 const applicationScholarship = computed(() => application.value?.scholarship ?? null);
+const supportPeriodLabel = computed(() => {
+    const startsAt = applicationScholarship.value?.support_starts_at;
+    const endsAt = applicationScholarship.value?.support_ends_at;
+
+    if (startsAt && endsAt) return `${startsAt} - ${endsAt}`;
+    if (startsAt) return `Starts ${startsAt}`;
+    if (endsAt) return `Through ${endsAt}`;
+
+    return 'Not specified';
+});
 const correctionTargetOptions = [
     { value: 'profile', label: 'Profile information' },
     { value: 'academic_record', label: 'Academic record' },
@@ -690,6 +746,11 @@ async function openSection(section, target = null) {
 }
 
 async function followNextAction() {
+    if (nextActionButton.value?.href) {
+        window.location.href = nextActionButton.value.href;
+        return;
+    }
+
     if (nextActionButton.value?.action === 'agreement') {
         showRecipientAgreementModal.value = true;
         return;
@@ -714,9 +775,18 @@ async function loadApplication() {
 
         user.value = response.data.user;
         application.value = response.data.application;
-        const requestedSection = new URLSearchParams(window.location.search).get('section');
+        const urlParams = new URLSearchParams(window.location.search);
+        const requestedSection = urlParams.get('section');
+        const requestedAction = urlParams.get('action');
+        if (requestedSection === 'monitoring' && recipientMonitoring.value.eligible) {
+            window.location.replace(`/dashboard/monitoring/${application.value.id}`);
+            return;
+        }
         if (requestedSection && applicationSections.value.some((section) => section.key === requestedSection)) {
             activeSection.value = requestedSection;
+        }
+        if (requestedAction === 'agreement' && recipientAgreement.value?.can_respond) {
+            showRecipientAgreementModal.value = true;
         }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load application details.';
@@ -883,10 +953,6 @@ async function submitRecipientAgreement(response) {
     }
 }
 
-function applyApplicationUpdate(updatedApplication) {
-    application.value = updatedApplication;
-}
-
 onMounted(loadApplication);
 </script>
 
@@ -902,105 +968,98 @@ onMounted(loadApplication);
         />
 
         <section class="student-page">
-            <div class="student-container">
+            <div class="student-container max-w-6xl">
                 <a href="/dashboard/applications" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to applications
                 </a>
 
-                <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
-                    Loading application details...
+                <div v-if="isLoading" class="student-card mt-5 rounded-md border-slate-300 p-6 text-sm text-slate-500">
+                    Loading application...
                 </div>
 
-                <div v-else-if="errorMessage && !application" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
+                <div v-else-if="errorMessage && !application" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
                     {{ errorMessage }}
                 </div>
 
-                <div v-else-if="application" class="mt-6 space-y-4">
-                    <div v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
+                <div v-else-if="application" class="mt-5 space-y-4">
+                    <div v-if="errorMessage" class="rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
                         {{ errorMessage }}
                     </div>
 
-                    <section class="overflow-hidden rounded-md border border-slate-800 bg-white shadow-[0_12px_28px_rgba(8,20,38,0.11)]">
-                        <header class="relative overflow-hidden bg-slate-950 px-4 py-5 text-white sm:px-6">
-                            <div class="pointer-events-none absolute -right-12 -top-20 h-44 w-44 rounded-full border-[2rem] border-white/5" aria-hidden="true"></div>
-                            <div class="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="flex min-w-0 gap-4">
+                    <header class="student-card overflow-hidden rounded-md border-slate-300 border-t-4 border-t-amber-400 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
+                        <div class="flex flex-col gap-4 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                            <div class="flex min-w-0 items-center gap-4">
                                 <img
                                     :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
                                     :alt="application.scholarship?.title || 'Scholarship'"
-                                    class="h-14 w-14 shrink-0 rounded bg-white object-contain p-2 ring-1 ring-white/20"
+                                    class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                 >
                                 <div class="min-w-0">
-                                    <div class="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">
-                                        <span>Application record</span>
-                                        <span class="h-1 w-1 rounded-full bg-slate-500"></span>
-                                        <span>#{{ application.id }}</span>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Application #{{ application.id }}</p>
+                                    <h1 class="mt-1 text-xl font-bold leading-tight text-slate-950 sm:text-2xl">{{ application.scholarship?.title || 'Scholarship application' }}</h1>
+                                    <p class="mt-1 truncate text-sm font-semibold text-slate-500">{{ application.scholarship?.provider?.name || 'Scholarship provider' }}</p>
+                                    <div class="mt-2 flex flex-wrap gap-1.5">
+                                        <span v-if="application.scholarship?.category" class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{{ labelFromKey(application.scholarship.category) }}</span>
+                                        <span v-if="application.scholarship?.program_cycle" class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{{ application.scholarship.program_cycle }}</span>
+                                        <span class="rounded-sm bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800 ring-1 ring-amber-200">{{ applicationModeLabel(application.scholarship?.application_mode) }}</span>
                                     </div>
-                                    <h1 class="mt-1.5 text-xl font-bold leading-tight text-white sm:text-2xl">
-                                        {{ application.scholarship?.title || 'Scholarship' }}
-                                    </h1>
-                                    <p class="mt-1 text-sm font-semibold text-slate-300">
-                                        {{ application.scholarship?.provider?.name || 'Scholarship provider' }}
-                                    </p>
                                 </div>
                             </div>
-
-                            <div class="relative shrink-0 sm:text-right">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Application status</p>
-                                <span :class="['mt-2 inline-flex w-fit rounded px-3 py-1.5 text-xs font-bold uppercase ring-1 ring-white/10', statusClass(application.status)]">
+                            <div class="flex shrink-0 flex-col items-start sm:items-end">
+                                <span :class="['rounded-md px-3 py-1.5 text-xs font-bold uppercase', statusClass(application.status)]">
                                     {{ application.status === 'benefits_terminated' ? statusLabel(application.status) : (workflow.final_outcome_label || workflow.application_state_label || statusLabel(application.status)) }}
                                 </span>
+                                <p class="mt-2 text-xs text-slate-500">Submitted {{ application.submitted_at || 'recently' }}</p>
                             </div>
-                            </div>
-                        </header>
+                        </div>
 
-                        <div v-if="!applicationIsClosed || recipientAgreement?.can_respond" :class="['grid gap-4 border-b p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-6', applicationIsClosed && !recipientAgreement?.can_respond ? 'border-slate-200 bg-slate-50' : 'border-amber-200 bg-amber-50']">
-                            <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded', applicationIsClosed && !recipientAgreement?.can_respond ? 'bg-emerald-100 text-emerald-800' : applicantOwnsNextAction ? 'bg-amber-300 text-slate-950' : 'bg-slate-950 text-amber-300']">
-                                <i :class="applicationIsClosed && !recipientAgreement?.can_respond ? 'fa-solid fa-check' : 'fa-solid fa-arrow-right'" aria-hidden="true"></i>
+                        <dl class="grid border-t border-slate-200 bg-slate-50 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                            <div class="px-4 py-3 sm:border-r sm:border-slate-200 sm:px-5">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Current stage</dt>
+                                <dd class="mt-1 font-bold text-slate-900">{{ application.status_progress?.current_stage_label || statusLabel(application.status) }}</dd>
+                            </div>
+                            <div class="border-t border-slate-200 px-4 py-3 sm:border-r sm:border-t-0 sm:px-5">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Application progress</dt>
+                                <dd class="mt-1 flex items-center gap-2 font-bold text-slate-900"><span>{{ application.status_progress?.percent ?? 0 }}%</span><span class="h-1.5 min-w-12 flex-1 overflow-hidden bg-slate-200"><span class="block h-full bg-amber-400" :style="{ width: `${application.status_progress?.percent ?? 0}%` }"></span></span></dd>
+                            </div>
+                            <div class="border-t border-slate-200 px-4 py-3 sm:border-r sm:border-slate-200 lg:border-t-0 sm:px-5">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Files</dt>
+                                <dd :class="['mt-1 font-bold', filesNeedingAction.length ? 'text-amber-800' : 'text-slate-900']">{{ fileStatusLabel }}</dd>
+                            </div>
+                            <div class="border-t border-slate-200 px-4 py-3 sm:px-5 lg:border-t-0">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Program deadline</dt>
+                                <dd class="mt-1 font-bold text-slate-900">{{ application.scholarship?.deadline || 'Not listed' }}</dd>
+                            </div>
+                        </dl>
+                    </header>
+
+                    <section :class="['rounded-md border border-l-4 p-4 shadow-sm sm:p-5', applicantOwnsNextAction ? 'border-amber-300 border-l-amber-400 bg-amber-50' : applicationIsClosed ? 'border-emerald-200 border-l-emerald-500 bg-emerald-50/60' : 'border-slate-300 border-l-slate-800 bg-white']">
+                        <div class="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+                            <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md', applicantOwnsNextAction ? 'bg-amber-300 text-slate-950' : applicationIsClosed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-950 text-amber-300']">
+                                <i :class="applicantOwnsNextAction ? 'fa-solid fa-arrow-right' : applicationIsClosed ? 'fa-solid fa-check' : 'fa-regular fa-clock'" aria-hidden="true"></i>
                             </span>
                             <div class="min-w-0">
-                                <p v-if="!applicationIsClosed || recipientAgreement?.can_respond" class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                                    {{ applicantNextEyebrow }}
-                                </p>
-                                <h3 :class="['text-base font-bold text-slate-950', !applicationIsClosed || recipientAgreement?.can_respond ? 'mt-1' : '']">{{ applicantNextStep }}</h3>
-                                <p v-if="applicationIsClosed && !recipientAgreement?.can_respond" class="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-700">
-                                    {{ applicantNextEyebrow }}
-                                </p>
-                                <p class="mt-1 text-sm leading-5 text-slate-600">{{ applicantNextDescription }}</p>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ applicantNextEyebrow }}</p>
+                                    <span v-if="!applicantOwnsNextAction && !applicationIsClosed" class="rounded bg-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-600 ring-1 ring-slate-200">No action needed</span>
+                                </div>
+                                <h2 class="mt-1 text-lg font-bold text-slate-950">{{ applicantNextStep }}</h2>
+                                <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ applicantNextDescription }}</p>
                             </div>
                             <button
                                 v-if="nextActionButton"
                                 type="button"
-                                class="inline-flex w-fit items-center justify-center gap-2 rounded bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
                                 @click="followNextAction"
                             >
                                 {{ nextActionButton.label }}
                                 <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </button>
                         </div>
-
-                        <dl class="grid bg-white text-sm sm:grid-cols-2 lg:grid-cols-4">
-                            <div class="border-b border-slate-200 px-4 py-3.5 sm:border-r sm:px-5 lg:border-b-0">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Submitted</dt>
-                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ application.submitted_at || 'Recently' }}</dd>
-                            </div>
-                            <div class="border-b border-slate-200 px-4 py-3.5 sm:px-5 lg:border-b-0 lg:border-r">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Current stage</dt>
-                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ application.status === 'benefits_terminated' ? statusLabel(application.status) : (application.status_progress?.current_stage_label || statusLabel(application.status)) }}</dd>
-                            </div>
-                            <div class="border-b border-slate-200 px-4 py-3.5 sm:border-b-0 sm:border-r sm:px-5">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Required files</dt>
-                                <dd :class="['mt-1 text-sm font-bold', filesNeedingAction.length ? 'text-amber-800' : 'text-slate-900']">{{ fileStatusLabel }}</dd>
-                            </div>
-                            <div class="px-4 py-3.5 sm:px-5">
-                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Program deadline</dt>
-                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ application.scholarship?.deadline || 'Not listed' }}</dd>
-                            </div>
-                        </dl>
                     </section>
 
-                    <nav class="overflow-x-auto rounded-md border border-slate-200 bg-white p-1 shadow-sm" aria-label="Application details sections">
+                    <nav class="overflow-x-auto rounded-md border border-slate-300 bg-white p-1 shadow-sm" aria-label="Application sections">
                         <div class="flex min-w-max gap-1 sm:min-w-0" role="tablist">
                             <button
                                 v-for="section in applicationSections"
@@ -1008,891 +1067,228 @@ onMounted(loadApplication);
                                 type="button"
                                 role="tab"
                                 :aria-selected="activeSection === section.key"
-                                :class="[
-                                    'flex items-center justify-center gap-2 rounded px-3 py-2.5 text-sm font-bold transition sm:flex-1',
-                                    activeSection === section.key
-                                        ? 'bg-slate-950 text-white'
-                                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950',
-                                ]"
+                                :class="['flex items-center justify-center gap-2 rounded-sm px-3 py-2.5 text-sm font-bold transition sm:flex-1', activeSection === section.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950']"
                                 @click="openSection(section.key)"
                             >
                                 <i :class="section.icon" class="text-xs" aria-hidden="true"></i>
                                 {{ section.label }}
-                                <span
-                                    v-if="section.count"
-                                    :class="[
-                                        'rounded px-1.5 py-0.5 text-[10px] font-bold',
-                                        activeSection === section.key ? 'bg-white/15 text-white' : 'bg-amber-100 text-amber-800',
-                                    ]"
-                                >
-                                    {{ section.count }}
-                                </span>
+                                <span v-if="section.count" :class="['rounded px-1.5 py-0.5 text-[10px] font-bold', activeSection === section.key ? 'bg-white/15 text-white' : 'bg-amber-100 text-amber-800']">{{ section.count }}</span>
                             </button>
                         </div>
                     </nav>
 
-                    <div class="space-y-4">
-                        <div class="flex flex-col gap-4">
-                            <section
-                                v-if="activeSection === 'overview' && applicationIsClosed && !recipientAgreement?.can_respond"
-                                class="overflow-hidden rounded-md border border-slate-200 border-t-4 border-t-amber-400 bg-white shadow-sm"
-                            >
-                                <div class="grid gap-4 p-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center sm:px-5">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-950 text-amber-300">
-                                        <i class="fa-solid fa-check" aria-hidden="true"></i>
-                                    </span>
-                                    <div class="min-w-0">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Application complete</p>
-                                        <h3 class="mt-1 text-base font-bold text-slate-950">{{ applicantNextStep }}</h3>
-                                        <p class="mt-1 text-sm leading-5 text-slate-600">{{ applicantNextDescription }}</p>
+                    <div v-if="activeSection === 'overview'" class="space-y-4">
+                        <section
+                            v-if="application.correction_status"
+                            id="application-correction"
+                            :class="['scroll-mt-4 rounded-md border border-l-4 bg-white p-4 shadow-sm sm:p-5', application.correction_status === 'requested' ? 'border-slate-300 border-l-amber-400' : application.correction_status === 'submitted' ? 'border-slate-300 border-l-sky-500' : 'border-slate-300 border-l-emerald-500']"
+                        >
+                            <div class="flex items-start gap-3">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></span>
+                                <div class="min-w-0 flex-1">
+                                    <p class="student-kicker">Requested update</p>
+                                    <h3 class="mt-1 text-base font-bold text-slate-950">{{ application.correction_status === 'requested' ? 'The provider needs more information' : application.correction_status === 'submitted' ? 'Your update is being reviewed' : 'Update completed' }}</h3>
+                                    <p v-if="application.correction_message" class="mt-2 text-sm leading-6 text-slate-600">{{ application.correction_message }}</p>
+                                    <div v-if="correctionTargets.length" class="mt-3 flex flex-wrap gap-1.5">
+                                        <span v-for="target in correctionTargets" :key="target" class="rounded bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{{ correctionTargetLabel(target) }}</span>
                                     </div>
+                                    <div v-if="application.correction_status === 'requested'" class="mt-4 flex flex-wrap gap-2">
+                                        <a v-if="correctionTargetsInclude('profile')" href="/dashboard/profile?section=personal" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Update profile</a>
+                                        <a v-if="correctionTargetsInclude('academic_record')" href="/dashboard/profile?section=verification" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Update academic record</a>
+                                        <button v-if="correctionTargetsInclude('application_files') || !correctionTargets.length" type="button" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openSection('files')">Update files</button>
+                                        <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="showCorrectionModal = true">Send response</button>
+                                    </div>
+                                    <p v-if="application.correction_response" class="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"><strong>Your response:</strong> {{ application.correction_response }}</p>
                                 </div>
-                            </section>
+                            </div>
+                        </section>
 
-                            <section
-                                v-if="activeSection === 'overview' && (recipientAgreement || application.status_progress)"
-                                class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm"
-                            >
-                                <div
-                                    v-if="recipientAgreement"
-                                    id="recipient-agreement"
-                                    class="scroll-mt-4 flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
-                                >
-                                    <div class="flex min-w-0 items-start gap-3">
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded bg-slate-950 text-amber-300">
-                                            <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
-                                        </span>
-                                        <div class="min-w-0">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <h3 class="font-bold text-slate-950">Recipient agreement</h3>
-                                                <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', recipientAgreement.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : recipientAgreement.status === 'declined' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800']">
-                                                    {{ recipientAgreement.status_label }}
-                                                </span>
-                                            </div>
-                                            <p class="mt-1 text-sm leading-5 text-slate-500">
-                                                {{ recipientAgreement.can_respond ? 'Review the support and responsibilities before continuing.' : 'View the support and terms recorded when you were selected.' }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        class="inline-flex w-fit shrink-0 items-center justify-center gap-2 rounded bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                        @click="showRecipientAgreementModal = true"
-                                    >
-                                        {{ recipientAgreement.can_respond ? 'Review and respond' : 'View agreement' }}
-                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                    </button>
-                                </div>
-
-                                <details :class="['group', recipientAgreement ? 'border-t border-slate-200' : '']" v-if="application.status_progress">
-                                <summary class="student-section-head cursor-pointer list-none p-4 transition hover:bg-slate-50 sm:px-5 [&::-webkit-details-marker]:hidden">
-                                    <div class="flex items-start gap-3">
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded bg-amber-100 text-amber-800">
-                                            <i class="fa-solid fa-route" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Application flow</p>
-                                            <h3 class="mt-1 font-bold text-slate-950">{{ application.status_progress.current_stage_label }}</h3>
-                                        </div>
-                                    </div>
-                                    <div class="flex w-full items-center gap-3 sm:w-52">
-                                        <div class="min-w-0 flex-1">
-                                            <div class="flex items-center justify-between text-xs font-bold text-slate-600">
-                                                <span>Progress</span>
-                                                <span>{{ application.status_progress.percent }}%</span>
-                                            </div>
-                                            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200">
-                                                <div class="h-full rounded-full bg-amber-400 transition-all" :style="{ width: `${application.status_progress.percent}%` }"></div>
-                                            </div>
-                                        </div>
-                                        <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                                    </div>
-                                </summary>
-                                <div class="border-t border-slate-200 bg-slate-50/70 p-3 sm:p-4">
-                                    <ol class="grid gap-2 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))]">
-                                        <li
-                                            v-for="(step, index) in application.status_progress.steps"
-                                            :key="step.key"
-                                            :class="[
-                                                'flex min-w-0 items-center gap-3 rounded border px-3 py-3 text-xs',
-                                                step.state === 'current' ? 'border-amber-300 bg-amber-50 text-slate-950' : step.state === 'complete' ? 'border-slate-200 bg-white text-slate-800' : ['stopped', 'skipped'].includes(step.state) ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-slate-200 bg-white text-slate-500',
-                                            ]"
-                                        >
-                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded text-xs font-bold', step.state === 'complete' ? 'bg-slate-900 text-white' : step.state === 'current' ? 'bg-amber-400 text-slate-950 ring-2 ring-amber-100' : ['stopped', 'skipped'].includes(step.state) ? 'bg-rose-100 text-rose-700' : 'border border-slate-300 bg-white text-slate-500']">
-                                                <i v-if="step.state === 'complete'" class="fa-solid fa-check" aria-hidden="true"></i>
-                                                <span v-else>{{ index + 1 }}</span>
-                                            </span>
-                                            <div class="min-w-0">
-                                                <p class="truncate font-bold">{{ step.label }}</p>
-                                                <p class="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] opacity-70">{{ progressStateLabel(step.state) }}</p>
-                                            </div>
-                                        </li>
-                                    </ol>
-                                </div>
-                                </details>
-                            </section>
-
-                            <details
-                                v-if="activeSection === 'overview' && formalApplicationHandoff"
-                                id="formal-application-handoff"
-                                :open="formalHandoffOpen"
-                                class="scroll-mt-4 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm"
-                                @toggle="formalHandoffOpen = $event.currentTarget.open"
-                            >
-                                <summary class="relative flex cursor-pointer list-none flex-col gap-4 border-t-4 border-amber-400 p-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-5 [&::-webkit-details-marker]:hidden">
-                                    <div class="flex min-w-0 items-start gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded bg-slate-950 text-amber-300">
-                                            <i class="fa-solid fa-check" aria-hidden="true"></i>
-                                        </span>
-                                        <div class="min-w-0">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Pre-screening result</p>
-                                            <div class="mt-1 flex flex-wrap items-center gap-2">
-                                                <h3 class="text-base font-bold text-slate-950">Continue with the provider</h3>
-                                                <span class="rounded bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-900">Passed</span>
-                                            </div>
-                                            <p class="mt-1 line-clamp-2 text-sm leading-5 text-slate-500">{{ formalApplicationHandoff.notice }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="flex shrink-0 items-center gap-3">
-                                        <span v-if="formalApplicationHandoff.deadline" class="hidden border-r border-slate-200 pr-3 text-right md:block">
-                                            <span class="block text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Provider deadline</span>
-                                            <span class="mt-0.5 block text-xs font-bold text-slate-800">{{ formalApplicationHandoff.deadline }}</span>
-                                        </span>
-                                        <span class="flex w-fit items-center gap-2 rounded bg-slate-950 px-3 py-2 text-xs font-bold text-white">
-                                            <span>{{ formalHandoffOpen ? 'Close instructions' : 'Open instructions' }}</span>
-                                            <i :class="['fa-solid fa-chevron-down text-[10px] transition-transform', formalHandoffOpen ? 'rotate-180' : '']" aria-hidden="true"></i>
-                                        </span>
-                                    </div>
-                                </summary>
-
-                                <div class="divide-y divide-slate-200 border-t border-slate-200 bg-slate-50/40">
-                                    <section
-                                        v-if="formalApplicationHandoff.location_name || formalApplicationHandoff.location_address || formalApplicationHandoff.url"
-                                        class="grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)] sm:px-5"
-                                    >
-                                        <span class="grid h-9 w-9 place-items-center rounded border border-amber-200 bg-amber-50 text-sm text-amber-800">
-                                            <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
-                                        </span>
-                                        <div class="min-w-0">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Where to continue</p>
-                                            <p v-if="formalApplicationHandoff.location_name" class="mt-1 text-sm font-bold text-slate-950">{{ formalApplicationHandoff.location_name }}</p>
-                                            <p v-if="formalApplicationHandoff.location_address" class="mt-0.5 text-sm leading-5 text-slate-600">{{ formalApplicationHandoff.location_address }}</p>
-                                            <div class="mt-3 flex flex-wrap gap-2">
-                                                <button v-if="formalApplicationHandoff.map_url || formalApplicationHandoff.location_address || formalApplicationHandoff.location_name" type="button" class="inline-flex items-center gap-2 rounded border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openFormalHandoffMap">
-                                                    View map
-                                                    <i class="fa-solid fa-map-location-dot text-[10px]" aria-hidden="true"></i>
-                                                </button>
-                                                <a v-if="formalApplicationHandoff.url" :href="formalApplicationHandoff.url" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800">
-                                                    Continue online
-                                                    <i class="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true"></i>
-                                                </a>
-                                            </div>
-                                        </div>
-                                    </section>
-
-                                    <section class="grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)] sm:px-5">
-                                        <span class="grid h-9 w-9 place-items-center rounded border border-amber-200 bg-amber-50 text-sm text-amber-800">
-                                            <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
-                                        </span>
-                                        <div class="min-w-0">
-                                            <div class="flex flex-wrap items-start justify-between gap-2">
-                                                <div>
-                                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">What to prepare</p>
-                                                    <p class="mt-1 text-sm font-bold text-slate-950">Provider documents</p>
-                                                </div>
-                                                <span v-if="formalApplicationHandoff.deadline" class="inline-flex items-center gap-1.5 rounded bg-amber-50 px-2 py-1 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
-                                                    <i class="fa-solid fa-calendar-day text-[10px] text-amber-700" aria-hidden="true"></i>
-                                                    Due {{ formalApplicationHandoff.deadline }}
-                                                </span>
-                                            </div>
-                                            <ul v-if="formalApplicationHandoff.requirements?.length" class="mt-3 divide-y divide-slate-200 overflow-hidden rounded border border-slate-200 bg-white">
-                                                <li v-for="item in formalApplicationHandoff.requirements" :key="item" class="flex items-start gap-2 px-3 py-2.5 text-sm leading-5 text-slate-700">
-                                                <i class="fa-solid fa-check mt-1 text-xs text-amber-700" aria-hidden="true"></i>
-                                                <span>{{ item }}</span>
-                                            </li>
-                                            </ul>
-                                            <p v-else class="mt-2 text-sm text-slate-500">The provider will confirm the document list directly.</p>
-                                            <div :class="['mt-3 flex items-start gap-2 rounded px-3 py-2.5 text-xs leading-5 ring-1', handoffRequiresOriginalDocuments ? 'bg-amber-50 text-amber-950 ring-amber-200' : 'bg-slate-100 text-slate-700 ring-slate-200']">
-                                                <i :class="['fa-solid mt-1 shrink-0', handoffRequiresOriginalDocuments ? 'fa-file-shield text-amber-700' : 'fa-circle-info text-slate-600']" aria-hidden="true"></i>
-                                                <span>{{ handoffRequiresOriginalDocuments ? 'Bring the listed originals to the provider. Keep your portal copies unchanged unless a replacement is requested.' : 'Bring or send these directly to the provider. Upload them here only when they also appear in your portal checklist.' }}</span>
-                                            </div>
-                                        </div>
-                                    </section>
-
-                                    <section
-                                        v-if="formalApplicationHandoff.instructions || formalApplicationHandoff.contact_person || formalApplicationHandoff.contact_department || formalApplicationHandoff.contact_email || formalApplicationHandoff.contact_number"
-                                        class="grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)] sm:px-5"
-                                    >
-                                        <span class="grid h-9 w-9 place-items-center rounded border border-amber-200 bg-amber-50 text-sm text-amber-800">
-                                            <i class="fa-solid fa-message" aria-hidden="true"></i>
-                                        </span>
-                                        <div class="min-w-0">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Provider instructions</p>
-                                            <p v-if="formalApplicationHandoff.instructions" class="mt-1.5 whitespace-pre-line text-sm leading-6 text-slate-700">{{ formalApplicationHandoff.instructions }}</p>
-                                            <div v-if="formalApplicationHandoff.contact_person || formalApplicationHandoff.contact_department || formalApplicationHandoff.contact_email || formalApplicationHandoff.contact_number" class="mt-3 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
-                                                <span v-if="formalApplicationHandoff.contact_person || formalApplicationHandoff.contact_department" class="rounded bg-slate-100 px-2.5 py-1.5 text-slate-700">
-                                                    {{ [formalApplicationHandoff.contact_person, formalApplicationHandoff.contact_department].filter(Boolean).join(' · ') }}
-                                                </span>
-                                                <a v-if="formalApplicationHandoff.contact_email" :href="`mailto:${formalApplicationHandoff.contact_email}`" class="rounded border border-slate-300 bg-white px-2.5 py-1.5 font-bold text-slate-700 hover:bg-slate-50">Email provider</a>
-                                                <a v-if="formalApplicationHandoff.contact_number" :href="`tel:${formalApplicationHandoff.contact_number}`" class="rounded border border-slate-300 bg-white px-2.5 py-1.5 font-bold text-slate-700 hover:bg-slate-50">Call provider</a>
-                                            </div>
-                                        </div>
-                                    </section>
-                                </div>
-                            </details>
-
-                            <section v-if="activeSection === 'program' && rubricReview" class="order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="student-section-head p-4 sm:p-5">
-                                    <div class="flex items-start gap-3">
-                                        <span class="student-section-mark"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span>
-                                        <div>
-                                            <p class="student-kicker">Provider assessment</p>
-                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Review rubric score</h3>
-                                            <p class="mt-1 text-sm leading-5 text-slate-500">
-                                            This is how the provider scored your submitted application against its review criteria.
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div class="flex w-fit items-baseline gap-1 rounded-md bg-slate-950 px-4 py-2 text-white">
-                                        <span class="text-2xl font-bold">{{ rubricReview.total_score }}</span>
-                                        <span class="text-xs font-semibold text-slate-300">/ 100</span>
-                                    </div>
-                                </div>
-
-                                <div class="grid gap-3 border-t border-slate-200 bg-slate-50/70 p-4 sm:grid-cols-2">
-                                    <div
-                                        v-for="criterion in rubricCriteria"
-                                        :key="criterion.key"
-                                        class="rounded-md border border-slate-200 bg-white p-3"
-                                    >
-                                        <div class="flex items-center justify-between gap-3">
-                                            <p class="font-bold text-slate-950">{{ criterion.label }}</p>
-                                            <p class="shrink-0 text-sm font-bold text-slate-950">{{ criterion.score }} / 100</p>
-                                        </div>
-                                        <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                            <div
-                                                class="h-full rounded-full bg-amber-400"
-                                                :style="{ width: `${Math.min(100, Math.max(0, Number(criterion.score) || 0))}%` }"
-                                            ></div>
-                                        </div>
-                                        <p class="mt-2 text-xs font-semibold text-slate-500">
-                                            {{ criterion.weight }}% of the total score
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="flex flex-col gap-1 border-t border-slate-200 px-4 py-3 text-xs leading-5 text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                                    <p>{{ rubricReview.decision_notice }}</p>
-                                    <p v-if="application.rubric_scored_at" class="shrink-0 font-semibold">
-                                        Scored {{ application.rubric_scored_at }}
-                                    </p>
-                                </div>
-                            </section>
-
-                            <section v-if="activeSection === 'schedule' && schedules.length" id="application-schedules" class="scroll-mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="student-section-head p-4 sm:p-5">
-                                    <div class="flex items-start gap-3">
-                                        <span class="student-section-mark"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span>
-                                        <div>
-                                            <p class="student-kicker">Schedule</p>
-                                            <h3 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule ? 'Your next activity' : 'No upcoming activity' }}</h3>
-                                            <p class="mt-1 text-sm leading-6 text-slate-500">
-                                            {{ currentSchedule ? 'Check when, where, and what you need to prepare.' : 'Previous activities are kept below for reference.' }}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <span v-if="currentSchedule" class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
-                                        Upcoming
-                                    </span>
-                                </div>
-
-                                <div v-if="currentSchedule" class="border-t border-slate-200 p-4">
-                                    <article class="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
-                                        <div class="flex flex-col gap-4 bg-white p-4 sm:flex-row sm:items-center">
-                                            <div class="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-md bg-slate-950 text-white shadow-sm">
-                                                <span class="text-xs font-bold uppercase tracking-[0.14em] text-amber-300">{{ currentScheduleDate.month }}</span>
-                                                <span class="mt-0.5 text-3xl font-bold leading-none">{{ currentScheduleDate.day }}</span>
-                                            </div>
-                                            <div class="min-w-0 flex-1">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(currentSchedule.type) }}</p>
-                                                    <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', scheduleStatusClass(currentSchedule.status)]">
-                                                        {{ labelFromKey(currentSchedule.status) }}
-                                                    </span>
-                                                </div>
-                                                <h4 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule.title }}</h4>
-                                                <p class="mt-1 text-sm font-semibold text-slate-600">{{ currentSchedule.scheduled_label }}</p>
-                                            </div>
-                                            <span class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">
-                                                <i class="fa-solid fa-location-arrow text-amber-700" aria-hidden="true"></i>
-                                                {{ scheduleModeLabel(currentSchedule.mode) }}
-                                            </span>
-                                        </div>
-
-                                        <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-3">
-                                            <div class="p-3 sm:border-r sm:border-slate-200">
-                                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Time</dt>
-                                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ currentScheduleDate.time }}</dd>
-                                            </div>
-                                            <div class="border-t border-slate-200 p-3 sm:border-r sm:border-t-0">
-                                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Venue</dt>
-                                                <dd class="mt-1 line-clamp-2 text-sm font-bold text-slate-900">{{ currentSchedule.venue || (currentSchedule.mode === 'online' ? 'Online access' : 'See address below') }}</dd>
-                                            </div>
-                                            <div class="border-t border-slate-200 p-3 sm:border-t-0">
-                                                <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Application stage</dt>
-                                                <dd class="mt-1 text-sm font-bold text-slate-900">{{ workflow.current_stage_label || scheduleTypeLabel(currentSchedule.type) }}</dd>
-                                            </div>
-                                        </dl>
-
-                                        <div class="border-t border-slate-200 bg-white p-4">
-                                            <div class="grid gap-3 lg:grid-cols-2">
-                                                <div v-if="currentSchedule.venue || currentSchedule.location_address" class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Address</p>
-                                                    <p class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ currentSchedule.location_address || currentSchedule.venue }}</p>
-                                                    <p v-if="currentSchedule.location_address && currentSchedule.venue" class="mt-1 text-xs text-slate-500">{{ currentSchedule.venue }}</p>
-                                                </div>
-                                                <div class="rounded-md border border-slate-200 bg-slate-50 p-3">
-                                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">What to prepare</p>
-                                                    <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ currentSchedule.instructions }}</p>
-                                                </div>
-                                            </div>
-
-                                            <div class="mt-3 flex flex-wrap gap-2">
-                                                <a
-                                                    v-if="currentSchedule.online_url"
-                                                    :href="currentSchedule.online_url"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="inline-flex items-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
-                                                >
-                                                    Open online access
-                                                    <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
-                                                </a>
-                                                <button
-                                                    v-if="hasCoordinates(currentSchedule.latitude, currentSchedule.longitude) || currentSchedule.location_address || currentSchedule.venue"
-                                                    type="button"
-                                                    class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50"
-                                                    @click="openScheduleMap(currentSchedule)"
-                                                >
-                                                        <i class="fa-solid fa-map-location-dot text-amber-700" aria-hidden="true"></i>
-                                                        View map
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </article>
-                                </div>
-
-                                <div v-if="scheduleHistory.length" :class="currentSchedule ? 'border-t border-slate-200' : ''" class="p-4">
-                                    <div class="flex items-center justify-between gap-3">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">Previous activities</p>
-                                            <p class="mt-0.5 text-xs text-slate-500">Completed and cancelled schedule records.</p>
-                                        </div>
-                                        <span class="text-xs font-bold text-slate-500">{{ scheduleHistory.length }}</span>
-                                    </div>
-
-                                    <div class="mt-3 overflow-hidden rounded-md border border-slate-200">
-                                        <details v-for="schedule in scheduleHistory" :key="schedule.id" class="group border-b border-slate-200 last:border-b-0">
-                                            <summary class="flex cursor-pointer list-none items-center gap-3 bg-white px-3 py-3 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
-                                                    <i :class="scheduleTypeIcon(schedule.type)" aria-hidden="true"></i>
-                                                </span>
-                                                <div class="min-w-0 flex-1">
-                                                    <p class="truncate text-sm font-bold text-slate-950">{{ scheduleTypeLabel(schedule.type) }}</p>
-                                                    <p class="mt-0.5 text-xs text-slate-500">{{ schedule.scheduled_label }}</p>
-                                                </div>
-                                                <span :class="['hidden rounded-md px-2 py-1 text-[10px] font-bold uppercase sm:inline-flex', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span>
-                                                <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                                            </summary>
-                                            <div class="border-t border-slate-200 bg-slate-50 p-3 text-sm">
-                                                <p v-if="schedule.venue || schedule.location_address" class="font-semibold text-slate-700">{{ schedule.location_address || schedule.venue }}</p>
-                                                <p class="mt-2 whitespace-pre-line leading-6 text-slate-600">{{ schedule.instructions }}</p>
-                                            </div>
-                                        </details>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section v-if="activeSection === 'schedule' && !schedules.length" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                <div class="flex items-start gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
-                                        <i class="fa-regular fa-calendar" aria-hidden="true"></i>
-                                    </span>
+                        <section v-if="recipientAgreement" class="rounded-md border border-slate-300 bg-white p-4 shadow-sm sm:p-5">
+                            <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                <div class="flex min-w-0 items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-file-signature" aria-hidden="true"></i></span>
                                     <div>
-                                        <p class="font-bold text-slate-950">{{ applicationIsClosed ? 'No schedule required' : 'No schedule posted yet' }}</p>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            {{ applicationIsClosed
-                                                ? 'This application has no upcoming activity to attend. Review the provider update for the recorded outcome.'
-                                                : 'There is no exam or interview date for you to attend right now. You will receive an update when the provider publishes one.' }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <section v-if="activeSection === 'schedule' && application.exam" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="grid sm:grid-cols-[9rem_minmax(0,1fr)]">
-                                    <div class="flex h-36 items-center justify-center border-b border-slate-200 bg-slate-50 p-4 sm:border-b-0 sm:border-r">
-                                        <img :src="application.exam.image_url" :alt="application.exam.title" class="h-full w-full object-contain">
-                                    </div>
-                                    <div class="p-4">
-                                        <p class="student-kicker">Provider-managed exam</p>
-                                        <h3 class="mt-1 text-lg font-bold text-slate-950">{{ application.exam.title }}</h3>
-                                        <p v-if="application.exam.description" class="mt-2 text-sm leading-6 text-slate-600">{{ application.exam.description }}</p>
-                                        <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
-                                            <span class="rounded-md bg-slate-100 px-2.5 py-1">{{ labelFromKey(application.exam.delivery_mode) }}</span>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h3 class="font-bold text-slate-950">Recipient agreement</h3>
+                                            <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', recipientAgreement.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : recipientAgreement.status === 'declined' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-800']">{{ recipientAgreement.status_label }}</span>
                                         </div>
-                                        <div v-if="application.exam.venue || application.exam.instructions" class="mt-3 border-t border-slate-200 pt-3 text-sm leading-6 text-slate-600">
-                                            <p v-if="application.exam.venue"><span class="font-bold text-slate-800">Venue:</span> {{ application.exam.venue }}</p>
-                                            <p v-if="application.exam.instructions" class="mt-1">{{ application.exam.instructions }}</p>
-                                        </div>
+                                        <p class="mt-1 text-sm leading-5 text-slate-500">{{ recipientAgreement.can_respond ? 'Review what you will receive and what the provider expects before accepting.' : 'The support and responsibilities recorded when you were selected.' }}</p>
                                     </div>
                                 </div>
-                            </section>
+                                <button type="button" class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="showRecipientAgreementModal = true">{{ recipientAgreement.can_respond ? 'Review and respond' : 'View agreement' }}</button>
+                            </div>
+                        </section>
 
-                            <section v-if="activeSection === 'program'" class="order-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                                    <div class="flex min-w-0 items-center gap-3">
-                                        <img
-                                            :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
-                                            :alt="application.scholarship?.title || 'Scholarship program'"
-                                            class="h-11 w-11 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
-                                        >
-                                        <div class="min-w-0">
-                                            <p class="student-kicker">Program</p>
-                                            <h3 class="mt-0.5 text-base font-bold leading-tight text-slate-950">{{ application.scholarship?.title || 'Scholarship program' }}</h3>
-                                            <p class="mt-0.5 truncate text-xs font-semibold text-slate-500">{{ application.scholarship?.provider?.name || 'Scholarship provider' }}</p>
-                                        </div>
-                                    </div>
-                                    <a
-                                        :href="`/dashboard/scholarships/${application.scholarship?.id}`"
-                                        class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                    >
-                                        Full details
-                                        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true"></i>
-                                    </a>
-                                </div>
-
-                                <dl class="mx-4 grid border-y border-slate-200 sm:mx-5 sm:grid-cols-3">
-                                    <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:pr-3">
-                                        <dt class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Deadline</dt>
-                                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ application.scholarship?.deadline || 'Not listed' }}</dd>
-                                    </div>
-                                    <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:px-3">
-                                        <dt class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Application mode</dt>
-                                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ applicationModeLabel(application.scholarship?.application_mode) }}</dd>
-                                    </div>
-                                    <div class="py-3 sm:pl-3">
-                                        <dt class="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-500">Available slots</dt>
-                                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ application.scholarship?.slots_available || 'Not listed' }}</dd>
-                                    </div>
-                                </dl>
-
-                                <div
-                                    v-if="application.scholarship?.benefits?.length || application.scholarship?.benefit_summary || application.scholarship?.award_amount != null"
-                                    class="px-4 py-4 sm:px-5"
-                                >
-                                    <p class="student-kicker">Support package</p>
-                                    <h4 class="mt-0.5 text-sm font-bold text-slate-950">What the program provides</h4>
-                                    <div v-if="application.scholarship?.benefits?.length" class="mt-2 divide-y divide-slate-200 border-y border-slate-200">
-                                        <div v-for="benefit in application.scholarship.benefits" :key="`${benefit.type}-${benefit.title}`" class="flex items-start gap-2 py-2.5">
-                                            <i class="fa-solid fa-check mt-1 text-xs text-amber-700" aria-hidden="true"></i>
-                                            <div class="min-w-0">
-                                                <p class="text-sm font-bold text-slate-950">
-                                                    {{ benefit.title }}
-                                                    <span v-if="benefit.amount !== null && benefit.amount !== undefined && benefit.amount !== ''" class="text-amber-800"> - {{ formatAwardAmount(benefit.amount) }}</span>
-                                                </p>
-                                                <p v-if="benefit.coverage_label || benefit.frequency_label" class="mt-1 text-xs font-semibold text-slate-500">
-                                                    {{ [benefit.coverage_label, benefit.frequency_label].filter(Boolean).join(' - ') }}
-                                                </p>
-                                                <p v-if="benefit.description" class="mt-1 line-clamp-2 text-xs leading-5 text-slate-600">{{ benefit.description }}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <p v-else class="mt-2 border-y border-slate-200 py-2.5 text-sm font-bold leading-5 text-slate-950">
-                                        {{ application.scholarship?.benefit_summary || formatAwardAmount(application.scholarship?.award_amount) }}
-                                    </p>
-                                </div>
-
-                                <div class="mx-4 border-t border-slate-200 sm:mx-5">
-                                    <div class="flex items-start gap-2.5 py-3">
-                                        <i class="fa-solid fa-location-dot mt-1 text-amber-700" aria-hidden="true"></i>
-                                        <div class="min-w-0 flex-1">
-                                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Program location</p>
-                                            <p class="mt-0.5 text-sm font-bold text-slate-950">{{ application.scholarship?.location_name || 'Location not named' }}</p>
-                                            <p class="mt-0.5 text-xs leading-5 text-slate-600">{{ application.scholarship?.location_address || application.scholarship?.eligible_locations || 'No address listed.' }}</p>
-                                            <p v-if="application.scholarship?.distance_label" class="mt-1 text-xs font-bold text-slate-600">About {{ application.scholarship.distance_label }} away</p>
-                                            <button v-if="hasMapPreview" type="button" class="mt-1.5 inline-flex items-center gap-2 text-xs font-bold text-amber-800" @click="openProgramMap">
-                                                View on map
-                                                <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-start gap-2.5 border-t border-slate-200 py-3">
-                                        <i class="fa-solid fa-address-book mt-1 text-amber-700" aria-hidden="true"></i>
-                                        <div class="min-w-0 flex-1 text-sm">
-                                            <p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Provider contact</p>
-                                            <div v-if="application.scholarship?.contact_email || application.scholarship?.contact_number" class="mt-1 flex flex-wrap gap-x-5 gap-y-1">
-                                                <a v-if="application.scholarship.contact_email" :href="`mailto:${application.scholarship.contact_email}`" class="truncate font-bold text-slate-800 hover:text-amber-700">{{ application.scholarship.contact_email }}</a>
-                                                <a v-if="application.scholarship.contact_number" :href="`tel:${application.scholarship.contact_number}`" class="font-bold text-slate-800 hover:text-amber-700">{{ application.scholarship.contact_number }}</a>
-                                            </div>
-                                            <p v-else class="mt-1 text-slate-500">No public contact listed.</p>
-                                        </div>
+                        <details
+                            v-if="formalApplicationHandoff && !applicationIsClosed"
+                            id="formal-application-handoff"
+                            :open="formalHandoffOpen"
+                            class="scroll-mt-4 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm"
+                            @toggle="formalHandoffOpen = $event.currentTarget.open"
+                        >
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 p-4 hover:bg-slate-50 sm:p-5 [&::-webkit-details-marker]:hidden">
+                                <div class="flex min-w-0 items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-800"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
+                                    <div class="min-w-0">
+                                        <p class="student-kicker">Continue with provider</p>
+                                        <h3 class="mt-1 font-bold text-slate-950">Formal application instructions</h3>
+                                        <p class="mt-1 line-clamp-1 text-sm text-slate-500">{{ formalApplicationHandoff.notice }}</p>
                                     </div>
                                 </div>
-                            </section>
-
-                            <section v-if="activeSection === 'program'" class="order-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                                    <div class="flex items-start gap-3">
-                                        <span class="student-section-mark"><i class="fa-solid fa-chart-simple" aria-hidden="true"></i></span>
-                                        <div>
-                                            <p class="student-kicker">Profile match</p>
-                                            <h3 class="mt-0.5 text-base font-bold text-slate-950">How your profile fits this program</h3>
-                                        </div>
-                                    </div>
-                                    <div class="flex w-fit items-baseline gap-2 rounded-md bg-slate-950 px-3 py-2 text-white">
-                                        <span class="text-xl font-bold">{{ application.dss_score ?? 0 }}%</span>
-                                        <span class="text-xs font-semibold text-slate-300">{{ application.dss_breakdown?.label || labelFromKey(application.dss_recommendation || 'needs_review') }}</span>
-                                    </div>
+                                <i class="fa-solid fa-chevron-down shrink-0 text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                            </summary>
+                            <div class="grid gap-4 border-t border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 sm:p-5">
+                                <div class="rounded-md border border-slate-200 bg-white p-4">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Instructions</p>
+                                    <p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ formalApplicationHandoff.instructions || 'Follow the instructions provided by the scholarship provider.' }}</p>
+                                    <p v-if="formalApplicationHandoff.deadline" class="mt-3 text-xs font-bold text-amber-800">Due {{ formalApplicationHandoff.deadline }}</p>
                                 </div>
-
-                                <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                                    <p class="text-sm font-bold text-slate-700">{{ application.eligibility_breakdown?.criteria?.length || 0 }} eligibility checks recorded</p>
-                                    <button
-                                        type="button"
-                                        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 transition hover:border-slate-500 hover:bg-slate-100"
-                                        @click="showProfileMatchModal = true"
-                                    >
-                                        View match details
-                                        <i class="fa-solid fa-arrow-up-right-from-square text-xs text-amber-700" aria-hidden="true"></i>
-                                    </button>
+                                <div class="rounded-md border border-slate-200 bg-white p-4">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">What to prepare</p>
+                                    <ul v-if="formalApplicationHandoff.requirements?.length" class="mt-2 space-y-2">
+                                        <li v-for="item in formalApplicationHandoff.requirements" :key="item" class="flex items-start gap-2 text-sm text-slate-700"><i class="fa-solid fa-check mt-1 text-xs text-amber-700" aria-hidden="true"></i><span>{{ item }}</span></li>
+                                    </ul>
+                                    <p v-else class="mt-2 text-sm text-slate-500">The provider will confirm any additional documents.</p>
                                 </div>
-                            </section>
-
-                            <section v-if="activeSection === 'files'" class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <div class="student-section-head p-4 sm:p-5">
-                                    <div class="flex items-start gap-3">
-                                        <span class="student-section-mark"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span>
-                                        <div>
-                                            <p class="student-kicker">Documents</p>
-                                            <h3 class="mt-1 text-lg font-bold text-slate-950">Application files</h3>
-                                            <p class="mt-1 text-sm leading-6 text-slate-500">Upload or replace a file beside the requirement it belongs to.</p>
-                                        </div>
-                                    </div>
-                                    <span
-                                        :class="[
-                                            'rounded-md px-2.5 py-1 text-xs font-bold',
-                                            filesNeedingAction.length ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800',
-                                        ]"
-                                    >
-                                        {{ filesNeedingAction.length ? `${filesNeedingAction.length} need attention` : fileStatusLabel }}
-                                    </span>
-                                </div>
-
-                                <div class="border-t border-slate-200 p-4 sm:p-5">
-                                <div v-if="requiresOriginalVerification" class="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
-                                    <i class="fa-solid fa-circle-info mt-1 text-amber-700" aria-hidden="true"></i>
-                                    <p><span class="font-bold">Originals are not needed yet.</span> Keep them ready and bring them only when the provider sends an in-person verification schedule or formal application instructions.</p>
-                                </div>
-
-                                <TermsAgreement
-                                    v-model="documentTermsAccepted"
-                                    class="mt-4"
-                                    context="document"
-                                />
-
-                                <input
-                                    ref="fileInput"
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                                    class="hidden"
-                                    @change="handleFileChange"
-                                >
-
-                                <div v-if="applicationFileRows.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
-                                    <div
-                                        v-for="row in applicationFileRows"
-                                        :key="row.name"
-                                        class="flex flex-col gap-3 border-b border-slate-200 p-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-                                    >
-                                        <div class="flex min-w-0 items-start gap-3">
-                                            <span
-                                                :class="[
-                                                    'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
-                                                    row.document
-                                                        ? 'bg-slate-100 text-slate-700'
-                                                        : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500',
-                                                ]"
-                                            >
-                                                <i :class="row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'"></i>
-                                            </span>
-
-                                            <div class="min-w-0">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <p class="font-bold text-slate-950">
-                                                        {{ row.name }}
-                                                    </p>
-                                                    <span v-if="!row.required" class="rounded bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase text-slate-500">
-                                                        Supporting file
-                                                    </span>
-                                                </div>
-                                                <p v-if="row.document" class="mt-1 truncate text-xs text-slate-500">
-                                                    {{ row.document.original_name }} - {{ formatFileSize(row.document.size) }} - {{ row.document.uploaded_at }}
-                                                </p>
-                                                <p v-else :class="['mt-1 text-xs font-semibold', row.required ? 'text-amber-700' : 'text-slate-500']">
-                                                    {{ row.required ? 'No file uploaded yet' : 'Optional - upload if it supports your application' }}
-                                                </p>
-                                                <p v-if="row.document?.review_notes" class="mt-1 text-xs font-semibold text-slate-600">
-                                                    Provider note: {{ row.document.review_notes }}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                                            <span
-                                                :class="[
-                                                    'h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase',
-                                                    row.document
-                                                        ? documentStatusClass(row.document.status)
-                                                        : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500',
-                                                ]"
-                                            >
-                                                {{ row.document ? labelFromKey(row.document.status || 'pending') : row.required ? 'Not uploaded' : 'Optional' }}
-                                            </span>
-                                            <button
-                                                v-if="row.document?.view_url"
-                                                type="button"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                                @click="openDocumentPreview(row.document)"
-                                            >
-                                                View
-                                            </button>
-                                            <button
-                                                type="button"
-                                                :disabled="isUploading"
-                                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="openUploadPicker(row.name)"
-                                            >
-                                                <i class="fa-solid fa-arrow-up-from-bracket"></i>
-                                                {{ isUploading && activeUploadRequirement === row.name ? 'Uploading...' : (row.document ? 'Replace file' : 'Upload document') }}
-                                            </button>
-                                            <button
-                                                v-if="row.document"
-                                                type="button"
-                                                :disabled="isUploading"
-                                                class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
-                                                :aria-label="`Remove ${row.name}`"
-                                                @click="deleteDocument(row.document)"
-                                            >
-                                                <i class="fa-solid fa-trash-can text-xs"></i>
-                                            </button>
-                                        </div>
+                                <div v-if="formalApplicationHandoff.location_name || formalApplicationHandoff.location_address" class="rounded-md border border-slate-200 bg-white p-4 sm:col-span-2">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Where to continue</p>
+                                    <p class="mt-1 text-sm font-bold text-slate-950">{{ formalApplicationHandoff.location_name }}</p>
+                                    <p class="mt-1 text-sm text-slate-600">{{ formalApplicationHandoff.location_address }}</p>
+                                    <div class="mt-3 flex flex-wrap gap-2">
+                                        <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openFormalHandoffMap">View map</button>
+                                        <a v-if="formalApplicationHandoff.url" :href="formalApplicationHandoff.url" target="_blank" rel="noopener" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white">Continue online</a>
                                     </div>
                                 </div>
-                                <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-                                    This program does not have any document requirements yet.
-                                </div>
-                                </div>
-                            </section>
+                            </div>
+                        </details>
 
-                            <ApplicantRecipientMonitoring
-                                v-if="activeSection === 'monitoring' && recipientMonitoring.eligible"
-                                :monitoring="recipientMonitoring"
-                                :application-id="application.id"
-                                :program-title="application.scholarship?.title"
-                                @application-updated="applyApplicationUpdate"
-                            />
+                        <details v-if="hasProviderUpdate" class="group overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 p-4 hover:bg-slate-50 sm:p-5 [&::-webkit-details-marker]:hidden">
+                                <div class="flex items-center gap-3">
+                                    <span class="grid h-9 w-9 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-message" aria-hidden="true"></i></span>
+                                    <div><p class="student-kicker">Provider update</p><h3 class="mt-1 font-bold text-slate-950">View feedback or result notes</h3></div>
+                                </div>
+                                <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                            </summary>
+                            <dl class="divide-y divide-slate-200 border-t border-slate-200 bg-slate-50">
+                                <div v-if="application.review_notes" class="p-4 sm:px-5"><dt class="text-xs font-bold text-slate-500">Provider message</dt><dd class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ application.review_notes }}</dd></div>
+                                <div v-if="application.outcome_notes" class="p-4 sm:px-5"><dt class="text-xs font-bold text-slate-500">Outcome details</dt><dd class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ application.outcome_notes }}</dd></div>
+                                <div v-if="application.decision_reason" class="p-4 sm:px-5"><dt class="text-xs font-bold text-slate-500">Decision reason</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ labelFromKey(application.decision_reason) }}</dd></div>
+                            </dl>
+                        </details>
 
-                            <section
-                                v-if="activeSection === 'history' && application.pre_screening_handoff"
-                                class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                            >
+                        <details v-if="application.status_progress" class="group overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 p-4 hover:bg-slate-50 sm:p-5 [&::-webkit-details-marker]:hidden">
                                 <div class="flex min-w-0 items-center gap-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-800">
-                                        <i class="fa-solid fa-check" aria-hidden="true"></i>
-                                    </span>
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-route" aria-hidden="true"></i></span>
+                                    <div class="min-w-0"><p class="student-kicker">Application process</p><h3 class="mt-1 truncate font-bold text-slate-950">{{ application.status_progress.current_stage_label }}</h3></div>
+                                </div>
+                                <div class="flex items-center gap-3"><span class="text-xs font-bold text-slate-600">{{ application.status_progress.percent }}%</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></div>
+                            </summary>
+                            <ol class="grid gap-2 border-t border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                                <li v-for="(step, index) in application.status_progress.steps" :key="step.key" :class="['flex items-center gap-3 rounded-md border p-3 text-xs', step.state === 'current' ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white']">
+                                    <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-full text-[10px] font-bold', step.state === 'complete' ? 'bg-slate-950 text-white' : step.state === 'current' ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-500']"><i v-if="step.state === 'complete'" class="fa-solid fa-check" aria-hidden="true"></i><span v-else>{{ index + 1 }}</span></span>
+                                    <div><p class="font-bold text-slate-800">{{ step.label }}</p><p class="mt-0.5 text-[9px] font-bold uppercase tracking-wide text-slate-500">{{ progressStateLabel(step.state) }}</p></div>
+                                </li>
+                            </ol>
+                        </details>
+
+                        <details v-if="application.can_withdraw || application.status === 'withdrawn'" class="group overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-50 [&::-webkit-details-marker]:hidden"><span>Application options</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary>
+                            <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"><p class="text-sm text-slate-600">Withdraw only if you no longer want the provider to continue reviewing this application.</p><button v-if="application.can_withdraw" type="button" class="rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700" @click="showWithdrawalModal = true">Withdraw application</button><span v-else class="text-xs font-bold text-slate-500">Withdrawn {{ application.withdrawn_at }}</span></div>
+                        </details>
+                    </div>
+
+                    <section v-if="activeSection === 'files'" class="student-card overflow-hidden rounded-md border-slate-300">
+                        <header class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                            <div><p class="student-kicker">Documents</p><h2 class="mt-1 text-lg font-bold text-slate-950">Application files</h2><p class="mt-1 text-sm text-slate-500">Upload only the file requested for each requirement.</p></div>
+                            <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold', filesNeedingAction.length ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800']">{{ filesNeedingAction.length ? `${filesNeedingAction.length} need attention` : fileStatusLabel }}</span>
+                        </header>
+                        <div class="p-4 sm:p-5">
+                            <div v-if="requiresOriginalVerification" class="mb-4 flex items-start gap-2 rounded-md bg-amber-50 p-3 text-xs leading-5 text-amber-950 ring-1 ring-amber-200"><i class="fa-solid fa-circle-info mt-1 text-amber-700" aria-hidden="true"></i><p>Keep the originals ready. Bring them only when the provider sends in-person instructions.</p></div>
+                            <TermsAgreement v-model="documentTermsAccepted" context="document" />
+                            <input ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="hidden" @change="handleFileChange">
+                            <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200">
+                                <div v-for="row in applicationFileRows" :key="row.name" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div class="min-w-0">
-                                        <p class="text-sm font-bold text-slate-950">
-                                            {{ application.pre_screening_handoff.decision?.label || 'Pre-screening passed' }}
-                                        </p>
-                                        <p v-if="application.pre_screening_handoff.next_step?.label" class="mt-0.5 truncate text-xs text-slate-500">
-                                            Next: {{ application.pre_screening_handoff.next_step.label }}
-                                        </p>
+                                        <div class="flex flex-wrap items-center gap-2"><p class="text-sm font-bold text-slate-950">{{ row.name }}</p><span v-if="!row.required" class="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-500">Optional</span></div>
+                                        <p v-if="row.document" class="mt-1 truncate text-xs text-slate-500">{{ row.document.original_name }} - {{ row.document.uploaded_at }}</p>
+                                        <p v-else class="mt-1 text-xs text-slate-500">{{ row.required ? 'No file uploaded' : 'Upload only if this supports your application' }}</p>
+                                        <p v-if="row.document?.review_notes" class="mt-1 text-xs font-semibold text-amber-800">Provider note: {{ row.document.review_notes }}</p>
+                                    </div>
+                                    <div class="flex shrink-0 flex-wrap items-center gap-2">
+                                        <span :class="['rounded-md px-2.5 py-2 text-[10px] font-bold uppercase', row.document ? documentStatusClass(row.document.status) : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500']">{{ row.document ? labelFromKey(row.document.status || 'pending') : row.required ? 'Not uploaded' : 'Optional' }}</span>
+                                        <button v-if="row.document?.view_url" type="button" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700" @click="openDocumentPreview(row.document)">View</button>
+                                        <button type="button" :disabled="isUploading" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white disabled:opacity-60" @click="openUploadPicker(row.name)">{{ isUploading && activeUploadRequirement === row.name ? 'Uploading...' : row.document ? 'Replace' : 'Upload' }}</button>
+                                        <button v-if="row.document" type="button" :disabled="isUploading" class="grid h-8 w-8 place-items-center rounded-md border border-slate-300 text-slate-500" :aria-label="`Remove ${row.name}`" @click="deleteDocument(row.document)"><i class="fa-solid fa-trash-can text-xs" aria-hidden="true"></i></button>
                                     </div>
                                 </div>
-                                <span v-if="application.pre_screening_handoff.passed_at" class="shrink-0 text-xs font-semibold text-slate-500">
-                                    {{ application.pre_screening_handoff.passed_at }}
-                                </span>
-                            </section>
+                            </div>
+                        </div>
+                    </section>
 
-                            <section v-if="activeSection === 'history' && timeline.length" class="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                                <div class="flex items-start gap-3">
-                                    <span class="student-section-mark"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
-                                    <div>
-                                        <p class="student-kicker">Timeline</p>
-                                        <h3 class="mt-1 text-lg font-bold text-slate-950">Application history</h3>
-                                        <p class="mt-1 text-sm text-slate-500">A record of changes made to this application.</p>
-                                    </div>
-                                </div>
-                                <div class="mt-4 grid gap-2">
-                                    <div
-                                        v-for="event in timeline"
-                                        :key="event.id"
-                                        class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm"
-                                    >
-                                        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                            <p class="font-bold text-slate-950">
-                                                {{ statusLabel(event.to_status) }}
-                                            </p>
-                                            <p class="text-xs text-slate-500">
-                                                {{ event.changed_at || 'Recently' }}
-                                            </p>
-                                        </div>
-                                        <p class="mt-1 text-xs text-slate-500">
-                                            By {{ event.actor || 'System' }}
-                                        </p>
-                                        <p v-if="event.review_notes" class="mt-2 leading-6 text-slate-600">
-                                            {{ event.review_notes }}
-                                        </p>
-                                    </div>
-                                </div>
-                            </section>
+                    <section v-if="activeSection === 'schedule'" id="application-schedules" class="student-card scroll-mt-4 overflow-hidden rounded-md border-slate-300">
+                        <header class="border-b border-slate-200 bg-slate-50/70 p-4 sm:p-5"><p class="student-kicker">Schedule</p><h2 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule ? 'Your next activity' : 'Activity history' }}</h2><p class="mt-1 text-sm text-slate-500">{{ currentSchedule ? 'Review the date, location, and instructions before attending.' : 'There is no upcoming activity.' }}</p></header>
+                        <div v-if="currentSchedule" class="p-4 sm:p-5">
+                            <div class="grid gap-4 rounded-md border border-slate-300 bg-slate-50 p-4 sm:grid-cols-[auto_minmax(0,1fr)]">
+                                <div class="flex h-16 w-16 flex-col items-center justify-center rounded-md bg-slate-950 text-white"><span class="text-[10px] font-bold uppercase text-amber-300">{{ currentScheduleDate.month }}</span><span class="text-2xl font-bold">{{ currentScheduleDate.day }}</span></div>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(currentSchedule.type) }}</p><h3 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule.title }}</h3><p class="mt-1 text-sm font-semibold text-slate-600">{{ currentSchedule.scheduled_label }}</p></div>
+                                <dl class="grid gap-3 sm:col-span-2 sm:grid-cols-3"><div class="rounded-md bg-white p-3 ring-1 ring-slate-200"><dt class="text-[10px] font-bold uppercase text-slate-500">Time</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ currentScheduleDate.time }}</dd></div><div class="rounded-md bg-white p-3 ring-1 ring-slate-200"><dt class="text-[10px] font-bold uppercase text-slate-500">Mode</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ scheduleModeLabel(currentSchedule.mode) }}</dd></div><div class="rounded-md bg-white p-3 ring-1 ring-slate-200"><dt class="text-[10px] font-bold uppercase text-slate-500">Venue</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ currentSchedule.venue || 'See provider instructions' }}</dd></div></dl>
+                                <div class="sm:col-span-2"><p class="text-sm leading-6 text-slate-700">{{ currentSchedule.instructions }}</p><div class="mt-3 flex flex-wrap gap-2"><a v-if="currentSchedule.online_url" :href="currentSchedule.online_url" target="_blank" rel="noopener" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white">Open online access</a><button v-if="hasCoordinates(currentSchedule.latitude, currentSchedule.longitude) || currentSchedule.location_address || currentSchedule.venue" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openScheduleMap(currentSchedule)">View map</button></div></div>
+                            </div>
+                        </div>
+                        <details v-if="scheduleHistory.length" class="group border-t border-slate-200"><summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-bold text-slate-700 sm:px-5 [&::-webkit-details-marker]:hidden"><span>Previous activities ({{ scheduleHistory.length }})</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary><div class="divide-y divide-slate-200 border-t border-slate-200 bg-slate-50"><div v-for="schedule in scheduleHistory" :key="schedule.id" class="flex items-center justify-between gap-3 px-4 py-3 sm:px-5"><div><p class="text-sm font-bold text-slate-900">{{ schedule.title || scheduleTypeLabel(schedule.type) }}</p><p class="mt-1 text-xs text-slate-500">{{ schedule.scheduled_label }}</p></div><span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span></div></div></details>
+                    </section>
 
-                            <section v-if="activeSection === 'history' && !timeline.length" class="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                                <p class="font-bold text-slate-950">No status changes yet</p>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">
-                                    The submitted application will appear here when the provider records a review update.
-                                </p>
-                            </section>
+                    <section v-if="activeSection === 'program'" class="student-card overflow-hidden rounded-md border-slate-300">
+                        <header class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                            <div><p class="student-kicker">Scholarship</p><h2 class="mt-1 text-lg font-bold text-slate-950">Program information</h2><p class="mt-1 text-sm text-slate-500">Benefits, dates, and provider contact for this application.</p></div>
+                            <a :href="`/dashboard/scholarships/${application.scholarship?.id}`" class="w-fit rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View full scholarship</a>
+                        </header>
 
-                            <details v-if="activeSection === 'history' && application.application_answers?.length" class="group rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-                                    <span>Your submitted answers</span>
-                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                                </summary>
-                                <dl class="divide-y divide-slate-200 border-t border-slate-200">
-                                    <div v-for="(answer, index) in application.application_answers" :key="answer.question_id || index" class="px-4 py-3">
-                                        <dt class="text-xs font-bold leading-5 text-slate-500">{{ answer.prompt }}</dt>
-                                        <dd class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ answer.answer || 'No response provided' }}</dd>
-                                    </div>
-                                </dl>
-                            </details>
+                        <div class="p-4 sm:p-5">
+                            <div class="flex items-center gap-3">
+                                <img :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'" :alt="application.scholarship?.title" class="h-12 w-12 rounded-sm object-contain p-1 ring-1 ring-slate-200">
+                                <div class="min-w-0"><h3 class="truncate font-bold text-slate-950">{{ application.scholarship?.title }}</h3><p class="mt-1 text-xs text-slate-500">{{ application.scholarship?.provider?.name }}</p></div>
+                            </div>
+                            <p v-if="application.scholarship?.description" class="mt-4 max-w-4xl text-sm leading-6 text-slate-600">{{ application.scholarship.description }}</p>
 
-                            <details v-if="activeSection === 'history' && application.notes" class="group rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-                                    <span>Your submitted note</span>
-                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                                </summary>
-                                <p class="border-t border-slate-200 px-4 py-3 text-sm leading-6 text-slate-600">{{ application.notes }}</p>
-                            </details>
+                            <div v-if="application.scholarship?.benefits?.length || application.scholarship?.benefit_summary || application.scholarship?.award_amount != null" class="mt-4 border-t border-slate-200 pt-4">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Support provided</p>
+                                <ul v-if="application.scholarship?.benefits?.length" class="mt-2 grid gap-2 sm:grid-cols-2">
+                                    <li v-for="benefit in application.scholarship.benefits" :key="`${benefit.type}-${benefit.title}`" class="flex items-start gap-2 border-l-2 border-amber-400 bg-amber-50/60 px-3 py-2 text-sm text-slate-700"><i class="fa-solid fa-check mt-1 text-xs text-amber-700" aria-hidden="true"></i><span><strong>{{ benefit.title }}</strong><span v-if="benefit.amount !== null && benefit.amount !== undefined && benefit.amount !== ''"> - {{ formatAwardAmount(benefit.amount) }}</span></span></li>
+                                </ul>
+                                <p v-else class="mt-2 text-sm font-bold text-slate-900">{{ application.scholarship?.benefit_summary || formatAwardAmount(application.scholarship?.award_amount) }}</p>
+                            </div>
+
+                            <dl class="mt-5 grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 lg:grid-cols-5">
+                                <div class="bg-slate-50 px-3 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Program cycle</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ application.scholarship?.program_cycle || 'Not listed' }}</dd></div>
+                                <div class="bg-slate-50 px-3 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Deadline</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ application.scholarship?.deadline || 'Not listed' }}</dd></div>
+                                <div class="bg-slate-50 px-3 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Application mode</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ applicationModeLabel(application.scholarship?.application_mode) }}</dd></div>
+                                <div class="bg-slate-50 px-3 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Support period</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ supportPeriodLabel }}</dd></div>
+                                <div class="bg-slate-50 px-3 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Location</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ application.scholarship?.location_name || 'Not listed' }}</dd><button v-if="hasMapPreview" type="button" class="mt-1 text-xs font-bold text-amber-800" @click="openProgramMap">View map</button></div>
+                            </dl>
                         </div>
 
-                        <div v-if="activeSection === 'overview'" class="flex flex-col gap-4">
-                            <section v-if="hasProviderUpdate" class="order-2 overflow-hidden rounded-lg border border-slate-200 border-l-4 border-l-slate-400 bg-white shadow-sm">
-                                <div class="flex items-start gap-3 p-4 sm:p-5">
-                                    <span class="student-section-mark"><i class="fa-solid fa-message" aria-hidden="true"></i></span>
-                                    <div class="min-w-0">
-                                        <p class="student-kicker">Provider update</p>
-                                        <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                            {{ application.review_notes || application.decision_reason || application.outcome_notes ? 'Review feedback' : 'Your submitted note' }}
-                                        </h3>
-                                    </div>
-                                </div>
-
-                                <dl class="divide-y divide-slate-200 border-t border-slate-200">
-                                    <div v-if="application.review_notes" class="px-4 py-3.5 text-sm sm:px-5">
-                                        <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Message from the provider</dt>
-                                        <dd class="mt-1 whitespace-pre-line leading-6 text-slate-700">{{ application.review_notes }}</dd>
-                                    </div>
-                                    <div v-if="application.outcome_notes" class="px-4 py-3.5 text-sm sm:px-5">
-                                        <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Outcome details</dt>
-                                        <dd class="mt-1 whitespace-pre-line leading-6 text-slate-700">{{ application.outcome_notes }}</dd>
-                                    </div>
-                                    <div v-if="application.decision_reason" class="px-4 py-3.5 text-sm sm:px-5">
-                                        <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Decision reason</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ labelFromKey(application.decision_reason) }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
-
-                            <section
-                                v-if="activeSection === 'overview' && application.correction_status"
-                                :class="[
-                                    'order-1 overflow-hidden rounded-lg border border-l-4 bg-white p-4 shadow-sm sm:p-5',
-                                    application.correction_status === 'requested'
-                                        ? 'border-slate-200 border-l-amber-400'
-                                        : application.correction_status === 'submitted'
-                                            ? 'border-slate-200 border-l-sky-500'
-                                            : 'border-slate-200 border-l-emerald-500',
-                                ]"
-                            >
-                                <div class="flex items-start gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-800">
-                                        <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
-                                    </span>
-                                    <div class="min-w-0 flex-1">
-                                        <p class="student-kicker">Application correction</p>
-                                        <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                            {{ application.correction_status === 'requested' ? 'Provider needs an update' : application.correction_status === 'submitted' ? 'Correction sent for review' : 'Correction completed' }}
-                                        </h3>
-                                        <p v-if="application.correction_message" class="mt-2 text-sm leading-6 text-slate-700">{{ application.correction_message }}</p>
-                                        <div v-if="correctionTargets.length" class="mt-2 flex flex-wrap gap-1.5">
-                                            <span v-for="target in correctionTargets" :key="target" class="rounded-md bg-white/80 px-2 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">
-                                                {{ correctionTargetLabel(target) }}
-                                            </span>
-                                        </div>
-                                        <p v-if="application.correction_response" class="mt-2 rounded-md bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"><strong>Your response:</strong> {{ application.correction_response }}</p>
-                                        <div v-if="application.correction_status === 'requested'" class="mt-3 flex flex-wrap gap-2">
-                                            <a
-                                                v-if="correctionTargetsInclude('profile')"
-                                                href="/dashboard/profile?section=personal"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                                            >Update profile</a>
-                                            <a
-                                                v-if="correctionTargetsInclude('academic_record')"
-                                                href="/dashboard/profile?section=verification"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                                            >Update academic record</a>
-                                            <button
-                                                v-if="correctionTargetsInclude('application_files') || !correctionTargets.length"
-                                                type="button"
-                                                class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                                                @click="openSection('files')"
-                                            >Update files</button>
-                                            <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="showCorrectionModal = true">Send correction</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <details v-if="application.can_withdraw || application.status === 'withdrawn'" class="group order-3 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                                <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-                                    <span class="flex items-center gap-2"><i class="fa-solid fa-gear text-slate-400" aria-hidden="true"></i> Application options</span>
-                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                                </summary>
-                                <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <div>
-                                        <h3 class="text-sm font-bold text-slate-950">Withdraw this application</h3>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">This stops provider review and keeps the record in your history.</p>
-                                    </div>
-                                    <button
-                                        v-if="application.can_withdraw"
-                                        type="button"
-                                        class="shrink-0 rounded-md border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-700 transition hover:bg-rose-50"
-                                        @click="showWithdrawalModal = true"
-                                    >
-                                        Withdraw application
-                                    </button>
-                                    <span v-else-if="application.status === 'withdrawn'" class="rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Withdrawn {{ application.withdrawn_at }}</span>
-                                </div>
-                            </details>
-
+                        <div class="divide-y divide-slate-200 border-t border-slate-200 bg-slate-50">
+                            <div class="px-4 py-4 sm:px-5">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Provider contact</p>
+                                <p class="mt-1 text-sm font-bold text-slate-900">{{ application.scholarship?.contact_person || application.scholarship?.provider?.name || 'Scholarship provider' }}</p>
+                                <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600"><a v-if="application.scholarship?.contact_email" :href="`mailto:${application.scholarship.contact_email}`" class="font-semibold hover:text-slate-950">{{ application.scholarship.contact_email }}</a><a v-if="application.scholarship?.contact_number" :href="`tel:${application.scholarship.contact_number}`" class="font-semibold hover:text-slate-950">{{ application.scholarship.contact_number }}</a><span v-if="!application.scholarship?.contact_email && !application.scholarship?.contact_number">Contact details are available on the full listing.</span></div>
+                            </div>
+                            <div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div><p class="text-sm font-bold text-slate-900">Profile comparison</p><p class="mt-1 text-xs text-slate-500">Review the profile values checked against the rules.</p></div><button type="button" class="w-fit shrink-0 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="showProfileMatchModal = true">View match details</button></div>
                         </div>
+                    </section>
+
+                    <div v-if="activeSection === 'history'" class="space-y-4">
+                        <section class="student-card overflow-hidden rounded-md border-slate-300"><header class="border-b border-slate-200 bg-slate-50/70 p-4 sm:p-5"><p class="student-kicker">History</p><h2 class="mt-1 text-lg font-bold text-slate-950">Application timeline</h2><p class="mt-1 text-sm text-slate-500">Status changes and provider updates are recorded here.</p></header><div v-if="timeline.length" class="divide-y divide-slate-200"><div v-for="event in timeline" :key="event.id" class="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:px-5"><div><p class="text-sm font-bold text-slate-900">{{ statusLabel(event.to_status) }}</p><p class="mt-1 text-xs text-slate-500">By {{ event.actor || 'System' }}</p><p v-if="event.review_notes" class="mt-2 text-sm leading-6 text-slate-600">{{ event.review_notes }}</p></div><p class="text-xs text-slate-500">{{ event.changed_at || 'Recently' }}</p></div></div><div v-else class="p-5 text-sm text-slate-500">No status changes have been recorded yet.</div></section>
+                        <details v-if="application.application_answers?.length" class="group student-card overflow-hidden rounded-md border-slate-300"><summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-bold text-slate-700 sm:px-5 [&::-webkit-details-marker]:hidden"><span>Your submitted answers</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary><dl class="divide-y divide-slate-200 border-t border-slate-200"><div v-for="(answer, index) in application.application_answers" :key="answer.question_id || index" class="px-4 py-3 sm:px-5"><dt class="text-xs font-bold text-slate-500">{{ answer.prompt }}</dt><dd class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ answer.answer || 'No response provided' }}</dd></div></dl></details>
+                        <details v-if="application.notes" class="group student-card overflow-hidden rounded-md border-slate-300"><summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-bold text-slate-700 sm:px-5 [&::-webkit-details-marker]:hidden"><span>Your submitted note</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary><p class="border-t border-slate-200 px-4 py-3 text-sm leading-6 text-slate-600 sm:px-5">{{ application.notes }}</p></details>
                     </div>
                 </div>
-
             </div>
         </section>
+    </main>
 
         <Teleport to="body">
             <div
@@ -2236,6 +1632,4 @@ onMounted(loadApplication);
             :note="activeMapPreview.note"
             @close="closeMapModal"
         />
-
-    </main>
 </template>

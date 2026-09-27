@@ -48,10 +48,24 @@ const scheduledActivities = computed(() => applications.value
     .sort((first, second) => scheduleTimestamp(first.schedule) - scheduleTimestamp(second.schedule)));
 
 const nextScheduledActivity = computed(() => scheduledActivities.value[0] ?? null);
-const activeApplication = computed(() => nextScheduledActivity.value?.application
+const agreementActionApplication = computed(() => applications.value.find(
+    (application) => application.recipient_agreement?.can_respond || application.requires_student_response,
+) ?? null);
+const monitoringActionApplication = computed(() => applications.value.find(
+    (application) => Number(application.recipient_monitoring?.pending_count ?? 0) > 0,
+) ?? null);
+const activeApplication = computed(() => agreementActionApplication.value
+    ?? monitoringActionApplication.value
+    ?? nextScheduledActivity.value?.application
     ?? applications.value.find((application) => !isClosedApplication(application))
+    ?? applications.value.find((application) => applicationHasOngoingSupport(application))
     ?? null);
-const activeApplicationCount = computed(() => applications.value.filter((application) => !isClosedApplication(application)).length);
+const activeApplicationCount = computed(() => applications.value.filter((application) => (
+    !isClosedApplication(application)
+    || application.recipient_agreement?.can_respond
+    || application.requires_student_response
+    || applicationHasOngoingSupport(application)
+)).length);
 const correctionApplication = computed(() => applications.value.find(
     (application) => application.correction_status === 'requested',
 ) ?? null);
@@ -106,6 +120,45 @@ const priorityAction = computed(() => {
             requiresAttention: true,
             meta: [
                 { icon: 'fa-solid fa-folder-open', label: `${issues.length} to update` },
+            ],
+        };
+    }
+
+    if (agreementActionApplication.value) {
+        const application = agreementActionApplication.value;
+
+        return {
+            key: `agreement-${application.id}`,
+            eyebrow: 'Selection result',
+            title: 'Review your recipient agreement',
+            detail: application.scholarship?.title || 'Selected scholarship',
+            prompt: 'Confirm the support, responsibilities, timeframe, and provider terms before continuing.',
+            href: applicationDetailUrl(application, { action: 'agreement' }),
+            button: 'Review agreement',
+            icon: 'fa-solid fa-file-signature',
+            requiresAttention: true,
+            meta: [
+                { icon: 'fa-solid fa-award', label: 'Selected applicant' },
+            ],
+        };
+    }
+
+    if (monitoringActionApplication.value) {
+        const application = monitoringActionApplication.value;
+        const pendingCount = Number(application.recipient_monitoring?.pending_count ?? 0);
+
+        return {
+            key: `monitoring-${application.id}`,
+            eyebrow: 'Scholarship requirement',
+            title: pendingCount === 1 ? 'Submit your current requirement' : `Complete ${pendingCount} monitoring requirements`,
+            detail: application.scholarship?.title || 'Active scholarship support',
+            prompt: 'Open your recipient record to review the instructions and submission deadline.',
+            href: applicationDetailUrl(application, { section: 'monitoring' }),
+            button: 'Open requirement',
+            icon: 'fa-solid fa-graduation-cap',
+            requiresAttention: true,
+            meta: [
+                { icon: 'fa-solid fa-list-check', label: `${pendingCount} pending` },
             ],
         };
     }
@@ -210,6 +263,28 @@ const priorityAction = computed(() => {
         meta: [],
     };
 });
+
+function applicationHasOngoingSupport(application) {
+    const agreementStatus = String(application?.recipient_agreement?.status ?? '').toLowerCase();
+    const supportStatus = String(application?.recipient_monitoring?.support_status ?? '').toLowerCase();
+
+    return Boolean(application?.recipient_monitoring?.eligible)
+        && agreementStatus !== 'declined'
+        && ['active', 'renewed'].includes(supportStatus);
+}
+
+function applicationDetailUrl(application, params = {}) {
+    const url = new URL(
+        application?.detail_url || `/dashboard/applications/${application?.id}`,
+        window.location.origin,
+    );
+
+    Object.entries(params).forEach(([key, value]) => {
+        if (value) url.searchParams.set(key, value);
+    });
+
+    return `${url.pathname}${url.search}`;
+}
 
 const readinessItems = computed(() => {
     const application = activeApplication.value;

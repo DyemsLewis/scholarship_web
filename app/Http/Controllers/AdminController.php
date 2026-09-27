@@ -888,6 +888,81 @@ class AdminController extends Controller
         );
     }
 
+    public function reviewApplicantProfilePhoto(Request $request, User $applicant): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($applicant->isApplicant(), 404);
+
+        $validated = $request->validate([
+            'action' => ['required', Rule::in(['approve', 'request_replacement'])],
+            'reason' => [
+                Rule::requiredIf($request->input('action') === 'request_replacement'),
+                'nullable',
+                'string',
+                'min:5',
+                'max:1000',
+            ],
+        ]);
+        $profile = $applicant->studentProfile()->firstOrCreate(['user_id' => $applicant->id]);
+
+        if ($validated['action'] === 'approve' && blank($profile->profile_photo_path)) {
+            return response()->json(['message' => 'The applicant has not uploaded a 2x2 photo yet.'], 422);
+        }
+
+        $needsReplacement = $validated['action'] === 'request_replacement';
+        $profile->update([
+            'profile_photo_review_status' => $needsReplacement ? 'needs_replacement' : 'approved',
+            'profile_photo_review_note' => $needsReplacement ? $validated['reason'] : null,
+            'profile_photo_reviewed_by' => $request->user()->id,
+            'profile_photo_reviewed_at' => now(),
+            'profile_photo_review_application_id' => null,
+        ]);
+
+        PortalNotification::updateOrCreate(
+            [
+                'user_id' => $applicant->id,
+                'deduplication_key' => "profile-photo-review:{$applicant->id}",
+            ],
+            [
+                'type' => 'profile_photo_review',
+                'title' => $needsReplacement ? 'Replace your applicant photo' : 'Applicant photo reviewed',
+                'message' => $needsReplacement
+                    ? "An administrator requested a new 2x2 photo. Reason: {$validated['reason']}"
+                    : 'An administrator checked your applicant photo.',
+                'action_url' => $needsReplacement ? '/dashboard/profile?section=personal&photo=replace' : '/dashboard/profile',
+                'read_at' => null,
+            ],
+        );
+
+        ActivityLog::record(
+            $request->user(),
+            $needsReplacement ? 'applicant_profile_photo_replacement_requested' : 'applicant_profile_photo_approved',
+            $needsReplacement
+                ? "{$request->user()->name} requested a replacement 2x2 photo from {$applicant->name}."
+                : "{$request->user()->name} approved the 2x2 photo for {$applicant->name}.",
+            $request,
+            [
+                'applicant_id' => $applicant->id,
+                'photo_review_status' => $profile->profile_photo_review_status,
+                'reason' => $profile->profile_photo_review_note,
+            ],
+        );
+
+        $freshApplicant = $applicant->fresh([
+            'studentProfile.verifier.adminProfile',
+            'studentProfile.verifier.providerProfile',
+            'studentProfile.verifier.parentAccount.providerProfile',
+            'applicantVerificationDocuments',
+        ]);
+
+        return response()->json([
+            'message' => $needsReplacement
+                ? 'The applicant was asked to upload a new 2x2 photo.'
+                : 'The applicant photo was marked as acceptable.',
+            'applicant' => $this->applicantReviewPayload($freshApplicant, true),
+        ]);
+    }
+
     public function downloadProviderVerificationDocument(Request $request, ProviderVerificationDocument $document)
     {
         abort_unless($request->user()?->isAdmin(), 403);

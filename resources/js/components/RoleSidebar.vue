@@ -92,9 +92,23 @@ function linkHashMatches(link) {
     return !link.hashless || !currentUrl.hash;
 }
 
+function linkPatternMatches(link) {
+    return link.activePathPatterns?.some((pattern) => {
+        try {
+            return new RegExp(pattern).test(currentPath);
+        } catch {
+            return false;
+        }
+    }) ?? false;
+}
+
 function isActive(link) {
     if (props.active) {
         return props.active === link.key;
+    }
+
+    if (linkPatternMatches(link)) {
+        return true;
     }
 
     const targetPath = linkPath(link);
@@ -115,7 +129,8 @@ function isActive(link) {
 function isGroupActive(link) {
     const targetPath = linkPath(link);
 
-    return currentPath === targetPath
+    return linkPatternMatches(link)
+        || currentPath === targetPath
         || currentPath.startsWith(`${targetPath}/`)
         || link.activePaths?.some((path) => currentPath === path || currentPath.startsWith(`${path}/`))
         || link.children?.some((child) => isActive(child));
@@ -280,12 +295,13 @@ async function requestLogout() {
 
                 <div class="mt-2 grid gap-0.5 sm:grid-cols-2 lg:grid-cols-1">
                     <NotificationBell align="left" mode="sidebar-compact" centered />
+                    <slot name="account-actions"></slot>
                     <button
                         type="button"
-                        class="group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-slate-400 transition hover:bg-white/[0.05] hover:text-white"
+                        class="group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300"
                         @click="requestLogout"
                     >
-                        <span class="grid h-6 w-6 shrink-0 place-items-center text-xs text-slate-500 transition group-hover:text-slate-300">
+                        <span class="grid h-6 w-6 shrink-0 place-items-center text-xs text-rose-400 transition group-hover:text-rose-300">
                             <i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i>
                         </span>
                         Logout
