@@ -455,17 +455,6 @@ function applicationCardAction(application) {
         };
     }
 
-    const schedule = primarySchedule(application);
-
-    if (!application?.workflow?.is_closed && schedule?.status === 'scheduled') {
-        return {
-            eyebrow: 'Upcoming activity',
-            title: schedule.title || `${scheduleTypeLabel(schedule.type)} scheduled`,
-            description: `Review the instructions for ${schedule.scheduled_label || 'the scheduled date'}.`,
-            icon: scheduleTypeIcon(schedule.type),
-        };
-    }
-
     if (applicationHasOngoingSupport(application)) {
         return {
             eyebrow: 'Recipient support',
@@ -1529,26 +1518,35 @@ watch(selectedScholarship, (scholarship) => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-                                            <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
-                                                {{ applicationStatusLabel(application) }}
-                                            </span>
-                                            <span
-                                                v-if="application.correction_status === 'requested'"
-                                                class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                        <div class="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+                                            <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                                                <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
+                                                    {{ applicationStatusLabel(application) }}
+                                                </span>
+                                                <span
+                                                    v-if="application.correction_status === 'requested'"
+                                                    class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold uppercase text-amber-800"
+                                                >
+                                                    Update requested
+                                                </span>
+                                                <span
+                                                    v-else-if="application.correction_status === 'submitted'"
+                                                    class="w-fit rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold uppercase text-sky-800"
+                                                >
+                                                    Correction sent
+                                                </span>
+                                            </div>
+                                            <a
+                                                :href="applicationActionUrl(application)"
+                                                class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
                                             >
-                                                Update requested
-                                            </span>
-                                            <span
-                                                v-else-if="application.correction_status === 'submitted'"
-                                                class="w-fit rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold uppercase text-sky-800"
-                                            >
-                                                Correction sent
-                                            </span>
+                                                {{ applicationActionLabel(application) }}
+                                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                            </a>
                                         </div>
                                     </div>
 
-                                    <div class="mt-4 grid gap-4 border-t border-slate-200 pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                                    <div v-if="applicationNeedsAction(application)" class="mt-4 border-t border-slate-200 pt-4">
                                         <div class="flex min-w-0 items-start gap-3">
                                             <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
                                                 <i :class="applicationCardAction(application).icon" aria-hidden="true"></i>
@@ -1570,13 +1568,6 @@ watch(selectedScholarship, (scholarship) => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <a
-                                            :href="applicationActionUrl(application)"
-                                            class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
-                                        >
-                                            {{ applicationActionLabel(application) }}
-                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                        </a>
                                     </div>
                                 </div>
 

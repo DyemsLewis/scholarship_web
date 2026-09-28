@@ -284,6 +284,12 @@ const academicProfileProof = computed(() => applicantProfileProofs.value.find(
 const recentSchoolIdProfileProof = computed(() => applicantProfileProofs.value.find(
     (proof) => proof.document_type === 'recent_school_id',
 ) ?? null);
+const schoolRecordProfileProof = computed(() => applicantProfileProofs.value.find(
+    (proof) => proof.document_type === 'school_record',
+) ?? null);
+const achievementProfileProof = computed(() => applicantProfileProofs.value.find(
+    (proof) => proof.document_type === 'achievement_evidence',
+) ?? null);
 const academicScanRequired = computed(() => Boolean(application.value?.applicant?.academic_scan_required));
 const academicScanReady = computed(() => !academicScanRequired.value || academicProfileProof.value?.ocr_status === 'succeeded');
 const reviewedAcademicResultIsNumeric = computed(() => ['percentage', 'grade_point'].includes(reviewedAcademicScale.value));
@@ -316,6 +322,20 @@ const applicantReviewFacts = computed(() => {
         { label: 'Citizenship', value: applicant.citizenship_status ? labelFromKey(applicant.citizenship_status) : 'Not provided' },
     ];
 });
+const applicantIdentityFacts = computed(() => {
+    const applicant = application.value?.applicant ?? {};
+    const education = [
+        applicant.education_level ? labelFromKey(applicant.education_level) : '',
+        applicant.course_or_strand,
+        applicant.year_level,
+    ].filter(Boolean).join(' - ');
+
+    return [
+        { label: 'Education', value: education || 'Not provided' },
+        { label: 'School', value: applicant.school || 'Not provided' },
+        { label: 'Account managed by', value: applicant.account_managed_by ? labelFromKey(applicant.account_managed_by) : 'Not provided' },
+    ];
+});
 const academicEvidenceState = computed(() => {
     const status = application.value?.applicant?.profile_verification_status;
 
@@ -328,6 +348,57 @@ const academicEvidenceState = computed(() => {
     }
 
     return academicProfileProof.value ? 'document_supported' : 'self_declared';
+});
+const recentSchoolIdEvidenceState = computed(() => profileProofEvidenceState(
+    recentSchoolIdProfileProof.value,
+    true,
+));
+const schoolRecordEvidenceState = computed(() => profileProofEvidenceState(schoolRecordProfileProof.value));
+const achievementEvidenceState = computed(() => profileProofEvidenceState(achievementProfileProof.value));
+const profileEvidenceRows = computed(() => {
+    const applicant = application.value?.applicant ?? {};
+    const rows = [
+        {
+            key: 'academic_record',
+            label: 'Academic record',
+            detail: 'Supports the saved grades and grading period.',
+            icon: 'fa-solid fa-file-lines',
+            proof: academicProfileProof.value,
+            state: academicEvidenceState.value,
+        },
+        {
+            key: 'recent_school_id',
+            label: 'Recent school ID',
+            detail: 'Supports the applicant\'s current student identity.',
+            icon: 'fa-solid fa-id-card',
+            proof: recentSchoolIdProfileProof.value,
+            state: recentSchoolIdEvidenceState.value,
+        },
+    ];
+
+    if (schoolRecordProfileProof.value) {
+        rows.push({
+            key: 'school_record',
+            label: 'Enrollment proof',
+            detail: 'Supports the current school and enrollment details.',
+            icon: 'fa-solid fa-school',
+            proof: schoolRecordProfileProof.value,
+            state: schoolRecordEvidenceState.value,
+        });
+    }
+
+    if (applicant.achievements || achievementProfileProof.value) {
+        rows.push({
+            key: 'achievement_evidence',
+            label: 'Achievement evidence',
+            detail: 'Supports the achievement entered in the profile.',
+            icon: 'fa-solid fa-award',
+            proof: achievementProfileProof.value,
+            state: achievementEvidenceState.value,
+        });
+    }
+
+    return rows;
 });
 const canVerifyAcademicRecord = computed(() => (
     application.value?.applicant?.profile_verification_status === 'pending'
@@ -781,6 +852,8 @@ function evidenceLabel(status) {
         verified: 'Verified',
         document_supported: 'Document submitted',
         needs_replacement: 'Needs replacement',
+        missing: 'Missing',
+        not_required: 'Not required',
         self_declared: 'Self-declared',
     }[status] ?? 'Self-declared';
 }
@@ -798,7 +871,28 @@ function evidenceClass(status) {
         return 'bg-rose-100 text-rose-800';
     }
 
+    if (status === 'missing') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
     return 'bg-slate-100 text-slate-600';
+}
+
+function profileProofEvidenceState(proof, verifiedWithAcademicReview = false) {
+    const proofStatus = proof?.status;
+    const profileStatus = application.value?.applicant?.profile_verification_status;
+
+    if (['rejected', 'needs_replacement'].includes(proofStatus)
+        || (verifiedWithAcademicReview && profileStatus === 'rejected')) {
+        return 'needs_replacement';
+    }
+
+    if (proofStatus === 'approved'
+        || (verifiedWithAcademicReview && profileStatus === 'approved')) {
+        return 'verified';
+    }
+
+    return proof ? 'document_supported' : 'missing';
 }
 
 function labelFromKey(value) {
@@ -2149,11 +2243,49 @@ onMounted(loadApplication);
                                 eyebrow="Applicant record"
                                 :status-label="profileVerificationLabel(application.applicant?.profile_verification_status)"
                                 :status-class="profileVerificationClass(application.applicant?.profile_verification_status)"
+                                :facts="applicantIdentityFacts"
                                 :busy="isReviewingPhoto"
                                 :error="photoReviewError"
                                 @approve-photo="updatePhotoReview('approve')"
                                 @request-photo-replacement="updatePhotoReview('request_replacement', $event)"
                             />
+
+                            <section v-if="activeApplicantView === 'profile'" class="provider-panel overflow-hidden">
+                                <header class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <h3 class="font-bold text-slate-950">Supporting evidence</h3>
+                                        <p class="mt-1 text-xs text-slate-500">Open a record when a saved claim needs checking.</p>
+                                    </div>
+                                    <span class="text-xs font-bold text-slate-500">{{ profileEvidenceRows.filter((row) => row.proof).length }} of {{ profileEvidenceRows.length }} submitted</span>
+                                </header>
+                                <div class="divide-y divide-slate-200">
+                                    <article
+                                        v-for="row in profileEvidenceRows"
+                                        :key="row.key"
+                                        class="flex flex-col gap-3 px-5 py-3.5 sm:flex-row sm:items-center"
+                                    >
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
+                                            <i :class="row.icon" aria-hidden="true"></i>
+                                        </span>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="font-bold text-slate-950">{{ row.label }}</p>
+                                            <p class="mt-0.5 text-xs text-slate-500">{{ row.detail }}</p>
+                                        </div>
+                                        <span :class="['w-fit shrink-0 rounded-sm px-2 py-1 text-[10px] font-bold uppercase', evidenceClass(row.state)]">
+                                            {{ evidenceLabel(row.state) }}
+                                        </span>
+                                        <button
+                                            v-if="row.proof"
+                                            type="button"
+                                            class="inline-flex w-fit shrink-0 items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 hover:text-slate-950"
+                                            @click="openProfileProof(row.proof)"
+                                        >
+                                            Open file
+                                            <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i>
+                                        </button>
+                                    </article>
+                                </div>
+                            </section>
 
                             <section v-if="activeApplicantView === 'profile'" class="provider-panel overflow-hidden">
                                 <div class="border-b border-slate-200">
@@ -2197,11 +2329,14 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div>
-                                    <div class="flex items-center gap-3 bg-slate-50/70 px-5 py-4">
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
-                                            <i class="fa-solid fa-house-chimney-user" aria-hidden="true"></i>
-                                        </span>
-                                        <h3 class="font-bold text-slate-950">Household and support</h3>
+                                    <div class="flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 px-5 py-4">
+                                        <div class="flex items-center gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
+                                                <i class="fa-solid fa-house-chimney-user" aria-hidden="true"></i>
+                                            </span>
+                                            <h3 class="font-bold text-slate-950">Household and support</h3>
+                                        </div>
+                                        <span class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Applicant-declared</span>
                                     </div>
                                     <dl class="grid gap-x-8 gap-y-4 px-5 py-5 text-sm sm:grid-cols-2 xl:grid-cols-3">
                                         <div><dt class="text-xs font-semibold text-slate-500">Income bracket</dt><dd class="mt-1 font-bold text-slate-950">{{ application.applicant?.income_bracket || 'Not provided' }}</dd></div>
@@ -2241,7 +2376,16 @@ onMounted(loadApplication);
                                     </div>
                                     <dl class="divide-y divide-slate-200 text-sm">
                                         <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Applicant goal</dt><dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.scholarship_goal || 'Not provided' }}</dd></div>
-                                        <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Achievements or strengths</dt><dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.achievements || 'Not provided' }}</dd></div>
+                                        <div class="px-5 py-4">
+                                            <dt class="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-slate-500">
+                                                <span>Achievements or strengths</span>
+                                                <span v-if="application.applicant?.achievements || achievementProfileProof" :class="['rounded-sm px-2 py-1 text-[10px] font-bold uppercase', evidenceClass(achievementEvidenceState)]">{{ evidenceLabel(achievementEvidenceState) }}</span>
+                                            </dt>
+                                            <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.achievements || 'Not provided' }}</dd>
+                                            <button v-if="achievementProfileProof" type="button" class="mt-2 inline-flex items-center gap-2 text-xs font-bold text-amber-800 hover:text-amber-950" @click="openProfileProof(achievementProfileProof)">
+                                                Open achievement evidence<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
                                         <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Activities and responsibilities</dt><dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ application.applicant?.activities_and_responsibilities || 'Not provided' }}</dd></div>
                                     </dl>
                                 </div>

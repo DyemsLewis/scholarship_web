@@ -157,6 +157,61 @@ class ProviderProgramDirectoryTest extends TestCase
             ->assertRedirect("/provider/monitoring/{$scholarship->id}");
     }
 
+    public function test_program_editor_uses_dedicated_step_urls(): void
+    {
+        $provider = User::factory()->create([
+            'role' => 'provider',
+            'account_status' => 'active',
+        ]);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Guided Program Draft',
+            'description' => '',
+            'status' => 'draft',
+        ]);
+
+        $this->actingAs($provider)
+            ->get("/provider/programs/{$scholarship->id}/edit")
+            ->assertRedirect("/provider/programs/{$scholarship->id}/edit/basics");
+
+        foreach (['basics', 'support', 'dates-location', 'eligibility', 'application', 'selection', 'review'] as $step) {
+            $this->actingAs($provider)
+                ->get("/provider/programs/{$scholarship->id}/edit/{$step}")
+                ->assertOk()
+                ->assertViewIs('provider-program-form');
+        }
+
+        $this->actingAs($provider)
+            ->get("/provider/programs/{$scholarship->id}/edit/not-a-step")
+            ->assertNotFound();
+    }
+
+    public function test_provider_cannot_open_another_organization_program_editor(): void
+    {
+        $provider = User::factory()->create([
+            'role' => 'provider',
+            'account_status' => 'active',
+        ]);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+
+        $otherProvider = User::factory()->create([
+            'role' => 'provider',
+            'account_status' => 'active',
+        ]);
+        $scholarship = Scholarship::create([
+            'provider_id' => $otherProvider->id,
+            'title' => 'Private Program Draft',
+            'description' => '',
+            'status' => 'draft',
+        ]);
+
+        $this->actingAs($provider)
+            ->get("/provider/programs/{$scholarship->id}/edit/basics")
+            ->assertForbidden();
+    }
+
     public function test_provider_cannot_open_another_organization_program_workspace(): void
     {
         $provider = User::factory()->create([

@@ -1,7 +1,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey } from '../support/display';
 
 const isLoading = ref(true);
@@ -9,6 +11,13 @@ const errorMessage = ref('');
 const user = ref(null);
 const scholarships = ref([]);
 const searchQuery = ref('');
+const deletingProgramId = ref(null);
+const {
+    confirmation,
+    requestConfirmation,
+    confirmConfirmation,
+    cancelConfirmation,
+} = useConfirmationDialog();
 const requestedStatusFilter = new URLSearchParams(window.location.search).get('status');
 const legacyStatusAliases = { draft: 'drafts', rejected: 'drafts', pending_review: 'review' };
 const normalizedStatusFilter = legacyStatusAliases[requestedStatusFilter] ?? requestedStatusFilter;
@@ -235,6 +244,33 @@ async function loadProviderData() {
     }
 }
 
+async function deleteDraft(scholarship) {
+    if (scholarship.status !== 'draft' || deletingProgramId.value) return;
+
+    const confirmed = await requestConfirmation({
+        title: 'Delete this draft?',
+        message: `${scholarship.title} will be permanently deleted. This action cannot be undone.`,
+        confirmLabel: 'Delete draft',
+        tone: 'danger',
+    });
+
+    if (!confirmed) return;
+
+    deletingProgramId.value = scholarship.id;
+    errorMessage.value = '';
+
+    try {
+        await window.axios.delete(`/provider/scholarships/${scholarship.id}`);
+        scholarships.value = scholarships.value.filter((item) => item.id !== scholarship.id);
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message
+            ?? error.response?.data?.errors?.program?.[0]
+            ?? 'Unable to delete this draft.';
+    } finally {
+        deletingProgramId.value = null;
+    }
+}
+
 watch(statusFilter, (status) => {
     const url = new URL(window.location.href);
 
@@ -250,6 +286,12 @@ onMounted(loadProviderData);
 <template>
     <main class="provider-shell">
         <ProviderSidebar />
+
+        <ConfirmationDialog
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <section class="provider-page">
             <div class="provider-container">
@@ -329,7 +371,7 @@ onMounted(loadProviderData);
 
                         <template v-else>
                             <div v-if="filteredScholarships.length" class="bg-white">
-                                <div class="portal-record-head hidden grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_13rem] items-center gap-4 lg:grid">
+                                <div class="portal-record-head hidden grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_15rem] items-center gap-4 lg:grid">
                                     <span>Program</span>
                                     <span>Current step</span>
                                     <span class="text-center">Actions</span>
@@ -337,7 +379,7 @@ onMounted(loadProviderData);
                                 <article
                                     v-for="scholarship in filteredScholarships"
                                     :key="scholarship.id"
-                                    class="portal-record-row grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_13rem] lg:items-center lg:gap-4"
+                                    class="portal-record-row grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(12rem,18rem)_15rem] lg:items-center lg:gap-4"
                                 >
                                     <div class="flex min-w-0 items-center gap-3">
                                         <img
@@ -365,6 +407,16 @@ onMounted(loadProviderData);
                                         <p class="mt-0.5 truncate text-xs text-slate-500">{{ programTask(scholarship).detail }}</p>
                                     </div>
                                     <div class="portal-record-actions grid grid-cols-1 sm:ml-14 sm:flex sm:w-fit lg:ml-0 lg:w-full">
+                                        <button
+                                            v-if="canManagePrograms && scholarship.status === 'draft'"
+                                            type="button"
+                                            :disabled="deletingProgramId === scholarship.id"
+                                            class="inline-flex items-center justify-center gap-2 rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                            @click="deleteDraft(scholarship)"
+                                        >
+                                            <i class="fa-regular fa-trash-can text-[10px]" aria-hidden="true"></i>
+                                            {{ deletingProgramId === scholarship.id ? 'Deleting...' : 'Delete draft' }}
+                                        </button>
                                         <a
                                             v-if="programEditAction(scholarship)"
                                             :href="programEditAction(scholarship).href"

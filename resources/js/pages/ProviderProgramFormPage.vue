@@ -26,10 +26,19 @@ import {
 import { cashGrantAmount, normalizeScholarshipBenefits as normalizeBenefits } from '../support/scholarshipBenefits';
 import { providerObjectiveDetails, providerObjectiveOptions } from '../support/providerObjectives';
 
-const scholarshipId = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit$/)?.[1] ?? null;
-const isEditMode = computed(() => Boolean(scholarshipId));
+const programFormPathMatch = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
+const scholarshipId = ref(programFormPathMatch?.[1] ?? null);
+const programStepSectionMap = {
+    basics: 'details',
+    support: 'support',
+    'dates-location': 'logistics',
+    eligibility: 'eligibility',
+    application: 'application',
+    selection: 'selection',
+    review: 'review',
+};
+const isEditMode = computed(() => Boolean(scholarshipId.value));
 const isLoading = ref(true);
-const showFormGuidance = ref(false);
 const isSaving = ref(false);
 const errorMessage = ref('');
 const formError = ref('');
@@ -42,8 +51,15 @@ const imageFile = ref(null);
 const imagePreviewUrl = ref('');
 const useProviderLogoSelected = ref(false);
 const providerLocationMessage = ref('');
-const activeFormSection = ref('details');
+const activeFormSection = ref(programStepSectionMap[programFormPathMatch?.[2]] ?? 'details');
 const showLocationMap = ref(false);
+const showProviderPurpose = ref(false);
+const showCoreMatchingRules = ref(false);
+const showAdditionalMatchingRules = ref(false);
+const showDocumentChecklist = ref(false);
+const showRecipientReleaseDetails = ref(false);
+const showRecipientExceptionDetails = ref(false);
+const showProgramReviewSummary = ref(false);
 const customizeRubric = ref(false);
 const selectedTargetPresetKey = ref('');
 const customProgramPath = ref('');
@@ -88,16 +104,17 @@ const currentLocalDateTime = new Date(Date.now() - new Date().getTimezoneOffset(
     .toISOString();
 const todayDate = currentLocalDateTime.slice(0, 10);
 const formSections = [
-    { id: 'details', label: 'Overview', help: 'Set the program identity, public contact, and main location.' },
-    { id: 'support', label: 'Benefits & dates', help: 'Define the support, recipient slots, and application timeline.' },
-    { id: 'eligibility', label: 'Eligible applicants', help: 'Set who can apply and how the portal checks profile fit.' },
-    { id: 'application', label: 'Application files', help: 'Choose the initial files and originals applicants may need to present later.' },
-    { id: 'selection', label: 'Selection flow', help: 'Arrange pre-screening, later provider stages, and review scoring.' },
-    { id: 'review', label: 'Review & submit', help: 'Preview the listing, save a draft, or send it for admin review.' },
+    { id: 'details', slug: 'basics', label: 'Basics', help: 'Name the scholarship and give applicants a short, clear summary.' },
+    { id: 'support', slug: 'support', label: 'Support', help: 'List what recipients receive and how many can be selected.' },
+    { id: 'logistics', slug: 'dates-location', label: 'Dates & location', help: 'Set the application dates, public contact, and program location.' },
+    { id: 'eligibility', slug: 'eligibility', label: 'Eligible applicants', help: 'Set who can apply and how profile matching should work.' },
+    { id: 'application', slug: 'application', label: 'Application', help: 'Choose the files, questions, and formal application instructions.' },
+    { id: 'selection', slug: 'selection', label: 'Selection', help: 'Arrange the provider stages and review scoring.' },
+    { id: 'review', slug: 'review', label: 'Review & submit', help: 'Check the program, save a draft, or send it for admin review.' },
 ];
 const formSubsections = {
     eligibility: [
-        { id: 'requirements', label: 'Required eligibility', icon: 'fa-solid fa-list-check' },
+        { id: 'requirements', label: 'Requirements', icon: 'fa-solid fa-list-check' },
         { id: 'matching', label: 'Matching rules', icon: 'fa-solid fa-sliders' },
     ],
     application: [
@@ -267,35 +284,35 @@ const selectionStageOptions = [
     {
         value: 'screening',
         label: 'Pre-screening review',
-        description: 'Review eligibility, profile details, and submitted files inside the portal. No schedule is needed.',
+        description: 'Check eligibility, profile details, and submitted files.',
         icon: 'fa-solid fa-list-check',
         required: true,
     },
     {
         value: 'formal_application',
         label: 'Formal application',
-        description: 'The applicant follows your official instructions, submits provider-specific forms, or presents originals.',
+        description: 'Complete provider forms or present original records.',
         icon: 'fa-solid fa-file-signature',
         required: true,
     },
     {
         value: 'exam',
         label: 'Exam',
-        description: 'Applicants complete an exam managed and graded by your organization.',
+        description: 'Complete an exam managed by your organization.',
         icon: 'fa-solid fa-clipboard-question',
         required: false,
     },
     {
         value: 'interview',
         label: 'Interview',
-        description: 'Shortlisted applicants meet the provider before the final decision.',
+        description: 'Meet your team before the final decision.',
         icon: 'fa-solid fa-comments',
         required: false,
     },
     {
         value: 'decision',
         label: 'Final decision',
-        description: 'Record selected, waitlisted, or not selected after all configured stages.',
+        description: 'Record selected, waitlisted, or not selected.',
         icon: 'fa-solid fa-award',
         required: true,
     },
@@ -835,6 +852,15 @@ const recipientAgreementReady = computed(() => {
         && hasText(scholarshipForm.value.recipientAgreement.noncompliance_consequence)
         && hasText(scholarshipForm.value.recipientAgreement.exit_or_exception_process);
 });
+const recipientReleaseDetailsReady = computed(() => (
+    hasText(scholarshipForm.value.recipientAgreement.required_evidence)
+    && hasText(scholarshipForm.value.recipientAgreement.release_conditions)
+    && hasText(scholarshipForm.value.recipientAgreement.duration)
+));
+const recipientExceptionDetailsReady = computed(() => (
+    hasText(scholarshipForm.value.recipientAgreement.noncompliance_consequence)
+    && hasText(scholarshipForm.value.recipientAgreement.exit_or_exception_process)
+));
 const programReadinessItems = computed(() => [
     {
         label: 'Program overview',
@@ -852,14 +878,19 @@ const programReadinessItems = computed(() => [
         help: 'Upload a program logo or reuse the provider logo.',
     },
     {
-        label: 'Support and dates',
+        label: 'Support package',
         section: 'support',
-        complete: scholarshipForm.value.benefits.length > 0
-            && deadlineReady.value
+        complete: scholarshipForm.value.benefits.length > 0,
+        help: 'Add at least one benefit recipients will receive.',
+    },
+    {
+        label: 'Program dates',
+        section: 'logistics',
+        complete: deadlineReady.value
             && applicationWindowReady.value
             && resultsDateReady.value
             && supportPeriodReady.value,
-        help: 'At least one benefit, valid application dates, and the recipient support period.',
+        help: 'Set a valid deadline and recipient support period.',
     },
     {
         label: 'Eligibility and matching rules',
@@ -923,7 +954,7 @@ const programReadinessItems = computed(() => [
     },
     {
         label: 'Program location',
-        section: 'details',
+        section: 'logistics',
         complete: hasText(scholarshipForm.value.locationName)
             && hasText(scholarshipForm.value.locationRegion)
             && hasText(scholarshipForm.value.locationProvince)
@@ -934,7 +965,7 @@ const programReadinessItems = computed(() => [
     },
     {
         label: 'Public contact',
-        section: 'details',
+        section: 'logistics',
         complete: hasText(scholarshipForm.value.contactEmail)
             || hasText(scholarshipForm.value.contactNumber),
         help: 'An official email address or phone number applicants can use.',
@@ -945,7 +976,10 @@ const completedProgramReadinessCount = computed(() => programReadinessItems.valu
 const activeFormSectionIndex = computed(() => formSections.findIndex((section) => section.id === activeFormSection.value));
 const activeFormSectionMeta = computed(() => formSections[activeFormSectionIndex.value] ?? formSections[0]);
 const finderRuleSummary = computed(() => [
-    scholarshipForm.value.eligibleEducationLevels.length ? `${scholarshipForm.value.eligibleEducationLevels.length} education level${scholarshipForm.value.eligibleEducationLevels.length === 1 ? '' : 's'}` : 'All education levels',
+    scholarshipForm.value.eligibleEducationLevels.length
+        && !hasSameMembers(scholarshipForm.value.eligibleEducationLevels, allEducationLevelValues)
+        ? `${scholarshipForm.value.eligibleEducationLevels.length} education level${scholarshipForm.value.eligibleEducationLevels.length === 1 ? '' : 's'}`
+        : 'All education levels',
     scholarshipForm.value.eligibleSchoolTypes.length ? `${scholarshipForm.value.eligibleSchoolTypes.length} school type${scholarshipForm.value.eligibleSchoolTypes.length === 1 ? '' : 's'}` : 'All school types',
     academicRequirementSummary.value,
     scholarshipForm.value.incomeRequirement && scholarshipForm.value.incomeRequirement !== 'Any' ? scholarshipForm.value.incomeRequirement : 'Any income',
@@ -984,6 +1018,13 @@ const hiddenSelectedSchoolTypeLabels = computed(() => {
 
     return optionLabels(hiddenValues, schoolTypeOptions);
 });
+const additionalRestrictionCount = computed(() => [
+    selectedProgramPaths.value.some((path) => !isOpenProgramPath(path)),
+    selectedGradeLevels.value.some((level) => !['any', 'all', 'any grade or year level'].includes(String(level).trim().toLowerCase())),
+    !isOpenEligibilityRule(scholarshipForm.value.eligibleLocations),
+    !isOpenEligibilityRule(scholarshipForm.value.incomeRequirement),
+    scholarshipForm.value.excludeCurrentScholarshipRecipients,
+].filter(Boolean).length);
 const statusOptions = computed(() => {
     const options = [
         { value: 'draft', label: 'Save as draft', help: 'Only provider can see it.' },
@@ -1026,11 +1067,49 @@ const submitButtonLabel = computed(() => {
         ? 'Resubmit for review'
         : 'Submit for review';
 });
+const stepNavigationSaves = computed(() => !isEditMode.value || scholarshipForm.value.status === 'draft');
 
-async function openFormSection(sectionId) {
+function formSectionFromLocation() {
+    const step = window.location.pathname.match(/\/provider\/programs\/\d+\/edit\/([a-z-]+)$/)?.[1];
+
+    return programStepSectionMap[step] ?? 'details';
+}
+
+function programStepUrl(sectionId) {
+    const section = formSections.find((item) => item.id === sectionId);
+
+    if (!scholarshipId.value || !section) {
+        return '';
+    }
+
+    return `/provider/programs/${scholarshipId.value}/edit/${section.slug}`;
+}
+
+function syncProgramStepUrl(sectionId, replace = false) {
+    const url = programStepUrl(sectionId);
+
+    if (!url || window.location.pathname === url) {
+        return;
+    }
+
+    window.history[replace ? 'replaceState' : 'pushState']({}, '', url);
+}
+
+async function openFormSection(sectionId, options = {}) {
+    if (!formSections.some((section) => section.id === sectionId)) {
+        return;
+    }
+
     activeFormSection.value = sectionId;
+    if (options.syncUrl !== false) {
+        syncProgramStepUrl(sectionId, Boolean(options.replaceUrl));
+    }
     await nextTick();
     scholarshipFormElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function handleProgramStepHistory() {
+    activeFormSection.value = formSectionFromLocation();
 }
 
 function openFormSubsection(subsectionId) {
@@ -1043,16 +1122,40 @@ function openFormSubsection(subsectionId) {
 
 function revealFieldSubsection(sectionId, fieldId) {
     if (sectionId === 'eligibility') {
-        activeFormSubsection.value.eligibility = fieldId === 'scholarship-eligibility' || fieldId === 'target-applicant-preset'
+        const requirementsFields = [
+            'scholarship-eligibility',
+            'target-applicant-preset',
+            'scholarship-grade-scale',
+            'scholarship-minimum-gwa',
+            'scholarship-custom-eligibility',
+        ];
+        activeFormSubsection.value.eligibility = requirementsFields.includes(fieldId)
             ? 'requirements'
             : 'matching';
+
+        if (['scholarship-education-levels', 'scholarship-school-types'].includes(fieldId)) {
+            showCoreMatchingRules.value = true;
+        }
+
+        if (['scholarship-courses', 'scholarship-years', 'scholarship-eligible-locations', 'scholarship-income'].includes(fieldId)) {
+            showAdditionalMatchingRules.value = true;
+        }
     }
 
     if (sectionId === 'application') {
-        if (fieldId === 'scholarship-mode' || fieldId === 'scholarship-custom-requirements') {
+        if (['scholarship-mode', 'scholarship-custom-requirements', 'scholarship-custom-optional-requirements'].includes(fieldId)) {
             activeFormSubsection.value.application = 'files';
-        } else if (fieldId === 'scholarship-commitment-option') {
+            showDocumentChecklist.value = fieldId !== 'scholarship-mode';
+        } else if (fieldId === 'scholarship-commitment-option' || fieldId?.startsWith('scholarship-agreement-')) {
             activeFormSubsection.value.application = 'expectations';
+
+            if (['scholarship-agreement-evidence', 'scholarship-agreement-release-conditions', 'scholarship-agreement-duration'].includes(fieldId)) {
+                showRecipientReleaseDetails.value = true;
+            }
+
+            if (['scholarship-agreement-consequence', 'scholarship-agreement-exit'].includes(fieldId)) {
+                showRecipientExceptionDetails.value = true;
+            }
         } else {
             activeFormSubsection.value.application = 'handoff';
         }
@@ -1065,6 +1168,7 @@ function revealFieldSubsection(sectionId, fieldId) {
 
 async function focusFormField(sectionId, fieldId) {
     activeFormSection.value = sectionId;
+    syncProgramStepUrl(sectionId);
     revealFieldSubsection(sectionId, fieldId);
     await nextTick();
 
@@ -1085,8 +1189,9 @@ function readinessFocusTarget(item) {
 
     if (item.label === 'Program logo') return 'scholarship-image';
 
-    if (item.label === 'Support and dates') {
-        if (scholarshipForm.value.benefits.length === 0) return 'program-benefit-type';
+    if (item.label === 'Support package') return 'program-benefit-type';
+
+    if (item.label === 'Program dates') {
         if (!applicationWindowReady.value) return 'scholarship-application-opens';
         if (!resultsDateReady.value) return 'scholarship-expected-results';
         if (!hasText(scholarshipForm.value.supportStartsAt)) return 'scholarship-support-starts';
@@ -1096,9 +1201,16 @@ function readinessFocusTarget(item) {
     }
 
     if (item.label === 'Eligibility and matching rules') {
-        return !hasText(scholarshipForm.value.eligibility)
-            ? 'scholarship-eligibility'
-            : 'target-applicant-preset';
+        if (!hasText(scholarshipForm.value.eligibility)) return 'scholarship-eligibility';
+
+        const issue = eligibilityRuleIssues.value[0] ?? '';
+
+        if (issue.includes('academic grading')) return 'scholarship-grade-scale';
+        if (issue.includes('income range')) return 'scholarship-income';
+        if (issue.includes('covered location')) return 'scholarship-eligible-locations';
+        if (issue.includes('custom condition')) return 'scholarship-custom-eligibility';
+
+        return 'target-applicant-preset';
     }
 
     if (item.label === 'Verification method') return 'scholarship-mode';
@@ -1125,16 +1237,69 @@ function readinessFocusTarget(item) {
     if (item.label === 'Public contact') return 'scholarship-contact-email';
     if (item.label === 'Exam details') return 'scholarship-exam-duration';
     if (item.label === 'Review scoring') return `rubric-label-${scholarshipForm.value.reviewRubric[0]?.key}`;
-    if (item.label === 'Provider expectation disclosure') return 'scholarship-commitment-option';
+    if (item.label === 'Provider expectation disclosure') {
+        if (selectedCommitmentOption.value === 'provider_briefing') return 'scholarship-commitment-option';
+        if (selectedCommitmentOption.value !== 'none' && !hasText(scholarshipForm.value.recipientAgreement.responsibilities)) return 'scholarship-agreement-responsibilities';
+        if (selectedCommitmentOption.value !== 'none' && !hasText(scholarshipForm.value.recipientAgreement.required_evidence)) return 'scholarship-agreement-evidence';
+        if (!hasText(scholarshipForm.value.recipientAgreement.release_conditions)) {
+            return selectedCommitmentOption.value === 'none'
+                ? 'scholarship-agreement-release-conditions-none'
+                : 'scholarship-agreement-release-conditions';
+        }
+        if (selectedCommitmentOption.value !== 'none' && !hasText(scholarshipForm.value.recipientAgreement.duration)) return 'scholarship-agreement-duration';
+        if (selectedCommitmentOption.value !== 'none' && !hasText(scholarshipForm.value.recipientAgreement.noncompliance_consequence)) return 'scholarship-agreement-consequence';
+        if (selectedCommitmentOption.value !== 'none' && !hasText(scholarshipForm.value.recipientAgreement.exit_or_exception_process)) return 'scholarship-agreement-exit';
+
+        return 'scholarship-commitment-option';
+    }
 
     return '';
+}
+
+async function validateActiveFormSection() {
+    const missingItem = programReadinessItems.value.find((item) => (
+        item.section === activeFormSection.value && !item.complete
+    ));
+
+    if (!missingItem) {
+        return true;
+    }
+
+    const fieldId = readinessFocusTarget(missingItem);
+
+    if (fieldId) {
+        await focusFormField(missingItem.section, fieldId);
+    }
+
+    formError.value = `${missingItem.label} is incomplete. ${missingItem.help}`;
+
+    return false;
+}
+
+async function navigateFromFormSection(sectionId, validateCurrent = false) {
+    if (sectionId === activeFormSection.value || isSaving.value) {
+        return;
+    }
+
+    formError.value = '';
+
+    if (validateCurrent && !await validateActiveFormSection()) {
+        return;
+    }
+
+    if (!isEditMode.value || scholarshipForm.value.status === 'draft') {
+        await saveScholarship({ mode: 'step', targetSection: sectionId });
+        return;
+    }
+
+    await openFormSection(sectionId);
 }
 
 function goToPreviousFormSection() {
     const previous = formSections[activeFormSectionIndex.value - 1];
 
     if (previous) {
-        openFormSection(previous.id);
+        navigateFromFormSection(previous.id);
     }
 }
 
@@ -1142,7 +1307,7 @@ function goToNextFormSection() {
     const next = formSections[activeFormSectionIndex.value + 1];
 
     if (next) {
-        openFormSection(next.id);
+        navigateFromFormSection(next.id, true);
     }
 }
 
@@ -1723,7 +1888,7 @@ function updateEligibilitySummary() {
 
 function eligibilityVerificationLabel(type) {
     if (type === 'automatic') {
-        return 'Checked by DSS';
+        return 'Portal check';
     }
 
     return eligibilityVerificationOptions.find((option) => option.value === type)?.label || 'Provider verifies';
@@ -2505,8 +2670,8 @@ async function loadFormData() {
 
         user.value = profileResponse.data.user;
 
-        if (scholarshipId) {
-            const scholarshipResponse = await window.axios.get(`/provider/scholarships/${scholarshipId}`);
+        if (scholarshipId.value) {
+            const scholarshipResponse = await window.axios.get(`/provider/scholarships/${scholarshipId.value}`);
 
             fillScholarshipForm(scholarshipResponse.data.scholarship);
         } else {
@@ -2521,7 +2686,9 @@ async function loadFormData() {
     }
 }
 
-async function saveScholarship() {
+async function saveScholarship(options = {}) {
+    const isStepSave = options.mode === 'step';
+    const targetSection = options.targetSection ?? null;
     formError.value = '';
 
     if (!hasText(scholarshipForm.value.title)) {
@@ -2530,13 +2697,13 @@ async function saveScholarship() {
         return;
     }
 
-    if (termsRequiredForSave.value && !hasText(scholarshipForm.value.description)) {
+    if (!isStepSave && termsRequiredForSave.value && !hasText(scholarshipForm.value.description)) {
         await focusFormField('details', 'scholarship-description');
         formError.value = 'Add a clear scholarship description before continuing.';
         return;
     }
 
-    if (reviewSubmissionSelected.value && missingProgramReadinessItems.value.length > 0) {
+    if (!isStepSave && reviewSubmissionSelected.value && missingProgramReadinessItems.value.length > 0) {
         const firstMissingItem = missingProgramReadinessItems.value[0];
         const fieldId = readinessFocusTarget(firstMissingItem);
 
@@ -2551,7 +2718,8 @@ async function saveScholarship() {
     }
 
     if (
-        termsRequiredForSave.value
+        !isStepSave
+        && termsRequiredForSave.value
         && scholarshipForm.value.applicationQuestions.some((question) => !hasText(question.prompt))
     ) {
         await openFormSection('application');
@@ -2559,14 +2727,15 @@ async function saveScholarship() {
         return;
     }
 
-    if (termsRequiredForSave.value && !scholarshipForm.value.termsAccepted) {
+    if (!isStepSave && termsRequiredForSave.value && !scholarshipForm.value.termsAccepted) {
         await openFormSection('review');
         formError.value = 'Accept the provider scholarship terms before submitting or updating this program.';
         return;
     }
 
     if (
-        termsRequiredForSave.value
+        !isStepSave
+        && termsRequiredForSave.value
         && (
             scholarshipForm.value.reviewRubric.some((criterion) => !hasText(criterion.label))
             || rubricWeightTotal.value !== 100
@@ -2578,7 +2747,7 @@ async function saveScholarship() {
         return;
     }
 
-    const importantSave = {
+    const importantSave = isStepSave ? null : {
         pending_review: {
             title: 'Submit this program for review?',
             message: 'The program will be sent to the administrator for approval before applicants can see it.',
@@ -2656,7 +2825,7 @@ async function saveScholarship() {
         contact_person: scholarshipForm.value.contactPerson || '',
         contact_department: scholarshipForm.value.contactDepartment || '',
         deadline: scholarshipForm.value.deadline || '',
-        status: scholarshipForm.value.status,
+        status: isStepSave ? 'draft' : scholarshipForm.value.status,
         use_provider_logo: useProviderLogoSelected.value ? '1' : '0',
         terms_accepted: scholarshipForm.value.termsAccepted ? '1' : '',
     };
@@ -2669,16 +2838,28 @@ async function saveScholarship() {
         payload.append('image_file', imageFile.value);
     }
 
-    if (isEditMode.value) {
+    const wasEditMode = isEditMode.value;
+
+    if (wasEditMode) {
         payload.append('_method', 'PUT');
     }
 
     try {
-        const response = isEditMode.value
-            ? await window.axios.post(`/provider/scholarships/${scholarshipId}`, payload)
+        const response = wasEditMode
+            ? await window.axios.post(`/provider/scholarships/${scholarshipId.value}`, payload)
             : await window.axios.post('/provider/scholarships', payload);
 
-        if (isEditMode.value) {
+        if (isStepSave) {
+            autosaveReady.value = false;
+            scholarshipId.value = String(response.data.scholarship.id);
+            clearLocalDraft();
+            fillScholarshipForm(response.data.scholarship);
+            autosaveReady.value = true;
+
+            if (targetSection) {
+                await openFormSection(targetSection, { replaceUrl: !wasEditMode });
+            }
+        } else if (wasEditMode) {
             fillScholarshipForm(response.data.scholarship);
         } else {
             autosaveReady.value = false;
@@ -2686,6 +2867,8 @@ async function saveScholarship() {
             resetScholarshipForm();
             autosaveReady.value = true;
         }
+
+        return true;
     } catch (error) {
         const validationErrors = error.response?.data?.errors ?? {};
         const firstValidationMessage = Object.values(validationErrors).flat()[0];
@@ -2693,6 +2876,8 @@ async function saveScholarship() {
         formError.value = firstValidationMessage
             ?? error.response?.data?.message
             ?? 'Unable to save this scholarship right now.';
+
+        return false;
     } finally {
         isSaving.value = false;
     }
@@ -2707,9 +2892,13 @@ watch(scholarshipForm, () => {
     autosaveTimer = window.setTimeout(saveLocalDraft, 600);
 }, { deep: true });
 
-onMounted(loadFormData);
+onMounted(() => {
+    window.addEventListener('popstate', handleProgramStepHistory);
+    loadFormData();
+});
 onBeforeUnmount(() => {
     window.clearTimeout(autosaveTimer);
+    window.removeEventListener('popstate', handleProgramStepHistory);
 
     if (imagePreviewUrl.value) {
         URL.revokeObjectURL(imagePreviewUrl.value);
@@ -2779,9 +2968,9 @@ onBeforeUnmount(() => {
 
                     <form
                         ref="scholarshipFormElement"
-                        :class="['provider-program-form scroll-mt-4 space-y-4', showFormGuidance ? 'show-guidance' : '']"
+                        class="provider-program-form scroll-mt-4 space-y-4"
                         novalidate
-                        @submit.prevent="saveScholarship"
+                        @submit.prevent="saveScholarship()"
                     >
                         <div class="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
                             <label class="block sm:hidden">
@@ -2789,26 +2978,32 @@ onBeforeUnmount(() => {
                                 <select
                                     :value="activeFormSection"
                                     class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                                    @change="openFormSection($event.target.value)"
+                                    @change="navigateFromFormSection($event.target.value)"
                                 >
-                                    <option v-for="(section, index) in formSections" :key="section.id" :value="section.id">
+                                    <option
+                                        v-for="(section, index) in formSections"
+                                        :key="section.id"
+                                        :value="section.id"
+                                        :disabled="!isEditMode && section.id !== activeFormSection"
+                                    >
                                         {{ index + 1 }}. {{ section.label }}
                                     </option>
                                 </select>
                             </label>
-                            <nav class="hidden gap-1 sm:grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6" aria-label="Program form sections">
+                            <nav class="hidden gap-1 sm:grid sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7" aria-label="Program form sections">
                                 <button
                                     v-for="(section, index) in formSections"
                                     :key="section.id"
                                     type="button"
+                                    :disabled="!isEditMode && section.id !== activeFormSection"
                                     :aria-current="activeFormSection === section.id ? 'page' : undefined"
                                     :class="[
                                         'flex min-w-0 items-center gap-2 rounded-md px-3 py-2.5 text-left text-xs font-bold transition',
                                         activeFormSection === section.id
                                             ? 'bg-slate-950 text-white shadow-sm'
-                                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
+                                            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40',
                                     ]"
-                                    @click="openFormSection(section.id)"
+                                    @click="navigateFromFormSection(section.id)"
                                 >
                                     <span :class="['grid h-6 w-6 shrink-0 place-items-center rounded text-[10px]', activeFormSection === section.id ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-500']">{{ index + 1 }}</span>
                                     <span class="truncate">{{ section.label }}</span>
@@ -2818,17 +3013,9 @@ onBeforeUnmount(() => {
 
                         <div class="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white">
                             <div class="border-b border-slate-200 px-5 py-4 sm:px-7">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Section {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}</p>
-                                        <h3 class="mt-1 text-xl font-bold text-slate-950">{{ activeFormSectionMeta.label }}</h3>
-                                    </div>
-                                    <button type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950" @click="showFormGuidance = !showFormGuidance">
-                                        <i :class="['fa-solid mr-1.5 text-[10px]', showFormGuidance ? 'fa-eye-slash' : 'fa-circle-question']" aria-hidden="true"></i>
-                                        {{ showFormGuidance ? 'Hide guidance' : 'Show guidance' }}
-                                    </button>
-                                </div>
-                                <p v-if="showFormGuidance" class="mt-2 max-w-2xl text-xs leading-5 text-slate-500">{{ activeFormSectionMeta.help }}</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Section {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}</p>
+                                <h3 class="mt-1 text-xl font-bold text-slate-950">{{ activeFormSectionMeta.label }}</h3>
+                                <p class="mt-1 max-w-2xl text-sm leading-5 text-slate-600">{{ activeFormSectionMeta.help }}</p>
 
                                 <nav
                                     v-if="activeFormSubsectionTabs.length"
@@ -2856,14 +3043,14 @@ onBeforeUnmount(() => {
                             <div class="p-5 sm:p-7">
 
                         <div
-                            v-show="['details', 'support', 'review'].includes(activeFormSection)
+                            v-show="['details', 'support', 'logistics', 'review'].includes(activeFormSection)
                                 || (activeFormSection === 'eligibility' && activeFormSubsection.eligibility === 'requirements')
                                 || (activeFormSection === 'application' && activeFormSubsection.application === 'files')"
                             :class="['grid gap-6', sectionCardClass]"
                         >
                             <div v-show="activeFormSection === 'details'" class="space-y-5">
                                 <div>
-                                    <h4 class="text-base font-bold text-slate-950">Applicant listing</h4>
+                                    <h4 class="text-base font-bold text-slate-950">Program identity</h4>
                                 </div>
 
                                 <div :class="fieldStackClass">
@@ -2927,9 +3114,9 @@ onBeforeUnmount(() => {
                                             <i :class="activeTargetForm.icon" aria-hidden="true"></i>
                                         </span>
                                         <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Target applicants</p>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">1. Starting point</p>
                                             <p class="mt-1 text-sm font-bold text-slate-950">Choose the closest learner group</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">This fills sensible starting rules. You can adjust every rule afterward.</p>
+                                            <p class="mt-1 text-xs text-slate-500">The portal fills common rules that you can adjust.</p>
                                         </div>
                                     </div>
                                     <div :class="fieldStackClass">
@@ -2955,19 +3142,16 @@ onBeforeUnmount(() => {
                                 </div>
 
                                 <div class="mt-5" :class="labelClass">
-                                    Required eligibility
+                                    2. Required conditions
                                     <span :class="requiredHintClass">Select all that apply</span>
                                 </div>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">
-                                    Select every condition that applies. Each condition records how it will be checked; the detailed fields below control automatic matching.
-                                </p>
 
-                                <div class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3" role="group" aria-label="Eligibility criteria">
+                                <div class="mt-3 grid gap-2 md:grid-cols-2" role="group" aria-label="Eligibility criteria">
                                     <label
                                         v-for="option in eligibilityOptions"
                                         :key="option.key"
                                         :class="[
-                                            'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition',
+                                            'flex cursor-pointer items-center gap-3 rounded-md border px-3 py-3 transition',
                                             selectedEligibilityOptions.includes(option.key)
                                                 ? 'border-slate-900 bg-slate-50 ring-1 ring-slate-900/10'
                                                 : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70',
@@ -2980,10 +3164,9 @@ onBeforeUnmount(() => {
                                             class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-amber-400"
                                             @change="applyEligibilityOption(option.key)"
                                         >
-                                        <span>
-                                            <span class="block text-sm font-bold text-slate-900">{{ option.label }}</span>
-                                            <span class="mt-1 block text-xs leading-5 text-slate-500">{{ option.description }}</span>
-                                            <span class="mt-2 inline-flex rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-600">
+                                        <span class="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                            <span class="text-sm font-bold text-slate-900">{{ option.label }}</span>
+                                            <span class="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-slate-600">
                                                 {{ eligibilityVerificationLabel(option.verificationType) }}
                                             </span>
                                         </span>
@@ -2991,7 +3174,7 @@ onBeforeUnmount(() => {
 
                                     <label
                                         :class="[
-                                            'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition md:col-span-2 xl:col-span-3',
+                                            'flex cursor-pointer items-center gap-3 rounded-md border px-3 py-3 transition',
                                             selectedEligibilityOptions.includes(customEligibilityOption)
                                                 ? 'border-amber-400 bg-amber-50/60 ring-1 ring-amber-200'
                                                 : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70',
@@ -3004,9 +3187,9 @@ onBeforeUnmount(() => {
                                             class="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-slate-900 focus:ring-amber-400"
                                             @change="applyEligibilityOption(customEligibilityOption)"
                                         >
-                                        <span>
-                                            <span class="block text-sm font-bold text-slate-900">Custom eligibility</span>
-                                            <span class="mt-1 block text-xs leading-5 text-slate-500">Add an official condition that is not covered above.</span>
+                                        <span class="flex min-w-0 flex-1 items-center justify-between gap-3">
+                                            <span class="text-sm font-bold text-slate-900">Custom condition</span>
+                                            <span class="shrink-0 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-900">Optional</span>
                                         </span>
                                     </label>
                                 </div>
@@ -3102,55 +3285,62 @@ onBeforeUnmount(() => {
                                 </div>
 
                                 <section v-show="activeFormSection === 'details'" class="md:col-span-2 rounded-lg border border-slate-200 bg-white p-4 sm:p-5">
-                                    <div class="flex items-start gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                            <i class="fa-solid fa-bullseye" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Provider purpose</p>
-                                            <h4 class="mt-1 text-base font-bold text-slate-950">What this scholarship aims to achieve</h4>
+                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div class="flex items-start gap-3">
+                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                                <i class="fa-solid fa-bullseye" aria-hidden="true"></i>
+                                            </span>
+                                            <div>
+                                                <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Optional purpose</p>
+                                                <h4 class="mt-1 text-sm font-bold text-slate-950">Explain why your organization offers this scholarship</h4>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                            @click="showProviderPurpose = !showProviderPurpose"
+                                        >
+                                            {{ showProviderPurpose ? 'Hide purpose' : (scholarshipForm.providerObjectives.length || scholarshipForm.providerObjectiveNotes ? 'Review purpose' : 'Add purpose') }}
+                                        </button>
+                                    </div>
+
+                                    <div v-if="showProviderPurpose" class="mt-4 border-t border-slate-200 pt-4">
+                                        <div class="grid gap-2 sm:grid-cols-2">
+                                            <label
+                                                v-for="option in providerObjectiveOptions"
+                                                :key="option.value"
+                                                :class="[
+                                                    'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition',
+                                                    scholarshipForm.providerObjectives.includes(option.value)
+                                                        ? 'border-amber-400 bg-amber-50'
+                                                        : 'border-slate-200 bg-slate-50 hover:border-slate-300',
+                                                ]"
+                                            >
+                                                <input
+                                                    v-model="scholarshipForm.providerObjectives"
+                                                    type="checkbox"
+                                                    :value="option.value"
+                                                    class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400"
+                                                >
+                                                <span class="min-w-0">
+                                                    <span class="block text-sm font-bold text-slate-950">{{ option.label }}</span>
+                                                    <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ option.detail }}</span>
+                                                </span>
+                                            </label>
+                                        </div>
+
+                                        <div class="mt-4">
+                                            <label :class="labelClass" for="scholarship-provider-objective-notes">Short explanation</label>
+                                            <textarea
+                                                id="scholarship-provider-objective-notes"
+                                                v-model="scholarshipForm.providerObjectiveNotes"
+                                                rows="3"
+                                                maxlength="1500"
+                                                placeholder="How does this scholarship support your organization's purpose?"
+                                                :class="inputClass"
+                                            ></textarea>
                                         </div>
                                     </div>
-
-                                    <div class="mt-4 grid gap-2 sm:grid-cols-2">
-                                        <label
-                                            v-for="option in providerObjectiveOptions"
-                                            :key="option.value"
-                                            :class="[
-                                                'flex cursor-pointer items-start gap-3 rounded-md border p-3 transition',
-                                                scholarshipForm.providerObjectives.includes(option.value)
-                                                    ? 'border-amber-400 bg-amber-50'
-                                                    : 'border-slate-200 bg-slate-50 hover:border-slate-300',
-                                            ]"
-                                        >
-                                            <input
-                                                v-model="scholarshipForm.providerObjectives"
-                                                type="checkbox"
-                                                :value="option.value"
-                                                class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400"
-                                            >
-                                            <span class="min-w-0">
-                                                <span class="block text-sm font-bold text-slate-950">{{ option.label }}</span>
-                                                <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ option.detail }}</span>
-                                            </span>
-                                        </label>
-                                    </div>
-
-                                    <div class="mt-4">
-                                        <label :class="labelClass" for="scholarship-provider-objective-notes">
-                                            Program-specific explanation
-                                            <span :class="optionalHintClass">Optional</span>
-                                        </label>
-                                        <textarea
-                                            id="scholarship-provider-objective-notes"
-                                            v-model="scholarshipForm.providerObjectiveNotes"
-                                            rows="3"
-                                            maxlength="1500"
-                                            placeholder="Example: We want to help senior high learners continue STEM studies and prepare for local technology careers."
-                                            :class="inputClass"
-                                        ></textarea>
-                                    </div>
-
                                 </section>
 
                                 <div v-show="activeFormSection === 'support'" class="md:col-span-2">
@@ -3287,7 +3477,7 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div v-show="activeFormSection === 'support'" class="border-t border-slate-200 pt-6 md:col-span-2">
+                                <div v-show="activeFormSection === 'logistics'" class="md:col-span-2">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Application timeline</p>
                                     <h4 class="mt-1 text-base font-bold text-slate-950">Portal pre-screening dates</h4>
                                     <p class="mt-1 text-xs leading-5 text-slate-500">Set when applications open, when submissions close, and when applicants should expect the initial result.</p>
@@ -3394,93 +3584,32 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div v-show="activeFormSection === 'review'" class="md:col-span-2">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Publication choice</p>
-                                    <h4 class="mt-1 text-base font-bold text-slate-950">Choose what happens when you save</h4>
-                                    <div class="mt-4 grid gap-2 sm:grid-cols-2">
-                                        <label
-                                            v-for="option in statusOptions"
-                                            :key="option.value"
-                                            :class="[
-                                                'flex items-start gap-3 rounded-lg border p-4 transition',
-                                                option.value === 'rejected' ? 'cursor-not-allowed border-slate-200 bg-slate-100 opacity-60' : 'cursor-pointer',
-                                                scholarshipForm.status === option.value
-                                                    ? 'border-slate-950 bg-slate-950 text-white'
-                                                    : option.value !== 'rejected' ? 'border-slate-200 bg-white text-slate-950 hover:border-slate-400' : '',
-                                            ]"
-                                        >
-                                            <input
-                                                v-model="scholarshipForm.status"
-                                                type="radio"
-                                                name="scholarship-status"
-                                                :value="option.value"
-                                                :disabled="option.value === 'rejected'"
-                                                class="sr-only"
-                                            >
-                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', scholarshipForm.status === option.value ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']">
-                                                <i :class="option.value === 'draft' ? 'fa-solid fa-file-pen' : option.value === 'closed' ? 'fa-solid fa-lock' : option.value === 'published' ? 'fa-solid fa-eye' : 'fa-solid fa-paper-plane'" aria-hidden="true"></i>
-                                            </span>
-                                            <span>
-                                                <span class="block text-sm font-bold">{{ option.label }}</span>
-                                                <span :class="['mt-1 block text-xs leading-5', scholarshipForm.status === option.value ? 'text-slate-300' : 'text-slate-500']">{{ option.help }}</span>
-                                            </span>
-                                        </label>
-                                    </div>
-                                </div>
                             </div>
 
                         </div>
 
-                            <section v-show="['selection', 'details'].includes(activeFormSection)" class="flex flex-col gap-6">
+                            <section v-show="['selection', 'logistics'].includes(activeFormSection)" class="flex flex-col gap-6">
                                 <div id="scholarship-selection-stages" v-show="activeFormSection === 'selection' && activeFormSubsection.selection === 'flow'" :class="sectionCardClass">
-                                    <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                    <div class="flex items-start justify-between gap-4">
                                         <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Selection path</p>
-                                            <p class="mt-1 text-base font-bold text-slate-950">What happens after pre-screening</p>
-                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Formal application is always included. Add an exam or interview only when your organization requires it.
-                                            </p>
+                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Selection process</p>
+                                            <p class="mt-1 text-base font-bold text-slate-950">Set the steps before the final decision</p>
                                         </div>
                                         <span class="w-fit rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-600">
                                             {{ scholarshipForm.selectionStages.length }} stages
                                         </span>
                                     </div>
 
-                                    <div v-if="!selectionPlanLocked" class="mt-4 grid gap-2 sm:grid-cols-2">
-                                        <button
-                                            v-for="stage in configurableStageOptions.filter((item) => !item.required)"
-                                            :key="stage.value"
-                                            type="button"
-                                            :class="[
-                                                'flex items-center gap-3 rounded-lg border p-3 text-left transition',
-                                                scholarshipForm.selectionStages.includes(stage.value)
-                                                    ? 'border-slate-950 bg-slate-950 text-white'
-                                                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
-                                            ]"
-                                            @click="toggleSelectionStage(stage.value)"
-                                        >
-                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', scholarshipForm.selectionStages.includes(stage.value) ? 'bg-white/10 text-amber-300' : 'bg-slate-100 text-slate-600']">
-                                                <i :class="stage.icon" aria-hidden="true"></i>
-                                            </span>
-                                            <span class="min-w-0 flex-1">
-                                                <span class="block text-sm font-bold">{{ stage.label }}</span>
-                                                <span :class="['mt-0.5 block text-xs', scholarshipForm.selectionStages.includes(stage.value) ? 'text-slate-300' : 'text-slate-500']">
-                                                    {{ scholarshipForm.selectionStages.includes(stage.value) ? 'Included in this program' : 'Select to include this stage' }}
-                                                </span>
-                                            </span>
-                                            <i :class="scholarshipForm.selectionStages.includes(stage.value) ? 'fa-solid fa-circle-check' : 'fa-solid fa-plus'" aria-hidden="true"></i>
-                                        </button>
-                                    </div>
-                                    <div v-else class="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+                                    <div v-if="selectionPlanLocked" class="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-600">
                                         <i class="fa-solid fa-lock mt-1 text-slate-500" aria-hidden="true"></i>
-                                        <p>{{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already {{ existingApplicationCount === 1 ? 'uses' : 'use' }} this flow, so its stage order is protected. Duplicate the program to use a different flow.</p>
+                                        <p>This order is locked because {{ existingApplicationCount }} applicant{{ existingApplicationCount === 1 ? '' : 's' }} already {{ existingApplicationCount === 1 ? 'uses' : 'use' }} it.</p>
                                     </div>
 
-                                    <div class="mt-5 flex items-center justify-between gap-3">
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Process order</p>
-                                        <p v-if="!selectionPlanLocked" class="text-[11px] text-slate-400">Use the arrows to reorder provider stages.</p>
-                                    </div>
-                                    <div class="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                    <div class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                        <div class="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Stage order</p>
+                                            <p v-if="!selectionPlanLocked" class="text-[11px] text-slate-400">Use arrows to reorder.</p>
+                                        </div>
                                         <div class="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
                                             <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-950 text-xs font-bold text-white">1</span>
                                             <div class="min-w-0 flex-1">
@@ -3526,37 +3655,45 @@ onBeforeUnmount(() => {
                                             </div>
                                             <span class="rounded bg-white px-2 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 ring-1 ring-slate-200">Final</span>
                                         </div>
-                                    </div>
-                                </div>
 
-                                <div v-show="activeFormSection === 'selection' && activeFormSubsection.selection === 'flow'" class="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
-                                    <div class="flex min-w-0 items-start gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                            <i class="fa-solid fa-calendar-check" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">
-                                                Publish activity dates when confirmed
-                                            </p>
-                                            <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                                Save the program first, then schedule the {{ schedulableSelectionStageLabel }} from Activities.
-                                            </p>
+                                        <div
+                                            v-if="!selectionPlanLocked && configurableStageOptions.filter((stage) => !stage.required && !scholarshipForm.selectionStages.includes(stage.value)).length"
+                                            class="border-t border-slate-200 bg-white px-4 py-3"
+                                        >
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="mr-1 text-xs font-bold text-slate-500">Add optional stage</span>
+                                                <button
+                                                    v-for="stage in configurableStageOptions.filter((item) => !item.required && !scholarshipForm.selectionStages.includes(item.value))"
+                                                    :key="stage.value"
+                                                    type="button"
+                                                    class="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-950 hover:text-slate-950"
+                                                    @click="toggleSelectionStage(stage.value)"
+                                                >
+                                                    <i :class="stage.icon" aria-hidden="true"></i>
+                                                    {{ stage.label }}
+                                                    <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                    <a
-                                        v-if="isEditMode && hasSchedulableSelectionStage"
-                                        :href="`/provider/programs/${scholarshipId}/applications/activities`"
-                                        class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800"
-                                    >
-                                        Open schedule workspace
-                                        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
-                                    </a>
-                                    <span v-else class="shrink-0 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">
-                                        Available after saving
-                                    </span>
+
+                                    <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                        <p class="text-xs leading-5 text-slate-500">
+                                            Schedule the {{ schedulableSelectionStageLabel }} from Activities after saving.
+                                        </p>
+                                        <a
+                                            v-if="isEditMode && hasSchedulableSelectionStage"
+                                            :href="`/provider/programs/${scholarshipId}/applications/activities`"
+                                            class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+                                        >
+                                            Open Activities
+                                            <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                                        </a>
+                                        <span v-else class="shrink-0 text-xs font-bold text-slate-400">Available after saving</span>
+                                    </div>
                                 </div>
 
-                                <div v-show="activeFormSection === 'details'" :class="[sectionCardClass, 'grid items-stretch gap-4 lg:grid-cols-2']">
+                                <div v-show="activeFormSection === 'logistics'" :class="[sectionCardClass, 'grid items-stretch gap-4 lg:grid-cols-2']">
                                     <div class="flex flex-col gap-3 lg:col-span-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Public contact</p>
@@ -3698,7 +3835,26 @@ onBeforeUnmount(() => {
                                         </p>
                                     </div>
 
-                                    <div :class="[fieldStackClass, 'rounded-md border border-slate-200 bg-white p-4 lg:col-span-2']">
+                                    <button
+                                        type="button"
+                                        class="flex w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300 lg:col-span-2"
+                                        :aria-expanded="showCoreMatchingRules"
+                                        @click="showCoreMatchingRules = !showCoreMatchingRules"
+                                    >
+                                        <span class="flex min-w-0 items-center gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                                <i class="fa-solid fa-graduation-cap" aria-hidden="true"></i>
+                                            </span>
+                                            <span class="min-w-0">
+                                                <span class="block text-sm font-bold text-slate-950">Learner and school rules</span>
+                                                <span class="mt-1 block truncate text-xs text-slate-500">{{ finderRuleSummary.slice(0, 2).join(' · ') }}</span>
+                                            </span>
+                                        </span>
+                                        <i :class="['fa-solid shrink-0 text-slate-400', showCoreMatchingRules ? 'fa-chevron-up' : 'fa-chevron-down']" aria-hidden="true"></i>
+                                    </button>
+
+                                    <div v-if="showCoreMatchingRules" class="grid gap-4 lg:col-span-2 lg:grid-cols-2">
+                                    <div id="scholarship-education-levels" :class="[fieldStackClass, 'rounded-md border border-slate-200 bg-white p-4 lg:col-span-2']">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                                             <div>
                                                 <p class="text-sm font-bold text-slate-900">Education levels</p>
@@ -3739,7 +3895,7 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
 
-                                    <div :class="[fieldStackClass, 'rounded-md border border-slate-200 bg-white p-4 lg:col-span-2']">
+                                    <div id="scholarship-school-types" :class="[fieldStackClass, 'rounded-md border border-slate-200 bg-white p-4 lg:col-span-2']">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                                             <div>
                                                 <p class="text-sm font-bold text-slate-900">School types</p>
@@ -3797,12 +3953,27 @@ onBeforeUnmount(() => {
                                             </button>
                                         </div>
                                     </div>
-
-                                    <div class="pt-1 lg:col-span-2">
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-700">Additional limits</p>
-                                        <p class="mt-1 text-sm font-bold text-slate-900">Optional restrictions</p>
-                                        <p class="mt-1 text-xs text-slate-500">Leave an item open when it does not apply.</p>
                                     </div>
+
+                                    <button
+                                        type="button"
+                                        class="flex w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300 lg:col-span-2"
+                                        :aria-expanded="showAdditionalMatchingRules"
+                                        @click="showAdditionalMatchingRules = !showAdditionalMatchingRules"
+                                    >
+                                        <span class="flex min-w-0 items-center gap-3">
+                                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
+                                                <i class="fa-solid fa-filter" aria-hidden="true"></i>
+                                            </span>
+                                            <span>
+                                                <span class="block text-sm font-bold text-slate-950">Additional restrictions</span>
+                                                <span class="mt-1 block text-xs text-slate-500">{{ additionalRestrictionCount ? `${additionalRestrictionCount} active` : 'No additional restrictions' }}</span>
+                                            </span>
+                                        </span>
+                                        <i :class="['fa-solid shrink-0 text-slate-400', showAdditionalMatchingRules ? 'fa-chevron-up' : 'fa-chevron-down']" aria-hidden="true"></i>
+                                    </button>
+
+                                    <div v-if="showAdditionalMatchingRules" class="grid gap-4 lg:col-span-2 lg:grid-cols-2">
 
                                     <div v-if="activeTargetForm.showProgramPath" :class="[fieldStackClass, 'rounded-md border border-slate-200 bg-white p-4 lg:col-span-2']">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -3917,7 +4088,7 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
 
-                                    <div :class="[fieldStackClass, 'rounded-md border border-slate-200 bg-white p-4 lg:col-span-2']">
+                                    <div id="scholarship-eligible-locations" :class="[fieldStackClass, 'rounded-md border border-slate-200 bg-white p-4 lg:col-span-2']">
                                         <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                                             <div>
                                                 <p class="text-sm font-bold text-slate-900">Eligible locations</p>
@@ -4024,10 +4195,11 @@ onBeforeUnmount(() => {
                                         </span>
                                     </label>
 
+                                    </div>
                                 </div>
                             </section>
 
-                            <fieldset v-show="activeFormSection === 'details'" :class="['mt-6', sectionCardClass]">
+                            <fieldset v-show="activeFormSection === 'logistics'" :class="['mt-6', sectionCardClass]">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Program location</p>
@@ -4218,6 +4390,28 @@ onBeforeUnmount(() => {
                                 </div>
 
                                 <template v-else>
+                                <button
+                                    type="button"
+                                    class="mt-4 flex w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300"
+                                    :aria-expanded="showDocumentChecklist"
+                                    @click="showDocumentChecklist = !showDocumentChecklist"
+                                >
+                                    <span class="flex min-w-0 items-center gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
+                                            <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
+                                        </span>
+                                        <span>
+                                            <span class="block text-sm font-bold text-slate-950">Document checklist</span>
+                                            <span class="mt-1 block text-xs text-slate-500">{{ selectedRequirementCount }} required · {{ selectedOptionalRequirementCount }} supporting</span>
+                                        </span>
+                                    </span>
+                                    <span class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-600">
+                                        {{ showDocumentChecklist ? 'Hide' : 'Review' }}
+                                        <i :class="['fa-solid text-slate-400', showDocumentChecklist ? 'fa-chevron-up' : 'fa-chevron-down']" aria-hidden="true"></i>
+                                    </span>
+                                </button>
+
+                                <div v-if="showDocumentChecklist">
                                 <div class="mt-4 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
                                     <button
                                         type="button"
@@ -4285,7 +4479,7 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid gap-4 lg:grid-cols-2">
+                                <div class="mt-4 grid gap-4">
                                     <div :class="fieldCardClass">
                                         <label :class="labelClass" for="scholarship-custom-requirements">Other required documents</label>
                                         <textarea
@@ -4310,6 +4504,7 @@ onBeforeUnmount(() => {
                                         ></textarea>
                                         <p class="mt-2 text-xs leading-5 text-slate-500">These may strengthen or clarify an application but never block submission.</p>
                                     </div>
+                                </div>
                                 </div>
                                 </template>
                                 </div>
@@ -4625,7 +4820,22 @@ onBeforeUnmount(() => {
                                                 </div>
                                             </div>
 
-                                            <div class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                            <button
+                                                type="button"
+                                                class="mt-4 flex w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300"
+                                                :aria-expanded="showRecipientReleaseDetails"
+                                                @click="showRecipientReleaseDetails = !showRecipientReleaseDetails"
+                                            >
+                                                <span>
+                                                    <span class="block text-sm font-bold text-slate-950">Release and proof details</span>
+                                                    <span class="mt-1 block text-xs text-slate-500">Proof, benefit release conditions, and duration</span>
+                                                </span>
+                                                <span :class="['shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold', recipientReleaseDetailsReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
+                                                    {{ recipientReleaseDetailsReady ? 'Complete' : 'Needs details' }}
+                                                </span>
+                                            </button>
+
+                                            <div v-if="showRecipientReleaseDetails" class="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
                                                 <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
                                                     <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">1</span>
                                                     <div :class="fieldStackClass">
@@ -4660,7 +4870,7 @@ onBeforeUnmount(() => {
                                                         ></textarea>
                                                     </div>
                                                 </div>
-                                                <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
+                                                <div class="grid gap-3 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
                                                     <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">3</span>
                                                     <div :class="fieldStackClass">
                                                         <label :class="labelClass" for="scholarship-agreement-duration">
@@ -4677,6 +4887,24 @@ onBeforeUnmount(() => {
                                                         ></textarea>
                                                     </div>
                                                 </div>
+                                            </div>
+
+                                            <button
+                                                type="button"
+                                                class="mt-3 flex w-full items-center justify-between gap-4 rounded-md border border-slate-200 bg-white p-4 text-left transition hover:border-slate-300"
+                                                :aria-expanded="showRecipientExceptionDetails"
+                                                @click="showRecipientExceptionDetails = !showRecipientExceptionDetails"
+                                            >
+                                                <span>
+                                                    <span class="block text-sm font-bold text-slate-950">Exceptions and consequences</span>
+                                                    <span class="mt-1 block text-xs text-slate-500">Non-compliance, adjustments, and withdrawal</span>
+                                                </span>
+                                                <span :class="['shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold', recipientExceptionDetailsReady ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
+                                                    {{ recipientExceptionDetailsReady ? 'Complete' : 'Needs details' }}
+                                                </span>
+                                            </button>
+
+                                            <div v-if="showRecipientExceptionDetails" class="mt-3 overflow-hidden rounded-md border border-slate-200 bg-white">
                                                 <div class="grid gap-3 border-b border-slate-200 p-4 sm:grid-cols-[2rem_minmax(0,1fr)]">
                                                     <span class="grid h-8 w-8 place-items-center rounded-md bg-slate-100 text-xs font-bold text-slate-700">4</span>
                                                     <div :class="fieldStackClass">
@@ -4734,13 +4962,10 @@ onBeforeUnmount(() => {
                             </fieldset>
 
                             <fieldset v-show="activeFormSection === 'selection' && activeFormSubsection.selection === 'scoring'" :class="sectionCardClass">
-                                <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Review scoring</p>
-                                        <p class="mt-1 text-base font-bold text-slate-950">Criteria used during pre-screening</p>
-                                        <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">
-                                            Every reviewer scores these criteria. The weighted result supports comparison, but your organization makes the final decision.
-                                        </p>
+                                        <p class="mt-1 text-base font-bold text-slate-950">Set a 100% review rubric</p>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-2">
                                         <span :class="['rounded-md px-3 py-2 text-xs font-bold', rubricWeightTotal === 100 ? 'bg-slate-950 text-white' : 'bg-amber-100 text-amber-800']">
@@ -4751,7 +4976,7 @@ onBeforeUnmount(() => {
                                             class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                                             @click="customizeRubric = !customizeRubric"
                                         >
-                                            {{ customizeRubric ? 'Finish editing' : 'Edit criteria' }}
+                                            {{ customizeRubric ? 'Finish editing' : 'Edit rubric' }}
                                         </button>
                                     </div>
                                 </div>
@@ -4765,7 +4990,6 @@ onBeforeUnmount(() => {
                                         <span class="grid h-7 w-7 place-items-center rounded-md bg-slate-100 text-[11px] font-bold text-slate-600">{{ index + 1 }}</span>
                                         <div class="min-w-0">
                                             <p class="text-sm font-bold text-slate-950">{{ criterion.label || 'Unnamed criterion' }}</p>
-                                            <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ criterion.guidance || 'No reviewer guidance added.' }}</p>
                                         </div>
                                         <span class="w-fit rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{{ criterion.weight }}%</span>
                                     </div>
@@ -4852,15 +5076,56 @@ onBeforeUnmount(() => {
                             <div class="mb-4 flex items-center justify-between gap-3">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Final check</p>
-                                    <h4 class="mt-1 text-base font-bold text-slate-950">Applicant-facing summary</h4>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">Confirm the key information applicants will see before they start an application.</p>
+                                    <h4 class="mt-1 text-base font-bold text-slate-950">Review before sending</h4>
                                 </div>
-                                <span class="w-fit shrink-0 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-bold text-white">
-                                    {{ scholarshipForm.status === 'draft' ? 'Draft' : statusOptions.find((option) => option.value === scholarshipForm.status)?.label }}
+                                <span :class="['w-fit shrink-0 rounded-md px-3 py-1.5 text-xs font-bold', missingProgramReadinessItems.length ? 'bg-amber-100 text-amber-900' : 'bg-slate-950 text-white']">
+                                    {{ missingProgramReadinessItems.length ? `${missingProgramReadinessItems.length} to finish` : 'Ready for review' }}
                                 </span>
                             </div>
 
-                            <div class="overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                            <div class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                <div class="flex items-start gap-4 p-4 sm:p-5">
+                                    <img
+                                        :src="scholarshipImagePreview"
+                                        alt="Program logo"
+                                        class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
+                                    >
+                                    <div class="min-w-0 flex-1">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">{{ scholarshipForm.category || 'Scholarship program' }}</p>
+                                        <h4 class="mt-1 truncate text-lg font-bold text-slate-950">{{ scholarshipForm.title || 'Untitled scholarship' }}</h4>
+                                        <p class="mt-1 line-clamp-2 text-sm leading-5 text-slate-500">{{ scholarshipForm.description || 'Add a clear program description.' }}</p>
+                                    </div>
+                                </div>
+                                <dl class="grid grid-cols-2 border-t border-slate-200 bg-slate-50 sm:grid-cols-4">
+                                    <div class="border-r border-slate-200 p-3">
+                                        <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Deadline</dt>
+                                        <dd class="mt-1 text-xs font-bold text-slate-800">{{ formatPreviewDate(scholarshipForm.deadline) }}</dd>
+                                    </div>
+                                    <div class="border-r border-slate-200 p-3">
+                                        <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Support</dt>
+                                        <dd class="mt-1 text-xs font-bold text-slate-800">{{ scholarshipForm.benefits.length }} benefit{{ scholarshipForm.benefits.length === 1 ? '' : 's' }}</dd>
+                                    </div>
+                                    <div class="border-r border-t border-slate-200 p-3 sm:border-t-0">
+                                        <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Application</dt>
+                                        <dd class="mt-1 text-xs font-bold text-slate-800">{{ applicationModeLabel(scholarshipForm.applicationMode) }}</dd>
+                                    </div>
+                                    <div class="border-t border-slate-200 p-3 sm:border-t-0">
+                                        <dt class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Selection</dt>
+                                        <dd class="mt-1 text-xs font-bold text-slate-800">{{ scholarshipForm.selectionStages.length }} stages</dd>
+                                    </div>
+                                </dl>
+                                <button
+                                    type="button"
+                                    class="flex w-full items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-left text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                    :aria-expanded="showProgramReviewSummary"
+                                    @click="showProgramReviewSummary = !showProgramReviewSummary"
+                                >
+                                    <span>{{ showProgramReviewSummary ? 'Hide applicant-facing summary' : 'Review applicant-facing summary' }}</span>
+                                    <i :class="['fa-solid text-slate-400', showProgramReviewSummary ? 'fa-chevron-up' : 'fa-chevron-down']" aria-hidden="true"></i>
+                                </button>
+                            </div>
+
+                            <div v-if="showProgramReviewSummary" class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
                                 <div class="border-b border-slate-200 bg-white p-4 sm:p-5">
                                     <div class="flex min-w-0 items-start gap-4">
                                         <img
@@ -4999,7 +5264,7 @@ onBeforeUnmount(() => {
                                 </div>
                             </div>
 
-                            <div class="mt-5 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                            <div class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                         <p class="text-sm font-bold text-slate-950">Submission readiness</p>
@@ -5010,12 +5275,12 @@ onBeforeUnmount(() => {
                                     </span>
                                 </div>
 
-                                <div v-if="missingProgramReadinessItems.length" class="grid sm:grid-cols-2">
+                                <div v-if="missingProgramReadinessItems.length" class="divide-y divide-slate-200">
                                     <button
                                         v-for="item in missingProgramReadinessItems"
                                         :key="item.label"
                                         type="button"
-                                        class="flex items-start gap-3 border-b border-slate-200 px-4 py-3 text-left transition last:border-b-0 hover:bg-slate-50 sm:odd:border-r"
+                                        class="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-slate-50"
                                         @click="focusFormField(item.section, readinessFocusTarget(item))"
                                     >
                                         <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-100 text-xs text-amber-800">
@@ -5023,7 +5288,7 @@ onBeforeUnmount(() => {
                                         </span>
                                         <span class="min-w-0 flex-1">
                                             <span class="block text-sm font-bold text-slate-950">{{ item.label }}</span>
-                                            <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ item.help }}</span>
+                                            <span class="mt-0.5 block truncate text-xs text-slate-500">{{ item.help }}</span>
                                         </span>
                                         <i class="fa-solid fa-arrow-right mt-2 text-xs text-slate-400" aria-hidden="true"></i>
                                     </button>
@@ -5038,9 +5303,44 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
                             </div>
+
+                            <div class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                                <div class="border-b border-slate-200 bg-slate-50 px-4 py-3">
+                                    <p class="text-sm font-bold text-slate-950">Save choice</p>
+                                    <p class="mt-0.5 text-xs text-slate-500">Keep working or send the completed program to the admin.</p>
+                                </div>
+                                <div class="divide-y divide-slate-200">
+                                    <label
+                                        v-for="option in statusOptions"
+                                        :key="option.value"
+                                        :class="[
+                                            'flex items-center gap-3 px-4 py-3 transition',
+                                            option.value === 'rejected' ? 'cursor-not-allowed bg-slate-50 opacity-60' : 'cursor-pointer hover:bg-slate-50',
+                                            scholarshipForm.status === option.value ? 'border-l-4 border-l-amber-500 bg-amber-50/50' : 'border-l-4 border-l-transparent',
+                                        ]"
+                                    >
+                                        <input
+                                            v-model="scholarshipForm.status"
+                                            type="radio"
+                                            name="scholarship-status"
+                                            :value="option.value"
+                                            :disabled="option.value === 'rejected'"
+                                            class="sr-only"
+                                        >
+                                        <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', scholarshipForm.status === option.value ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-600']">
+                                            <i :class="option.value === 'draft' ? 'fa-solid fa-file-pen' : option.value === 'closed' ? 'fa-solid fa-lock' : option.value === 'published' ? 'fa-solid fa-eye' : 'fa-solid fa-paper-plane'" aria-hidden="true"></i>
+                                        </span>
+                                        <span class="min-w-0 flex-1">
+                                            <span class="block text-sm font-bold text-slate-950">{{ option.label }}</span>
+                                            <span class="mt-0.5 block text-xs text-slate-500">{{ option.help }}</span>
+                                        </span>
+                                        <i v-if="scholarshipForm.status === option.value" class="fa-solid fa-circle-check text-emerald-600" aria-hidden="true"></i>
+                                    </label>
+                                </div>
+                            </div>
                         </section>
 
-                        <div v-show="activeFormSection === 'review'" class="pt-6">
+                        <div v-show="activeFormSection === 'review'" class="mt-4 rounded-lg border border-slate-200 bg-white p-4">
                             <div class="mb-3">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Confirmation</p>
                                 <p class="mt-1 text-sm font-bold text-slate-950">
@@ -5053,7 +5353,7 @@ onBeforeUnmount(() => {
                                 context="scholarship"
                             />
                             <p v-else class="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
-                                You can save this draft now. Terms are required only when you submit it for admin review.
+                                Save this draft now and finish it later. Terms are required only for admin review.
                             </p>
                         </div>
                             </div>
@@ -5065,14 +5365,14 @@ onBeforeUnmount(() => {
                                             {{ formError }}
                                         </p>
                                         <p v-else class="text-xs font-semibold text-slate-500">
-                                            Editing: {{ activeFormSectionMeta.label }}
+                                            {{ stepNavigationSaves ? 'Your draft saves when you continue.' : 'Final changes save from Review & submit.' }}
                                         </p>
                                     </div>
 
                                     <div class="flex shrink-0 flex-wrap justify-end gap-2">
                                         <button
                                             type="button"
-                                            :disabled="activeFormSectionIndex === 0"
+                                            :disabled="activeFormSectionIndex === 0 || isSaving"
                                             class="rounded-md border border-slate-300 px-3.5 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                                             @click="goToPreviousFormSection"
                                         >
@@ -5081,10 +5381,11 @@ onBeforeUnmount(() => {
                                         <button
                                             v-if="activeFormSectionIndex < formSections.length - 1"
                                             type="button"
+                                            :disabled="isSaving || !canPostScholarships"
                                             class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                                             @click="goToNextFormSection"
                                         >
-                                            Next: {{ formSections[activeFormSectionIndex + 1]?.label }}
+                                            {{ stepNavigationSaves ? 'Save & continue:' : 'Next:' }} {{ formSections[activeFormSectionIndex + 1]?.label }}
                                         </button>
                                         <button
                                             v-if="activeFormSection === 'review'"

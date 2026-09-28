@@ -43,6 +43,153 @@ class ProviderProgramSafeguardsTest extends TestCase
         ]);
     }
 
+    public function test_provider_can_delete_an_owned_draft_and_its_uploaded_logo(): void
+    {
+        $provider = $this->verifiedProvider();
+
+        $response = $this->actingAs($provider)
+            ->post('/provider/scholarships', [
+                'title' => 'Disposable Program Draft',
+                'status' => 'draft',
+                'image_file' => UploadedFile::fake()->image('disposable-logo.png'),
+            ], ['Accept' => 'application/json'])
+            ->assertCreated();
+
+        $scholarshipId = $response->json('scholarship.id');
+        $imagePath = public_path($response->json('scholarship.image_path'));
+
+        $this->assertFileExists($imagePath);
+
+        $this->actingAs($provider)
+            ->deleteJson("/provider/scholarships/{$scholarshipId}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Draft deleted.');
+
+        $this->assertDatabaseMissing('scholarships', ['id' => $scholarshipId]);
+        $this->assertFileDoesNotExist($imagePath);
+    }
+
+    public function test_provider_cannot_delete_a_program_after_draft_status(): void
+    {
+        $provider = $this->verifiedProvider();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->providerOrganizationId(),
+            'title' => 'Submitted Program',
+            'description' => 'This program has already left draft status.',
+            'status' => 'pending_review',
+        ]);
+
+        $this->actingAs($provider)
+            ->deleteJson("/provider/scholarships/{$scholarship->id}")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('program');
+
+        $this->assertDatabaseHas('scholarships', ['id' => $scholarship->id]);
+    }
+
+    public function test_provider_cannot_delete_another_organizations_draft(): void
+    {
+        $provider = $this->verifiedProvider();
+        $otherProvider = $this->verifiedProvider();
+        $scholarship = Scholarship::create([
+            'provider_id' => $otherProvider->providerOrganizationId(),
+            'title' => 'Private Program Draft',
+            'description' => '',
+            'status' => 'draft',
+        ]);
+
+        $this->actingAs($provider)
+            ->deleteJson("/provider/scholarships/{$scholarship->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('scholarships', ['id' => $scholarship->id]);
+    }
+
+    public function test_provider_can_complete_the_guided_editor_from_draft_to_admin_review(): void
+    {
+        $provider = $this->verifiedProvider();
+
+        $draftResponse = $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'Guided Editor Scholarship',
+                'status' => 'draft',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('scholarship.status', 'draft');
+
+        $scholarshipId = $draftResponse->json('scholarship.id');
+
+        foreach (['basics', 'support', 'dates-location', 'eligibility', 'application', 'selection', 'review'] as $step) {
+            $this->actingAs($provider)
+                ->get("/provider/programs/{$scholarshipId}/edit/{$step}")
+                ->assertOk()
+                ->assertViewIs('provider-program-form');
+        }
+
+        $this->actingAs($provider)
+            ->putJson("/provider/scholarships/{$scholarshipId}", [
+                'title' => 'Guided Editor Scholarship',
+                'description' => 'An intentionally incomplete scholarship used to verify guided submission checks.',
+                'deadline' => now()->addMonth()->toDateString(),
+                'status' => 'pending_review',
+                'terms_accepted' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'category',
+                'benefits',
+                'image_file',
+                'application_mode',
+            ]);
+
+        $reviewRubric = [
+            [
+                'key' => 'need',
+                'label' => 'Financial need',
+                'guidance' => 'Review the household information and supporting records.',
+                'weight' => 60,
+            ],
+            [
+                'key' => 'readiness',
+                'label' => 'Academic readiness',
+                'guidance' => 'Review enrollment and the latest academic record.',
+                'weight' => 40,
+            ],
+        ];
+
+        $this->actingAs($provider)
+            ->post("/provider/scholarships/{$scholarshipId}", [
+                ...$this->completeSubmissionPayload([
+                    'title' => 'Guided Editor Scholarship',
+                    'program_cycle' => 'School Year 2026-2027',
+                    'location_address' => 'Quezon City, Metro Manila, NCR',
+                    'selection_stages' => json_encode(['screening', 'formal_application', 'interview', 'decision']),
+                    'review_rubric' => json_encode($reviewRubric),
+                ]),
+                '_method' => 'PUT',
+                'image_file' => UploadedFile::fake()->image('guided-editor-logo.png'),
+            ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('scholarship.status', 'pending_review')
+            ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')
+            ->assertJsonPath('scholarship.location_address', 'Quezon City, Metro Manila, NCR')
+            ->assertJsonPath('scholarship.selection_stages.2', 'interview');
+
+        $this->assertDatabaseHas('scholarships', [
+            'id' => $scholarshipId,
+            'provider_id' => $provider->providerOrganizationId(),
+            'title' => 'Guided Editor Scholarship',
+            'status' => 'pending_review',
+            'program_cycle' => 'School Year 2026-2027',
+            'location_address' => 'Quezon City, Metro Manila, NCR',
+        ]);
+
+        $this->actingAs($provider)
+            ->get("/provider/programs/{$scholarshipId}/edit/review")
+            ->assertOk()
+            ->assertViewIs('provider-program-form');
+    }
+
     public function test_provider_can_separate_required_and_supporting_documents(): void
     {
         $provider = $this->verifiedProvider();

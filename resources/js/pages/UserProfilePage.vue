@@ -108,7 +108,6 @@ const birthdateMaximumValue = birthdateMaximum.toISOString().slice(0, 10);
 
 const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
-const supportNeedOptions = ['Tuition', 'Books and supplies', 'Transportation', 'Uniform', 'Internet / device', 'Boarding / housing', 'Exam or certification fees'];
 const citizenshipOptions = [
     { value: 'filipino', label: 'Filipino citizen' },
     { value: 'dual_filipino', label: 'Dual citizen, including Filipino' },
@@ -204,7 +203,6 @@ const fieldLabels = {
     grading_scale: 'Grading scale',
     income_bracket: 'Household income bracket',
     household_size: 'Household size',
-    support_needs: 'Support needs',
     current_scholarship_status: 'Outside scholarship status',
     current_scholarship_details: 'Outside scholarship details',
     scholarship_goal: 'Applicant goal',
@@ -226,12 +224,12 @@ const profileSections = [
     {
         id: 'personal',
         label: 'Personal',
-        detail: 'Identity',
+        detail: 'Identity and contact',
         icon: 'fa-solid fa-address-card',
-        impact: 'Identity, contact, and household context.',
+        impact: 'Identity and contact information.',
         required: true,
-        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'has_profile_photo', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'support_needs', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['first_name', 'last_name', 'has_profile_photo', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status', 'income_bracket', 'household_size', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'],
+        fields: ['first_name', 'middle_initial', 'last_name', 'suffix', 'has_profile_photo', 'gender', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status'],
+        requiredFields: ['first_name', 'last_name', 'has_profile_photo', 'birthdate', 'contact_number', 'account_managed_by', 'citizenship_status'],
     },
     {
         id: 'academic',
@@ -242,6 +240,16 @@ const profileSections = [
         required: true,
         fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
         requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
+    },
+    {
+        id: 'household',
+        label: 'Household',
+        detail: 'Eligibility and guardian',
+        icon: 'fa-solid fa-house-chimney-user',
+        impact: 'Household, guardian, and scholarship status.',
+        required: true,
+        fields: ['income_bracket', 'household_size', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
+        requiredFields: ['income_bracket', 'household_size', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'],
     },
     {
         id: 'background',
@@ -1089,7 +1097,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'General average',
                 idLabel: 'Learner Reference Number',
                 idPlaceholder: 'LRN if available',
-                summary: 'Grade level, average, location, and support needs matter most.',
+                summary: 'Grade level, school, location, and academic record matter most.',
             };
         case 'senior_high_school':
             return {
@@ -1101,7 +1109,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'General average',
                 idLabel: 'Learner Reference Number',
                 idPlaceholder: 'LRN if available',
-                summary: 'Track, grade level, average, location, and need matter most.',
+                summary: 'Track, grade level, average, and school record matter most.',
             };
         case 'college':
             return {
@@ -1113,7 +1121,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'GWA / general average',
                 idLabel: 'Student number',
                 idPlaceholder: 'College student number',
-                summary: 'Course, year level, GWA, school type, location, and need matter most.',
+                summary: 'Course, year level, GWA, school type, and location matter most.',
             };
         case 'tvet':
             return {
@@ -1125,7 +1133,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'Latest average / assessment rating',
                 idLabel: 'Trainee number',
                 idPlaceholder: 'TESDA or center trainee ID',
-                summary: 'Qualification, center, level, location, and support needs matter most.',
+                summary: 'Qualification, center, level, and training record matter most.',
             };
         case 'als':
             return {
@@ -1137,7 +1145,7 @@ const learnerPathCopy = computed(() => {
                 gwaLabel: 'Latest assessment rating / average',
                 idLabel: 'Learner ID',
                 idPlaceholder: 'ALS learner ID if available',
-                summary: 'Current level, learning center, location, and support needs matter most.',
+                summary: 'Current level, learning center, location, and learning record matter most.',
             };
         default:
             return {
@@ -1198,7 +1206,7 @@ const guardianRequirementText = computed(() => {
 const reviewGroups = computed(() => [
     {
         id: 'personal',
-        title: 'Personal and household',
+        title: 'Personal and contact',
         icon: 'fa-solid fa-address-card',
         items: [
             ['Name', [form.value.first_name, form.value.middle_initial ? `${form.value.middle_initial}.` : '', form.value.last_name, form.value.suffix].filter(Boolean).join(' ')],
@@ -1207,9 +1215,15 @@ const reviewGroups = computed(() => [
             ['Contact', form.value.contact_number],
             ['Account managed by', accountManagerLabel(form.value.account_managed_by)],
             ['Citizenship', citizenshipLabel(form.value.citizenship_status)],
+        ],
+    },
+    {
+        id: 'household',
+        title: 'Household and guardian',
+        icon: 'fa-solid fa-house-chimney-user',
+        items: [
             ['Income bracket', form.value.income_bracket],
             ['Household size', form.value.household_size],
-            ['Support needed', listFromText(form.value.support_needs).join(', ')],
             ['Outside scholarship', currentScholarshipLabel(form.value.current_scholarship_status)],
             ...(form.value.current_scholarship_details ? [['Outside scholarship details', form.value.current_scholarship_details]] : []),
             ...((needsGuardianContext.value || hasGuardianDetails.value) ? [
@@ -2042,7 +2056,7 @@ onMounted(async () => {
 
     if (requestedProfileSection === 'verification') {
         openVerificationRecords();
-    } else if (['personal', 'academic', 'background', 'location'].includes(requestedProfileSection)) {
+    } else if (['personal', 'academic', 'household', 'background', 'location'].includes(requestedProfileSection)) {
         openProfileEditor(requestedProfileSection);
     }
 });
@@ -2292,13 +2306,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </dd>
                                         <dd v-else class="mt-1 font-bold text-slate-950">No active portal award detected</dd>
                                     </div>
-                                    <div class="sm:col-span-2 xl:col-span-2">
+                                    <div class="sm:col-span-2 xl:col-span-4">
                                         <dt class="text-slate-500">Location</dt>
                                         <dd class="mt-1 font-bold leading-6 text-slate-950">{{ profileLocationSummary }}</dd>
-                                    </div>
-                                    <div class="sm:col-span-2 xl:col-span-2">
-                                        <dt class="text-slate-500">Support needed</dt>
-                                        <dd class="mt-1 font-bold leading-6 text-slate-950">{{ listFromText(form.support_needs).join(', ') || 'Not provided' }}</dd>
                                     </div>
                                     <div v-if="form.current_scholarship_details" class="sm:col-span-2 xl:col-span-4">
                                         <dt class="text-slate-500">Scholarship details</dt>
@@ -2389,23 +2399,19 @@ watch(() => form.value.grading_scale, (scale) => {
                     </div>
 
                     <section class="student-card overflow-hidden rounded-md border-slate-300 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
-                        <div class="flex flex-col gap-5 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="flex min-w-0 items-start gap-4">
-                                <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-sm bg-slate-950 text-xl font-bold text-white ring-1 ring-slate-200">
+                        <div class="flex flex-col gap-4 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="flex min-w-0 items-start gap-3.5">
+                                <div class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-sm bg-slate-950 text-lg font-bold text-white ring-1 ring-slate-200">
                                     <img v-if="profilePhotoUrl" :src="profilePhotoUrl" :alt="`${profileDisplayName} applicant photo`" class="h-full w-full object-cover">
                                     <span v-else>{{ profileInitials }}</span>
                                 </div>
                                 <div class="min-w-0">
                                     <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant record</p>
                                     <div class="mt-1 flex flex-wrap items-center gap-2">
-                                        <h2 class="truncate text-2xl font-bold text-slate-950">{{ profileDisplayName }}</h2>
+                                        <h2 class="truncate text-xl font-bold text-slate-950">{{ profileDisplayName }}</h2>
                                         <span v-if="profileVerificationStatus === 'approved'" class="rounded-sm bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800"><i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>Evidence reviewed</span>
                                     </div>
                                     <p class="mt-1 text-sm font-semibold text-slate-600">{{ profileEducationSummary }}</p>
-                                    <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                                        <span><i class="fa-solid fa-location-dot mr-1.5 text-slate-400" aria-hidden="true"></i>{{ profileLocationSummary }}</span>
-                                        <span><i class="fa-solid fa-envelope mr-1.5 text-slate-400" aria-hidden="true"></i>{{ user?.email }}</span>
-                                    </div>
                                 </div>
                             </div>
 
@@ -2451,14 +2457,17 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <div><dt class="text-xs text-slate-500">Age</dt><dd class="mt-1 font-bold text-slate-950">{{ applicantAge !== null ? `${applicantAge} years old` : 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Contact number</dt><dd class="mt-1 font-bold text-slate-950">{{ form.contact_number || 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Account managed by</dt><dd class="mt-1 font-bold text-slate-950">{{ accountManagerLabel(form.account_managed_by) || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Parent or guardian</dt><dd class="mt-1 font-bold text-slate-950">{{ (needsGuardianContext || hasGuardianDetails) ? (form.guardian_name || 'Not provided') : 'Not required' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Citizenship</dt><dd class="mt-1 font-bold text-slate-950">{{ citizenshipLabel(form.citizenship_status) || 'Not provided' }}</dd></div>
                                 </dl>
                             </section>
 
                             <section class="bg-white p-4 sm:p-5">
                                 <div class="flex min-h-9 items-center justify-between gap-3">
                                     <div class="flex items-center gap-2"><i class="fa-solid fa-graduation-cap w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Learning record</h4></div>
-                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('academic')">Edit</button>
+                                    <div class="flex items-center gap-3">
+                                        <span class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
+                                        <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('academic')">Edit</button>
+                                    </div>
                                 </div>
                                 <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
                                     <div><dt class="text-xs text-slate-500">School</dt><dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd></div>
@@ -2470,21 +2479,27 @@ watch(() => form.value.grading_scale, (scale) => {
 
                             <section class="bg-white p-4 sm:p-5">
                                 <div class="flex min-h-9 items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-house-chimney-user w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Household and support</h4></div>
-                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('personal')">Edit</button>
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-house-chimney-user w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Household details</h4></div>
+                                    <div class="flex items-center gap-3">
+                                        <span class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Applicant-declared</span>
+                                        <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('household')">Edit</button>
+                                    </div>
                                 </div>
                                 <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
                                     <div><dt class="text-xs text-slate-500">Income bracket</dt><dd class="mt-1 font-bold text-slate-950">{{ form.income_bracket || 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Household size</dt><dd class="mt-1 font-bold text-slate-950">{{ form.household_size ? `${form.household_size} members` : 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Location</dt><dd class="mt-1 font-bold text-slate-950">{{ profileLocationSummary }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Support needed</dt><dd class="mt-1 font-bold text-slate-950">{{ listFromText(form.support_needs).join(', ') || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Current scholarship</dt><dd class="mt-1 font-bold text-slate-950">{{ currentScholarshipLabel(form.current_scholarship_status) || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Parent or guardian</dt><dd class="mt-1 font-bold text-slate-950">{{ (needsGuardianContext || hasGuardianDetails) ? (form.guardian_name || 'Not provided') : 'Not required' }}</dd></div>
                                 </dl>
                             </section>
 
                             <section class="bg-white p-4 sm:p-5">
                                 <div class="flex min-h-9 items-center justify-between gap-3">
                                     <div class="flex items-center gap-2"><i class="fa-solid fa-bullseye w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Goals and involvement</h4></div>
-                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('background')">Edit</button>
+                                    <div class="flex items-center gap-3">
+                                        <span :class="['rounded-sm px-2 py-1 text-[10px] font-bold uppercase', achievementEvidenceDocument ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">{{ achievementEvidenceDocument ? 'Evidence attached' : 'Applicant-declared' }}</span>
+                                        <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('background')">Edit</button>
+                                    </div>
                                 </div>
                                 <dl class="mt-4 grid gap-3 text-sm">
                                     <div><dt class="text-xs text-slate-500">Scholarship goal</dt><dd class="mt-1 line-clamp-2 font-bold leading-5 text-slate-950">{{ form.scholarship_goal || 'Not provided' }}</dd></div>
@@ -2564,7 +2579,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         <div v-if="profileView === 'edit'" class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
                             <p class="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Choose information to edit</p>
                             <nav aria-label="Profile sections">
-                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
                                     <li v-for="step in profileNavigationSteps" :key="step.id" class="min-w-0">
                                         <button
                                             type="button"
@@ -2609,17 +2624,17 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </div>
 
-                        <section v-if="activeSection === 'personal'" id="profile-personal" :class="sectionCardClass">
+                        <section v-if="['personal', 'household'].includes(activeSection)" :id="`profile-${activeSection}`" :class="sectionCardClass">
                             <div :class="sectionHeaderClass">
                                 <div>
                                     <p class="student-kicker">Required</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Personal and household details</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Add the learner's identity, current contact, and household context in one place.</p>
+                                    <h3 class="mt-2 text-xl font-bold text-slate-950">{{ activeSection === 'personal' ? 'Personal and contact' : 'Household and guardian' }}</h3>
+                                    <p class="mt-1 text-sm text-slate-500">{{ activeSection === 'personal' ? 'Add the learner identity and current contact details.' : 'Add eligibility, guardian, and outside-scholarship details.' }}</p>
                                 </div>
                             </div>
 
                             <div :class="[sectionBodyClass, 'space-y-4']">
-                                <div :class="formPanelClass">
+                                <div v-if="activeSection === 'personal'" :class="formPanelClass">
                                     <div class="mb-4">
                                         <h4 :class="formPanelTitleClass">Official name</h4>
                                         <p :class="formPanelDescriptionClass">Enter the name used in school and identification records.</p>
@@ -2654,7 +2669,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                 </div>
 
-                                <div :class="formPanelClass">
+                                <div v-if="activeSection === 'personal'" :class="formPanelClass">
                                     <div
                                         v-if="['needs_replacement', 'resubmitted'].includes(user?.profile_photo_review_status)"
                                         :class="[
@@ -2732,7 +2747,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </p>
                                 </div>
 
-                                <div :class="formPanelClass">
+                                <div v-if="activeSection === 'personal'" :class="formPanelClass">
                                     <div class="mb-4">
                                         <h4 :class="formPanelTitleClass">Basic information</h4>
                                         <p :class="formPanelDescriptionClass">Used for age-based eligibility and account communication.</p>
@@ -2768,8 +2783,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                 </div>
 
-                                <div class="grid items-stretch gap-4 lg:grid-cols-2">
-                                    <div :class="formPanelClass">
+                                <div class="contents">
+                                    <div v-if="activeSection === 'personal'" :class="formPanelClass">
                                         <div class="mb-4">
                                             <h4 :class="formPanelTitleClass">Account responsibility</h4>
                                             <p :class="formPanelDescriptionClass">Choose who signs in, updates this profile, and manages applications.</p>
@@ -2786,7 +2801,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                     </div>
 
-                                    <div :class="formPanelClass">
+                                    <div v-if="activeSection === 'household'" :class="formPanelClass">
                                         <div class="mb-4">
                                             <h4 :class="formPanelTitleClass">Household context</h4>
                                             <p :class="formPanelDescriptionClass">Use the household's approximate current situation.</p>
@@ -2816,7 +2831,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                 </div>
 
-                                <div :class="formPanelClass">
+                                <div v-if="activeSection === 'household'" :class="formPanelClass">
                                     <div class="mb-4 flex items-start gap-3">
                                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200">
                                             <i class="fa-solid fa-user-shield text-sm" aria-hidden="true"></i>
@@ -2860,10 +2875,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </label>
                                 </div>
 
-                                <div :class="formPanelClass">
+                                <div v-if="activeSection === 'household'" :class="formPanelClass">
                                     <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Scholarship support context</h4>
-                                        <p :class="formPanelDescriptionClass">Portal awards are detected automatically. Only declare scholarship support managed outside this platform.</p>
+                                        <h4 :class="formPanelTitleClass">Other scholarship status</h4>
+                                        <p :class="formPanelDescriptionClass">Portal awards are detected automatically. Only declare scholarships managed outside this platform.</p>
                                     </div>
                                     <div class="mb-5 rounded-md border border-slate-200 bg-white p-3">
                                         <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Detected by the portal</p>
@@ -2872,52 +2887,33 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                         <p v-else class="mt-1 text-sm font-semibold text-slate-700">No active scholarship award is recorded in this portal.</p>
                                     </div>
-                                    <div class="grid gap-5 lg:grid-cols-2 lg:gap-0">
-                                        <fieldset class="lg:pr-5">
-                                            <legend class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Study costs</legend>
-                                            <div class="mt-3 grid gap-2 sm:grid-cols-2">
-                                                <button
-                                                    v-for="option in supportNeedOptions"
-                                                    :key="option"
-                                                    type="button"
-                                                    :aria-pressed="isOptionSelected('support_needs', option)"
-                                                    :class="optionButtonClass(isOptionSelected('support_needs', option))"
-                                                    @click="toggleListOption('support_needs', option)"
-                                                >
-                                                    <span>{{ option }}</span>
-                                                    <i v-if="isOptionSelected('support_needs', option)" class="fa-solid fa-check text-xs" aria-hidden="true"></i>
-                                                </button>
+                                    <div>
+                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Scholarship outside this portal</p>
+                                        <div class="mt-3 space-y-4">
+                                            <div>
+                                                <label :class="labelClass" for="profile-current-scholarship">Outside scholarship status <span class="font-normal text-slate-400">(required)</span></label>
+                                                <select id="profile-current-scholarship" v-model="form.current_scholarship_status" :class="inputClass">
+                                                    <option value="">Select an option</option>
+                                                    <option v-for="option in currentScholarshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
+                                                </select>
                                             </div>
-                                        </fieldset>
-
-                                        <div class="border-t border-slate-200 pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
-                                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Scholarship outside this portal</p>
-                                            <div class="mt-3 space-y-4">
-                                                <div>
-                                                    <label :class="labelClass" for="profile-current-scholarship">Outside scholarship status <span class="font-normal text-slate-400">(required)</span></label>
-                                                    <select id="profile-current-scholarship" v-model="form.current_scholarship_status" :class="inputClass">
-                                                        <option value="">Select an option</option>
-                                                        <option v-for="option in currentScholarshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                                    </select>
-                                                </div>
-                                                <div v-if="['receiving', 'pending'].includes(form.current_scholarship_status)">
-                                                    <label :class="labelClass" for="profile-current-scholarship-details">Outside provider, program, and support <span class="font-normal text-slate-400">(required)</span></label>
-                                                    <textarea
-                                                        id="profile-current-scholarship-details"
-                                                        v-model="form.current_scholarship_details"
-                                                        rows="3"
-                                                        maxlength="1000"
-                                                        placeholder="Provider, program name, and type of support"
-                                                        :class="inputClass"
-                                                    ></textarea>
-                                                </div>
-                                                <p class="text-xs leading-5 text-slate-500">You do not need to list scholarships awarded through this portal because those are checked automatically.</p>
+                                            <div v-if="['receiving', 'pending'].includes(form.current_scholarship_status)">
+                                                <label :class="labelClass" for="profile-current-scholarship-details">Outside provider and program details <span class="font-normal text-slate-400">(required)</span></label>
+                                                <textarea
+                                                    id="profile-current-scholarship-details"
+                                                    v-model="form.current_scholarship_details"
+                                                    rows="3"
+                                                    maxlength="1000"
+                                                    placeholder="Provider and program name"
+                                                    :class="inputClass"
+                                                ></textarea>
                                             </div>
+                                            <p class="text-xs leading-5 text-slate-500">You do not need to list scholarships awarded through this portal because those are checked automatically.</p>
                                         </div>
                                     </div>
                                 </div>
 
-                                <p class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
+                                <p v-if="activeSection === 'household'" class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
                                     <i class="fa-solid fa-lock mr-1.5" aria-hidden="true"></i>
                                     Household details are used for eligibility and authorized provider review. They are not shown publicly.
                                 </p>
@@ -3196,7 +3192,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </span>
                                         <div>
                                             <h4 :class="formPanelTitleClass">Home address</h4>
-                                            <p :class="formPanelDescriptionClass">City, province, and region are required for residency matching.</p>
+                                            <p class="mt-1 max-w-2xl text-sm font-medium leading-5 text-slate-600">Your general location is enough here. Some providers may request your complete address later for verification.</p>
                                         </div>
                                     </div>
                                     <div class="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -3246,26 +3242,19 @@ watch(() => form.value.grading_scale, (scale) => {
                                             </div>
                                         </div>
                                         <p v-if="locationOptionsError" class="mt-3 text-xs font-semibold text-rose-600">{{ locationOptionsError }}</p>
-                                </div>
-
-                                <div :class="formPanelClass">
-                                    <div class="mb-4 flex items-start gap-3">
-                                        <div class="flex items-start gap-3">
-                                            <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-amber-200 bg-amber-50 text-amber-700">
+                                        <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                                            <div class="flex min-w-0 items-start gap-3">
+                                                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-800">
                                                 <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
-                                            </span>
-                                            <div>
-                                                <h4 :class="formPanelTitleClass">Location map</h4>
-                                                <p :class="formPanelDescriptionClass">The map updates automatically from your city, province, and region. Your street and house number are not used for automatic map searches.</p>
+                                                </span>
+                                                <div class="min-w-0">
+                                                    <p class="text-sm font-bold text-slate-950">{{ form.latitude && form.longitude ? 'Map pin saved' : 'Map pin not set' }}</p>
+                                                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ locationMessage || profileMapAddress || 'The map uses your city, province, and region.' }}</p>
+                                                </div>
                                             </div>
+                                            <button type="button" class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="showProfileMapModal = true"><i class="fa-solid fa-map-location-dot mr-2" aria-hidden="true"></i>{{ form.latitude ? 'Review map pin' : 'Set map pin' }}</button>
                                         </div>
                                     </div>
-
-                                    <div class="flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                                        <div class="min-w-0"><p class="text-sm font-bold text-slate-950">{{ form.latitude && form.longitude ? 'Map pin saved in this form' : 'Map pin not set yet' }}</p><p class="mt-1 text-xs leading-5 text-slate-500">{{ locationMessage || profileMapAddress || 'Complete your city and province, then set the pin in the map modal.' }}</p></div>
-                                        <button type="button" class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="showProfileMapModal = true"><i class="fa-solid fa-map-location-dot mr-2" aria-hidden="true"></i>{{ form.latitude ? 'Review map pin' : 'Set map pin' }}</button>
-                                    </div>
-                                </div>
                             </div>
                         </section>
 

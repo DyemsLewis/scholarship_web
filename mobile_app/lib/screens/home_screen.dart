@@ -1390,15 +1390,11 @@ class _ProfileCard extends StatelessWidget {
         stringValue(user['household_size'], fallback: 'Not provided'),
       ),
       _Detail(
-        'Support needs',
-        stringValue(user['support_needs'], fallback: 'Not provided'),
-      ),
-      _Detail(
-        'Current scholarship support',
+        'Current scholarship status',
         profileLabelFromKey(user['current_scholarship_status']),
       ),
       _Detail(
-        'Scholarship support details',
+        'Outside scholarship details',
         stringValue(
           user['current_scholarship_details'],
           fallback: 'Not provided',
@@ -4031,10 +4027,9 @@ class _ProfileEditorState extends State<_ProfileEditor> {
       'Household size',
       keyboardType: TextInputType.number,
     ),
-    _ProfileField('support_needs', 'Support needs', maxLines: 3),
     _ProfileField(
       'current_scholarship_status',
-      'Current scholarship support (none / receiving / pending / completed / prefer_not_to_say)',
+      'Current scholarship status (none / receiving / pending / completed)',
     ),
     _ProfileField(
       'current_scholarship_details',

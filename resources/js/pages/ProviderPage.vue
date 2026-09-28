@@ -362,7 +362,7 @@ onMounted(loadProviderData);
                 <TaskPageHeader
                     theme="provider"
                     eyebrow="Provider dashboard"
-                    :title="providerName"
+                    title="Dashboard"
                     :description="workspaceDescription"
                     icon="fa-solid fa-gauge-high"
                 >

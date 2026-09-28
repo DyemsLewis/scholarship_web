@@ -42,14 +42,16 @@ const props = defineProps({
 });
 
 const isApplicant = computed(() => props.theme === 'applicant');
+const isProvider = computed(() => props.theme === 'provider');
 const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props.theme}-hero task-page-header`);
 </script>
 
 <template>
     <header :class="headerClass">
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex min-w-0 items-start gap-3">
+            <div :class="['flex min-w-0 items-start', isProvider ? '' : 'gap-3']">
                 <span
+                    v-if="!isProvider"
                     :class="[
                         'grid h-11 w-11 shrink-0 place-items-center rounded-md shadow-sm',
                         isApplicant ? 'student-hero-icon' : 'bg-slate-950 text-amber-300',
@@ -59,10 +61,10 @@ const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props
                 </span>
 
                 <div class="min-w-0">
-                    <p :class="['text-[11px] font-bold uppercase tracking-[0.18em]', isApplicant ? 'text-amber-200' : 'text-amber-700']">
+                    <p v-if="!isProvider" :class="['text-[11px] font-bold uppercase tracking-[0.18em]', isApplicant ? 'text-amber-200' : 'text-amber-700']">
                         {{ eyebrow }}
                     </p>
-                    <h1 :class="['mt-1 font-display text-xl font-bold leading-tight sm:text-2xl', isApplicant ? 'text-white' : 'text-slate-950']">
+                    <h1 :class="['text-xl font-bold leading-tight sm:text-2xl', !isProvider ? 'mt-1 font-display' : '', isApplicant ? 'text-white' : 'text-slate-950']">
                         {{ title }}
                     </h1>
                     <p
@@ -72,7 +74,7 @@ const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props
                         {{ description }}
                     </p>
                     <div
-                        v-if="$slots.meta"
+                        v-if="$slots.meta && !isProvider"
                         :class="['mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold', isApplicant ? 'text-slate-300' : 'text-slate-500']"
                     >
                         <slot name="meta"></slot>

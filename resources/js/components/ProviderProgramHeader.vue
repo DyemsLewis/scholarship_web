@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue';
 import TaskPageHeader from './TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
 
@@ -22,6 +23,10 @@ const props = defineProps({
 });
 
 const statusLabel = () => labelFromKey(props.status || 'draft');
+const headerDescription = computed(() => [
+    props.title,
+    props.status ? statusLabel() : '',
+].filter(Boolean).join(' · '));
 </script>
 
 <template>
@@ -35,7 +40,8 @@ const statusLabel = () => labelFromKey(props.status || 'draft');
     <TaskPageHeader
         theme="provider"
         :eyebrow="section"
-        :title="title"
+        :title="section"
+        :description="headerDescription"
         icon="fa-solid fa-graduation-cap"
     >
         <template v-if="status || $slots.meta" #meta>

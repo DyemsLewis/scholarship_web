@@ -152,6 +152,11 @@ Route::middleware(['auth', 'provider'])
         Route::get('/programs/{scholarship}/monitoring/releases', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'releases')->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.releases');
         Route::get('/programs/{scholarship}/monitoring/outcomes', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'outcomes')->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.outcomes');
         Route::get('/programs/{scholarship}/edit', [ProviderController::class, 'programForm'])->middleware('permission:manage_programs')->name('programs.edit');
+        Route::get('/programs/{scholarship}/edit/{step}', [ProviderController::class, 'programForm'])
+            ->middleware('permission:manage_programs')
+            ->whereNumber('scholarship')
+            ->where('step', 'basics|support|dates-location|eligibility|application|selection|review')
+            ->name('programs.edit.step');
         Route::get('/programs/{scholarship}/applications', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications');
         Route::get('/programs/{scholarship}/applications/review', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.review');
         Route::get('/programs/{scholarship}/applications/activities', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.activities');
@@ -262,6 +267,7 @@ Route::middleware(['auth', 'provider'])
         Route::patch('/scholarships/{scholarship}/events/{event}/attendance', [ProviderController::class, 'bulkUpdateScholarshipEventAttendance'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.events.attendance');
         Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->middleware('permission:manage_programs,review_applications')->name('scholarships.show');
         Route::put('/scholarships/{scholarship}', [ProviderController::class, 'updateScholarship'])->middleware('permission:manage_programs')->name('scholarships.update');
+        Route::delete('/scholarships/{scholarship}', [ProviderController::class, 'destroyScholarship'])->middleware('permission:manage_programs')->name('scholarships.destroy');
         Route::post('/scholarships/{scholarship}/duplicate', [ProviderController::class, 'duplicateScholarship'])->middleware('permission:manage_programs')->name('scholarships.duplicate');
     });
 

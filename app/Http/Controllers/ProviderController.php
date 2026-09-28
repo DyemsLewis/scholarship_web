@@ -193,7 +193,7 @@ class ProviderController extends Controller
         return redirect()->route($routeName, $scholarship);
     }
 
-    public function programForm(Request $request): View|RedirectResponse
+    public function programForm(Request $request, ?Scholarship $scholarship = null): View|RedirectResponse
     {
         if (! $request->user()) {
             return redirect()->route('login');
@@ -205,6 +205,17 @@ class ProviderController extends Controller
 
         if (! $providerOwner->hasVerifiedEmail() || ! $providerOwner->providerProfile?->isVerified()) {
             return redirect()->route('provider.profile.verification');
+        }
+
+        if ($scholarship) {
+            abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+
+            if (! $request->route('step')) {
+                return redirect()->route('provider.programs.edit.step', [
+                    'scholarship' => $scholarship,
+                    'step' => 'basics',
+                ]);
+            }
         }
 
         return view('provider-program-form');
@@ -4438,6 +4449,43 @@ class ProviderController extends Controller
             'message' => 'Program duplicated as a draft.',
             'scholarship' => $this->scholarshipPayload($duplicate),
         ], 201);
+    }
+
+    public function destroyScholarship(Request $request, Scholarship $scholarship): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+
+        if ($scholarship->status !== 'draft') {
+            throw ValidationException::withMessages([
+                'program' => 'Only draft programs can be deleted.',
+            ]);
+        }
+
+        if ($scholarship->applications()->exists()) {
+            throw ValidationException::withMessages([
+                'program' => 'This draft has applicant records and cannot be deleted.',
+            ]);
+        }
+
+        $scholarshipId = $scholarship->id;
+        $scholarshipTitle = $scholarship->title;
+        $imagePath = $scholarship->image_path;
+
+        DB::transaction(fn () => $scholarship->delete());
+        $this->deleteScholarshipImageIfUnused($imagePath);
+
+        ActivityLog::record(
+            $request->user(),
+            'scholarship_draft_deleted',
+            "{$request->user()->name} deleted scholarship draft {$scholarshipTitle}.",
+            $request,
+            ['scholarship_id' => $scholarshipId],
+        );
+
+        return response()->json([
+            'message' => 'Draft deleted.',
+        ]);
     }
 
     public function storeScholarship(Request $request): JsonResponse

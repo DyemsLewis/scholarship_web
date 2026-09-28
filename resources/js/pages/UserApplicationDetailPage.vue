@@ -999,11 +999,6 @@ onMounted(loadApplication);
                                     <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Application #{{ application.id }}</p>
                                     <h1 class="mt-1 text-xl font-bold leading-tight text-slate-950 sm:text-2xl">{{ application.scholarship?.title || 'Scholarship application' }}</h1>
                                     <p class="mt-1 truncate text-sm font-semibold text-slate-500">{{ application.scholarship?.provider?.name || 'Scholarship provider' }}</p>
-                                    <div class="mt-2 flex flex-wrap gap-1.5">
-                                        <span v-if="application.scholarship?.category" class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{{ labelFromKey(application.scholarship.category) }}</span>
-                                        <span v-if="application.scholarship?.program_cycle" class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{{ application.scholarship.program_cycle }}</span>
-                                        <span class="rounded-sm bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-800 ring-1 ring-amber-200">{{ applicationModeLabel(application.scholarship?.application_mode) }}</span>
-                                    </div>
                                 </div>
                             </div>
                             <div class="flex shrink-0 flex-col items-start sm:items-end">
