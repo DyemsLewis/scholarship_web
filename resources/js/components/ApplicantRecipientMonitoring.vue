@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import FilePreviewModal from './FilePreviewModal.vue';
+import ApplicantMonitoringChecklist from './ApplicantMonitoringChecklist.vue';
 import { showPortalToast } from '../support/portalToast';
 
 const props = defineProps({
@@ -18,8 +19,16 @@ const acceptedTerms = ref({});
 const manualForms = ref({});
 const previewFile = ref(null);
 const activePanel = ref('requirements');
+const today = new Date().toISOString().slice(0, 10);
+const receiptResponseTarget = ref(null);
+const isSavingReceiptResponse = ref(false);
+const receiptResponseForm = ref(defaultReceiptResponseForm());
+const supportDecisionTarget = ref(null);
+const isSavingSupportResponse = ref(false);
+const supportResponseForm = ref(defaultSupportResponseForm());
 
 const cycles = computed(() => props.monitoring.cycles ?? []);
+const checkIns = computed(() => props.monitoring.check_ins ?? []);
 const releases = computed(() => props.monitoring.benefit_releases ?? []);
 const decisions = computed(() => props.monitoring.support_decisions ?? []);
 const actionCycles = computed(() => cycles.value.filter((cycle) => cycle.correction_requested || (cycle.can_submit && !cycle.submission)));
@@ -27,6 +36,7 @@ const submittedCycles = computed(() => cycles.value.filter((cycle) => cycle.subm
 const laterCycles = computed(() => cycles.value.filter((cycle) => !cycle.submission && !actionCycles.value.some((item) => item.id === cycle.id)));
 const activeReleases = computed(() => releases.value.filter((release) => ['scheduled', 'prepared'].includes(release.status)));
 const releaseHistory = computed(() => releases.value.filter((release) => !['scheduled', 'prepared'].includes(release.status)));
+const receiptActionRelease = computed(() => releases.value.find((release) => release.can_respond));
 const latestDecision = computed(() => decisions.value[0] ?? null);
 const previousDecisions = computed(() => decisions.value.slice(1));
 const monitoringTabs = [
@@ -36,12 +46,27 @@ const monitoringTabs = [
 ];
 
 const nextStep = computed(() => {
+    const checkInRequirement = checkIns.value
+        .flatMap((checkIn) => checkIn.requirements.map((requirement) => ({ checkIn, requirement })))
+        .find(({ requirement }) => requirement.can_submit && (!requirement.submission || requirement.correction_requested));
+    if (checkInRequirement) {
+        return {
+            panel: 'requirements',
+            icon: checkInRequirement.requirement.correction_requested ? 'fa-solid fa-rotate' : 'fa-solid fa-arrow-up-from-bracket',
+            tone: 'amber',
+            label: checkInRequirement.requirement.correction_requested ? 'Action needed' : 'Next requirement',
+            title: checkInRequirement.requirement.title,
+            detail: `Submit by ${checkInRequirement.checkIn.due_label}`,
+        };
+    }
     const correction = actionCycles.value.find((cycle) => cycle.correction_requested);
     if (correction) return { panel: 'requirements', icon: 'fa-solid fa-rotate', tone: 'amber', label: 'Action needed', title: `Replace the record for ${correction.title}`, detail: correction.due_label ? `Submit by ${correction.due_label}` : 'Upload the corrected grade record.' };
     const requirement = actionCycles.value[0];
     if (requirement) return { panel: 'requirements', icon: 'fa-solid fa-arrow-up-from-bracket', tone: 'amber', label: 'Next requirement', title: `Upload ${requirement.title}`, detail: requirement.due_label ? `Submit by ${requirement.due_label}` : 'Submit your grade record.' };
     const pending = submittedCycles.value.find((cycle) => cycle.submission?.review_status === 'pending');
     if (pending) return { panel: 'requirements', icon: 'fa-regular fa-clock', tone: 'slate', label: 'Waiting for review', title: `${pending.title} was submitted`, detail: 'The provider will post the result here.' };
+    if (receiptActionRelease.value) return { panel: 'benefits', icon: 'fa-solid fa-receipt', tone: 'amber', label: 'Confirmation needed', title: `Confirm ${receiptActionRelease.value.title}`, detail: 'Confirm what you received or report a problem.' };
+    if (latestDecision.value?.can_respond) return { panel: 'status', icon: 'fa-solid fa-file-signature', tone: 'amber', label: 'Response needed', title: latestDecision.value.decision_label, detail: 'Acknowledge the outcome or ask the provider to review it.' };
     const release = activeReleases.value[0];
     if (release) return { panel: 'benefits', icon: releaseStatusIcon(release.status), tone: 'sky', label: release.status === 'prepared' ? 'Benefit ready' : 'Upcoming release', title: release.title, detail: release.release_label || 'Open the release details for instructions.' };
     return { panel: 'requirements', icon: 'fa-solid fa-circle-check', tone: 'emerald', label: 'No action needed', title: 'Your monitoring record is up to date', detail: 'New requirements and release schedules will appear here.' };
@@ -119,6 +144,115 @@ function supportStatusIcon(status) {
     return 'fa-solid fa-heart-pulse';
 }
 
+function defaultReceiptResponseForm() {
+    return {
+        response_type: 'confirmed',
+        received_on: new Date().toISOString().slice(0, 10),
+        recipient_note: '',
+        issue_type: 'not_received',
+        issue_details: '',
+        evidence: null,
+        acknowledged: false,
+    };
+}
+
+function defaultSupportResponseForm() {
+    return { response_type: 'acknowledged', message: '', attachment: null, confirmed: false };
+}
+
+function openSupportDecisionResponse(decision) {
+    supportDecisionTarget.value = decision;
+    supportResponseForm.value = defaultSupportResponseForm();
+}
+
+function closeSupportDecisionResponse() {
+    if (isSavingSupportResponse.value) return;
+    supportDecisionTarget.value = null;
+    supportResponseForm.value = defaultSupportResponseForm();
+}
+
+async function submitSupportDecisionResponse() {
+    if (!supportDecisionTarget.value || isSavingSupportResponse.value) return;
+
+    isSavingSupportResponse.value = true;
+    const data = new FormData();
+    data.append('response_type', supportResponseForm.value.response_type);
+    data.append('confirmed', supportResponseForm.value.confirmed ? '1' : '0');
+    if (supportResponseForm.value.message) data.append('message', supportResponseForm.value.message);
+    if (supportResponseForm.value.attachment) data.append('attachment', supportResponseForm.value.attachment);
+
+    try {
+        const response = await window.axios.post(
+            `/dashboard/support-decisions/${supportDecisionTarget.value.id}/response`,
+            data,
+        );
+        emit('application-updated', response.data.application);
+        supportDecisionTarget.value = null;
+        supportResponseForm.value = defaultSupportResponseForm();
+        showPortalToast({ type: 'success', title: 'Response recorded', message: response.data.message });
+    } catch (error) {
+        const errors = error.response?.data?.errors;
+        showPortalToast({ type: 'error', title: 'Response not saved', message: errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to record your response.') });
+    } finally {
+        isSavingSupportResponse.value = false;
+    }
+}
+
+function receiptResponseClass(response) {
+    if (!response) return 'border-amber-200 bg-amber-50 text-amber-900';
+    if (response.status === 'confirmed' || response.status === 'resolved') return 'border-emerald-200 bg-emerald-50 text-emerald-900';
+    return 'border-rose-200 bg-rose-50 text-rose-800';
+}
+
+function openReceiptResponse(release) {
+    receiptResponseTarget.value = release;
+    receiptResponseForm.value = defaultReceiptResponseForm();
+}
+
+function closeReceiptResponse() {
+    if (isSavingReceiptResponse.value) return;
+    receiptResponseTarget.value = null;
+    receiptResponseForm.value = defaultReceiptResponseForm();
+}
+
+async function submitReceiptResponse() {
+    if (!receiptResponseTarget.value || isSavingReceiptResponse.value) return;
+
+    isSavingReceiptResponse.value = true;
+    const data = new FormData();
+    const form = receiptResponseForm.value;
+    data.append('response_type', form.response_type);
+    data.append('acknowledged', form.acknowledged ? '1' : '0');
+    if (form.response_type === 'confirmed') {
+        data.append('received_on', form.received_on);
+        if (form.recipient_note) data.append('recipient_note', form.recipient_note);
+    } else {
+        data.append('issue_type', form.issue_type);
+        data.append('issue_details', form.issue_details);
+        if (form.evidence) data.append('evidence', form.evidence);
+    }
+
+    try {
+        const response = await window.axios.post(
+            `/dashboard/benefit-release-records/${receiptResponseTarget.value.record_id}/response`,
+            data,
+        );
+        emit('application-updated', response.data.application);
+        receiptResponseTarget.value = null;
+        receiptResponseForm.value = defaultReceiptResponseForm();
+        showPortalToast({ type: 'success', title: 'Response recorded', message: response.data.message });
+    } catch (error) {
+        const errors = error.response?.data?.errors;
+        showPortalToast({
+            type: 'error',
+            title: 'Response not saved',
+            message: errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to record your response.'),
+        });
+    } finally {
+        isSavingReceiptResponse.value = false;
+    }
+}
+
 function openFilePicker(cycle) {
     if (!cycle.submission && !acceptedTerms.value[cycle.id]) {
         showPortalToast({ type: 'error', title: 'Confirmation required', message: 'Confirm that this grade record is yours and matches the listed academic period.' });
@@ -178,7 +312,7 @@ async function saveManualGrade(cycle) {
 </script>
 
 <template>
-    <FilePreviewModal :file="previewFile" :title="previewFile?.original_name || 'Academic progress record'" :context="programTitle" @close="previewFile = null" />
+    <FilePreviewModal :file="previewFile" :title="previewFile?.original_name || 'Supporting record'" :context="programTitle" @close="previewFile = null" />
 
     <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_6px_18px_rgba(15,23,42,0.06)]">
         <header v-if="showHeader" class="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -210,11 +344,23 @@ async function saveManualGrade(cycle) {
         <input ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" @change="uploadGradeRecord">
 
         <div v-if="activePanel === 'requirements'" class="p-4 sm:p-5">
-            <div v-if="!cycles.length" class="rounded-md border border-dashed border-slate-300 px-5 py-8 text-center">
-                <span class="mx-auto grid h-10 w-10 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-regular fa-calendar-check" aria-hidden="true"></i></span><p class="mt-3 font-bold text-slate-950">No grade record requested</p><p class="mt-1 text-sm text-slate-500">A request will appear here when it is ready.</p>
+            <div v-if="!checkIns.length && !cycles.length" class="rounded-md border border-dashed border-slate-300 px-5 py-8 text-center">
+                <span class="mx-auto grid h-10 w-10 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-regular fa-calendar-check" aria-hidden="true"></i></span><p class="mt-3 font-bold text-slate-950">No check-in requested</p><p class="mt-1 text-sm text-slate-500">A checklist will appear here when it is ready.</p>
             </div>
 
             <div v-else class="space-y-5">
+                <ApplicantMonitoringChecklist
+                    v-if="checkIns.length"
+                    :check-ins="checkIns"
+                    :application-id="applicationId"
+                    :program-title="programTitle"
+                    @application-updated="emit('application-updated', $event)"
+                />
+
+                <div v-if="checkIns.length && cycles.length" class="border-t border-slate-200 pt-5">
+                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Earlier requests</p>
+                    <h4 class="mt-1 text-base font-bold text-slate-950">Academic records</h4>
+                </div>
                 <section v-if="actionCycles.length">
                     <div class="mb-3"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">What you need to do</p><h4 class="mt-1 text-base font-bold text-slate-950">Submit the open requirement</h4></div>
                     <div class="space-y-3">
@@ -284,21 +430,92 @@ async function saveManualGrade(cycle) {
 
             <details v-if="releaseHistory.length" class="group mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
                 <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-4 [&::-webkit-details-marker]:hidden"><div><p class="font-bold text-slate-950">Previous releases</p><p class="mt-1 text-xs text-slate-500">{{ releaseHistory.length }} recorded</p></div><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary>
-                <div class="divide-y divide-slate-200 border-t border-slate-200"><div v-for="release in releaseHistory" :key="release.record_id" class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div class="flex min-w-0 items-start gap-3"><span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md border', releaseStatusClass(release.status)]"><i :class="releaseStatusIcon(release.status)" class="text-xs" aria-hidden="true"></i></span><div><p class="text-sm font-bold text-slate-950">{{ release.title }}</p><p class="mt-1 text-xs text-slate-500">{{ release.status_label }} · {{ release.release_label }}</p></div></div><button v-if="release.receipt" type="button" class="self-start rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 sm:self-auto" @click="previewFile = release.receipt">View receipt</button></div></div>
+                <div class="divide-y divide-slate-200 border-t border-slate-200">
+                    <div v-for="release in releaseHistory" :key="release.record_id" class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md border', releaseStatusClass(release.status)]"><i :class="releaseStatusIcon(release.status)" class="text-xs" aria-hidden="true"></i></span>
+                            <div>
+                                <p class="text-sm font-bold text-slate-950">{{ release.title }}</p>
+                                <p class="mt-1 text-xs text-slate-500">{{ release.status_label }} · {{ release.release_label }}</p>
+                                <span v-if="release.receipt_response" :class="['mt-2 inline-flex rounded border px-2 py-1 text-[10px] font-bold uppercase', receiptResponseClass(release.receipt_response)]">{{ release.receipt_response.status_label }}</span>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button v-if="release.receipt" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="previewFile = release.receipt">View provider proof</button>
+                            <button v-if="release.can_respond" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openReceiptResponse(release)">Confirm receipt</button>
+                            <button v-if="release.receipt_response?.evidence" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="previewFile = release.receipt_response.evidence">View your evidence</button>
+                            <button v-if="release.receipt_response?.resolution_proof" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="previewFile = release.receipt_response.resolution_proof">View resolution proof</button>
+                        </div>
+                        <div v-if="release.receipt_response?.resolution_notes" class="basis-full rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900 sm:order-last">Provider resolution: {{ release.receipt_response.resolution_notes }}</div>
+                    </div>
+                </div>
             </details>
         </div>
 
         <div v-else class="p-4 sm:p-5">
             <article class="rounded-md border border-slate-200 bg-slate-50 p-4">
-                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div class="flex min-w-0 items-start gap-3"><span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md border', supportStatusClass(monitoring.support_status)]"><i :class="supportStatusIcon(monitoring.support_status)" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Current status</p><h4 class="mt-1 font-bold text-slate-950">{{ monitoring.support_status_label }}</h4><p class="mt-1 text-sm text-slate-600">{{ latestDecision?.reason || 'Continue following the posted requirements and release schedules.' }}</p></div></div><p v-if="latestDecision?.effective_label" class="shrink-0 text-xs font-bold text-slate-600">Effective {{ latestDecision.effective_label }}</p></div>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div class="flex min-w-0 items-start gap-3"><span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md border', supportStatusClass(monitoring.support_status)]"><i :class="supportStatusIcon(monitoring.support_status)" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Current status</p><h4 class="mt-1 font-bold text-slate-950">{{ monitoring.support_status_label }}</h4><p v-if="latestDecision?.reason_category_label" class="mt-1 text-xs font-bold text-slate-700">{{ latestDecision.reason_category_label }}</p><p class="mt-1 text-sm text-slate-600">{{ latestDecision?.reason || 'Continue following the posted requirements and release schedules.' }}</p></div></div><p v-if="latestDecision?.effective_label" class="shrink-0 text-xs font-bold text-slate-600">Effective {{ latestDecision.effective_label }}</p></div>
                 <dl v-if="latestDecision?.support_ends_label || latestDecision?.next_review_label" class="mt-4 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-2"><div v-if="latestDecision.support_ends_label" class="bg-white px-3 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Support through</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ latestDecision.support_ends_label }}</dd></div><div v-if="latestDecision.next_review_label" class="bg-white px-3 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Next review</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ latestDecision.next_review_label }}</dd></div></dl>
                 <p v-if="latestDecision?.next_period_terms" class="mt-3 text-sm leading-6 text-slate-600"><strong class="text-slate-900">Next period:</strong> {{ latestDecision.next_period_terms }}</p>
+                <div v-if="latestDecision" class="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3">
+                    <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', latestDecision.response_status === 'open' ? 'bg-rose-100 text-rose-700' : latestDecision.response_status === 'resolved' || latestDecision.response_status === 'acknowledged' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']">{{ latestDecision.response_status_label }}</span>
+                    <button v-if="latestDecision.decision_document" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="previewFile = latestDecision.decision_document">View decision file</button>
+                    <button v-if="latestDecision.resolution_proof" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="previewFile = latestDecision.resolution_proof">View resolution proof</button>
+                    <button v-if="latestDecision.can_respond" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openSupportDecisionResponse(latestDecision)">Respond to outcome</button>
+                </div>
+                <p v-if="latestDecision?.resolution_notes" class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900">Provider response: {{ latestDecision.resolution_notes }}</p>
             </article>
 
             <details v-if="previousDecisions.length" class="group mt-5 overflow-hidden rounded-md border border-slate-200 bg-white">
                 <summary class="flex cursor-pointer list-none items-center justify-between px-4 py-4 [&::-webkit-details-marker]:hidden"><div><p class="font-bold text-slate-950">Earlier status changes</p><p class="mt-1 text-xs text-slate-500">{{ previousDecisions.length }} recorded</p></div><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary>
-                <div class="divide-y divide-slate-200 border-t border-slate-200"><article v-for="decision in previousDecisions" :key="decision.id" class="px-4 py-3"><div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p class="text-sm font-bold text-slate-950">{{ decision.decision_label }}</p><p v-if="decision.reason" class="mt-1 text-xs leading-5 text-slate-600">{{ decision.reason }}</p></div><p class="shrink-0 text-xs text-slate-500">{{ decision.decided_at }}</p></div></article></div>
+                <div class="divide-y divide-slate-200 border-t border-slate-200"><article v-for="decision in previousDecisions" :key="decision.id" class="px-4 py-3"><div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><p class="text-sm font-bold text-slate-950">{{ decision.decision_label }}</p><p v-if="decision.reason" class="mt-1 text-xs leading-5 text-slate-600">{{ decision.reason }}</p><p v-if="decision.applicant_response_label" class="mt-1 text-[10px] font-bold uppercase text-slate-500">{{ decision.applicant_response_label }} · {{ decision.response_status_label }}</p></div><p class="shrink-0 text-xs text-slate-500">{{ decision.decided_at }}</p></div></article></div>
             </details>
         </div>
     </section>
+
+    <Teleport to="body">
+        <div v-if="supportDecisionTarget" class="fixed inset-0 z-[2100] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeSupportDecisionResponse" @keydown.esc="closeSupportDecisionResponse">
+            <section class="flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="support-response-title">
+                <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4"><div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Support outcome</p><h2 id="support-response-title" class="mt-1 text-xl font-bold">Respond to provider decision</h2><p class="mt-1 text-sm text-slate-500">{{ supportDecisionTarget.decision_label }}</p></div><button type="button" :disabled="isSavingSupportResponse" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500" aria-label="Close" @click="closeSupportDecisionResponse"><i class="fa-solid fa-xmark"></i></button></header>
+                <form class="min-h-0 overflow-y-auto" @submit.prevent="submitSupportDecisionResponse">
+                    <div class="space-y-4 p-5">
+                        <fieldset><legend class="text-xs font-bold text-slate-700">Your response</legend><div class="mt-2 space-y-2"><label :class="['flex cursor-pointer items-start gap-3 rounded-md border p-3', supportResponseForm.response_type === 'acknowledged' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200']"><input v-model="supportResponseForm.response_type" type="radio" value="acknowledged" class="mt-1"><span><strong class="block text-sm">Acknowledge outcome</strong><span class="mt-1 block text-xs text-slate-500">Confirm that you received and reviewed it.</span></span></label><label :class="['flex cursor-pointer items-start gap-3 rounded-md border p-3', supportResponseForm.response_type === 'clarification_requested' ? 'border-amber-500 bg-amber-50' : 'border-slate-200']"><input v-model="supportResponseForm.response_type" type="radio" value="clarification_requested" class="mt-1"><span><strong class="block text-sm">Ask for clarification</strong><span class="mt-1 block text-xs text-slate-500">Ask the provider to explain the decision.</span></span></label><label v-if="supportDecisionTarget.decision === 'terminated'" :class="['flex cursor-pointer items-start gap-3 rounded-md border p-3', supportResponseForm.response_type === 'reconsideration_requested' ? 'border-rose-500 bg-rose-50' : 'border-slate-200']"><input v-model="supportResponseForm.response_type" type="radio" value="reconsideration_requested" class="mt-1"><span><strong class="block text-sm">Request reconsideration</strong><span class="mt-1 block text-xs text-slate-500">Provide information the provider should review again.</span></span></label></div></fieldset>
+                        <template v-if="supportResponseForm.response_type !== 'acknowledged'"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Message</span><textarea v-model="supportResponseForm.message" required minlength="5" maxlength="1500" rows="4" placeholder="Explain what needs clarification or reconsideration." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Supporting file <span class="font-normal text-slate-400">(optional)</span></span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-md border border-slate-300 bg-white p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white" @change="supportResponseForm.attachment = $event.target.files?.[0] || null"></label></template>
+                        <label class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"><input v-model="supportResponseForm.confirmed" type="checkbox" required class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"><span>I confirm this response is accurate.</span></label>
+                    </div>
+                    <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button type="button" :disabled="isSavingSupportResponse" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeSupportDecisionResponse">Cancel</button><button type="submit" :disabled="isSavingSupportResponse || !supportResponseForm.confirmed" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isSavingSupportResponse ? 'Saving...' : 'Submit response' }}</button></footer>
+                </form>
+            </section>
+        </div>
+    </Teleport>
+
+    <Teleport to="body">
+        <div v-if="receiptResponseTarget" class="fixed inset-0 z-[2100] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeReceiptResponse" @keydown.esc="closeReceiptResponse">
+            <section class="flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="receipt-response-title">
+                <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                    <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Benefit receipt</p><h2 id="receipt-response-title" class="mt-1 text-xl font-bold">Confirm what you received</h2><p class="mt-1 text-sm text-slate-500">{{ receiptResponseTarget.title }}</p></div>
+                    <button type="button" :disabled="isSavingReceiptResponse" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500" aria-label="Close" @click="closeReceiptResponse"><i class="fa-solid fa-xmark"></i></button>
+                </header>
+
+                <form class="min-h-0 overflow-y-auto" @submit.prevent="submitReceiptResponse">
+                    <div class="space-y-4 p-5">
+                        <fieldset><legend class="text-xs font-bold text-slate-700">Your response</legend><div class="mt-2 grid gap-2 sm:grid-cols-2"><label :class="['cursor-pointer rounded-md border p-3', receiptResponseForm.response_type === 'confirmed' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200']"><input v-model="receiptResponseForm.response_type" type="radio" value="confirmed" class="sr-only"><span class="block text-sm font-bold">Received as listed</span><span class="mt-1 block text-xs text-slate-500">Confirm the benefit and date.</span></label><label :class="['cursor-pointer rounded-md border p-3', receiptResponseForm.response_type === 'issue' ? 'border-rose-400 bg-rose-50' : 'border-slate-200']"><input v-model="receiptResponseForm.response_type" type="radio" value="issue" class="sr-only"><span class="block text-sm font-bold">Report a problem</span><span class="mt-1 block text-xs text-slate-500">Tell the provider what is wrong.</span></label></div></fieldset>
+
+                        <template v-if="receiptResponseForm.response_type === 'confirmed'">
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Date received</span><input v-model="receiptResponseForm.received_on" type="date" :max="today" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Note <span class="font-normal text-slate-400">(optional)</span></span><textarea v-model="receiptResponseForm.recipient_note" maxlength="1000" rows="3" placeholder="Add a short note only if needed." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+                        </template>
+                        <template v-else>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Problem</span><select v-model="receiptResponseForm.issue_type" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option value="not_received">Benefit not received</option><option value="incorrect_amount">Incorrect amount</option><option value="incomplete_benefit">Benefit was incomplete</option><option value="damaged_item">Item was damaged</option><option value="other">Other problem</option></select></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">What happened</span><textarea v-model="receiptResponseForm.issue_details" required minlength="5" maxlength="1500" rows="4" placeholder="Describe what was missing or different." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Evidence <span class="font-normal text-slate-400">(optional)</span></span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-md border border-slate-300 bg-white p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white" @change="receiptResponseForm.evidence = $event.target.files?.[0] || null"></label>
+                        </template>
+
+                        <label class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"><input v-model="receiptResponseForm.acknowledged" type="checkbox" required class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"><span>I confirm this response is accurate.</span></label>
+                    </div>
+                    <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button type="button" :disabled="isSavingReceiptResponse" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeReceiptResponse">Cancel</button><button type="submit" :disabled="isSavingReceiptResponse || !receiptResponseForm.acknowledged" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isSavingReceiptResponse ? 'Saving...' : 'Submit response' }}</button></footer>
+                </form>
+            </section>
+        </div>
+    </Teleport>
 </template>

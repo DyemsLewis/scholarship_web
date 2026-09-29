@@ -40,7 +40,11 @@ function monitoringNextStep(application) {
         };
     }
 
-    const pendingReview = (monitoring.cycles ?? []).find((cycle) => cycle.submission?.review_status === 'pending');
+    const pendingCheckInReview = (monitoring.check_ins ?? []).find((checkIn) => (
+        checkIn.requirements.some((requirement) => requirement.submission?.review_status === 'pending')
+    ));
+    const pendingReview = pendingCheckInReview
+        ?? (monitoring.cycles ?? []).find((cycle) => cycle.submission?.review_status === 'pending');
     if (pendingReview) {
         return {
             label: 'Provider review',

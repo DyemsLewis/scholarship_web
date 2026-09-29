@@ -153,8 +153,20 @@ class ProviderProgramDirectoryTest extends TestCase
         }
 
         $this->actingAs($provider)
+            ->get("/provider/monitoring/{$scholarship->id}/plan")
+            ->assertOk()
+            ->assertViewIs('provider-monitoring-plan')
+            ->assertViewHas('scholarship', fn (Scholarship $viewScholarship): bool => (
+                $viewScholarship->is($scholarship)
+            ));
+
+        $this->actingAs($provider)
             ->get("/provider/programs/{$scholarship->id}/monitoring")
             ->assertRedirect("/provider/monitoring/{$scholarship->id}");
+
+        $this->actingAs($provider)
+            ->get("/provider/programs/{$scholarship->id}/monitoring/plan")
+            ->assertRedirect("/provider/monitoring/{$scholarship->id}/plan");
     }
 
     public function test_program_editor_uses_dedicated_step_urls(): void

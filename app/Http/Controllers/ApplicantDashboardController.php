@@ -8,9 +8,14 @@ use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
+use App\Models\RecipientBenefitReceiptResponse;
 use App\Models\RecipientBenefitReleaseRecord;
 use App\Models\RecipientMonitoringCycle;
+use App\Models\RecipientMonitoringCycleRequirement;
+use App\Models\RecipientMonitoringAdjustmentRequest;
+use App\Models\RecipientMonitoringIntervention;
 use App\Models\RecipientMonitoringSubmission;
+use App\Models\RecipientSupportDecision;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
@@ -28,9 +33,11 @@ use App\Support\AcademicRequirement;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\PreScreeningHandoffRecord;
 use App\Support\RecipientAgreement;
+use App\Support\RecipientMonitoringRequirementType;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -1935,13 +1942,347 @@ class ApplicantDashboardController extends Controller
         ]);
     }
 
+    public function uploadRecipientMonitoringRequirement(
+        Request $request,
+        ScholarshipApplication $application,
+        RecipientMonitoringCycleRequirement $requirement,
+    ): JsonResponse {
+        $requirement->loadMissing('cycle');
+        $cycle = $requirement->cycle;
+        abort_unless($cycle, 404);
+        $this->ensureRecipientMonitoringSubmissionAllowed($request, $application, $cycle, $requirement);
+
+        $isAcademic = $requirement->type === RecipientMonitoringRequirementType::ACADEMIC_PROGRESS;
+        $maximumFileSize = $isAcademic && $this->academicRecordOcrService->configured()
+            ? max(1, (int) config('services.academic_ocr.max_file_size_kb', 1024))
+            : 5120;
+        $validated = $request->validate([
+            'supporting_record' => ['required', 'file', "max:{$maximumFileSize}", 'mimes:pdf,jpg,jpeg,png'],
+            'applicant_note' => ['nullable', 'string', 'max:500'],
+            'terms_accepted' => ['accepted'],
+        ]);
+        $file = $validated['supporting_record'];
+        $existing = RecipientMonitoringSubmission::query()
+            ->where('recipient_monitoring_cycle_requirement_id', $requirement->id)
+            ->where('scholarship_application_id', $application->id)
+            ->first();
+        $path = $file->store(
+            "recipient-monitoring/{$application->id}/{$cycle->id}/{$requirement->id}",
+            'local',
+        );
+        $oldPath = $existing?->path;
+
+        if (! is_string($path)) {
+            throw ValidationException::withMessages([
+                'supporting_record' => 'The supporting record could not be stored. Please try again.',
+            ]);
+        }
+
+        try {
+            $submission = RecipientMonitoringSubmission::query()->updateOrCreate([
+                'recipient_monitoring_cycle_requirement_id' => $requirement->id,
+                'scholarship_application_id' => $application->id,
+            ], [
+                'recipient_monitoring_cycle_id' => $cycle->id,
+                'applicant_id' => $request->user()->id,
+                'applicant_note' => trim((string) ($validated['applicant_note'] ?? '')) ?: null,
+                'submission_source' => 'applicant_upload',
+                'original_name' => $file->getClientOriginalName(),
+                'path' => $path,
+                'mime_type' => $file->getMimeType(),
+                'size' => $file->getSize() ?: 0,
+                'ocr_status' => AcademicRecordOcrService::STATUS_NOT_REQUESTED,
+                'ocr_provider' => null,
+                'ocr_grade' => null,
+                'ocr_grading_scale' => null,
+                'ocr_label' => null,
+                'ocr_message' => null,
+                'ocr_processed_at' => null,
+                'reported_grade' => null,
+                'reported_grading_scale' => null,
+                'grade_source' => null,
+                'submitted_at' => now(),
+                'review_status' => 'pending',
+                'review_notes' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+            ]);
+        } catch (Throwable $error) {
+            Storage::disk('local')->delete($path);
+            throw $error;
+        }
+
+        if ($oldPath && $oldPath !== $path) {
+            Storage::disk('local')->delete($oldPath);
+        }
+
+        $scanResult = $isAcademic
+            ? $this->processRecipientMonitoringScan($submission)
+            : ['status' => AcademicRecordOcrService::STATUS_NOT_REQUESTED];
+        $application->loadMissing('scholarship');
+        $programTitle = $application->scholarship?->title ?? 'the scholarship program';
+        $providerMessage = "{$request->user()->name} submitted {$requirement->title} for {$programTitle}.";
+
+        PortalNotification::query()->updateOrCreate([
+            'deduplication_key' => "recipient-monitoring-item:{$submission->id}:provider:{$application->scholarship?->provider_id}",
+        ], [
+            'user_id' => $application->scholarship?->provider_id,
+            'type' => 'recipient_monitoring_submission',
+            'title' => 'Monitoring requirement submitted',
+            'message' => $providerMessage,
+            'action_url' => route('provider.monitoring.academic', $application->scholarship_id, false),
+            'read_at' => null,
+        ]);
+        $this->notifyAdditionalProviderReviewers(
+            $application,
+            'recipient_monitoring_submission',
+            'Monitoring requirement submitted',
+            $providerMessage,
+            'overview',
+        );
+
+        ActivityLog::record(
+            $request->user(),
+            'recipient_monitoring_requirement_uploaded',
+            "{$request->user()->name} uploaded {$requirement->title} for {$cycle->title}.",
+            $request,
+            [
+                'application_id' => $application->id,
+                'monitoring_cycle_id' => $cycle->id,
+                'monitoring_requirement_id' => $requirement->id,
+                'submission_id' => $submission->id,
+                'ocr_status' => $scanResult['status'],
+            ],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => $isAcademic
+                ? ($scanResult['status'] === AcademicRecordOcrService::STATUS_SUCCEEDED
+                    ? 'Academic record uploaded and the result was extracted for provider review.'
+                    : 'Academic record uploaded. Enter the result if automatic extraction needs help.')
+                : 'Supporting record uploaded for provider review.',
+            'application' => $this->applicationPayload($freshApplication),
+        ], $existing ? 200 : 201);
+    }
+
+    public function saveRecipientMonitoringRequirementManualGrade(
+        Request $request,
+        ScholarshipApplication $application,
+        RecipientMonitoringCycleRequirement $requirement,
+    ): JsonResponse {
+        $requirement->loadMissing('cycle');
+        $cycle = $requirement->cycle;
+        abort_unless($cycle, 404);
+        abort_unless($requirement->type === RecipientMonitoringRequirementType::ACADEMIC_PROGRESS, 404);
+        $this->ensureRecipientMonitoringSubmissionAllowed($request, $application, $cycle, $requirement);
+
+        $submission = RecipientMonitoringSubmission::query()
+            ->where('recipient_monitoring_cycle_requirement_id', $requirement->id)
+            ->where('scholarship_application_id', $application->id)
+            ->firstOrFail();
+
+        if ($submission->ocr_status === AcademicRecordOcrService::STATUS_SUCCEEDED) {
+            throw ValidationException::withMessages([
+                'grade' => 'The scanner already extracted a result. The provider will compare it with the uploaded record.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'grade' => ['required', 'numeric'],
+            'grading_scale' => ['required', Rule::in([
+                AcademicRequirement::SCALE_PERCENTAGE,
+                AcademicRequirement::SCALE_GRADE_POINT,
+            ])],
+        ]);
+        $grade = (float) $validated['grade'];
+        $validGrade = $validated['grading_scale'] === AcademicRequirement::SCALE_GRADE_POINT
+            ? $grade >= 1 && $grade <= 5
+            : $grade >= 0 && $grade <= 100;
+
+        if (! $validGrade) {
+            throw ValidationException::withMessages([
+                'grade' => $validated['grading_scale'] === AcademicRequirement::SCALE_GRADE_POINT
+                    ? 'Enter a grade point from 1.00 to 5.00.'
+                    : 'Enter a percentage from 0 to 100.',
+            ]);
+        }
+
+        $submission->update([
+            'reported_grade' => $grade,
+            'reported_grading_scale' => $validated['grading_scale'],
+            'grade_source' => 'applicant_manual',
+            'review_status' => 'pending',
+            'review_notes' => null,
+            'reviewed_by' => null,
+            'reviewed_at' => null,
+        ]);
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => 'The academic result was saved for provider verification.',
+            'application' => $this->applicationPayload($freshApplication),
+        ]);
+    }
+
+    public function storeRecipientMonitoringAdjustmentRequest(
+        Request $request,
+        ScholarshipApplication $application,
+        RecipientMonitoringCycleRequirement $requirement,
+    ): JsonResponse {
+        $requirement->loadMissing('cycle.scholarship');
+        $cycle = $requirement->cycle;
+        abort_unless($cycle, 404);
+        $this->ensureRecipientMonitoringAdjustmentAllowed($request, $application, $cycle, $requirement);
+
+        $validated = $request->validate([
+            'request_type' => ['required', Rule::in(['extension', 'exception'])],
+            'reason_category' => ['required', Rule::in([
+                'illness',
+                'family_emergency',
+                'school_schedule',
+                'transfer',
+                'technical_issue',
+                'other',
+            ])],
+            'explanation' => ['required', 'string', 'min:10', 'max:2000'],
+            'requested_due_at' => [
+                Rule::requiredIf($request->input('request_type') === 'extension'),
+                'nullable',
+                'date',
+                'after:'.$cycle->due_at->format('Y-m-d'),
+                'before_or_equal:'.$cycle->due_at->copy()->addDays(60)->format('Y-m-d'),
+            ],
+            'supporting_record' => ['nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png'],
+            'confirmation' => ['accepted'],
+        ]);
+        if ($validated['request_type'] === 'extension' && ! $requirement->requires_file) {
+            throw ValidationException::withMessages([
+                'request_type' => 'This provider-recorded requirement accepts an exception request instead of a deadline extension.',
+            ]);
+        }
+        $file = $validated['supporting_record'] ?? null;
+        $path = $file?->store(
+            "recipient-monitoring/{$application->id}/{$cycle->id}/adjustments",
+            'local',
+        );
+
+        if ($file && ! is_string($path)) {
+            throw ValidationException::withMessages([
+                'supporting_record' => 'The supporting record could not be stored. Please try again.',
+            ]);
+        }
+
+        try {
+            $adjustment = RecipientMonitoringAdjustmentRequest::create([
+                'recipient_monitoring_cycle_id' => $cycle->id,
+                'recipient_monitoring_cycle_requirement_id' => $requirement->id,
+                'scholarship_application_id' => $application->id,
+                'applicant_id' => $request->user()->id,
+                'request_type' => $validated['request_type'],
+                'reason_category' => $validated['reason_category'],
+                'explanation' => trim($validated['explanation']),
+                'requested_due_at' => $validated['requested_due_at'] ?? null,
+                'attachment_original_name' => $file?->getClientOriginalName(),
+                'attachment_path' => $path,
+                'attachment_mime_type' => $file?->getMimeType(),
+                'attachment_size' => $file?->getSize() ?: 0,
+                'status' => 'pending',
+            ]);
+        } catch (Throwable $error) {
+            if ($path) Storage::disk('local')->delete($path);
+            throw $error;
+        }
+
+        $application->loadMissing(['applicant', 'scholarship']);
+        $programTitle = $application->scholarship?->title ?? 'the scholarship program';
+        $message = "{$request->user()->name} requested a monitoring {$validated['request_type']} for {$requirement->title} in {$programTitle}.";
+        PortalNotification::query()->updateOrCreate([
+            'deduplication_key' => "recipient-monitoring-adjustment:{$adjustment->id}:provider:{$application->scholarship?->provider_id}",
+        ], [
+            'user_id' => $application->scholarship?->provider_id,
+            'type' => 'recipient_monitoring_adjustment',
+            'title' => 'Monitoring request received',
+            'message' => $message,
+            'action_url' => route('provider.monitoring.academic', $application->scholarship_id, false),
+            'read_at' => null,
+        ]);
+        $this->notifyAdditionalProviderReviewers(
+            $application,
+            'recipient_monitoring_adjustment',
+            'Monitoring request received',
+            $message,
+            'monitoring',
+        );
+
+        ActivityLog::record(
+            $request->user(),
+            'recipient_monitoring_adjustment_requested',
+            "{$request->user()->name} requested a {$validated['request_type']} for {$requirement->title}.",
+            $request,
+            [
+                'application_id' => $application->id,
+                'monitoring_cycle_id' => $cycle->id,
+                'monitoring_requirement_id' => $requirement->id,
+                'adjustment_request_id' => $adjustment->id,
+                'request_type' => $validated['request_type'],
+            ],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => 'Your request was sent to the provider for review.',
+            'application' => $this->applicationPayload($freshApplication),
+        ], 201);
+    }
+
+    public function viewRecipientMonitoringAdjustmentAttachment(
+        Request $request,
+        RecipientMonitoringAdjustmentRequest $adjustment,
+    ) {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($adjustment->applicant_id === $request->user()->id, 403);
+        abort_unless(filled($adjustment->attachment_path)
+            && Storage::disk('local')->exists($adjustment->attachment_path), 404);
+
+        return Storage::disk('local')->response(
+            $adjustment->attachment_path,
+            $adjustment->attachment_original_name,
+            [
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
+        );
+    }
+
     public function viewRecipientMonitoringGrade(
         Request $request,
         RecipientMonitoringSubmission $submission,
     ) {
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($submission->applicant_id === $request->user()->id, 403);
-        abort_unless(Storage::disk('local')->exists($submission->path), 404);
+        abort_unless(filled($submission->path) && Storage::disk('local')->exists($submission->path), 404);
 
         return Storage::disk('local')->response($submission->path, $submission->original_name, [
             'Cache-Control' => 'private, no-store',
@@ -1958,6 +2299,268 @@ class ApplicantDashboardController extends Controller
         abort_unless(filled($record->receipt_path) && Storage::disk('local')->exists($record->receipt_path), 404);
 
         return Storage::disk('local')->response($record->receipt_path, $record->receipt_original_name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function respondToRecipientBenefitRelease(
+        Request $request,
+        RecipientBenefitReleaseRecord $record,
+    ): JsonResponse {
+        abort_unless($request->user()?->isApplicant(), 403);
+        $record->loadMissing(['release.scholarship', 'application.scholarship', 'receiptResponse']);
+        abort_unless($record->applicant_id === $request->user()->id, 403);
+
+        if ($record->status !== 'released') {
+            throw ValidationException::withMessages([
+                'response_type' => 'You can respond after the provider records this benefit as released.',
+            ]);
+        }
+
+        if ($record->receiptResponse) {
+            throw ValidationException::withMessages([
+                'response_type' => 'Your response to this release is already recorded.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'response_type' => ['required', Rule::in(['confirmed', 'issue'])],
+            'received_on' => [
+                Rule::requiredIf($request->input('response_type') === 'confirmed'),
+                'nullable',
+                'date',
+                'before_or_equal:today',
+            ],
+            'recipient_note' => ['nullable', 'string', 'max:1000'],
+            'issue_type' => [
+                Rule::requiredIf($request->input('response_type') === 'issue'),
+                'nullable',
+                Rule::in(['not_received', 'incorrect_amount', 'incomplete_benefit', 'damaged_item', 'other']),
+            ],
+            'issue_details' => [
+                Rule::requiredIf($request->input('response_type') === 'issue'),
+                'nullable',
+                'string',
+                'min:5',
+                'max:1500',
+            ],
+            'evidence' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'acknowledged' => ['accepted'],
+        ]);
+
+        $evidence = $request->file('evidence');
+        $evidencePath = $evidence?->store("benefit-receipt-responses/{$record->id}/recipient", 'local');
+
+        try {
+            $response = RecipientBenefitReceiptResponse::create([
+                'recipient_benefit_release_record_id' => $record->id,
+                'scholarship_application_id' => $record->scholarship_application_id,
+                'applicant_id' => $request->user()->id,
+                'response_type' => $validated['response_type'],
+                'received_on' => $validated['response_type'] === 'confirmed' ? $validated['received_on'] : null,
+                'recipient_note' => trim((string) ($validated['recipient_note'] ?? '')) ?: null,
+                'issue_type' => $validated['response_type'] === 'issue' ? $validated['issue_type'] : null,
+                'issue_details' => $validated['response_type'] === 'issue' ? $validated['issue_details'] : null,
+                'evidence_original_name' => $evidence?->getClientOriginalName(),
+                'evidence_path' => $evidencePath,
+                'evidence_mime_type' => $evidence?->getMimeType(),
+                'evidence_size' => $evidence?->getSize() ?: 0,
+                'status' => $validated['response_type'] === 'confirmed' ? 'confirmed' : 'open',
+                'responded_at' => now(),
+            ]);
+        } catch (Throwable $error) {
+            if ($evidencePath) {
+                Storage::disk('local')->delete($evidencePath);
+            }
+
+            throw $error;
+        }
+
+        $application = $record->application;
+        $programTitle = $record->release?->scholarship?->title ?? 'Scholarship program';
+        $isIssue = $response->response_type === 'issue';
+        PortalNotification::create([
+            'user_id' => $record->release?->scholarship?->provider_id,
+            'type' => $isIssue ? 'benefit_receipt_issue' : 'benefit_receipt_confirmed',
+            'title' => $isIssue ? 'Recipient reported a release issue' : 'Recipient confirmed benefit receipt',
+            'message' => $isIssue
+                ? "{$request->user()->name} reported an issue with {$record->release?->title} for {$programTitle}."
+                : "{$request->user()->name} confirmed receipt of {$record->release?->title} for {$programTitle}.",
+            'action_url' => route('provider.monitoring.releases', $record->release?->scholarship_id, false),
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            $isIssue ? 'benefit_receipt_issue_reported' : 'benefit_receipt_confirmed',
+            $isIssue
+                ? "{$request->user()->name} reported a benefit release issue."
+                : "{$request->user()->name} confirmed a benefit release receipt.",
+            $request,
+            [
+                'application_id' => $record->scholarship_application_id,
+                'benefit_release_record_id' => $record->id,
+                'benefit_receipt_response_id' => $response->id,
+            ],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => $isIssue
+                ? 'Your issue was sent to the provider for review.'
+                : 'Your benefit receipt was confirmed.',
+            'application' => $this->applicationPayload($freshApplication),
+        ], 201);
+    }
+
+    public function viewRecipientBenefitReceiptResponseFile(
+        Request $request,
+        RecipientBenefitReceiptResponse $response,
+        string $kind,
+    ) {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($response->applicant_id === $request->user()->id, 403);
+
+        $isResolutionProof = $kind === 'resolution-proof';
+        $path = $isResolutionProof ? $response->resolution_proof_path : $response->evidence_path;
+        $name = $isResolutionProof ? $response->resolution_proof_original_name : $response->evidence_original_name;
+        abort_unless(filled($path) && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, $name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
+    }
+
+    public function respondToRecipientSupportDecision(
+        Request $request,
+        RecipientSupportDecision $decision,
+    ): JsonResponse {
+        abort_unless($request->user()?->isApplicant(), 403);
+        $decision->loadMissing('application.scholarship');
+        abort_unless($decision->applicant_id === $request->user()->id, 403);
+
+        $latestDecisionId = $decision->application?->supportDecisions()
+            ->orderByDesc('decided_at')
+            ->orderByDesc('id')
+            ->value('id');
+        if ((int) $latestDecisionId !== $decision->id) {
+            throw ValidationException::withMessages([
+                'response_type' => 'Only the latest support outcome can receive a response.',
+            ]);
+        }
+
+        if ($decision->applicant_response_type) {
+            throw ValidationException::withMessages([
+                'response_type' => 'Your response to this support outcome is already recorded.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'response_type' => ['required', Rule::in(['acknowledged', 'clarification_requested', 'reconsideration_requested'])],
+            'message' => [
+                Rule::requiredIf($request->input('response_type') !== 'acknowledged'),
+                'nullable',
+                'string',
+                'min:5',
+                'max:1500',
+            ],
+            'attachment' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'confirmed' => ['accepted'],
+        ]);
+
+        if ($validated['response_type'] === 'reconsideration_requested' && $decision->decision !== 'terminated') {
+            throw ValidationException::withMessages([
+                'response_type' => 'Reconsideration is available only when support was ended early.',
+            ]);
+        }
+
+        $attachment = $request->file('attachment');
+        $path = $attachment?->store("support-decisions/{$decision->scholarship_application_id}/applicant", 'local');
+        $isAcknowledgement = $validated['response_type'] === 'acknowledged';
+
+        try {
+            $decision->update([
+                'applicant_response_type' => $validated['response_type'],
+                'applicant_response_message' => trim((string) ($validated['message'] ?? '')) ?: null,
+                'applicant_response_original_name' => $attachment?->getClientOriginalName(),
+                'applicant_response_path' => $path,
+                'applicant_response_mime_type' => $attachment?->getMimeType(),
+                'applicant_response_size' => $attachment?->getSize() ?: 0,
+                'applicant_responded_at' => now(),
+                'response_status' => $isAcknowledgement ? 'acknowledged' : 'open',
+            ]);
+        } catch (Throwable $error) {
+            if ($path) {
+                Storage::disk('local')->delete($path);
+            }
+
+            throw $error;
+        }
+
+        $application = $decision->application;
+        $programTitle = $application?->scholarship?->title ?? 'Scholarship program';
+        PortalNotification::create([
+            'user_id' => $application?->scholarship?->provider_id,
+            'type' => $isAcknowledgement ? 'support_decision_acknowledged' : 'support_decision_review_requested',
+            'title' => $isAcknowledgement ? 'Support outcome acknowledged' : 'Recipient requested an outcome review',
+            'message' => $isAcknowledgement
+                ? "{$request->user()->name} acknowledged the support outcome for {$programTitle}."
+                : "{$request->user()->name} requested {$validated['response_type']} for {$programTitle}.",
+            'action_url' => route('provider.monitoring.outcomes', $application?->scholarship_id, false),
+        ]);
+
+        ActivityLog::record(
+            $request->user(),
+            'recipient_support_decision_response_recorded',
+            "{$request->user()->name} recorded {$validated['response_type']} for a support outcome.",
+            $request,
+            [
+                'application_id' => $decision->scholarship_application_id,
+                'recipient_support_decision_id' => $decision->id,
+                'response_type' => $validated['response_type'],
+            ],
+        );
+
+        $freshApplication = $application->fresh()->load([
+            'documents',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship.provider.providerProfile',
+            'scholarship.events',
+        ]);
+
+        return response()->json([
+            'message' => $isAcknowledgement
+                ? 'Support outcome acknowledged.'
+                : 'Your request was sent to the provider.',
+            'application' => $this->applicationPayload($freshApplication),
+        ], 201);
+    }
+
+    public function viewRecipientSupportDecisionFile(
+        Request $request,
+        RecipientSupportDecision $decision,
+        string $kind,
+    ) {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($decision->applicant_id === $request->user()->id, 403);
+
+        [$path, $name] = match ($kind) {
+            'applicant-response' => [$decision->applicant_response_path, $decision->applicant_response_original_name],
+            'resolution-proof' => [$decision->resolution_proof_path, $decision->resolution_proof_original_name],
+            default => [$decision->decision_document_path, $decision->decision_document_original_name],
+        };
+        abort_unless(filled($path) && Storage::disk('local')->exists($path), 404);
+
+        return Storage::disk('local')->response($path, $name, [
             'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ]);
@@ -2737,14 +3340,77 @@ class ApplicantDashboardController extends Controller
         ];
     }
 
-    private function ensureRecipientMonitoringSubmissionAllowed(
+    private function ensureRecipientMonitoringAdjustmentAllowed(
         Request $request,
         ScholarshipApplication $application,
         RecipientMonitoringCycle $cycle,
+        RecipientMonitoringCycleRequirement $requirement,
     ): void {
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($application->applicant_id === $request->user()->id, 403);
         abort_unless($cycle->scholarship_id === $application->scholarship_id, 404);
+        abort_unless($requirement->recipient_monitoring_cycle_id === $cycle->id, 404);
+
+        $isSelected = $application->final_outcome === 'selected'
+            || in_array($application->status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'], true);
+        if (! $isSelected || $application->student_response_status !== 'accepted') {
+            throw ValidationException::withMessages([
+                'adjustment_request' => 'Monitoring requests are available only to confirmed recipients.',
+            ]);
+        }
+
+        if (! $cycle->allow_exception_requests) {
+            throw ValidationException::withMessages([
+                'adjustment_request' => 'This monitoring plan does not accept online extension or exception requests.',
+            ]);
+        }
+
+        if ($cycle->status !== 'open'
+            || now()->startOfDay()->isAfter($cycle->due_at->copy()->addDays($cycle->grace_period_days))) {
+            throw ValidationException::withMessages([
+                'adjustment_request' => 'The request window for this check-in has closed. Contact the provider directly.',
+            ]);
+        }
+
+        $completed = RecipientMonitoringSubmission::query()
+            ->where('recipient_monitoring_cycle_requirement_id', $requirement->id)
+            ->where('scholarship_application_id', $application->id)
+            ->whereIn('review_status', ['met', 'excused'])
+            ->exists();
+        if ($completed) {
+            throw ValidationException::withMessages([
+                'adjustment_request' => 'This requirement is already completed.',
+            ]);
+        }
+
+        $hasPendingRequest = RecipientMonitoringAdjustmentRequest::query()
+            ->where('recipient_monitoring_cycle_requirement_id', $requirement->id)
+            ->where('scholarship_application_id', $application->id)
+            ->where('status', 'pending')
+            ->exists();
+        if ($hasPendingRequest) {
+            throw ValidationException::withMessages([
+                'adjustment_request' => 'A request for this requirement is already waiting for provider review.',
+            ]);
+        }
+    }
+
+    private function ensureRecipientMonitoringSubmissionAllowed(
+        Request $request,
+        ScholarshipApplication $application,
+        RecipientMonitoringCycle $cycle,
+        ?RecipientMonitoringCycleRequirement $requirement = null,
+    ): void {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+        abort_unless($cycle->scholarship_id === $application->scholarship_id, 404);
+        abort_unless(! $requirement || $requirement->recipient_monitoring_cycle_id === $cycle->id, 404);
+
+        if ($requirement && ! $requirement->requires_file) {
+            throw ValidationException::withMessages([
+                'supporting_record' => 'This requirement is recorded by the provider and does not accept an applicant upload.',
+            ]);
+        }
 
         $application->loadMissing('scholarship');
         $isSelected = $application->final_outcome === 'selected'
@@ -2771,12 +3437,29 @@ class ApplicantDashboardController extends Controller
         $correctionRequested = RecipientMonitoringSubmission::query()
             ->where('recipient_monitoring_cycle_id', $cycle->id)
             ->where('scholarship_application_id', $application->id)
+            ->when(
+                $requirement,
+                fn ($query) => $query->where('recipient_monitoring_cycle_requirement_id', $requirement->id),
+                fn ($query) => $query->whereNull('recipient_monitoring_cycle_requirement_id'),
+            )
             ->where('review_status', 'needs_correction')
             ->exists();
+        $approvedDueAt = $requirement
+            ? RecipientMonitoringAdjustmentRequest::query()
+                ->where('recipient_monitoring_cycle_requirement_id', $requirement->id)
+                ->where('scholarship_application_id', $application->id)
+                ->where('request_type', 'extension')
+                ->where('status', 'approved')
+                ->whereNotNull('approved_due_at')
+                ->max('approved_due_at')
+            : null;
+        $effectiveDueAt = $approvedDueAt
+            ? CarbonImmutable::parse($approvedDueAt)
+            : $cycle->due_at;
 
         if ($cycle->status !== 'open'
             || (! $correctionRequested && $cycle->opens_at && $cycle->opens_at->isAfter(now()->startOfDay()))
-            || (! $correctionRequested && $cycle->due_at && $cycle->due_at->isBefore(now()->startOfDay()))) {
+            || (! $correctionRequested && $effectiveDueAt && $effectiveDueAt->isBefore(now()->startOfDay()))) {
             throw ValidationException::withMessages([
                 'grade_record' => 'This academic monitoring period is not currently accepting submissions.',
             ]);
@@ -2791,6 +3474,7 @@ class ApplicantDashboardController extends Controller
         if (! $isSelected || ! $application->scholarship) {
             return [
                 'eligible' => false,
+                'check_ins' => [],
                 'cycles' => [],
                 'benefit_releases' => [],
                 'support_decisions' => [],
@@ -2800,12 +3484,17 @@ class ApplicantDashboardController extends Controller
         }
 
         $application->loadMissing([
+            'monitoringSubmissions.requirement',
             'monitoringSubmissions.reviewer',
             'monitoringSubmissions.reviews.reviewer',
+            'monitoringAdjustmentRequests.decider',
+            'monitoringInterventions.creator',
             'benefitReleaseRecords.release.creator',
             'benefitReleaseRecords.recorder',
+            'benefitReleaseRecords.receiptResponse.resolver',
             'supportDecisions.decider',
-            'scholarship.monitoringCycles',
+            'supportDecisions.resolver',
+            'scholarship.monitoringCycles.requirements',
         ]);
         $agreementAccepted = $application->student_response_status === 'accepted';
         $latestSupportDecision = $application->supportDecisions->first();
@@ -2813,7 +3502,9 @@ class ApplicantDashboardController extends Controller
             && ! in_array($latestSupportDecision?->decision, ['completed', 'terminated'], true);
         $supportStatus = $latestSupportDecision?->decision
             ?? ($application->status === 'benefits_terminated' ? 'terminated' : 'active');
-        $cycles = $application->scholarship->monitoringCycles
+        $monitoringCycles = $application->scholarship->monitoringCycles;
+        $cycles = $monitoringCycles
+            ->filter(fn (RecipientMonitoringCycle $cycle): bool => $cycle->requirements->isEmpty())
             ->whereIn('status', ['open', 'closed'])
             ->map(function (RecipientMonitoringCycle $cycle) use ($application, $agreementAccepted, $benefitsActive): array {
                 $submission = $application->monitoringSubmissions
@@ -2858,6 +3549,16 @@ class ApplicantDashboardController extends Controller
                 ];
             })
             ->values();
+        $checkIns = $monitoringCycles
+            ->filter(fn (RecipientMonitoringCycle $cycle): bool => $cycle->requirements->isNotEmpty())
+            ->whereIn('status', ['open', 'closed'])
+            ->map(fn (RecipientMonitoringCycle $cycle): array => $this->applicantMonitoringCheckInPayload(
+                $cycle,
+                $application,
+                $agreementAccepted,
+                $benefitsActive,
+            ))
+            ->values();
         $benefitReleases = $application->benefitReleaseRecords
             ->sortByDesc(fn (RecipientBenefitReleaseRecord $record) => $record->release?->release_at)
             ->map(fn (RecipientBenefitReleaseRecord $record): array => $this->applicantBenefitReleasePayload($record))
@@ -2867,6 +3568,7 @@ class ApplicantDashboardController extends Controller
             'eligible' => true,
             'agreement_accepted' => $agreementAccepted,
             'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
+            'check_ins' => $checkIns,
             'cycles' => $cycles,
             'benefit_releases' => $benefitReleases,
             'support_status' => $supportStatus,
@@ -2877,34 +3579,239 @@ class ApplicantDashboardController extends Controller
                 default => 'Scholarship support active',
             },
             'support_decisions' => $application->supportDecisions
-                ->map(fn ($decision): array => [
-                    'id' => $decision->id,
-                    'decision' => $decision->decision,
-                    'decision_label' => match ($decision->decision) {
-                        'renewed' => 'Support renewed',
-                        'completed' => 'Program completed',
-                        'terminated' => 'Support ended early',
-                        default => Str::headline($decision->decision),
-                    },
-                    'effective_label' => $decision->effective_on?->format('M d, Y'),
-                    'support_ends_label' => $decision->support_ends_on?->format('M d, Y'),
-                    'next_review_label' => $decision->next_review_on?->format('M d, Y'),
-                    'reason' => $decision->reason,
-                    'next_period_terms' => $decision->next_period_terms,
-                    'decided_by' => $decision->decider?->name,
-                    'decided_at' => $decision->decided_at?->format('M d, Y h:i A'),
-                ])
+                ->map(fn (RecipientSupportDecision $decision): array => $this->applicantSupportDecisionPayload($decision))
                 ->values(),
-            'pending_count' => $cycles
+            'pending_count' => $checkIns->sum('pending_count') + $cycles
                 ->filter(fn (array $cycle): bool => $cycle['can_submit']
                     && ($cycle['submission'] === null || $cycle['correction_requested']))
-                ->count(),
+                ->count()
+                + $benefitReleases->where('can_respond', true)->count()
+                + ($latestSupportDecision && blank($latestSupportDecision->applicant_response_type) ? 1 : 0),
+        ];
+    }
+
+    private function applicantMonitoringCheckInPayload(
+        RecipientMonitoringCycle $cycle,
+        ScholarshipApplication $application,
+        bool $agreementAccepted,
+        bool $benefitsActive,
+    ): array {
+        $isPastDue = $cycle->due_at?->isBefore(now()->startOfDay()) ?? false;
+        $isNotOpenYet = $cycle->opens_at?->isAfter(now()->startOfDay()) ?? false;
+        $definitions = RecipientMonitoringRequirementType::definitions();
+        $cycleSubmissions = $application->monitoringSubmissions
+            ->where('recipient_monitoring_cycle_id', $cycle->id);
+        $requirements = $cycle->requirements->map(function (
+            RecipientMonitoringCycleRequirement $requirement,
+        ) use (
+            $application,
+            $cycle,
+            $cycleSubmissions,
+            $agreementAccepted,
+            $benefitsActive,
+            $isPastDue,
+            $isNotOpenYet,
+            $definitions,
+        ): array {
+            $submission = $cycleSubmissions
+                ->firstWhere('recipient_monitoring_cycle_requirement_id', $requirement->id);
+            $adjustments = $application->monitoringAdjustmentRequests
+                ->where('recipient_monitoring_cycle_id', $cycle->id)
+                ->where('recipient_monitoring_cycle_requirement_id', $requirement->id)
+                ->sortByDesc('id');
+            $latestAdjustment = $adjustments->first();
+            $approvedExtension = $adjustments
+                ->where('request_type', 'extension')
+                ->where('status', 'approved')
+                ->whereNotNull('approved_due_at')
+                ->sortByDesc('approved_due_at')
+                ->first();
+            $effectiveDueAt = $approvedExtension?->approved_due_at ?? $cycle->due_at;
+            $isRequirementPastDue = $effectiveDueAt?->isBefore(now()->startOfDay()) ?? false;
+            $correctionRequested = $submission?->review_status === 'needs_correction';
+            $canSubmit = $requirement->requires_file
+                && $agreementAccepted
+                && $benefitsActive
+                && $cycle->status === 'open'
+                && ($correctionRequested || (! $isRequirementPastDue && ! $isNotOpenYet));
+            $status = match (true) {
+                $correctionRequested => 'action_needed',
+                $submission?->review_status === 'met' => 'completed',
+                $submission?->review_status === 'excused' => 'completed',
+                $submission?->review_status === 'not_met' => 'not_met',
+                $submission !== null => 'submitted',
+                $latestAdjustment?->status === 'pending' => 'request_pending',
+                $approvedExtension !== null => 'extension_approved',
+                ! $requirement->requires_file => 'provider_recorded',
+                $isNotOpenYet => 'upcoming',
+                $isRequirementPastDue => 'closed',
+                default => 'open',
+            };
+            $definition = $definitions[$requirement->type] ?? [];
+
+            return [
+                'id' => $requirement->id,
+                'type' => $requirement->type,
+                'type_label' => $definition['label'] ?? Str::headline($requirement->type),
+                'icon' => $definition['icon'] ?? 'fa-solid fa-list-check',
+                'title' => $requirement->title,
+                'description' => $requirement->description,
+                'evidence_description' => $requirement->evidence_description,
+                'required' => $requirement->required,
+                'requires_file' => $requirement->requires_file,
+                'requires_original_verification' => $requirement->requires_original_verification,
+                'minimum_grade' => $requirement->minimum_grade !== null
+                    ? (float) $requirement->minimum_grade
+                    : null,
+                'grading_scale' => $requirement->grading_scale,
+                'requirement_label' => $requirement->type === RecipientMonitoringRequirementType::ACADEMIC_PROGRESS
+                    ? AcademicRequirement::requirementLabel($requirement->minimum_grade, $requirement->grading_scale)
+                    : null,
+                'status' => $status,
+                'status_label' => match ($status) {
+                    'action_needed' => 'Replacement requested',
+                    'completed' => 'Completed',
+                    'not_met' => 'Provider follow-up',
+                    'submitted' => 'Waiting for review',
+                    'request_pending' => 'Request pending',
+                    'extension_approved' => 'Extension approved',
+                    'provider_recorded' => 'Provider records this',
+                    'upcoming' => 'Opens later',
+                    'closed' => 'Submission closed',
+                    default => 'To submit',
+                },
+                'can_submit' => $canSubmit,
+                'can_request_adjustment' => $cycle->allow_exception_requests
+                    && $agreementAccepted
+                    && $benefitsActive
+                    && $cycle->status === 'open'
+                    && ! in_array($submission?->review_status, ['met', 'excused'], true)
+                    && $latestAdjustment?->status !== 'pending'
+                    && ! now()->startOfDay()->isAfter($cycle->due_at->copy()->addDays($cycle->grace_period_days)),
+                'correction_requested' => $correctionRequested,
+                'effective_due_at' => $effectiveDueAt?->format('Y-m-d'),
+                'effective_due_label' => $effectiveDueAt?->format('M d, Y'),
+                'locked_reason' => $agreementAccepted
+                    ? (! $benefitsActive
+                        ? 'Monitoring is closed for this recipient record.'
+                        : (! $requirement->requires_file
+                            ? 'The provider records this item.'
+                            : ($isRequirementPastDue
+                                ? 'The submission deadline has passed.'
+                                : ($isNotOpenYet ? 'This check-in is not open yet.' : null))))
+                    : 'Accept the recipient agreement before submitting a record.',
+                'adjustment_request' => $latestAdjustment
+                    ? $this->applicantMonitoringAdjustmentPayload($latestAdjustment)
+                    : null,
+                'interventions' => $application->monitoringInterventions
+                    ->where('recipient_monitoring_cycle_id', $cycle->id)
+                    ->where('recipient_monitoring_cycle_requirement_id', $requirement->id)
+                    ->sortByDesc('id')
+                    ->map(fn (RecipientMonitoringIntervention $intervention): array => (
+                        $this->applicantMonitoringInterventionPayload($intervention)
+                    ))
+                    ->values(),
+                'submission' => $submission
+                    ? $this->applicantRecipientMonitoringSubmissionPayload($submission, $cycle)
+                    : null,
+            ];
+        })->values();
+        $requiredUploads = $requirements->where('required', true)->where('requires_file', true);
+        $hasOpenPersonalExtension = $requirements->contains(fn (array $requirement): bool => (
+            data_get($requirement, 'adjustment_request.request_type') === 'extension'
+            && data_get($requirement, 'adjustment_request.status') === 'approved'
+            && filled($requirement['effective_due_at'])
+            && CarbonImmutable::parse($requirement['effective_due_at'])->greaterThanOrEqualTo(now()->startOfDay())
+        ));
+
+        return [
+            'id' => $cycle->id,
+            'title' => $cycle->title,
+            'period_label' => collect([$cycle->academic_period, $cycle->school_year])->filter()->implode(' - ')
+                ?: Str::headline($cycle->period_type),
+            'opens_at' => $cycle->opens_at?->format('Y-m-d'),
+            'opens_label' => $cycle->opens_at?->format('M d, Y'),
+            'due_at' => $cycle->due_at?->format('Y-m-d'),
+            'due_label' => $cycle->due_at?->format('M d, Y'),
+            'instructions' => $cycle->instructions,
+            'monitoring_plan_version' => $cycle->monitoring_plan_version,
+            'allow_exception_requests' => $cycle->allow_exception_requests,
+            'grace_period_days' => $cycle->grace_period_days,
+            'status' => $isPastDue && ! $hasOpenPersonalExtension
+                ? 'closed'
+                : ($isNotOpenYet ? 'upcoming' : $cycle->status),
+            'requirements' => $requirements,
+            'required_count' => $requiredUploads->count(),
+            'submitted_count' => $requiredUploads->whereNotNull('submission')->count(),
+            'pending_count' => $requiredUploads->filter(fn (array $requirement): bool => (
+                $requirement['can_submit']
+                && ($requirement['submission'] === null || $requirement['correction_requested'])
+            ))->count(),
+        ];
+    }
+
+    private function applicantMonitoringAdjustmentPayload(
+        RecipientMonitoringAdjustmentRequest $adjustment,
+    ): array {
+        return [
+            'id' => $adjustment->id,
+            'request_type' => $adjustment->request_type,
+            'request_type_label' => $adjustment->request_type === 'extension' ? 'Extension request' : 'Exception request',
+            'reason_category' => $adjustment->reason_category,
+            'reason_label' => Str::headline($adjustment->reason_category),
+            'explanation' => $adjustment->explanation,
+            'requested_due_at' => $adjustment->requested_due_at?->format('Y-m-d'),
+            'requested_due_label' => $adjustment->requested_due_at?->format('M d, Y'),
+            'status' => $adjustment->status,
+            'status_label' => match ($adjustment->status) {
+                'approved' => 'Approved',
+                'declined' => 'Declined',
+                default => 'Waiting for provider',
+            },
+            'decision_notes' => $adjustment->decision_notes,
+            'approved_due_at' => $adjustment->approved_due_at?->format('Y-m-d'),
+            'approved_due_label' => $adjustment->approved_due_at?->format('M d, Y'),
+            'decided_by' => $adjustment->decider?->name,
+            'decided_at' => $adjustment->decided_at?->format('M d, Y h:i A'),
+            'submitted_at' => $adjustment->created_at?->format('M d, Y h:i A'),
+            'attachment' => filled($adjustment->attachment_path) ? [
+                'original_name' => $adjustment->attachment_original_name,
+                'size' => $adjustment->attachment_size,
+                'view_url' => route('dashboard.monitoring-adjustment-requests.attachment', $adjustment, false),
+            ] : null,
+        ];
+    }
+
+    private function applicantMonitoringInterventionPayload(
+        RecipientMonitoringIntervention $intervention,
+    ): array {
+        return [
+            'id' => $intervention->id,
+            'type' => $intervention->type,
+            'type_label' => match ($intervention->type) {
+                'reminder' => 'Reminder',
+                'consultation' => 'Consultation',
+                'support_plan' => 'Support plan',
+                'warning' => 'Formal warning',
+                default => Str::headline($intervention->type),
+            },
+            'summary' => $intervention->summary,
+            'action_required' => $intervention->action_required,
+            'follow_up_on' => $intervention->follow_up_on?->format('Y-m-d'),
+            'follow_up_label' => $intervention->follow_up_on?->format('M d, Y'),
+            'status' => $intervention->status,
+            'status_label' => $intervention->status === 'completed' ? 'Completed' : 'Open',
+            'completion_notes' => $intervention->completion_notes,
+            'completed_at' => $intervention->completed_at?->format('M d, Y h:i A'),
+            'created_by' => $intervention->creator?->name,
+            'created_at' => $intervention->created_at?->format('M d, Y h:i A'),
         ];
     }
 
     private function applicantBenefitReleasePayload(RecipientBenefitReleaseRecord $record): array
     {
         $release = $record->release;
+        $response = $record->receiptResponse;
 
         return [
             'id' => $release?->id,
@@ -2938,6 +3845,40 @@ class ApplicantDashboardController extends Controller
             'recorded_by' => $record->recorder?->name,
             'recorded_at' => $record->recorded_at?->format('M d, Y h:i A'),
             'released_at' => $record->released_at?->format('M d, Y h:i A'),
+            'can_respond' => $record->status === 'released' && $response === null,
+            'receipt_response' => $response ? [
+                'id' => $response->id,
+                'response_type' => $response->response_type,
+                'response_label' => $response->response_type === 'confirmed' ? 'Receipt confirmed' : 'Issue reported',
+                'status' => $response->status,
+                'status_label' => match ($response->status) {
+                    'confirmed' => 'Confirmed',
+                    'resolved' => 'Resolved',
+                    default => 'Provider review needed',
+                },
+                'received_on' => $response->received_on?->format('Y-m-d'),
+                'received_label' => $response->received_on?->format('M d, Y'),
+                'recipient_note' => $response->recipient_note,
+                'issue_type' => $response->issue_type,
+                'issue_type_label' => $response->issue_type ? Str::headline($response->issue_type) : null,
+                'issue_details' => $response->issue_details,
+                'responded_at' => $response->responded_at?->format('M d, Y h:i A'),
+                'resolution_outcome' => $response->resolution_outcome,
+                'resolution_outcome_label' => $response->resolution_outcome ? Str::headline($response->resolution_outcome) : null,
+                'resolution_notes' => $response->resolution_notes,
+                'resolved_by' => $response->resolver?->name,
+                'resolved_at' => $response->resolved_at?->format('M d, Y h:i A'),
+                'evidence' => $response->evidence_path ? [
+                    'original_name' => $response->evidence_original_name,
+                    'size' => $response->evidence_size,
+                    'view_url' => route('dashboard.benefit-receipt-responses.file', [$response, 'kind' => 'evidence'], false),
+                ] : null,
+                'resolution_proof' => $response->resolution_proof_path ? [
+                    'original_name' => $response->resolution_proof_original_name,
+                    'size' => $response->resolution_proof_size,
+                    'view_url' => route('dashboard.benefit-receipt-responses.file', [$response, 'kind' => 'resolution-proof'], false),
+                ] : null,
+            ] : null,
             'receipt' => $record->receipt_path ? [
                 'id' => $record->id,
                 'original_name' => $record->receipt_original_name,
@@ -2947,10 +3888,75 @@ class ApplicantDashboardController extends Controller
         ];
     }
 
+    private function applicantSupportDecisionPayload(RecipientSupportDecision $decision): array
+    {
+        $decision->loadMissing(['decider', 'resolver']);
+
+        return [
+            'id' => $decision->id,
+            'decision' => $decision->decision,
+            'decision_label' => match ($decision->decision) {
+                'renewed' => 'Support renewed',
+                'completed' => 'Program completed',
+                'terminated' => 'Support ended early',
+                default => Str::headline($decision->decision),
+            },
+            'reason_category' => $decision->reason_category,
+            'reason_category_label' => $decision->reason_category ? Str::headline($decision->reason_category) : null,
+            'effective_label' => $decision->effective_on?->format('M d, Y'),
+            'support_ends_label' => $decision->support_ends_on?->format('M d, Y'),
+            'next_review_label' => $decision->next_review_on?->format('M d, Y'),
+            'notice_given_label' => $decision->notice_given_on?->format('M d, Y'),
+            'reason' => $decision->reason,
+            'next_period_terms' => $decision->next_period_terms,
+            'decided_by' => $decision->decider?->name,
+            'decided_at' => $decision->decided_at?->format('M d, Y h:i A'),
+            'can_respond' => blank($decision->applicant_response_type),
+            'applicant_response_type' => $decision->applicant_response_type,
+            'applicant_response_label' => match ($decision->applicant_response_type) {
+                'acknowledged' => 'Acknowledged',
+                'clarification_requested' => 'Clarification requested',
+                'reconsideration_requested' => 'Reconsideration requested',
+                default => null,
+            },
+            'applicant_response_message' => $decision->applicant_response_message,
+            'applicant_responded_at' => $decision->applicant_responded_at?->format('M d, Y h:i A'),
+            'response_status' => $decision->response_status,
+            'response_status_label' => match ($decision->response_status) {
+                'acknowledged' => 'Acknowledged',
+                'open' => 'Provider review needed',
+                'resolved' => 'Resolved',
+                default => 'Response needed',
+            },
+            'resolution_outcome' => $decision->resolution_outcome,
+            'resolution_outcome_label' => $decision->resolution_outcome ? Str::headline($decision->resolution_outcome) : null,
+            'resolution_notes' => $decision->resolution_notes,
+            'resolved_by' => $decision->resolver?->name,
+            'resolved_at' => $decision->resolved_at?->format('M d, Y h:i A'),
+            'decision_document' => $decision->decision_document_path ? [
+                'original_name' => $decision->decision_document_original_name,
+                'size' => $decision->decision_document_size,
+                'view_url' => route('dashboard.support-decisions.file', [$decision, 'kind' => 'decision-document'], false),
+            ] : null,
+            'applicant_response_file' => $decision->applicant_response_path ? [
+                'original_name' => $decision->applicant_response_original_name,
+                'size' => $decision->applicant_response_size,
+                'view_url' => route('dashboard.support-decisions.file', [$decision, 'kind' => 'applicant-response'], false),
+            ] : null,
+            'resolution_proof' => $decision->resolution_proof_path ? [
+                'original_name' => $decision->resolution_proof_original_name,
+                'size' => $decision->resolution_proof_size,
+                'view_url' => route('dashboard.support-decisions.file', [$decision, 'kind' => 'resolution-proof'], false),
+            ] : null,
+        ];
+    }
+
     private function applicantRecipientMonitoringSubmissionPayload(
         RecipientMonitoringSubmission $submission,
         RecipientMonitoringCycle $cycle,
     ): array {
+        $submission->loadMissing(['requirement', 'reviewer', 'reviews.reviewer']);
+        $requirement = $submission->requirement;
         $grade = $submission->grade_source === 'applicant_manual'
             ? $submission->reported_grade
             : ($submission->ocr_grade ?? $submission->reported_grade);
@@ -2966,6 +3972,10 @@ class ApplicantDashboardController extends Controller
 
         return [
             'id' => $submission->id,
+            'requirement_id' => $submission->recipient_monitoring_cycle_requirement_id,
+            'requirement_type' => $requirement?->type,
+            'submission_source' => $submission->submission_source ?? 'applicant_upload',
+            'has_file' => filled($submission->path),
             'original_name' => $submission->original_name,
             'size' => $submission->size,
             'submitted_at' => $submission->submitted_at?->format('M d, Y h:i A'),
@@ -3004,14 +4014,21 @@ class ApplicantDashboardController extends Controller
                 'reviewed_by' => $review->reviewer?->name,
                 'decided_at' => $review->decided_at?->format('M d, Y h:i A'),
             ])->values(),
-            'comparison' => AcademicRequirement::match(
-                $grade,
-                $scale,
-                $cycle->minimum_grade,
-                $cycle->grading_scale,
-            ),
-            'manual_entry_allowed' => in_array($submission->ocr_status, $manualStatuses, true),
-            'view_url' => route('dashboard.monitoring-submissions.view', $submission, false),
+            'comparison' => ($requirement?->type ?? RecipientMonitoringRequirementType::ACADEMIC_PROGRESS)
+                === RecipientMonitoringRequirementType::ACADEMIC_PROGRESS
+                    ? AcademicRequirement::match(
+                        $grade,
+                        $scale,
+                        $requirement?->minimum_grade ?? $cycle->minimum_grade,
+                        $requirement?->grading_scale ?? $cycle->grading_scale,
+                    )
+                    : null,
+            'manual_entry_allowed' => ($requirement?->type ?? RecipientMonitoringRequirementType::ACADEMIC_PROGRESS)
+                === RecipientMonitoringRequirementType::ACADEMIC_PROGRESS
+                && in_array($submission->ocr_status, $manualStatuses, true),
+            'view_url' => filled($submission->path)
+                ? route('dashboard.monitoring-submissions.view', $submission, false)
+                : null,
         ];
     }
 

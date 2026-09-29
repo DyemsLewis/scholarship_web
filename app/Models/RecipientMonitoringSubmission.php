@@ -10,8 +10,11 @@ class RecipientMonitoringSubmission extends Model
 {
     protected $fillable = [
         'recipient_monitoring_cycle_id',
+        'recipient_monitoring_cycle_requirement_id',
         'scholarship_application_id',
         'applicant_id',
+        'applicant_note',
+        'submission_source',
         'original_name',
         'path',
         'mime_type',
@@ -47,6 +50,11 @@ class RecipientMonitoringSubmission extends Model
     public function cycle(): BelongsTo
     {
         return $this->belongsTo(RecipientMonitoringCycle::class, 'recipient_monitoring_cycle_id');
+    }
+
+    public function requirement(): BelongsTo
+    {
+        return $this->belongsTo(RecipientMonitoringCycleRequirement::class, 'recipient_monitoring_cycle_requirement_id');
     }
 
     public function application(): BelongsTo

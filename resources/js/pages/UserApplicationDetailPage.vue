@@ -206,7 +206,7 @@ const applicantNextDescription = computed(() => {
     }
 
     if (recipientMonitoring.value.pending_count > 0) {
-        return 'Upload the grade record requested by the provider before the listed deadline.';
+        return 'Open Monitoring and submit the checklist records requested by the provider.';
     }
 
     if (filesNeedingAction.value.length) {
@@ -274,7 +274,7 @@ const nextActionButton = computed(() => {
     }
 
     if (recipientMonitoring.value.pending_count > 0) {
-        return { label: 'Upload grade record', href: `/dashboard/monitoring/${application.value.id}` };
+        return { label: 'Open monitoring checklist', href: `/dashboard/monitoring/${application.value.id}` };
     }
 
     if (filesNeedingAction.value.length) {

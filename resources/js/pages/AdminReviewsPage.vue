@@ -7,7 +7,7 @@ const isLoading = ref(true);
 const isProgramLoading = ref(false);
 const errorMessage = ref('');
 const requestedReviewType = new URLSearchParams(window.location.search).get('type');
-const reviewTypeValues = ['providers', 'programs', 'applicants', 'benefits'];
+const reviewTypeValues = ['providers', 'programs', 'applicants', 'benefits', 'monitoring'];
 const activeReviewType = ref(reviewTypeValues.includes(requestedReviewType) ? requestedReviewType : 'providers');
 const reviewSearch = ref('');
 const reviewPage = ref(1);
@@ -16,6 +16,7 @@ const selectedStatus = ref('pending');
 const selectedApplicantStatus = ref('pending');
 const selectedProgramStatus = ref('pending_review');
 const selectedBenefitStatus = ref('attention');
+const selectedMonitoringStatus = ref('attention');
 const stats = ref({
     providers: 0,
     pending_providers: 0,
@@ -35,11 +36,22 @@ const stats = ref({
     benefits_with_receipts: 0,
     benefits_note_only: 0,
     benefits_needing_attention: 0,
+    monitoring_records: 0,
+    monitoring_needing_attention: 0,
+    monitoring_reviewed: 0,
+    monitoring_stable: 0,
+    monitoring_closed: 0,
 });
 const providers = ref([]);
 const applicants = ref([]);
 const scholarships = ref([]);
 const benefitRecords = ref([]);
+const monitoringRecords = ref([]);
+const canExportData = computed(() => Boolean(
+    window.portalUser?.has_full_access
+        || window.portalUser?.permissions?.includes('export_data'),
+));
+const monitoringExportUrl = computed(() => `/admin/export/monitoring?status=${encodeURIComponent(selectedMonitoringStatus.value)}`);
 const reviewPageConfig = computed(() => ({
     providers: {
         eyebrow: 'Provider reviews',
@@ -75,6 +87,15 @@ const reviewPageConfig = computed(() => ({
         icon: 'fa-solid fa-file-shield',
         total: stats.value.benefit_records,
         pending: stats.value.benefits_needing_attention,
+        searchPlaceholder: 'Search recipient, provider, or program',
+    },
+    monitoring: {
+        eyebrow: 'Monitoring oversight',
+        title: 'Review recipient monitoring',
+        description: 'Focus on unresolved requirements, release issues, and support outcomes.',
+        icon: 'fa-solid fa-chart-line',
+        total: stats.value.monitoring_records,
+        pending: stats.value.monitoring_needing_attention,
         searchPlaceholder: 'Search recipient, provider, or program',
     },
 }[activeReviewType.value]));
@@ -150,17 +171,26 @@ const benefitStatusFilters = computed(() => [
     { value: 'note', label: 'Note only', count: stats.value.benefits_note_only },
     { value: 'all', label: 'All records', count: stats.value.benefit_records },
 ]);
+const monitoringStatusFilters = computed(() => [
+    { value: 'attention', label: 'Needs attention', count: stats.value.monitoring_needing_attention },
+    { value: 'reviewed', label: 'Admin reviewed', count: stats.value.monitoring_reviewed },
+    { value: 'stable', label: 'No current issue', count: stats.value.monitoring_stable },
+    { value: 'closed', label: 'Support closed', count: stats.value.monitoring_closed },
+    { value: 'all', label: 'All records', count: stats.value.monitoring_records },
+]);
 const activeStatusFilters = computed(() => ({
     providers: statusFilters.value,
     programs: programStatusFilters.value,
     applicants: applicantStatusFilters.value,
     benefits: benefitStatusFilters.value,
+    monitoring: monitoringStatusFilters.value,
 }[activeReviewType.value] ?? []));
 const activeStatusValue = computed(() => ({
     providers: selectedStatus.value,
     programs: selectedProgramStatus.value,
     applicants: selectedApplicantStatus.value,
     benefits: selectedBenefitStatus.value,
+    monitoring: selectedMonitoringStatus.value,
 }[activeReviewType.value]));
 const filteredBenefitRecords = computed(() => {
     const query = reviewSearch.value.trim().toLowerCase();
@@ -183,11 +213,28 @@ const filteredBenefitRecords = computed(() => {
         return matchesStatus && (!query || searchableText.includes(query));
     });
 });
+const filteredMonitoringRecords = computed(() => {
+    const query = reviewSearch.value.trim().toLowerCase();
+
+    return monitoringRecords.value.filter((record) => {
+        const matchesStatus = selectedMonitoringStatus.value === 'all'
+            || record.oversight_status === selectedMonitoringStatus.value;
+        const searchableText = [
+            record.applicant_name,
+            record.applicant_email,
+            record.provider_name,
+            record.program_title,
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        return matchesStatus && (!query || searchableText.includes(query));
+    });
+});
 const activeReviewItems = computed(() => ({
     providers: filteredProviders.value,
     programs: filteredPrograms.value,
     applicants: filteredApplicants.value,
     benefits: filteredBenefitRecords.value,
+    monitoring: filteredMonitoringRecords.value,
 }[activeReviewType.value] ?? []));
 const totalReviewPages = computed(() => Math.max(1, Math.ceil(activeReviewItems.value.length / reviewsPerPage)));
 const visibleReviewItems = computed(() => {
@@ -255,7 +302,7 @@ function benefitStatusClass(status) {
 }
 
 function oversightClass(status) {
-    if (status === 'documented') return 'bg-emerald-100 text-emerald-800';
+    if (['documented', 'reviewed', 'stable'].includes(status)) return 'bg-emerald-100 text-emerald-800';
     if (status === 'attention') return 'bg-amber-100 text-amber-900';
     return 'bg-slate-100 text-slate-700';
 }
@@ -313,6 +360,7 @@ async function selectActiveStatus(status) {
     if (activeReviewType.value === 'providers') selectedStatus.value = status;
     if (activeReviewType.value === 'applicants') selectedApplicantStatus.value = status;
     if (activeReviewType.value === 'benefits') selectedBenefitStatus.value = status;
+    if (activeReviewType.value === 'monitoring') selectedMonitoringStatus.value = status;
 }
 
 async function loadReviewData(options = {}) {
@@ -335,6 +383,7 @@ async function loadReviewData(options = {}) {
         applicants.value = response.data.applicants ?? [];
         scholarships.value = response.data.scholarships ?? [];
         benefitRecords.value = response.data.benefit_records ?? [];
+        monitoringRecords.value = response.data.monitoring_records ?? [];
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load review details.';
     } finally {
@@ -343,7 +392,7 @@ async function loadReviewData(options = {}) {
     }
 }
 
-watch([reviewSearch, selectedStatus, selectedApplicantStatus, selectedBenefitStatus], () => {
+watch([reviewSearch, selectedStatus, selectedApplicantStatus, selectedBenefitStatus, selectedMonitoringStatus], () => {
     reviewPage.value = 1;
 });
 
@@ -368,6 +417,14 @@ onMounted(loadReviewData);
                         <span>{{ reviewPageConfig.total }} total records</span>
                     </template>
                     <template #actions>
+                        <a
+                            v-if="activeReviewType === 'monitoring' && canExportData"
+                            :href="monitoringExportUrl"
+                            class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                        >
+                            <i class="fa-solid fa-download mr-1.5 text-xs" aria-hidden="true"></i>
+                            Export report
+                        </a>
                         <button
                             type="button"
                             class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
@@ -560,7 +617,7 @@ onMounted(loadReviewData);
                         </div>
                     </section>
 
-                    <section v-else class="admin-panel overflow-hidden">
+                    <section v-else-if="activeReviewType === 'benefits'" class="admin-panel overflow-hidden">
                         <div v-if="benefitRecords.length === 0" class="px-5 py-10 text-center sm:px-6">
                             <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span>
                             <p class="mt-3 font-bold text-slate-950">No benefit releases recorded yet</p>
@@ -603,6 +660,49 @@ onMounted(loadReviewData);
                                     <a v-if="record.applicant_review_url" :href="record.applicant_review_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant record</a>
                                     <a v-if="record.program_review_url" :href="record.program_review_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Program record</a>
                                     <p class="ml-auto text-xs text-slate-500">Recorded {{ record.recorded_at || 'not yet' }}<span v-if="record.recorded_by"> by {{ record.recorded_by }}</span></p>
+                                </div>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section v-else class="admin-panel overflow-hidden">
+                        <div v-if="monitoringRecords.length === 0" class="px-5 py-10 text-center sm:px-6">
+                            <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
+                            <p class="mt-3 font-bold text-slate-950">No recipient monitoring records yet</p>
+                            <p class="mt-1 text-sm text-slate-500">Records appear after a provider selects a recipient.</p>
+                        </div>
+
+                        <div v-else-if="filteredMonitoringRecords.length === 0" class="px-5 py-10 text-center sm:px-6">
+                            <p class="font-bold text-slate-950">No records match this filter</p>
+                            <p class="mt-1 text-sm text-slate-500">Choose another status or change the search.</p>
+                        </div>
+
+                        <div v-else class="divide-y divide-slate-200">
+                            <article v-for="record in visibleReviewItems" :key="record.application_id" class="px-5 py-4 sm:px-6">
+                                <div class="flex flex-col gap-4 lg:flex-row lg:items-center">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h4 class="font-bold text-slate-950">{{ record.applicant_name || 'Recipient' }}</h4>
+                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', oversightClass(record.oversight_status)]">{{ record.oversight_label }}</span>
+                                        </div>
+                                        <p class="mt-1 truncate text-xs leading-5 text-slate-500">{{ record.program_title }} &middot; {{ record.provider_name }}</p>
+                                        <p v-if="record.attention_items?.length" class="mt-2 line-clamp-1 text-sm font-semibold text-amber-900">
+                                            <i class="fa-solid fa-triangle-exclamation mr-1.5" aria-hidden="true"></i>{{ record.attention_items[0].title }}
+                                            <span v-if="record.attention_items.length > 1" class="text-slate-500"> +{{ record.attention_items.length - 1 }} more</span>
+                                        </p>
+                                        <p v-else class="mt-2 text-sm text-slate-600">{{ record.support_status_label }}</p>
+                                    </div>
+
+                                    <dl class="grid shrink-0 grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 text-xs sm:grid-cols-3 lg:w-[430px]">
+                                        <div class="bg-slate-50 px-3 py-2.5"><dt class="font-bold uppercase tracking-[0.08em] text-slate-500">Requirements</dt><dd class="mt-1 font-semibold text-slate-800">{{ record.requirements_confirmed }}/{{ record.requirements_total }} confirmed</dd></div>
+                                        <div class="bg-slate-50 px-3 py-2.5"><dt class="font-bold uppercase tracking-[0.08em] text-slate-500">Releases</dt><dd class="mt-1 font-semibold text-slate-800">{{ record.released_total }}/{{ record.release_total }} released</dd></div>
+                                        <div class="col-span-2 bg-slate-50 px-3 py-2.5 sm:col-span-1"><dt class="font-bold uppercase tracking-[0.08em] text-slate-500">Last activity</dt><dd class="mt-1 truncate font-semibold text-slate-800">{{ record.last_activity_at || 'No activity' }}</dd></div>
+                                    </dl>
+
+                                    <a :href="record.review_url" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                        Review record
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </a>
                                 </div>
                             </article>
                         </div>

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\PortalNotification;
+use App\Models\RecipientBenefitReceiptResponse;
 use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientBenefitReleaseRecord;
 use App\Models\RecipientMonitoringCycle;
@@ -328,6 +329,15 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->assertJsonPath('application.recipient_monitoring.benefit_releases.0.status', 'scheduled')
             ->assertJsonPath('application.recipient_monitoring.benefit_releases.0.benefit_description', 'PHP 5,000 learning allowance');
 
+        $this->actingAs($applicant)
+            ->postJson("/dashboard/benefit-release-records/{$recordId}/response", [
+                'response_type' => 'confirmed',
+                'received_on' => now()->toDateString(),
+                'acknowledged' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('response_type');
+
         $this->travel(2)->days();
         $this->actingAs($provider)
             ->postJson("/provider/benefit-release-records/{$recordId}/result", [
@@ -361,6 +371,125 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->where('user_id', $applicant->id)
             ->where('type', 'recipient_benefit_release_result')
             ->exists());
+
+        $this->actingAs($applicant)
+            ->postJson("/dashboard/benefit-release-records/{$recordId}/response", [
+                'response_type' => 'confirmed',
+                'received_on' => now()->toDateString(),
+                'recipient_note' => 'I received the complete allowance.',
+                'acknowledged' => true,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('application.recipient_monitoring.benefit_releases.0.receipt_response.status', 'confirmed')
+            ->assertJsonPath('application.recipient_monitoring.benefit_releases.0.can_respond', false);
+
+        $this->assertDatabaseHas('recipient_benefit_receipt_responses', [
+            'recipient_benefit_release_record_id' => $recordId,
+            'applicant_id' => $applicant->id,
+            'response_type' => 'confirmed',
+            'status' => 'confirmed',
+        ]);
+        $this->actingAs($applicant)
+            ->postJson("/dashboard/benefit-release-records/{$recordId}/response", [
+                'response_type' => 'confirmed',
+                'received_on' => now()->toDateString(),
+                'acknowledged' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('response_type');
+        $this->assertTrue(PortalNotification::query()
+            ->where('user_id', $provider->id)
+            ->where('type', 'benefit_receipt_confirmed')
+            ->exists());
+
+        $this->actingAs($provider)
+            ->postJson("/provider/benefit-release-records/{$recordId}/result", [
+                'status' => 'withheld',
+                'notes' => 'Attempting to replace the completed record.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('status');
+    }
+
+    public function test_recipient_can_report_a_release_issue_and_provider_can_resolve_it_separately(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedApplication();
+        $application->update([
+            'student_response_status' => 'accepted',
+            'student_responded_at' => now(),
+            'student_response_terms_accepted_at' => now(),
+        ]);
+        $release = RecipientBenefitRelease::create([
+            'scholarship_id' => $scholarship->id,
+            'created_by' => $provider->id,
+            'title' => 'Learning materials release',
+            'release_at' => now()->subDay(),
+            'benefit_description' => 'Books and school supplies',
+            'release_method' => 'in_person',
+            'location' => 'Community desk',
+            'requires_original_verification' => false,
+            'status' => 'completed',
+            'published_at' => now()->subDays(2),
+        ]);
+        Storage::disk('local')->put('benefit-release-receipts/original/provider-proof.pdf', 'provider proof');
+        $record = RecipientBenefitReleaseRecord::create([
+            'recipient_benefit_release_id' => $release->id,
+            'scholarship_application_id' => $application->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'released',
+            'notes' => 'Package handed to the recipient.',
+            'receipt_original_name' => 'provider-proof.pdf',
+            'receipt_path' => 'benefit-release-receipts/original/provider-proof.pdf',
+            'receipt_mime_type' => 'application/pdf',
+            'receipt_size' => 14,
+            'recorded_by' => $provider->id,
+            'recorded_at' => now()->subDay(),
+            'released_at' => now()->subDay(),
+        ]);
+
+        $issueEvidence = UploadedFile::fake()->image('incomplete-package.jpg')->size(200);
+        $response = $this->actingAs($applicant)
+            ->withHeader('Accept', 'application/json')
+            ->post("/dashboard/benefit-release-records/{$record->id}/response", [
+                'response_type' => 'issue',
+                'issue_type' => 'incomplete_benefit',
+                'issue_details' => 'The package did not include the listed reference books.',
+                'evidence' => $issueEvidence,
+                'acknowledged' => '1',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('application.recipient_monitoring.benefit_releases.0.receipt_response.status', 'open');
+
+        $receiptResponse = RecipientBenefitReceiptResponse::findOrFail(
+            $response->json('application.recipient_monitoring.benefit_releases.0.receipt_response.id'),
+        );
+        Storage::disk('local')->assertExists($receiptResponse->evidence_path);
+        $this->actingAs($provider)
+            ->get("/provider/benefit-receipt-responses/{$receiptResponse->id}/files/evidence")
+            ->assertOk();
+
+        $resolutionProof = UploadedFile::fake()->image('replacement-proof.jpg')->size(220);
+        $this->actingAs($provider)
+            ->withHeader('Accept', 'application/json')
+            ->post("/provider/benefit-receipt-responses/{$receiptResponse->id}/resolve", [
+                'resolution_outcome' => 'replacement_scheduled',
+                'resolution_notes' => 'The missing books were verified and a replacement pickup was arranged.',
+                'resolution_proof' => $resolutionProof,
+            ])
+            ->assertOk()
+            ->assertJsonPath('release.records.0.receipt_response.status', 'resolved')
+            ->assertJsonPath('release.records.0.receipt_response.resolution_outcome', 'replacement_scheduled');
+
+        $receiptResponse->refresh();
+        Storage::disk('local')->assertExists($receiptResponse->resolution_proof_path);
+        $this->actingAs($applicant)
+            ->get("/dashboard/benefit-receipt-responses/{$receiptResponse->id}/files/resolution-proof")
+            ->assertOk();
+        $this->assertSame('benefit-release-receipts/original/provider-proof.pdf', $record->fresh()->receipt_path);
+        $this->assertTrue(PortalNotification::query()
+            ->where('user_id', $applicant->id)
+            ->where('type', 'benefit_receipt_issue_resolved')
+            ->exists());
     }
 
     public function test_provider_can_renew_then_complete_a_recipient_support_record(): void
@@ -384,6 +513,7 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->json('cycle.id');
         $renewalPayload = [
             'decision' => 'renewed',
+            'reason_category' => 'requirements_met',
             'effective_on' => now()->toDateString(),
             'support_ends_on' => now()->addMonths(6)->toDateString(),
             'next_review_on' => now()->addMonths(3)->toDateString(),
@@ -431,6 +561,7 @@ class RecipientMonitoringWorkflowTest extends TestCase
         $this->actingAs($provider)
             ->postJson("/provider/applications/{$application->id}/support-decision", [
                 'decision' => 'completed',
+                'reason_category' => 'program_completed',
                 'effective_on' => now()->toDateString(),
                 'reason' => 'The recipient completed the support period and all currently due requirements.',
                 'confirmed' => true,
@@ -453,6 +584,85 @@ class RecipientMonitoringWorkflowTest extends TestCase
         $this->assertTrue(PortalNotification::query()
             ->where('user_id', $applicant->id)
             ->where('type', 'recipient_support_decision')
+            ->exists());
+    }
+
+    public function test_terminated_recipient_can_request_reconsideration_and_have_support_reinstated(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedApplication();
+        $application->update([
+            'student_response_status' => 'accepted',
+            'student_responded_at' => now(),
+            'student_response_terms_accepted_at' => now(),
+        ]);
+
+        $decisionFile = UploadedFile::fake()->create('termination-notice.pdf', 220, 'application/pdf');
+        $terminationResponse = $this->actingAs($provider)
+            ->withHeader('Accept', 'application/json')
+            ->post("/provider/applications/{$application->id}/support-decision", [
+                'decision' => 'terminated',
+                'reason_category' => 'requirement_not_met',
+                'effective_on' => now()->toDateString(),
+                'notice_given_on' => now()->subDay()->toDateString(),
+                'reason' => 'The required academic record remained unresolved after provider follow-up.',
+                'decision_document' => $decisionFile,
+                'confirmed' => '1',
+            ])
+            ->assertOk()
+            ->assertJsonPath('recipient.support_status', 'terminated')
+            ->assertJsonPath('recipient.latest_decision.reason_category', 'requirement_not_met');
+
+        $termination = RecipientSupportDecision::findOrFail($terminationResponse->json('recipient.latest_decision.id'));
+        Storage::disk('local')->assertExists($termination->decision_document_path);
+        $this->actingAs($applicant)
+            ->get("/dashboard/support-decisions/{$termination->id}/files/decision-document")
+            ->assertOk();
+
+        $appealFile = UploadedFile::fake()->image('updated-record.jpg')->size(180);
+        $this->actingAs($applicant)
+            ->withHeader('Accept', 'application/json')
+            ->post("/dashboard/support-decisions/{$termination->id}/response", [
+                'response_type' => 'reconsideration_requested',
+                'message' => 'The missing record is now available and is attached for another review.',
+                'attachment' => $appealFile,
+                'confirmed' => '1',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('application.recipient_monitoring.support_decisions.0.response_status', 'open');
+
+        $termination->refresh();
+        Storage::disk('local')->assertExists($termination->applicant_response_path);
+        $this->actingAs($provider)
+            ->get("/provider/support-decisions/{$termination->id}/files/applicant-response")
+            ->assertOk();
+
+        $resolutionProof = UploadedFile::fake()->create('reinstatement-note.pdf', 200, 'application/pdf');
+        $this->actingAs($provider)
+            ->withHeader('Accept', 'application/json')
+            ->post("/provider/support-decisions/{$termination->id}/resolve", [
+                'resolution_outcome' => 'support_reinstated',
+                'resolution_notes' => 'The replacement record was reviewed and support can continue.',
+                'resolution_proof' => $resolutionProof,
+                'support_ends_on' => now()->addMonths(6)->toDateString(),
+                'next_review_on' => now()->addMonths(3)->toDateString(),
+                'next_period_terms' => 'Continue the monitoring plan and submit the next required academic update.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('recipient.support_status', 'renewed')
+            ->assertJsonPath('recipient.latest_decision.reason_category', 'support_reinstated');
+
+        $termination->refresh();
+        $this->assertSame('resolved', $termination->response_status);
+        $this->assertSame('support_reinstated', $termination->resolution_outcome);
+        Storage::disk('local')->assertExists($termination->resolution_proof_path);
+        $this->actingAs($applicant)
+            ->get("/dashboard/support-decisions/{$termination->id}/files/resolution-proof")
+            ->assertOk();
+        $this->assertSame('renewed', $application->fresh()->status);
+        $this->assertDatabaseCount('recipient_support_decisions', 2);
+        $this->assertTrue(PortalNotification::query()
+            ->where('user_id', $applicant->id)
+            ->where('type', 'support_decision_request_resolved')
             ->exists());
     }
 

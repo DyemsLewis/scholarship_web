@@ -26,12 +26,13 @@ const navLinks = [
         label: 'Reviews',
         icon: 'fa-solid fa-clipboard-check',
         permission: 'manage_reviews',
-        activePaths: ['/admin/providers', '/admin/applicants', '/admin/scholarships'],
+        activePaths: ['/admin/providers', '/admin/applicants', '/admin/scholarships', '/admin/monitoring'],
         children: [
             { href: '/admin/reviews', label: 'Provider reviews', exact: true, queryless: true },
             { href: '/admin/reviews?type=programs', label: 'Program reviews', exact: true },
             { href: '/admin/reviews?type=applicants', label: 'Applicant reviews', exact: true },
             { href: '/admin/reviews?type=benefits', label: 'Benefit evidence', exact: true },
+            { href: '/admin/reviews?type=monitoring', label: 'Monitoring oversight', exact: true },
         ],
     },
     {

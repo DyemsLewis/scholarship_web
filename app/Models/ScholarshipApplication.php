@@ -165,15 +165,37 @@ class ScholarshipApplication extends Model
         return $this->hasMany(RecipientMonitoringSubmission::class);
     }
 
+    public function monitoringAdjustmentRequests(): HasMany
+    {
+        return $this->hasMany(RecipientMonitoringAdjustmentRequest::class);
+    }
+
+    public function monitoringInterventions(): HasMany
+    {
+        return $this->hasMany(RecipientMonitoringIntervention::class);
+    }
+
     public function benefitReleaseRecords(): HasMany
     {
         return $this->hasMany(RecipientBenefitReleaseRecord::class);
+    }
+
+    public function benefitReceiptResponses(): HasMany
+    {
+        return $this->hasMany(RecipientBenefitReceiptResponse::class);
     }
 
     public function supportDecisions(): HasMany
     {
         return $this->hasMany(RecipientSupportDecision::class)
             ->orderByDesc('decided_at')
+            ->orderByDesc('id');
+    }
+
+    public function monitoringOversightReviews(): HasMany
+    {
+        return $this->hasMany(RecipientMonitoringOversightReview::class)
+            ->orderByDesc('reviewed_at')
             ->orderByDesc('id');
     }
 }

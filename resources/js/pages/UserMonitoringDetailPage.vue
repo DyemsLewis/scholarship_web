@@ -11,7 +11,9 @@ const application = ref(null);
 
 const monitoring = computed(() => application.value?.recipient_monitoring ?? null);
 const releaseCount = computed(() => monitoring.value?.benefit_releases?.length ?? 0);
-const monitoringCount = computed(() => monitoring.value?.cycles?.length ?? 0);
+const monitoringCount = computed(() => (
+    (monitoring.value?.check_ins?.length ?? 0) + (monitoring.value?.cycles?.length ?? 0)
+));
 
 function supportStatusClass(status) {
     if (status === 'active') return 'bg-emerald-100 text-emerald-800';
@@ -75,7 +77,7 @@ onMounted(loadMonitoringRecord);
                         </div>
                         <div class="border-b border-slate-200 px-4 py-3 sm:border-b-0 sm:border-r">
                             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Requirements</p>
-                            <p class="mt-1 text-sm font-bold text-slate-950">{{ monitoring.pending_count }} due · {{ monitoringCount }} total</p>
+                            <p class="mt-1 text-sm font-bold text-slate-950">{{ monitoring.pending_count }} due | {{ monitoringCount }} check-in{{ monitoringCount === 1 ? '' : 's' }}</p>
                         </div>
                         <div class="px-4 py-3">
                             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Benefit releases</p>

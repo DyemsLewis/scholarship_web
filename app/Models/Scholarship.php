@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Scholarship extends Model
 {
@@ -125,6 +126,11 @@ class Scholarship extends Model
         return $this->hasMany(RecipientMonitoringCycle::class)
             ->orderByDesc('due_at')
             ->orderByDesc('id');
+    }
+
+    public function monitoringPlan(): HasOne
+    {
+        return $this->hasOne(RecipientMonitoringPlan::class);
     }
 
     public function benefitReleases(): HasMany

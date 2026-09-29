@@ -9,6 +9,7 @@ import { showPortalToast } from '../support/portalToast';
 
 const scholarshipId = document.getElementById('app')?.dataset.scholarshipId;
 const scholarship = ref(null);
+const monitoringPlan = ref(null);
 const cycles = ref([]);
 const benefitReleases = ref([]);
 const releaseCandidates = ref([]);
@@ -31,9 +32,16 @@ const errorMessage = ref('');
 const showCycleForm = ref(false);
 const titleInput = ref(null);
 const previewFile = ref(null);
+const checklistTarget = ref(null);
 const reviewTarget = ref(null);
 const reviewNotes = ref('');
 const isReviewing = ref(false);
+const adjustmentReviewTarget = ref(null);
+const adjustmentDecisionForm = ref({ decision: 'approved', decision_notes: '', approved_due_at: '' });
+const isDecidingAdjustment = ref(false);
+const interventionTarget = ref(null);
+const interventionForm = ref({ type: 'reminder', summary: '', action_required: '', follow_up_on: '', completion_notes: '' });
+const isSavingIntervention = ref(false);
 const openCycles = ref(new Set());
 const today = new Date().toISOString().slice(0, 10);
 const form = ref(defaultForm());
@@ -44,10 +52,17 @@ const openReleases = ref(new Set());
 const releaseTarget = ref(null);
 const isRecordingRelease = ref(false);
 const releaseResultForm = ref(defaultReleaseResultForm());
+const receiptIssueTarget = ref(null);
+const receiptResolutionForm = ref(defaultReceiptResolutionForm());
+const isResolvingReceiptIssue = ref(false);
 const supportTarget = ref(null);
 const supportForm = ref(defaultSupportForm());
 const isSavingSupport = ref(false);
 const supportError = ref('');
+const supportResponseTarget = ref(null);
+const supportResolutionForm = ref(defaultSupportResolutionForm());
+const isResolvingSupportResponse = ref(false);
+const supportResolutionError = ref('');
 const recipientRecordTarget = ref(null);
 const recipientRecord = ref(null);
 const recipientRecordError = ref('');
@@ -56,7 +71,17 @@ const isLoadingRecipientRecord = ref(false);
 const eligibleCandidates = computed(() => releaseCandidates.value.filter((candidate) => candidate.eligible));
 const activeSupportCount = computed(() => supportRecipients.value.filter((recipient) => !recipient.is_closed).length);
 const renewalReadyCount = computed(() => supportRecipients.value.filter((recipient) => recipient.renewal_eligible && !recipient.is_closed).length);
+const hasActiveMonitoringPlan = computed(() => monitoringPlan.value?.status === 'active');
+const reviewSubmission = computed(() => reviewTarget.value?.submission ?? null);
+const reviewRequirement = computed(() => reviewTarget.value?.requirement ?? null);
 const viewTabs = computed(() => [
+    {
+        value: 'plan',
+        label: 'Monitoring plan',
+        shortLabel: 'Plan',
+        count: 0,
+        href: `${monitoringBaseUrl}/plan`,
+    },
     {
         value: 'summary',
         label: 'Overview',
@@ -66,8 +91,8 @@ const viewTabs = computed(() => [
     },
     {
         value: 'monitoring',
-        label: 'Academic checks',
-        shortLabel: 'Academic',
+        label: 'Check-ins',
+        shortLabel: 'Check-ins',
         count: cycles.value.reduce((total, cycle) => total + Number(cycle.action_needed_count ?? 0), 0),
         href: `${monitoringBaseUrl}/academic`,
     },
@@ -75,20 +100,22 @@ const viewTabs = computed(() => [
         value: 'releases',
         label: 'Benefit releases',
         shortLabel: 'Releases',
-        count: benefitReleases.value.reduce((total, release) => total + Number(release.pending_count ?? 0), 0),
+        count: benefitReleases.value.reduce((total, release) => total
+            + Number(release.pending_count ?? 0)
+            + Number(release.open_issue_count ?? 0), 0),
         href: `${monitoringBaseUrl}/releases`,
     },
     {
         value: 'outcomes',
         label: 'Support outcomes',
         shortLabel: 'Outcomes',
-        count: renewalReadyCount.value,
+        count: renewalReadyCount.value + supportRecipients.value.filter((recipient) => recipient.latest_decision?.response_status === 'open').length,
         href: `${monitoringBaseUrl}/outcomes`,
     },
 ]);
 const activeViewTitle = computed(() => ({
     summary: 'Monitoring overview',
-    monitoring: 'Academic checks',
+    monitoring: 'Check-ins',
     releases: 'Benefit releases',
     outcomes: 'Support outcomes',
 }[activeTab.value]));
@@ -99,9 +126,9 @@ const monitoringGuide = computed(() => ({
         { label: 'Next action', text: 'Open an attention item or choose a monitoring section below.' },
     ],
     monitoring: [
-        { label: 'Purpose', text: 'Check whether recipients continue to meet the academic requirement.' },
-        { label: 'Records shown', text: 'Requested periods, submitted grade records, and provider reviews.' },
-        { label: 'Next action', text: 'Create a period, then review each submitted academic record.' },
+        { label: 'Purpose', text: 'Request the records in the active monitoring plan.' },
+        { label: 'Records shown', text: 'Published check-ins and recipient submission progress.' },
+        { label: 'Next action', text: 'Publish a check-in, then track the checklist.' },
     ],
     releases: [
         { label: 'Purpose', text: 'Prepare benefits and document what each recipient received.' },
@@ -130,6 +157,18 @@ const overviewWorkItems = computed(() => [
         tone: 'bg-sky-100 text-sky-800',
     })),
 ]);
+const checkInOverview = computed(() => {
+    const recipientStates = cycles.value.flatMap((cycle) => (
+        (cycle.recipients ?? []).map((recipient) => recipientCheckInState(cycle, recipient).key)
+    ));
+
+    return {
+        periods: cycles.value.length,
+        awaiting: recipientStates.filter((state) => state === 'awaiting').length,
+        review: recipientStates.filter((state) => state === 'review').length,
+        followUp: recipientStates.filter((state) => ['request', 'follow_up'].includes(state)).length,
+    };
+});
 
 function defaultForm() {
     return {
@@ -163,16 +202,59 @@ function defaultReleaseResultForm() {
     return { status: 'prepared', originals_verified: false, notes: '', receipt_proof: null };
 }
 
+function defaultReceiptResolutionForm() {
+    return { resolution_outcome: 'corrected_release', resolution_notes: '', resolution_proof: null };
+}
+
 function defaultSupportForm() {
     return {
         decision: 'renewed',
+        reason_category: 'requirements_met',
         effective_on: today,
         support_ends_on: '',
         next_review_on: '',
+        notice_given_on: today,
         reason: '',
         next_period_terms: '',
+        decision_document: null,
         confirmed: false,
     };
+}
+
+function defaultSupportResolutionForm() {
+    return {
+        resolution_outcome: 'decision_upheld',
+        resolution_notes: '',
+        resolution_proof: null,
+        support_ends_on: '',
+        next_review_on: '',
+        next_period_terms: '',
+    };
+}
+
+function supportReasonOptions(decision) {
+    if (decision === 'renewed') return [
+        { value: 'requirements_met', label: 'Requirements met' },
+        { value: 'support_period_extended', label: 'Support period extended' },
+        { value: 'continued_funding', label: 'Continued funding approved' },
+    ];
+    if (decision === 'completed') return [
+        { value: 'program_completed', label: 'Program completed' },
+        { value: 'support_period_ended', label: 'Support period ended' },
+        { value: 'recipient_withdrew', label: 'Recipient withdrew' },
+    ];
+    return [
+        { value: 'requirement_not_met', label: 'Requirement not met' },
+        { value: 'document_noncompliance', label: 'Required records not provided' },
+        { value: 'misrepresentation', label: 'Information misrepresentation' },
+        { value: 'recipient_withdrew', label: 'Recipient withdrew' },
+        { value: 'provider_funding_ended', label: 'Provider funding ended' },
+        { value: 'other', label: 'Other documented reason' },
+    ];
+}
+
+function changeSupportDecision() {
+    supportForm.value.reason_category = supportReasonOptions(supportForm.value.decision)[0].value;
 }
 
 function supportStatusClass(status) {
@@ -259,6 +341,19 @@ function closeSupportDecision() {
     supportError.value = '';
 }
 
+function openSupportResponse(recipient) {
+    supportResponseTarget.value = { recipient, decision: recipient.latest_decision };
+    supportResolutionForm.value = defaultSupportResolutionForm();
+    supportResolutionError.value = '';
+}
+
+function closeSupportResponse() {
+    if (isResolvingSupportResponse.value) return;
+    supportResponseTarget.value = null;
+    supportResolutionForm.value = defaultSupportResolutionForm();
+    supportResolutionError.value = '';
+}
+
 function openComposer() {
     form.value = defaultForm();
     errorMessage.value = '';
@@ -302,6 +397,12 @@ function releaseStatusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
+function receiptResponseStatusClass(response) {
+    if (!response) return 'bg-slate-100 text-slate-600';
+    if (response.status === 'confirmed' || response.status === 'resolved') return 'bg-emerald-100 text-emerald-800';
+    return 'bg-rose-100 text-rose-700';
+}
+
 function openReleaseResult(release, record) {
     releaseTarget.value = { release, record };
     releaseResultForm.value = {
@@ -316,6 +417,17 @@ function closeReleaseResult() {
     if (isRecordingRelease.value) return;
     releaseTarget.value = null;
     releaseResultForm.value = defaultReleaseResultForm();
+}
+
+function openReceiptIssue(release, record) {
+    receiptIssueTarget.value = { release, record, response: record.receipt_response };
+    receiptResolutionForm.value = defaultReceiptResolutionForm();
+}
+
+function closeReceiptIssue() {
+    if (isResolvingReceiptIssue.value) return;
+    receiptIssueTarget.value = null;
+    receiptResolutionForm.value = defaultReceiptResolutionForm();
 }
 
 function toggleCycle(cycleId) {
@@ -349,9 +461,251 @@ function reviewStatusClass(status) {
     return 'bg-slate-100 text-slate-600';
 }
 
-function openReview(cycle, recipient) {
-    reviewTarget.value = { cycle, recipient };
-    reviewNotes.value = recipient.submission?.review_notes ?? '';
+function adjustmentStatusClass(status) {
+    if (status === 'approved') return 'bg-emerald-100 text-emerald-800';
+    if (status === 'declined') return 'bg-rose-100 text-rose-800';
+    return 'bg-amber-100 text-amber-900';
+}
+
+function recipientCheckInState(cycle, recipient) {
+    if (!cycle.is_plan_check_in) {
+        if (!recipient.submission) {
+            return {
+                key: 'awaiting',
+                label: 'Awaiting upload',
+                detail: 'No academic record submitted',
+                className: 'bg-slate-100 text-slate-700',
+                priority: 3,
+            };
+        }
+        if (!recipient.submission.reviewed_at) {
+            return {
+                key: 'review',
+                label: 'Needs review',
+                detail: 'Submission is ready for review',
+                className: 'bg-amber-100 text-amber-800',
+                priority: 1,
+            };
+        }
+        if (['not_met', 'needs_correction'].includes(recipient.submission.review_status)) {
+            return {
+                key: 'follow_up',
+                label: 'Follow-up needed',
+                detail: recipient.submission.review_status_label,
+                className: 'bg-rose-100 text-rose-700',
+                priority: 2,
+            };
+        }
+
+        return {
+            key: 'complete',
+            label: 'Reviewed',
+            detail: recipient.submission.review_status_label,
+            className: 'bg-emerald-100 text-emerald-800',
+            priority: 4,
+        };
+    }
+
+    const requirements = recipient.requirements ?? [];
+    const adjustmentCount = requirements.filter((requirement) => requirement.adjustment_request?.status === 'pending').length;
+    const followUpCount = requirements.filter((requirement) => ['not_met', 'needs_correction'].includes(requirement.submission?.review_status)).length;
+    const reviewCount = requirements.filter((requirement) => (
+        requirement.required
+        && !requirement.submission?.reviewed_at
+        && (!requirement.requires_file || requirement.submission?.id)
+    )).length;
+    const uploadCount = Math.max(0, Number(recipient.required_upload_count ?? 0) - Number(recipient.submitted_item_count ?? 0));
+
+    if (adjustmentCount) {
+        return {
+            key: 'request',
+            label: 'Request to review',
+            detail: `${adjustmentCount} adjustment request${adjustmentCount === 1 ? '' : 's'}`,
+            className: 'bg-amber-100 text-amber-800',
+            priority: 0,
+        };
+    }
+    if (reviewCount) {
+        return {
+            key: 'review',
+            label: 'Needs review',
+            detail: `${reviewCount} submitted item${reviewCount === 1 ? '' : 's'}`,
+            className: 'bg-amber-100 text-amber-800',
+            priority: 1,
+        };
+    }
+    if (followUpCount) {
+        return {
+            key: 'follow_up',
+            label: 'Follow-up needed',
+            detail: `${followUpCount} item${followUpCount === 1 ? '' : 's'} need attention`,
+            className: 'bg-rose-100 text-rose-700',
+            priority: 2,
+        };
+    }
+    if (uploadCount) {
+        return {
+            key: 'awaiting',
+            label: 'Awaiting upload',
+            detail: `${uploadCount} file${uploadCount === 1 ? '' : 's'} remaining`,
+            className: 'bg-slate-100 text-slate-700',
+            priority: 3,
+        };
+    }
+
+    return {
+        key: 'complete',
+        label: 'Complete',
+        detail: 'Checklist is up to date',
+        className: 'bg-emerald-100 text-emerald-800',
+        priority: 4,
+    };
+}
+
+function orderedCycleRecipients(cycle) {
+    return [...(cycle.recipients ?? [])].sort((first, second) => {
+        const priorityDifference = recipientCheckInState(cycle, first).priority
+            - recipientCheckInState(cycle, second).priority;
+        return priorityDifference || String(first.name).localeCompare(String(second.name));
+    });
+}
+
+function cycleAttentionCount(cycle) {
+    return (cycle.recipients ?? []).filter((recipient) => recipientCheckInState(cycle, recipient).key !== 'complete').length;
+}
+
+function cycleCompleteCount(cycle) {
+    return Math.max(0, Number(cycle.recipient_count ?? cycle.recipients?.length ?? 0) - cycleAttentionCount(cycle));
+}
+
+function cycleRequiredReviewCount(cycle) {
+    if (!cycle.is_plan_check_in) return Number(cycle.recipient_count ?? cycle.recipients?.length ?? 0);
+    return (cycle.recipients ?? []).reduce((total, recipient) => total + Number(recipient.required_review_count ?? 0), 0);
+}
+
+function dateOffset(date, days) {
+    if (!date) return '';
+    const value = new Date(`${date}T00:00:00`);
+    value.setDate(value.getDate() + days);
+    return value.toISOString().slice(0, 10);
+}
+
+function openChecklist(cycle, recipient) {
+    checklistTarget.value = { cycle, recipient };
+}
+
+function closeChecklist() {
+    if (isReviewing.value) return;
+    checklistTarget.value = null;
+}
+
+function applyUpdatedCycle(updatedCycle) {
+    const cycleIndex = cycles.value.findIndex((cycle) => cycle.id === updatedCycle.id);
+    if (cycleIndex >= 0) cycles.value.splice(cycleIndex, 1, updatedCycle);
+
+    if (checklistTarget.value?.cycle.id === updatedCycle.id) {
+        const recipient = updatedCycle.recipients.find(
+            (item) => item.application_id === checklistTarget.value.recipient.application_id,
+        );
+        if (recipient) checklistTarget.value = { cycle: updatedCycle, recipient };
+    }
+}
+
+function openReview(cycle, recipient, requirement = null) {
+    const submission = requirement?.submission ?? recipient.submission ?? null;
+    if (!submission && (!requirement || requirement.requires_file)) return;
+
+    reviewTarget.value = { cycle, recipient, requirement, submission };
+    reviewNotes.value = submission?.review_notes ?? '';
+}
+
+function openAdjustmentReview(cycle, recipient, requirement) {
+    const adjustment = requirement.adjustment_request;
+    if (!adjustment) return;
+    adjustmentReviewTarget.value = { cycle, recipient, requirement, adjustment };
+    adjustmentDecisionForm.value = {
+        decision: 'approved',
+        decision_notes: adjustment.decision_notes ?? '',
+        approved_due_at: adjustment.requested_due_at ?? '',
+    };
+}
+
+function closeAdjustmentReview() {
+    if (isDecidingAdjustment.value) return;
+    adjustmentReviewTarget.value = null;
+}
+
+async function submitAdjustmentDecision() {
+    if (!adjustmentReviewTarget.value || isDecidingAdjustment.value) return;
+    if (adjustmentDecisionForm.value.decision === 'declined' && adjustmentDecisionForm.value.decision_notes.trim().length < 5) {
+        showPortalToast({ type: 'error', title: 'Decision note required', message: 'Explain why the request cannot be approved.' });
+        return;
+    }
+
+    isDecidingAdjustment.value = true;
+    try {
+        const target = adjustmentReviewTarget.value;
+        const response = await window.axios.patch(
+            `/provider/monitoring-adjustment-requests/${target.adjustment.id}/decision`,
+            {
+                decision: adjustmentDecisionForm.value.decision,
+                decision_notes: adjustmentDecisionForm.value.decision_notes.trim() || null,
+                approved_due_at: target.adjustment.request_type === 'extension'
+                    && adjustmentDecisionForm.value.decision === 'approved'
+                        ? adjustmentDecisionForm.value.approved_due_at
+                        : null,
+            },
+        );
+        applyUpdatedCycle(response.data.cycle);
+        adjustmentReviewTarget.value = null;
+        showPortalToast({ type: 'success', title: 'Request decided', message: response.data.message });
+    } catch (error) {
+        const errors = error.response?.data?.errors;
+        showPortalToast({ type: 'error', title: 'Decision not saved', message: errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to decide this request.') });
+    } finally {
+        isDecidingAdjustment.value = false;
+    }
+}
+
+function openIntervention(cycle, recipient, requirement, intervention = null) {
+    interventionTarget.value = { cycle, recipient, requirement, intervention, mode: intervention ? 'complete' : 'create' };
+    interventionForm.value = intervention
+        ? { type: intervention.type, summary: intervention.summary, action_required: intervention.action_required ?? '', follow_up_on: intervention.follow_up_on ?? '', completion_notes: '' }
+        : { type: 'reminder', summary: '', action_required: '', follow_up_on: '', completion_notes: '' };
+}
+
+function closeIntervention() {
+    if (isSavingIntervention.value) return;
+    interventionTarget.value = null;
+}
+
+async function submitIntervention() {
+    if (!interventionTarget.value || isSavingIntervention.value) return;
+    isSavingIntervention.value = true;
+    try {
+        const target = interventionTarget.value;
+        const response = target.mode === 'complete'
+            ? await window.axios.patch(`/provider/monitoring-interventions/${target.intervention.id}/complete`, {
+                completion_notes: interventionForm.value.completion_notes.trim() || null,
+            })
+            : await window.axios.post(
+                `/provider/monitoring-requirements/${target.requirement.id}/applications/${target.recipient.application_id}/interventions`,
+                {
+                    type: interventionForm.value.type,
+                    summary: interventionForm.value.summary.trim(),
+                    action_required: interventionForm.value.action_required.trim() || null,
+                    follow_up_on: interventionForm.value.follow_up_on || null,
+                },
+            );
+        applyUpdatedCycle(response.data.cycle);
+        interventionTarget.value = null;
+        showPortalToast({ type: 'success', title: target.mode === 'complete' ? 'Follow-up completed' : 'Follow-up recorded', message: response.data.message });
+    } catch (error) {
+        const errors = error.response?.data?.errors;
+        showPortalToast({ type: 'error', title: 'Follow-up not saved', message: errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to save this follow-up.') });
+    } finally {
+        isSavingIntervention.value = false;
+    }
 }
 
 function closeReview() {
@@ -374,16 +728,17 @@ async function submitReview(decision) {
 
     isReviewing.value = true;
     try {
-        const submission = reviewTarget.value.recipient.submission;
-        const response = await window.axios.patch(`/provider/monitoring-submissions/${submission.id}/review`, {
-            decision,
-            notes: reviewNotes.value.trim() || null,
-        });
-        const cycleIndex = cycles.value.findIndex((cycle) => cycle.id === response.data.cycle.id);
-        if (cycleIndex >= 0) cycles.value.splice(cycleIndex, 1, response.data.cycle);
+        const target = reviewTarget.value;
+        const payload = { decision, notes: reviewNotes.value.trim() || null };
+        const response = target.requirement && !target.requirement.requires_file
+            ? await window.axios.post(
+                `/provider/monitoring-requirements/${target.requirement.id}/applications/${target.recipient.application_id}/record`,
+                payload,
+            )
+            : await window.axios.patch(`/provider/monitoring-submissions/${target.submission.id}/review`, payload);
+        applyUpdatedCycle(response.data.cycle);
         reviewTarget.value = null;
         reviewNotes.value = '';
-        await loadMonitoring();
         showPortalToast({ type: 'success', title: 'Review recorded', message: response.data.message });
     } catch (error) {
         const errors = error.response?.data?.errors;
@@ -404,6 +759,7 @@ async function loadMonitoring() {
     try {
         const response = await window.axios.get(`/provider/scholarships/${scholarshipId}/monitoring-cycles`);
         scholarship.value = response.data.scholarship;
+        monitoringPlan.value = response.data.monitoring_plan ?? null;
         cycles.value = response.data.cycles ?? [];
         benefitReleases.value = response.data.benefit_releases ?? [];
         releaseCandidates.value = response.data.release_candidates ?? [];
@@ -423,10 +779,28 @@ async function submitSupportDecision() {
 
     isSavingSupport.value = true;
     supportError.value = '';
+    const data = new FormData();
+    Object.entries(supportForm.value).forEach(([key, value]) => {
+        const decision = supportForm.value.decision;
+        const renewalOnly = ['support_ends_on', 'next_review_on', 'next_period_terms'];
+
+        if (renewalOnly.includes(key) && decision !== 'renewed') return;
+        if (key === 'notice_given_on' && decision !== 'terminated') return;
+        if (key === 'reason' && decision === 'renewed') return;
+        if (key === 'decision_document') {
+            if (value) data.append(key, value);
+            return;
+        }
+        if (typeof value === 'boolean') {
+            data.append(key, value ? '1' : '0');
+            return;
+        }
+        if (value !== '' && value !== null) data.append(key, value);
+    });
     try {
         const response = await window.axios.post(
             `/provider/applications/${supportTarget.value.application_id}/support-decision`,
-            supportForm.value,
+            data,
         );
         const index = supportRecipients.value.findIndex((recipient) => recipient.application_id === response.data.recipient.application_id);
         if (index >= 0) supportRecipients.value.splice(index, 1, response.data.recipient);
@@ -438,6 +812,39 @@ async function submitSupportDecision() {
         supportError.value = errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to record this support outcome.');
     } finally {
         isSavingSupport.value = false;
+    }
+}
+
+async function submitSupportResponseResolution() {
+    if (!supportResponseTarget.value || isResolvingSupportResponse.value) return;
+
+    isResolvingSupportResponse.value = true;
+    supportResolutionError.value = '';
+    const data = new FormData();
+    Object.entries(supportResolutionForm.value).forEach(([key, value]) => {
+        if (key === 'resolution_proof') {
+            if (value) data.append(key, value);
+            return;
+        }
+        if (value !== '' && value !== null) data.append(key, value);
+    });
+
+    try {
+        const response = await window.axios.post(
+            `/provider/support-decisions/${supportResponseTarget.value.decision.id}/resolve`,
+            data,
+        );
+        const index = supportRecipients.value.findIndex((recipient) => recipient.application_id === response.data.recipient.application_id);
+        if (index >= 0) supportRecipients.value.splice(index, 1, response.data.recipient);
+        supportResponseTarget.value = null;
+        supportResolutionForm.value = defaultSupportResolutionForm();
+        await loadMonitoring();
+        showPortalToast({ type: 'success', title: 'Request resolved', message: response.data.message });
+    } catch (error) {
+        const errors = error.response?.data?.errors;
+        supportResolutionError.value = errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to resolve this request.');
+    } finally {
+        isResolvingSupportResponse.value = false;
     }
 }
 
@@ -496,17 +903,61 @@ async function submitReleaseResult() {
     }
 }
 
+async function submitReceiptIssueResolution() {
+    if (!receiptIssueTarget.value || isResolvingReceiptIssue.value) return;
+
+    isResolvingReceiptIssue.value = true;
+    const data = new FormData();
+    data.append('resolution_outcome', receiptResolutionForm.value.resolution_outcome);
+    data.append('resolution_notes', receiptResolutionForm.value.resolution_notes);
+    if (receiptResolutionForm.value.resolution_proof) data.append('resolution_proof', receiptResolutionForm.value.resolution_proof);
+
+    try {
+        const response = await window.axios.post(
+            `/provider/benefit-receipt-responses/${receiptIssueTarget.value.response.id}/resolve`,
+            data,
+        );
+        const index = benefitReleases.value.findIndex((release) => release.id === response.data.release.id);
+        if (index >= 0) benefitReleases.value.splice(index, 1, response.data.release);
+        receiptIssueTarget.value = null;
+        receiptResolutionForm.value = defaultReceiptResolutionForm();
+        showPortalToast({ type: 'success', title: 'Issue resolved', message: response.data.message });
+    } catch (error) {
+        const errors = error.response?.data?.errors;
+        showPortalToast({
+            type: 'error',
+            title: 'Resolution not saved',
+            message: errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to resolve this receipt issue.'),
+        });
+    } finally {
+        isResolvingReceiptIssue.value = false;
+    }
+}
+
 async function publishCycle() {
     if (isSaving.value) return;
     isSaving.value = true;
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.post(`/provider/scholarships/${scholarshipId}/monitoring-cycles`, form.value);
+        const endpoint = hasActiveMonitoringPlan.value
+            ? `/provider/scholarships/${scholarshipId}/monitoring-check-ins`
+            : `/provider/scholarships/${scholarshipId}/monitoring-cycles`;
+        const payload = hasActiveMonitoringPlan.value
+            ? {
+                title: form.value.title,
+                period_label: form.value.academic_period,
+                school_year: form.value.school_year,
+                opens_at: form.value.opens_at,
+                due_at: form.value.due_at,
+                instructions: form.value.instructions,
+            }
+            : form.value;
+        const response = await window.axios.post(endpoint, payload);
         cycles.value = [response.data.cycle, ...cycles.value];
         openCycles.value = new Set([response.data.cycle.id]);
         showCycleForm.value = false;
-        showPortalToast({ type: 'success', title: 'Monitoring period published', message: response.data.message });
+        showPortalToast({ type: 'success', title: hasActiveMonitoringPlan.value ? 'Check-in published' : 'Monitoring period published', message: response.data.message });
     } catch (error) {
         const errors = error.response?.data?.errors;
         errorMessage.value = errors ? Object.values(errors).flat()[0] : (error.response?.data?.message ?? 'Unable to publish this monitoring period.');
@@ -549,13 +1000,17 @@ onMounted(loadMonitoring);
                             <span v-if="activeTab === 'summary' || activeTab === 'outcomes'">{{ activeSupportCount }} active support record{{ activeSupportCount === 1 ? '' : 's' }}</span>
                         </template>
                         <template #actions>
+                            <a v-if="activeTab === 'summary'" :href="`/provider/scholarships/${scholarshipId}/monitoring/export`" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                <i class="fa-solid fa-download text-xs" aria-hidden="true"></i>
+                                Export report
+                            </a>
                             <a href="/provider/monitoring" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
                                 <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                                 All monitoring
                             </a>
                             <button v-if="activeTab === 'monitoring'" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openComposer">
                                 <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
-                                New period
+                                New check-in
                             </button>
                             <button v-else-if="activeTab === 'releases'" type="button" class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800" @click="openReleaseComposer">
                                 <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
@@ -570,8 +1025,8 @@ onMounted(loadMonitoring);
 
                     <p v-if="errorMessage" class="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
 
-                    <nav class="provider-panel mt-3 p-1.5" aria-label="Recipient monitoring views">
-                        <div class="grid grid-cols-4 gap-1">
+                    <nav class="provider-panel mt-3 overflow-x-auto p-1.5" aria-label="Recipient monitoring views">
+                        <div class="grid min-w-[40rem] grid-cols-5 gap-1">
                             <a
                                 v-for="view in viewTabs"
                                 :key="view.value"
@@ -586,7 +1041,7 @@ onMounted(loadMonitoring);
                         </div>
                     </nav>
 
-                    <ProviderSectionGuide :items="monitoringGuide" />
+                    <ProviderSectionGuide v-if="activeTab !== 'monitoring'" :items="monitoringGuide" />
 
                     <template v-if="activeTab === 'summary'">
                         <section class="provider-panel mt-3 overflow-hidden">
@@ -643,137 +1098,142 @@ onMounted(loadMonitoring);
                     </template>
 
                     <template v-else-if="activeTab === 'monitoring'">
-                        <section v-if="!cycles.length" class="provider-panel mt-3 overflow-hidden">
-                            <div class="portal-table-scroll">
-                                <table class="portal-data-table min-w-[760px]">
-                                    <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
-                                        <tr>
-                                            <th class="px-5 py-3">Monitoring period</th>
-                                            <th class="px-4 py-3">Grade requirement</th>
-                                            <th class="px-4 py-3">Due date</th>
-                                            <th class="px-4 py-3">Submissions</th>
-                                            <th class="px-5 py-3 text-right">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="bg-white">
-                                        <tr>
-                                            <td colspan="5" class="px-5 py-8 text-center">
-                                                <p class="font-bold text-slate-900">No monitoring periods yet</p>
-                                                <p class="mt-1 text-sm text-slate-500">Create a period when recipients need to submit an academic update.</p>
-                                                <button type="button" class="mt-3 rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openComposer">Create first period</button>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                        <section v-if="!cycles.length" class="provider-panel mt-3 px-6 py-10 text-center">
+                            <span class="mx-auto grid h-12 w-12 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span>
+                            <h2 class="mt-4 text-lg font-bold text-slate-950">No check-ins yet</h2>
+                            <p class="mx-auto mt-1 max-w-md text-sm text-slate-500">Create a check-in when recipients need to submit a monitoring requirement.</p>
+                            <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openComposer">Create first check-in</button>
                         </section>
 
-                        <section v-else class="mt-3 space-y-3">
-                            <article v-for="cycle in cycles" :key="cycle.id" class="provider-panel overflow-hidden">
-                                <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleCycle(cycle.id)">
-                                    <div class="flex min-w-0 items-start gap-3">
-                                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></span>
-                                        <div class="min-w-0">
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <h2 class="font-bold text-slate-950">{{ cycle.title }}</h2>
-                                                <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', cycle.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">{{ cycle.status }}</span>
-                                            </div>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}<span v-if="cycle.school_year"> · {{ cycle.school_year }}</span> · Due {{ cycle.due_label }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-center gap-4 sm:text-right">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">{{ cycle.submitted_count }} of {{ cycle.recipients.length }} received</p>
-                                            <p :class="['text-xs', cycle.action_needed_count ? 'font-bold text-amber-700' : 'text-slate-500']">{{ cycle.action_needed_count ? `${cycle.action_needed_count} need provider review` : `${cycle.reviewed_count} ${Number(cycle.reviewed_count) === 1 ? 'review' : 'reviews'} completed` }}</p>
-                                        </div>
-                                        <i :class="['fa-solid fa-chevron-down text-xs text-slate-400 transition', cycleIsOpen(cycle.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
-                                    </div>
-                                </button>
-
-                                <div v-if="cycleIsOpen(cycle.id)" class="border-t border-slate-200">
-                                    <div class="grid gap-px bg-slate-200 sm:grid-cols-3">
-                                        <div class="bg-slate-50 px-5 py-3">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Academic period</p>
-                                            <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}</p>
-                                            <p v-if="cycle.school_year" class="mt-0.5 text-xs text-slate-500">School year {{ cycle.school_year }}</p>
-                                        </div>
-                                        <div class="bg-slate-50 px-5 py-3">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Grade requirement</p>
-                                            <p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.requirement_label }}</p>
-                                            <p class="mt-0.5 text-xs text-slate-500">Used as a review guide</p>
-                                        </div>
-                                        <div class="bg-slate-50 px-5 py-3">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Submission window</p>
-                                            <p class="mt-1 text-sm font-bold text-slate-950">Due {{ cycle.due_label }}</p>
-                                            <p class="mt-0.5 text-xs text-slate-500">{{ cycle.pending_count }} still awaiting upload</p>
-                                        </div>
-                                    </div>
-                                    <p v-if="cycle.instructions" class="border-t border-slate-200 px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Recipient instructions:</strong> {{ cycle.instructions }}</p>
-
-                                    <div class="portal-table-scroll border-t border-slate-200">
-                                        <table class="portal-data-table min-w-[820px]">
-                                            <colgroup>
-                                                <col class="w-[28%]">
-                                                <col class="w-[29%]">
-                                                <col class="w-[23%]">
-                                                <col class="w-[20%]">
-                                            </colgroup>
-                                            <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
-                                                <tr>
-                                                    <th class="px-5 py-3">Recipient</th>
-                                                    <th class="px-4 py-3">Submitted result</th>
-                                                    <th class="px-4 py-3">Provider review</th>
-                                                    <th class="px-5 py-3 text-right">Action</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-slate-200 bg-white">
-                                                <tr v-if="!cycle.recipients.length">
-                                                    <td colspan="4" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this monitoring period.</td>
-                                                </tr>
-                                                <tr v-for="recipient in cycle.recipients" :key="recipient.application_id">
-                                                    <td class="align-top px-5 py-3.5">
-                                                        <div class="flex items-start gap-3">
-                                                            <img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
-                                                            <span v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold text-white">{{ personInitials(recipient) }}</span>
-                                                            <div class="min-w-0">
-                                                                <div class="flex min-h-6 flex-wrap items-center gap-2">
-                                                                    <p class="font-bold leading-5 text-slate-950">{{ recipient.name }}</p>
-                                                                    <span v-if="recipient.agreement_status !== 'accepted'" class="inline-flex rounded-md bg-amber-50 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">Agreement {{ recipient.agreement_status }}</span>
-                                                                </div>
-                                                                <p class="mt-0.5 text-xs text-slate-500">{{ recipient.email }}</p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td class="align-top px-4 py-3.5">
-                                                        <div class="flex min-h-6 items-center">
-                                                            <p class="font-bold leading-5 text-slate-950">{{ recipient.submission?.grade_label || (recipient.submission ? 'Result needs review' : 'Not submitted') }}</p>
-                                                        </div>
-                                                        <p v-if="recipient.submission" class="mt-0.5 text-xs text-slate-500">
-                                                            {{ recipient.submission.grade_source === 'ocr' ? 'OCR extracted' : recipient.submission.grade_source === 'applicant_manual' ? 'Applicant entered' : 'Manual check' }} · {{ comparisonLabel(recipient.submission) }}
-                                                        </p>
-                                                        <p v-else class="mt-0.5 text-xs text-slate-400">Waiting for academic record</p>
-                                                    </td>
-                                                    <td class="align-top px-4 py-3.5">
-                                                        <div class="flex min-h-6 items-center">
-                                                            <span v-if="recipient.submission" :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', reviewStatusClass(recipient.submission.review_status)]">{{ recipient.submission.review_status_label }}</span>
-                                                            <span v-else class="text-xs font-semibold text-slate-400">Not available</span>
-                                                        </div>
-                                                        <p v-if="recipient.submission?.reviewed_at" class="mt-0.5 text-xs text-slate-500">Updated {{ recipient.submission.reviewed_at }}</p>
-                                                        <p v-else-if="recipient.submission" class="mt-0.5 text-xs text-slate-500">Waiting for provider review</p>
-                                                        <p v-else class="mt-0.5 text-xs text-slate-400">Available after upload</p>
-                                                    </td>
-                                                    <td class="align-top px-5 py-3.5">
-                                                        <div class="flex min-h-9 items-start justify-end gap-2">
-                                                            <button v-if="recipient.submission" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReview(cycle, recipient)">{{ recipient.submission.review_status === 'pending' ? 'Review record' : 'View review' }}</button>
-                                                            <a :href="recipient.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
+                        <section v-else class="provider-panel mt-3 overflow-hidden">
+                            <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                <div>
+                                    <h2 class="text-lg font-bold text-slate-950">Check-in periods</h2>
+                                    <p class="mt-1 text-sm text-slate-500">Open a period to review recipient progress.</p>
                                 </div>
-                            </article>
+                                <span class="self-start rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600 sm:self-auto">{{ checkInOverview.periods }} period{{ checkInOverview.periods === 1 ? '' : 's' }}</span>
+                            </header>
+
+                            <dl class="grid border-b border-slate-200 bg-slate-50 sm:grid-cols-3">
+                                <div class="px-5 py-3 sm:border-r sm:border-slate-200">
+                                    <dt class="text-xs font-semibold text-slate-500">Waiting on recipients</dt>
+                                    <dd class="mt-0.5 text-lg font-bold text-slate-950">{{ checkInOverview.awaiting }}</dd>
+                                </div>
+                                <div class="border-t border-slate-200 px-5 py-3 sm:border-r sm:border-t-0">
+                                    <dt class="text-xs font-semibold text-slate-500">Ready for review</dt>
+                                    <dd class="mt-0.5 text-lg font-bold text-amber-800">{{ checkInOverview.review }}</dd>
+                                </div>
+                                <div class="border-t border-slate-200 px-5 py-3 sm:border-t-0">
+                                    <dt class="text-xs font-semibold text-slate-500">Follow-up</dt>
+                                    <dd class="mt-0.5 text-lg font-bold text-rose-700">{{ checkInOverview.followUp }}</dd>
+                                </div>
+                            </dl>
+
+                            <div class="divide-y divide-slate-200">
+                                <article v-for="cycle in cycles" :key="cycle.id">
+                                    <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleCycle(cycle.id)">
+                                        <div class="flex min-w-0 items-start gap-3">
+                                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i :class="cycle.is_plan_check_in ? 'fa-solid fa-list-check' : 'fa-solid fa-graduation-cap'" aria-hidden="true"></i></span>
+                                            <div class="min-w-0">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <h3 class="font-bold text-slate-950">{{ cycle.title }}</h3>
+                                                    <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', cycle.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">{{ cycle.status }}</span>
+                                                </div>
+                                                <p class="mt-1 text-xs text-slate-500">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}<span v-if="cycle.school_year"> · {{ cycle.school_year }}</span> · Due {{ cycle.due_label }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-4 sm:justify-end">
+                                            <div class="sm:text-right">
+                                                <span v-if="cycleAttentionCount(cycle)" class="inline-flex rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">{{ cycleAttentionCount(cycle) }} need attention</span>
+                                                <span v-else class="inline-flex rounded-md bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800">Up to date</span>
+                                                <p class="mt-1 text-xs text-slate-500">{{ cycleCompleteCount(cycle) }} of {{ cycle.recipient_count }} recipients complete</p>
+                                            </div>
+                                            <i :class="['fa-solid fa-chevron-down text-xs text-slate-400 transition', cycleIsOpen(cycle.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
+                                        </div>
+                                    </button>
+
+                                    <div v-if="cycleIsOpen(cycle.id)" class="border-t border-slate-200">
+                                        <dl class="grid bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
+                                            <div class="border-b border-slate-200 px-5 py-3 sm:border-r lg:border-b-0">
+                                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Requirements</dt>
+                                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.is_plan_check_in ? `${cycle.requirements.length} checklist item${cycle.requirements.length === 1 ? '' : 's'}` : cycle.requirement_label }}</dd>
+                                            </div>
+                                            <div class="border-b border-slate-200 px-5 py-3 lg:border-b-0 lg:border-r">
+                                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Received</dt>
+                                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.is_plan_check_in ? `${cycle.item_submitted_count} of ${cycle.item_expected_count} files` : `${cycle.submitted_count} of ${cycle.recipient_count} records` }}</dd>
+                                            </div>
+                                            <div class="border-b border-slate-200 px-5 py-3 sm:border-b-0 sm:border-r">
+                                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Reviewed</dt>
+                                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.reviewed_count }} of {{ cycleRequiredReviewCount(cycle) }}</dd>
+                                            </div>
+                                            <div class="px-5 py-3">
+                                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Deadline</dt>
+                                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.due_label }}</dd>
+                                            </div>
+                                        </dl>
+
+                                        <details v-if="cycle.instructions" class="border-t border-slate-200 px-5 py-3 sm:px-6">
+                                            <summary class="cursor-pointer text-xs font-bold text-slate-700">View recipient instructions</summary>
+                                            <p class="mt-2 text-sm leading-6 text-slate-600">{{ cycle.instructions }}</p>
+                                        </details>
+
+                                        <div class="portal-table-scroll border-t border-slate-200">
+                                            <table class="portal-data-table min-w-[820px]">
+                                                <colgroup>
+                                                    <col class="w-[32%]">
+                                                    <col class="w-[22%]">
+                                                    <col class="w-[26%]">
+                                                    <col class="w-[20%]">
+                                                </colgroup>
+                                                <thead class="bg-white text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                                    <tr>
+                                                        <th class="px-5 py-3">Recipient</th>
+                                                        <th class="px-4 py-3">Submission</th>
+                                                        <th class="px-4 py-3">Current status</th>
+                                                        <th class="px-5 py-3 text-right">Action</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-slate-200 bg-white">
+                                                    <tr v-if="!cycle.recipients.length">
+                                                        <td colspan="4" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this check-in.</td>
+                                                    </tr>
+                                                    <tr v-for="recipient in orderedCycleRecipients(cycle)" :key="recipient.application_id">
+                                                        <td class="align-middle px-5 py-3.5">
+                                                            <div class="flex items-center gap-3">
+                                                                <img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
+                                                                <span v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold text-white">{{ personInitials(recipient) }}</span>
+                                                                <div class="min-w-0">
+                                                                    <p class="font-bold leading-5 text-slate-950">{{ recipient.name }}</p>
+                                                                    <p class="mt-0.5 truncate text-xs text-slate-500">{{ recipient.email }}</p>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td class="align-middle px-4 py-3.5">
+                                                            <template v-if="cycle.is_plan_check_in">
+                                                                <p class="text-sm font-bold text-slate-950">{{ recipient.submitted_item_count }} of {{ recipient.required_upload_count }} files</p>
+                                                                <p class="mt-0.5 text-xs text-slate-500">{{ recipient.reviewed_item_count }} of {{ recipient.required_review_count }} reviewed</p>
+                                                            </template>
+                                                            <template v-else>
+                                                                <p class="text-sm font-bold text-slate-950">{{ recipient.submission?.grade_label || (recipient.submission ? 'Submitted' : 'Not submitted') }}</p>
+                                                                <p v-if="recipient.submission" class="mt-0.5 text-xs text-slate-500">{{ recipient.submission.grade_source === 'ocr' ? 'OCR extracted' : recipient.submission.grade_source === 'applicant_manual' ? 'Applicant entered' : 'Manual entry' }}</p>
+                                                            </template>
+                                                        </td>
+                                                        <td class="align-middle px-4 py-3.5">
+                                                            <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', recipientCheckInState(cycle, recipient).className]">{{ recipientCheckInState(cycle, recipient).label }}</span>
+                                                            <p class="mt-1 text-xs text-slate-500">{{ recipientCheckInState(cycle, recipient).detail }}</p>
+                                                        </td>
+                                                        <td class="align-middle px-5 py-3.5 text-right">
+                                                            <button v-if="cycle.is_plan_check_in" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openChecklist(cycle, recipient)">Open checklist</button>
+                                                            <button v-else-if="recipient.submission" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReview(cycle, recipient)">{{ recipient.submission.review_status === 'pending' ? 'Review record' : 'View review' }}</button>
+                                                            <a v-else :href="recipient.application_url" class="inline-flex rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">View recipient</a>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </article>
+                            </div>
                         </section>
                     </template>
 
@@ -827,24 +1287,26 @@ onMounted(loadMonitoring);
                                     </div>
                                     <p v-if="release.instructions" class="border-t border-slate-200 px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Instructions:</strong> {{ release.instructions }}</p>
                                     <div class="portal-table-scroll border-t border-slate-200">
-                                        <table class="portal-data-table min-w-[820px]">
+                                        <table class="portal-data-table min-w-[1040px]">
                                             <colgroup>
-                                                <col class="w-[28%]">
-                                                <col class="w-[23%]">
-                                                <col class="w-[29%]">
-                                                <col class="w-[20%]">
+                                                <col class="w-[24%]">
+                                                <col class="w-[16%]">
+                                                <col class="w-[22%]">
+                                                <col class="w-[21%]">
+                                                <col class="w-[17%]">
                                             </colgroup>
                                             <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
                                                 <tr>
                                                     <th class="px-5 py-3">Recipient</th>
                                                     <th class="px-4 py-3">Release status</th>
                                                     <th class="px-4 py-3">Verification</th>
+                                                    <th class="px-4 py-3">Recipient response</th>
                                                     <th class="px-5 py-3 text-right">Action</th>
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-slate-200 bg-white">
                                                 <tr v-if="!release.records.length">
-                                                    <td colspan="4" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this benefit release.</td>
+                                                    <td colspan="5" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this benefit release.</td>
                                                 </tr>
                                                 <tr v-for="record in release.records" :key="record.id">
                                                     <td class="align-top px-5 py-3.5">
@@ -871,9 +1333,16 @@ onMounted(loadMonitoring);
                                                         <p v-else-if="record.notes" class="mt-0.5 text-xs text-slate-500">Release documented by provider note</p>
                                                         <p v-else class="mt-0.5 text-xs text-slate-400">No receipt evidence recorded</p>
                                                     </td>
+                                                    <td class="align-top px-4 py-3.5">
+                                                        <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', receiptResponseStatusClass(record.receipt_response)]">{{ record.receipt_response?.status_label || (record.status === 'released' ? 'Waiting for recipient' : 'Not available') }}</span>
+                                                        <p v-if="record.receipt_response?.issue_type_label" class="mt-1 text-xs font-bold text-rose-700">{{ record.receipt_response.issue_type_label }}</p>
+                                                        <p v-else-if="record.receipt_response?.received_label" class="mt-1 text-xs text-slate-500">Received {{ record.receipt_response.received_label }}</p>
+                                                        <button v-if="record.receipt_response?.evidence" type="button" class="mt-1 text-xs font-bold text-slate-700 underline decoration-slate-300 underline-offset-4" @click="previewFile = record.receipt_response.evidence">View recipient evidence</button>
+                                                    </td>
                                                     <td class="align-top px-5 py-3.5">
                                                         <div class="flex min-h-9 items-start justify-end gap-2">
-                                                            <button type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReleaseResult(release, record)">Record result</button>
+                                                            <button v-if="record.receipt_response?.status === 'open'" type="button" class="rounded-md bg-rose-700 px-3 py-2 text-xs font-bold text-white hover:bg-rose-800" @click="openReceiptIssue(release, record)">Resolve issue</button>
+                                                            <button v-else-if="record.status !== 'released'" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReleaseResult(release, record)">Record result</button>
                                                             <a :href="record.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a>
                                                         </div>
                                                     </td>
@@ -939,10 +1408,12 @@ onMounted(loadMonitoring);
                                                 <p class="mt-0.5 line-clamp-2 text-xs leading-5 text-slate-500">
                                                     {{ recipient.latest_decision ? `${recipient.latest_decision.decision_label} effective ${recipient.latest_decision.effective_label}${recipient.latest_decision.decided_by ? ` by ${recipient.latest_decision.decided_by}` : ''}` : recipient.renewal_eligibility_reason }}
                                                 </p>
+                                                <span v-if="recipient.latest_decision" :class="['mt-1.5 inline-flex rounded px-2 py-1 text-[10px] font-bold uppercase', recipient.latest_decision.response_status === 'open' ? 'bg-rose-100 text-rose-700' : recipient.latest_decision.response_status === 'resolved' || recipient.latest_decision.response_status === 'acknowledged' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">{{ recipient.latest_decision.response_status_label }}</span>
                                             </td>
                                             <td class="align-top px-5 py-3.5">
                                                 <div class="flex min-h-9 flex-wrap items-start justify-end gap-2">
                                                     <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openRecipientRecord(recipient)">Recipient record</button>
+                                                    <button v-if="recipient.latest_decision?.response_status === 'open'" type="button" class="rounded-md bg-rose-700 px-3 py-2 text-xs font-bold text-white hover:bg-rose-800" @click="openSupportResponse(recipient)">Review request</button>
                                                     <button v-if="!recipient.is_closed" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openSupportDecision(recipient)">Record outcome</button>
                                                 </div>
                                             </td>
@@ -1036,23 +1507,24 @@ onMounted(loadMonitoring);
             <div v-if="showCycleForm" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/60 p-4" @click.self="closeComposer" @keydown.esc="closeComposer">
                 <section class="monitoring-modal flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="monitoring-cycle-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
-                        <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Academic progress</p><h2 id="monitoring-cycle-title" class="mt-1 text-xl font-bold text-slate-950">New monitoring period</h2><p class="mt-1 text-sm text-slate-600">One grade record request will be sent to every selected recipient.</p></div>
+                        <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recipient monitoring</p><h2 id="monitoring-cycle-title" class="mt-1 text-xl font-bold text-slate-950">{{ hasActiveMonitoringPlan ? 'New check-in' : 'New academic period' }}</h2><p class="mt-1 text-sm text-slate-600">{{ hasActiveMonitoringPlan ? 'The active plan checklist will be sent to every selected recipient.' : 'One grade record request will be sent to every selected recipient.' }}</p></div>
                         <button type="button" class="grid h-9 w-9 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close" @click="closeComposer"><i class="fa-solid fa-xmark"></i></button>
                     </header>
                     <form class="min-h-0 overflow-y-auto" @submit.prevent="publishCycle">
                         <div class="space-y-4 px-5 py-5 sm:px-6">
                             <p v-if="errorMessage" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
-                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Period title</span><input ref="titleInput" v-model="form.title" required maxlength="120" placeholder="Example: First semester grade update" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-700 focus:ring-3 focus:ring-slate-100"></label>
-                            <div class="grid gap-4 sm:grid-cols-2">
-                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Period type</span><select v-model="form.period_type" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option value="semester">Semester</option><option value="quarter">Quarter</option><option value="monthly">Monthly</option><option value="custom">Custom period</option></select></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Check-in title</span><input ref="titleInput" v-model="form.title" required maxlength="120" placeholder="Example: First semester check-in" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-700 focus:ring-3 focus:ring-slate-100"></label>
+                            <div v-if="hasActiveMonitoringPlan" class="rounded-md border border-amber-200 bg-amber-50 p-4"><p class="text-sm font-bold text-slate-950">{{ monitoringPlan.requirement_count }} requirement{{ monitoringPlan.requirement_count === 1 ? '' : 's' }} from the active plan</p><p class="mt-1 text-xs leading-5 text-slate-600">{{ monitoringPlan.requirements.map((item) => item.title).join(' | ') }}</p></div>
+                            <div :class="['grid gap-4', hasActiveMonitoringPlan ? '' : 'sm:grid-cols-2']">
+                                <label v-if="!hasActiveMonitoringPlan" class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Period type</span><select v-model="form.period_type" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option value="semester">Semester</option><option value="quarter">Quarter</option><option value="monthly">Monthly</option><option value="custom">Custom period</option></select></label>
                                 <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">School year</span><input v-model="form.school_year" maxlength="30" placeholder="2026-2027" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
                             </div>
-                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Academic period label</span><input v-model="form.academic_period" maxlength="80" placeholder="Example: First semester or Quarter 2" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Period label</span><input v-model="form.academic_period" maxlength="80" placeholder="Example: First semester or Quarter 2" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
                             <div class="grid gap-4 sm:grid-cols-2"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Opens on</span><input v-model="form.opens_at" type="date" :min="today" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Due date</span><input v-model="form.due_at" type="date" :min="form.opens_at || today" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label></div>
-                            <div class="grid gap-4 sm:grid-cols-2"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Grading scale</span><select v-model="form.grading_scale" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm" @change="form.minimum_grade = form.grading_scale === 'grade_point' ? '2.00' : '85'"><option value="percentage">Percentage / general average</option><option value="grade_point">GWA / GPA grade point</option></select></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">{{ form.grading_scale === 'grade_point' ? 'Maximum grade point' : 'Minimum average' }}</span><input v-model="form.minimum_grade" type="number" step="0.01" required :min="form.grading_scale === 'grade_point' ? 1 : 0" :max="form.grading_scale === 'grade_point' ? 5 : 100" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label></div>
+                            <div v-if="!hasActiveMonitoringPlan" class="grid gap-4 sm:grid-cols-2"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Grading scale</span><select v-model="form.grading_scale" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm" @change="form.minimum_grade = form.grading_scale === 'grade_point' ? '2.00' : '85'"><option value="percentage">Percentage / general average</option><option value="grade_point">GWA / GPA grade point</option></select></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">{{ form.grading_scale === 'grade_point' ? 'Maximum grade point' : 'Minimum average' }}</span><input v-model="form.minimum_grade" type="number" step="0.01" required :min="form.grading_scale === 'grade_point' ? 1 : 0" :max="form.grading_scale === 'grade_point' ? 5 : 100" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label></div>
                             <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Recipient instructions</span><textarea v-model="form.instructions" rows="4" maxlength="2000" placeholder="State which report card or grade record to upload and any reminder about bringing the original." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
                         </div>
-                        <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6"><button type="button" :disabled="isSaving" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeComposer">Cancel</button><button type="submit" :disabled="isSaving" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">{{ isSaving ? 'Publishing...' : 'Publish period' }}</button></footer>
+                        <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end sm:px-6"><button type="button" :disabled="isSaving" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeComposer">Cancel</button><button type="submit" :disabled="isSaving" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">{{ isSaving ? 'Publishing...' : (hasActiveMonitoringPlan ? 'Publish check-in' : 'Publish period') }}</button></footer>
                     </form>
                 </section>
             </div>
@@ -1121,6 +1593,26 @@ onMounted(loadMonitoring);
         </Teleport>
 
         <Teleport to="body">
+            <div v-if="receiptIssueTarget" class="fixed inset-0 z-[2100] flex items-center justify-center bg-slate-950/65 p-4" @click.self="closeReceiptIssue" @keydown.esc="closeReceiptIssue">
+                <section class="monitoring-modal flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="receipt-issue-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                        <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-rose-700">Recipient receipt issue</p><h2 id="receipt-issue-title" class="mt-1 text-xl font-bold">Resolve reported problem</h2><p class="mt-1 text-sm text-slate-500">{{ receiptIssueTarget.record.name }} · {{ receiptIssueTarget.release.title }}</p></div>
+                        <button type="button" :disabled="isResolvingReceiptIssue" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500" aria-label="Close" @click="closeReceiptIssue"><i class="fa-solid fa-xmark"></i></button>
+                    </header>
+                    <form class="min-h-0 overflow-y-auto" @submit.prevent="submitReceiptIssueResolution">
+                        <div class="space-y-4 p-5">
+                            <div class="rounded-md border border-rose-200 bg-rose-50 p-4"><div class="flex flex-wrap items-center justify-between gap-2"><p class="text-sm font-bold text-rose-900">{{ receiptIssueTarget.response.issue_type_label }}</p><span class="text-xs text-rose-700">{{ receiptIssueTarget.response.responded_at }}</span></div><p class="mt-2 text-sm leading-6 text-rose-900">{{ receiptIssueTarget.response.issue_details }}</p><button v-if="receiptIssueTarget.response.evidence" type="button" class="mt-3 rounded-md border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800" @click="previewFile = receiptIssueTarget.response.evidence">View recipient evidence</button></div>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Resolution</span><select v-model="receiptResolutionForm.resolution_outcome" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option value="corrected_release">Release corrected</option><option value="replacement_scheduled">Replacement scheduled</option><option value="delivery_confirmed">Delivery confirmed</option><option value="no_change">No change required</option></select></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Resolution note</span><textarea v-model="receiptResolutionForm.resolution_notes" required minlength="5" maxlength="1500" rows="4" placeholder="State what was checked and how the issue was resolved." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Resolution proof <span class="font-normal text-slate-400">(optional)</span></span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-md border border-slate-300 bg-white p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white" @change="receiptResolutionForm.resolution_proof = $event.target.files?.[0] || null"><span class="mt-1.5 block text-xs text-slate-500">This is stored separately from the original release proof.</span></label>
+                        </div>
+                        <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button type="button" :disabled="isResolvingReceiptIssue" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeReceiptIssue">Cancel</button><button type="submit" :disabled="isResolvingReceiptIssue" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isResolvingReceiptIssue ? 'Saving...' : 'Mark resolved' }}</button></footer>
+                    </form>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
             <div v-if="supportTarget" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/65 p-4" @click.self="closeSupportDecision" @keydown.esc="closeSupportDecision">
                 <section class="monitoring-modal flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="support-decision-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
@@ -1138,17 +1630,23 @@ onMounted(loadMonitoring);
                             </div>
 
                             <fieldset><legend class="text-xs font-bold text-slate-700">Outcome</legend><div class="mt-2 grid gap-2 sm:grid-cols-3">
-                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'renewed' ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="renewed" class="sr-only"><span class="block text-sm font-bold text-slate-950">Renew support</span><span class="mt-1 block text-xs leading-5 text-slate-500">Continue for another period.</span></label>
-                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'completed' ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="completed" class="sr-only"><span class="block text-sm font-bold text-slate-950">Complete program</span><span class="mt-1 block text-xs leading-5 text-slate-500">Close after normal completion.</span></label>
-                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'terminated' ? 'border-rose-500 bg-rose-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="terminated" class="sr-only"><span class="block text-sm font-bold text-slate-950">End early</span><span class="mt-1 block text-xs leading-5 text-slate-500">Stop future support with reason.</span></label>
+                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'renewed' ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="renewed" class="sr-only" @change="changeSupportDecision"><span class="block text-sm font-bold text-slate-950">Renew support</span><span class="mt-1 block text-xs leading-5 text-slate-500">Continue for another period.</span></label>
+                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'completed' ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="completed" class="sr-only" @change="changeSupportDecision"><span class="block text-sm font-bold text-slate-950">Complete program</span><span class="mt-1 block text-xs leading-5 text-slate-500">Close after normal completion.</span></label>
+                                <label :class="['cursor-pointer rounded-md border p-3', supportForm.decision === 'terminated' ? 'border-rose-500 bg-rose-50' : 'border-slate-200']"><input v-model="supportForm.decision" type="radio" value="terminated" class="sr-only" @change="changeSupportDecision"><span class="block text-sm font-bold text-slate-950">End early</span><span class="mt-1 block text-xs leading-5 text-slate-500">Stop future support with reason.</span></label>
                             </div></fieldset>
 
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Decision category</span><select v-model="supportForm.reason_category" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option v-for="option in supportReasonOptions(supportForm.decision)" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
                             <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Effective date</span><input v-model="supportForm.effective_on" type="date" :max="today" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
                             <template v-if="supportForm.decision === 'renewed'">
                                 <div class="grid gap-4 sm:grid-cols-2"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">New support end date</span><input v-model="supportForm.support_ends_on" type="date" :min="supportForm.effective_on" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Next review date</span><input v-model="supportForm.next_review_on" type="date" :min="supportForm.effective_on" :max="supportForm.support_ends_on || undefined" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label></div>
                                 <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Next-period terms</span><textarea v-model="supportForm.next_period_terms" required minlength="10" maxlength="2000" rows="4" placeholder="State the continuing requirement, review period, and support covered by this renewal." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
                             </template>
-                            <label v-else class="block"><span class="mb-2 block text-xs font-bold text-slate-700">{{ supportForm.decision === 'completed' ? 'Completion summary' : 'Reason for ending support' }}</span><textarea v-model="supportForm.reason" required minlength="10" maxlength="2000" rows="4" :placeholder="supportForm.decision === 'completed' ? 'Summarize how the recipient completed the support period.' : 'Explain the policy or requirement involved and any discussion with the recipient.'" class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            <template v-else>
+                                <label v-if="supportForm.decision === 'terminated'" class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Notice given on</span><input v-model="supportForm.notice_given_on" type="date" :max="supportForm.effective_on || today" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
+                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">{{ supportForm.decision === 'completed' ? 'Completion summary' : 'Reason for ending support' }}</span><textarea v-model="supportForm.reason" required minlength="10" maxlength="2000" rows="4" :placeholder="supportForm.decision === 'completed' ? 'Summarize how the recipient completed the support period.' : 'Explain the requirement, records reviewed, and prior notice.'" class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            </template>
+
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Decision document <span class="font-normal text-slate-400">(optional)</span></span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-md border border-slate-300 bg-white p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white" @change="supportForm.decision_document = $event.target.files?.[0] || null"></label>
 
                             <label class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"><input v-model="supportForm.confirmed" type="checkbox" class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"><span>I reviewed the recipient's monitoring, release records, and applicable program terms before recording this outcome.</span></label>
                         </div>
@@ -1159,34 +1657,181 @@ onMounted(loadMonitoring);
         </Teleport>
 
         <Teleport to="body">
+            <div v-if="supportResponseTarget" class="fixed inset-0 z-[2100] flex items-center justify-center bg-slate-950/65 p-4" @click.self="closeSupportResponse" @keydown.esc="closeSupportResponse">
+                <section class="monitoring-modal flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="support-response-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                        <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-rose-700">Recipient request</p><h2 id="support-response-title" class="mt-1 text-xl font-bold">Review support outcome request</h2><p class="mt-1 text-sm text-slate-500">{{ supportResponseTarget.recipient.name }} · {{ supportResponseTarget.decision.decision_label }}</p></div>
+                        <button type="button" :disabled="isResolvingSupportResponse" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500" aria-label="Close" @click="closeSupportResponse"><i class="fa-solid fa-xmark"></i></button>
+                    </header>
+                    <form class="min-h-0 overflow-y-auto" @submit.prevent="submitSupportResponseResolution">
+                        <div class="space-y-4 p-5">
+                            <p v-if="supportResolutionError" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-semibold text-rose-700">{{ supportResolutionError }}</p>
+                            <div class="rounded-md border border-rose-200 bg-rose-50 p-4"><div class="flex flex-wrap items-center justify-between gap-2"><p class="text-sm font-bold text-rose-900">{{ supportResponseTarget.decision.applicant_response_label }}</p><span class="text-xs text-rose-700">{{ supportResponseTarget.decision.applicant_responded_at }}</span></div><p class="mt-2 text-sm leading-6 text-rose-900">{{ supportResponseTarget.decision.applicant_response_message }}</p><button v-if="supportResponseTarget.decision.applicant_response_file" type="button" class="mt-3 rounded-md border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800" @click="previewFile = supportResponseTarget.decision.applicant_response_file">View attachment</button></div>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Resolution</span><select v-model="supportResolutionForm.resolution_outcome" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option value="clarified">Clarification provided</option><option value="decision_upheld">Decision upheld</option><option v-if="supportResponseTarget.decision.decision === 'terminated'" value="support_reinstated">Reinstate support</option></select></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Resolution note</span><textarea v-model="supportResolutionForm.resolution_notes" required minlength="5" maxlength="1500" rows="4" placeholder="Explain the review and final response." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            <template v-if="supportResolutionForm.resolution_outcome === 'support_reinstated'">
+                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">New support end date</span><input v-model="supportResolutionForm.support_ends_on" type="date" :min="today" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
+                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Next review date <span class="font-normal text-slate-400">(optional)</span></span><input v-model="supportResolutionForm.next_review_on" type="date" :min="today" :max="supportResolutionForm.support_ends_on || undefined" class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
+                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Reinstated terms</span><textarea v-model="supportResolutionForm.next_period_terms" required minlength="10" maxlength="2000" rows="3" placeholder="State the requirements and support period after reinstatement." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            </template>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Resolution proof <span class="font-normal text-slate-400">(optional)</span></span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-md border border-slate-300 bg-white p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white" @change="supportResolutionForm.resolution_proof = $event.target.files?.[0] || null"></label>
+                        </div>
+                        <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button type="button" :disabled="isResolvingSupportResponse" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeSupportResponse">Cancel</button><button type="submit" :disabled="isResolvingSupportResponse" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isResolvingSupportResponse ? 'Saving...' : 'Resolve request' }}</button></footer>
+                    </form>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div v-if="checklistTarget" class="fixed inset-0 z-[1900] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeChecklist" @keydown.esc="closeChecklist">
+                <section class="monitoring-modal flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="monitoring-checklist-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recipient checklist</p>
+                                <h2 id="monitoring-checklist-title" class="mt-1 text-xl font-bold text-slate-950">{{ checklistTarget.recipient.name }}</h2>
+                                <p class="mt-1 text-sm text-slate-500">{{ checklistTarget.cycle.title }}</p>
+                            </div>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close checklist" @click="closeChecklist"><i class="fa-solid fa-xmark"></i></button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-5">
+                        <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-4 py-3">
+                            <p class="text-sm font-bold text-slate-950">{{ checklistTarget.recipient.reviewed_item_count }} of {{ checklistTarget.recipient.required_review_count }} required items reviewed</p>
+                            <span class="text-xs text-slate-500">Due {{ checklistTarget.cycle.due_label }}</span>
+                        </div>
+
+                        <div class="overflow-hidden rounded-md border border-slate-200 bg-white">
+                            <section v-for="requirement in checklistTarget.recipient.requirements" :key="requirement.id" class="border-b border-slate-200 p-4 last:border-b-0">
+                                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="flex min-w-0 items-start gap-3">
+                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i :class="requirement.icon" aria-hidden="true"></i></span>
+                                        <div class="min-w-0">
+                                            <div class="flex flex-wrap items-center gap-2">
+                                                <h3 class="font-bold text-slate-950">{{ requirement.title }}</h3>
+                                                <span v-if="!requirement.required" class="rounded bg-slate-100 px-2 py-0.5 text-[9px] font-bold uppercase text-slate-500">Optional</span>
+                                            </div>
+                                            <p class="mt-1 text-xs text-slate-500">{{ requirement.requires_file ? (requirement.submission ? 'Record received' : 'Waiting for recipient upload') : 'Recorded by provider' }}</p>
+                                            <p v-if="requirement.effective_due_label && requirement.effective_due_label !== checklistTarget.cycle.due_label" class="mt-1 text-xs font-bold text-emerald-700">Extended to {{ requirement.effective_due_label }}</p>
+                                            <p v-if="requirement.submission?.grade_label" class="mt-1 text-xs font-bold text-slate-700">Detected result: {{ requirement.submission.grade_label }}</p>
+                                            <p v-if="requirement.submission?.review_notes" class="mt-1 text-xs leading-5 text-slate-600">Latest note: {{ requirement.submission.review_notes }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                                        <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', reviewStatusClass(requirement.submission?.review_status)]">{{ requirement.submission?.review_status_label || (requirement.requires_file ? 'Not submitted' : 'Not recorded') }}</span>
+                                        <button v-if="requirement.submission?.has_file" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="previewFile = requirement.submission">View file</button>
+                                        <button v-if="requirement.submission || !requirement.requires_file" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReview(checklistTarget.cycle, checklistTarget.recipient, requirement)">{{ requirement.submission?.reviewed_at ? 'Update result' : (requirement.requires_file ? 'Review item' : 'Record result') }}</button>
+                                        <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openIntervention(checklistTarget.cycle, checklistTarget.recipient, requirement)">Add follow-up</button>
+                                    </div>
+                                </div>
+
+                                <div v-if="requirement.adjustment_request" class="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <div><p class="text-sm font-bold text-slate-950">{{ requirement.adjustment_request.request_type_label }}</p><p class="mt-1 text-xs text-slate-600">{{ requirement.adjustment_request.reason_label }} · Submitted {{ requirement.adjustment_request.submitted_at }}</p></div>
+                                        <div class="flex items-center gap-2"><span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', adjustmentStatusClass(requirement.adjustment_request.status)]">{{ requirement.adjustment_request.status_label }}</span><button v-if="requirement.adjustment_request.status === 'pending'" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openAdjustmentReview(checklistTarget.cycle, checklistTarget.recipient, requirement)">Review request</button></div>
+                                    </div>
+                                    <p v-if="requirement.adjustment_request.decision_notes" class="mt-2 text-xs leading-5 text-slate-600">Decision note: {{ requirement.adjustment_request.decision_notes }}</p>
+                                </div>
+
+                                <div v-if="requirement.interventions?.length" class="mt-3 rounded-md border border-sky-200 bg-sky-50 p-3">
+                                    <div class="flex flex-wrap items-center justify-between gap-2">
+                                        <div><p class="text-sm font-bold text-slate-950">{{ requirement.interventions[0].type_label }}</p><p class="mt-1 text-xs leading-5 text-slate-600">{{ requirement.interventions[0].summary }}</p></div>
+                                        <div class="flex items-center gap-2"><span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', requirement.interventions[0].status === 'completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-sky-100 text-sky-800']">{{ requirement.interventions[0].status_label }}</span><button v-if="requirement.interventions[0].status === 'open'" type="button" class="rounded-md border border-sky-300 bg-white px-3 py-2 text-xs font-bold text-sky-800" @click="openIntervention(checklistTarget.cycle, checklistTarget.recipient, requirement, requirement.interventions[0])">Complete</button></div>
+                                    </div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+
+                    <footer class="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+                        <a :href="checklistTarget.recipient.application_url" class="text-xs font-bold text-slate-600 hover:text-slate-950">Open recipient record</a>
+                        <button type="button" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white" @click="closeChecklist">Close</button>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div v-if="adjustmentReviewTarget" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeAdjustmentReview" @keydown.esc="closeAdjustmentReview">
+                <form class="monitoring-modal flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" @submit.prevent="submitAdjustmentDecision">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
+                        <div class="flex min-w-0 items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Adjustment request</p><h2 class="mt-1 text-xl font-bold">{{ adjustmentReviewTarget.adjustment.request_type_label }}</h2><p class="mt-1 text-sm text-slate-500">{{ adjustmentReviewTarget.recipient.name }} · {{ adjustmentReviewTarget.requirement.title }}</p></div></div>
+                        <button type="button" :disabled="isDecidingAdjustment" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500" aria-label="Close request" @click="closeAdjustmentReview"><i class="fa-solid fa-xmark"></i></button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto bg-slate-50 p-4 sm:p-5">
+                        <div class="rounded-md border border-slate-200 bg-white p-4"><div class="flex flex-wrap items-center justify-between gap-2"><p class="text-sm font-bold">{{ adjustmentReviewTarget.adjustment.reason_label }}</p><span class="text-xs text-slate-500">{{ adjustmentReviewTarget.adjustment.submitted_at }}</span></div><p class="mt-2 text-sm leading-6 text-slate-600">{{ adjustmentReviewTarget.adjustment.explanation }}</p><p v-if="adjustmentReviewTarget.adjustment.requested_due_label" class="mt-2 text-xs font-bold text-slate-700">Requested deadline: {{ adjustmentReviewTarget.adjustment.requested_due_label }}</p><button v-if="adjustmentReviewTarget.adjustment.attachment" type="button" class="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="previewFile = adjustmentReviewTarget.adjustment.attachment">View supporting record</button></div>
+
+                        <fieldset><legend class="text-xs font-bold text-slate-700">Decision</legend><div class="mt-2 grid gap-2 sm:grid-cols-2"><label :class="['cursor-pointer rounded-md border bg-white p-3', adjustmentDecisionForm.decision === 'approved' ? 'border-emerald-600 ring-1 ring-emerald-600' : 'border-slate-200']"><input v-model="adjustmentDecisionForm.decision" type="radio" value="approved" class="sr-only"><span class="text-sm font-bold">Approve</span></label><label :class="['cursor-pointer rounded-md border bg-white p-3', adjustmentDecisionForm.decision === 'declined' ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200']"><input v-model="adjustmentDecisionForm.decision" type="radio" value="declined" class="sr-only"><span class="text-sm font-bold">Decline</span></label></div></fieldset>
+                        <label v-if="adjustmentReviewTarget.adjustment.request_type === 'extension' && adjustmentDecisionForm.decision === 'approved'" class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Approved deadline</span><input v-model="adjustmentDecisionForm.approved_due_at" type="date" required :min="dateOffset(adjustmentReviewTarget.cycle.due_at, 1)" :max="dateOffset(adjustmentReviewTarget.cycle.due_at, 60)" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm"></label>
+                        <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Decision note</span><textarea v-model="adjustmentDecisionForm.decision_notes" :required="adjustmentDecisionForm.decision === 'declined'" minlength="5" maxlength="1500" rows="4" placeholder="Explain the arrangement or why the request cannot be approved." class="w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6"></textarea></label>
+                    </div>
+
+                    <footer class="flex justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5"><button type="button" :disabled="isDecidingAdjustment" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeAdjustmentReview">Cancel</button><button type="submit" :disabled="isDecidingAdjustment" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">{{ isDecidingAdjustment ? 'Saving...' : 'Record decision' }}</button></footer>
+                </form>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div v-if="interventionTarget" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeIntervention" @keydown.esc="closeIntervention">
+                <form class="monitoring-modal flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" @submit.prevent="submitIntervention">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5"><div class="flex min-w-0 items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Provider follow-up</p><h2 class="mt-1 text-xl font-bold">{{ interventionTarget.mode === 'complete' ? 'Complete follow-up' : 'Add follow-up' }}</h2><p class="mt-1 text-sm text-slate-500">{{ interventionTarget.recipient.name }} · {{ interventionTarget.requirement.title }}</p></div></div><button type="button" :disabled="isSavingIntervention" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500" aria-label="Close follow-up" @click="closeIntervention"><i class="fa-solid fa-xmark"></i></button></header>
+
+                    <div class="min-h-0 flex-1 space-y-4 overflow-y-auto bg-slate-50 p-4 sm:p-5">
+                        <template v-if="interventionTarget.mode === 'create'">
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Follow-up type</span><select v-model="interventionForm.type" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm"><option value="reminder">Reminder</option><option value="consultation">Consultation</option><option value="support_plan">Support plan</option><option value="warning">Formal warning</option></select></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Summary</span><textarea v-model="interventionForm.summary" required minlength="5" maxlength="1000" rows="3" placeholder="State what was discussed or offered." class="w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Recipient action <span class="font-normal text-slate-400">(optional)</span></span><textarea v-model="interventionForm.action_required" maxlength="1000" rows="3" placeholder="State one clear next action, if needed." class="w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6"></textarea></label>
+                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Follow-up date <span class="font-normal text-slate-400">(optional)</span></span><input v-model="interventionForm.follow_up_on" type="date" :min="today" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm"></label>
+                        </template>
+                        <template v-else><div class="rounded-md border border-slate-200 bg-white p-4"><p class="text-sm font-bold">{{ interventionTarget.intervention.type_label }}</p><p class="mt-2 text-sm leading-6 text-slate-600">{{ interventionTarget.intervention.summary }}</p><p v-if="interventionTarget.intervention.action_required" class="mt-2 text-xs font-bold text-slate-700">Recipient action: {{ interventionTarget.intervention.action_required }}</p></div><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Completion note <span class="font-normal text-slate-400">(optional)</span></span><textarea v-model="interventionForm.completion_notes" maxlength="1000" rows="4" placeholder="Record what was completed or discussed." class="w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6"></textarea></label></template>
+                    </div>
+
+                    <footer class="flex justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5"><button type="button" :disabled="isSavingIntervention" class="rounded-md border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeIntervention">Cancel</button><button type="submit" :disabled="isSavingIntervention" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">{{ isSavingIntervention ? 'Saving...' : (interventionTarget.mode === 'complete' ? 'Complete follow-up' : 'Share follow-up') }}</button></footer>
+                </form>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
             <div v-if="reviewTarget" class="fixed inset-0 z-[2000] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeReview" @keydown.esc="closeReview">
                 <section class="monitoring-modal flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="monitoring-review-title">
                     <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
                         <div class="flex min-w-0 items-start gap-3">
                             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span>
-                            <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Compliance review</p><h2 id="monitoring-review-title" class="mt-1 text-xl font-bold text-slate-950">{{ reviewTarget.recipient.name }}</h2><p class="mt-1 text-sm text-slate-500">{{ reviewTarget.cycle.title }}</p></div>
+                            <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Requirement review</p><h2 id="monitoring-review-title" class="mt-1 text-xl font-bold text-slate-950">{{ reviewRequirement?.title || reviewTarget.cycle.title }}</h2><p class="mt-1 text-sm text-slate-500">{{ reviewTarget.recipient.name }}</p></div>
                         </div>
                         <button type="button" :disabled="isReviewing" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-50" aria-label="Close review" @click="closeReview"><i class="fa-solid fa-xmark"></i></button>
                     </header>
 
                     <div class="min-h-0 flex-1 overflow-y-auto bg-slate-50 p-4 sm:p-5">
-                        <div class="grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-3">
-                            <div class="bg-white p-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Submitted result</p><p class="mt-1 text-base font-bold text-slate-950">{{ reviewTarget.recipient.submission.grade_label || 'No result extracted' }}</p><p class="mt-1 text-xs text-slate-500">{{ reviewTarget.recipient.submission.grade_source === 'ocr' ? 'Extracted by OCR.space' : reviewTarget.recipient.submission.grade_source === 'applicant_manual' ? 'Entered by applicant' : 'Needs record review' }}</p></div>
-                            <div class="bg-white p-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Required result</p><p class="mt-1 text-base font-bold text-slate-950">{{ reviewTarget.cycle.requirement_label }}</p><p class="mt-1 text-xs text-slate-500">Published for this period</p></div>
-                            <div class="bg-white p-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">System comparison</p><span :class="['mt-1 inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', comparisonClass(reviewTarget.recipient.submission.comparison?.status)]">{{ comparisonLabel(reviewTarget.recipient.submission) }}</span><p class="mt-1 text-xs text-slate-500">Guide only; verify the record.</p></div>
+                        <div v-if="reviewRequirement?.description || reviewRequirement?.evidence_description" class="rounded-md border border-slate-200 bg-white p-3">
+                            <p class="text-sm leading-6 text-slate-600">{{ reviewRequirement.evidence_description || reviewRequirement.description }}</p>
                         </div>
 
-                        <div class="mt-3 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ reviewTarget.recipient.submission.original_name }}</p><p class="mt-1 text-xs text-slate-500">Submitted {{ reviewTarget.recipient.submission.submitted_at }}</p></div>
-                            <button type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="previewFile = reviewTarget.recipient.submission">View grade record</button>
+                        <div v-if="reviewSubmission?.grade_label" class="mt-3 rounded-md border border-slate-200 bg-white p-3">
+                            <div class="flex flex-wrap items-center justify-between gap-3">
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Submitted result</p><p class="mt-1 text-base font-bold text-slate-950">{{ reviewSubmission.grade_label }}</p></div>
+                                <div class="text-right"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">System comparison</p><span :class="['mt-1 inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', comparisonClass(reviewSubmission.comparison?.status)]">{{ comparisonLabel(reviewSubmission) }}</span></div>
+                            </div>
+                        </div>
+
+                        <div v-if="reviewSubmission?.has_file" class="mt-3 flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ reviewSubmission.original_name }}</p><p class="mt-1 text-xs text-slate-500">Submitted {{ reviewSubmission.submitted_at }}</p></div>
+                            <button type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="previewFile = reviewSubmission">View record</button>
+                        </div>
+                        <div v-else class="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                            <p class="text-sm font-bold text-slate-950">Provider-recorded item</p>
+                            <p class="mt-1 text-xs leading-5 text-slate-600">Confirm this using the provider's attendance or activity record.</p>
                         </div>
 
                         <label class="mt-4 block"><span class="text-xs font-bold uppercase tracking-[0.1em] text-slate-600">Review note</span><textarea v-model="reviewNotes" rows="4" maxlength="1500" placeholder="Optional when confirming the requirement; required for other decisions." class="mt-2 w-full resize-y rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6 outline-none focus:border-slate-700 focus:ring-3 focus:ring-slate-100"></textarea></label>
 
-                        <div v-if="reviewTarget.recipient.submission.reviews?.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
+                        <div v-if="reviewSubmission?.reviews?.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
                             <div class="border-b border-slate-200 px-3 py-2.5"><p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-600">Review history</p></div>
                             <div class="divide-y divide-slate-200">
-                                <div v-for="review in reviewTarget.recipient.submission.reviews" :key="review.id" class="px-3 py-3 text-sm">
+                                <div v-for="review in reviewSubmission.reviews" :key="review.id" class="px-3 py-3 text-sm">
                                     <div class="flex flex-wrap items-center justify-between gap-2"><span class="font-bold text-slate-950">{{ review.decision_label }}</span><span class="text-xs text-slate-500">{{ review.decided_at }}<span v-if="review.reviewed_by"> · {{ review.reviewed_by }}</span></span></div>
                                     <p v-if="review.notes" class="mt-1 leading-5 text-slate-600">{{ review.notes }}</p>
                                 </div>
@@ -1195,11 +1840,11 @@ onMounted(loadMonitoring);
                     </div>
 
                     <footer class="border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
-                        <p class="mb-3 text-xs leading-5 text-slate-500">OCR and the system comparison are guides. Choose the decision supported by the uploaded record and your program policy.</p>
-                        <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <p class="mb-3 text-xs leading-5 text-slate-500">Record the result supported by the submitted file or provider record.</p>
+                        <div class="flex flex-wrap justify-end gap-2">
                             <button type="button" :disabled="isReviewing" class="rounded-md bg-emerald-700 px-3 py-2.5 text-sm font-bold text-white hover:bg-emerald-800 disabled:opacity-60" @click="submitReview('met')">Requirement met</button>
                             <button type="button" :disabled="isReviewing" class="rounded-md border border-rose-200 bg-white px-3 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-60" @click="submitReview('not_met')">Not met</button>
-                            <button type="button" :disabled="isReviewing" class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60" @click="submitReview('needs_correction')">Request replacement</button>
+                            <button v-if="reviewRequirement?.requires_file !== false && reviewSubmission?.has_file" type="button" :disabled="isReviewing" class="rounded-md border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-bold text-amber-900 hover:bg-amber-100 disabled:opacity-60" @click="submitReview('needs_correction')">Request replacement</button>
                             <button type="button" :disabled="isReviewing" class="rounded-md border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm font-bold text-sky-800 hover:bg-sky-100 disabled:opacity-60" @click="submitReview('excused')">Approve exception</button>
                         </div>
                     </footer>

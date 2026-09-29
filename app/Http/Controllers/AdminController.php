@@ -7,7 +7,12 @@ use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
 use App\Models\ProviderVerificationDocument;
+use App\Models\RecipientBenefitReceiptResponse;
 use App\Models\RecipientBenefitReleaseRecord;
+use App\Models\RecipientMonitoringAdjustmentRequest;
+use App\Models\RecipientMonitoringOversightReview;
+use App\Models\RecipientMonitoringSubmission;
+use App\Models\RecipientSupportDecision;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -165,6 +170,22 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         return view('admin-reviews');
+    }
+
+    public function monitoringReview(
+        Request $request,
+        ScholarshipApplication $application,
+    ): View|RedirectResponse {
+        if (! $request->user()) {
+            return redirect()->route('login');
+        }
+
+        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless($this->isRecipientMonitoringRecord($application), 404);
+
+        return view('admin-monitoring-review', [
+            'application' => $application,
+        ]);
     }
 
     public function providerReview(Request $request, User $provider): View|RedirectResponse
@@ -471,6 +492,12 @@ class AdminController extends Controller
             ->get()
             ->map(fn (RecipientBenefitReleaseRecord $record): array => $this->benefitOversightPayload($record))
             ->values();
+        $monitoringRecords = $this->monitoringOversightQuery()
+            ->latest('updated_at')
+            ->limit(200)
+            ->get()
+            ->map(fn (ScholarshipApplication $application): array => $this->monitoringOversightPayload($application))
+            ->values();
 
         return response()->json([
             'stats' => [
@@ -496,13 +523,93 @@ class AdminController extends Controller
                 'benefits_with_receipts' => $benefitRecords->where('evidence_type', 'receipt')->count(),
                 'benefits_note_only' => $benefitRecords->where('evidence_type', 'note')->count(),
                 'benefits_needing_attention' => $benefitRecords->where('oversight_status', 'attention')->count(),
+                'monitoring_records' => $monitoringRecords->count(),
+                'monitoring_needing_attention' => $monitoringRecords->where('oversight_status', 'attention')->count(),
+                'monitoring_reviewed' => $monitoringRecords->where('oversight_status', 'reviewed')->count(),
+                'monitoring_stable' => $monitoringRecords->where('oversight_status', 'stable')->count(),
+                'monitoring_closed' => $monitoringRecords->where('oversight_status', 'closed')->count(),
             ],
             'providers' => $providers->map(fn (User $user) => $this->providerReviewPayload($user))->values(),
             'applicants' => $applicants->map(fn (User $user) => $this->applicantReviewPayload($user))->values(),
             'scholarships' => $scholarships->map(fn (Scholarship $scholarship) => $this->scholarshipReviewPayload($scholarship))->values(),
             'benefit_records' => $benefitRecords,
+            'monitoring_records' => $monitoringRecords,
             'selected_program_status' => $programStatus,
         ]);
+    }
+
+    public function monitoringReviewData(
+        Request $request,
+        ScholarshipApplication $application,
+    ): JsonResponse {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($this->isRecipientMonitoringRecord($application), 404);
+
+        $application->load($this->monitoringOversightRelations());
+
+        return response()->json([
+            'record' => $this->monitoringOversightPayload($application, true),
+        ]);
+    }
+
+    public function storeMonitoringOversightReview(
+        Request $request,
+        ScholarshipApplication $application,
+    ): JsonResponse {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($this->isRecipientMonitoringRecord($application), 404);
+
+        $validated = $request->validate([
+            'outcome' => ['required', Rule::in(['reviewed', 'follow_up_required', 'escalated'])],
+            'notes' => [Rule::requiredIf($request->input('outcome') !== 'reviewed'), 'nullable', 'string', 'max:2000'],
+        ]);
+
+        $application->load($this->monitoringOversightRelations());
+        $current = $this->monitoringOversightPayload($application);
+        $review = $application->monitoringOversightReviews()->create([
+            'reviewed_by' => $request->user()->id,
+            'outcome' => $validated['outcome'],
+            'notes' => $validated['notes'] ?? null,
+            'flags_snapshot' => $current['attention_items'],
+            'reviewed_at' => now(),
+        ]);
+
+        if (in_array($validated['outcome'], ['follow_up_required', 'escalated'], true)) {
+            $application->loadMissing('scholarship.provider');
+            $provider = $application->scholarship?->provider;
+
+            if ($provider) {
+                PortalNotification::create([
+                    'user_id' => $provider->id,
+                    'type' => 'monitoring_oversight_review',
+                    'title' => $validated['outcome'] === 'escalated'
+                        ? 'Monitoring record escalated'
+                        : 'Monitoring follow-up requested',
+                    'message' => $application->scholarship?->title.': '.($validated['notes'] ?? 'Review the recipient monitoring record.'),
+                    'action_url' => route('provider.monitoring.show', $application->scholarship, false),
+                    'deduplication_key' => "monitoring-oversight-review:{$review->id}",
+                ]);
+            }
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'recipient_monitoring_oversight_recorded',
+            "{$request->user()->name} recorded a monitoring oversight outcome.",
+            $request,
+            [
+                'scholarship_application_id' => $application->id,
+                'oversight_review_id' => $review->id,
+                'outcome' => $validated['outcome'],
+            ],
+        );
+
+        $application->load($this->monitoringOversightRelations());
+
+        return response()->json([
+            'message' => 'Oversight review recorded.',
+            'record' => $this->monitoringOversightPayload($application, true),
+        ], 201);
     }
 
     public function viewBenefitReleaseReceipt(
@@ -516,6 +623,54 @@ class AdminController extends Controller
             'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+    }
+
+    public function viewMonitoringSubmission(Request $request, RecipientMonitoringSubmission $submission)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless(filled($submission->path) && Storage::disk('local')->exists($submission->path), 404);
+
+        return $this->privateMonitoringFileResponse($submission->path, $submission->original_name);
+    }
+
+    public function viewMonitoringAdjustmentAttachment(
+        Request $request,
+        RecipientMonitoringAdjustmentRequest $adjustment,
+    ) {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless(filled($adjustment->attachment_path) && Storage::disk('local')->exists($adjustment->attachment_path), 404);
+
+        return $this->privateMonitoringFileResponse($adjustment->attachment_path, $adjustment->attachment_original_name);
+    }
+
+    public function viewBenefitReceiptResponseFile(
+        Request $request,
+        RecipientBenefitReceiptResponse $response,
+        string $kind,
+    ) {
+        abort_unless($request->user()?->isAdmin(), 403);
+        [$path, $name] = $kind === 'resolution-proof'
+            ? [$response->resolution_proof_path, $response->resolution_proof_original_name]
+            : [$response->evidence_path, $response->evidence_original_name];
+        abort_unless(filled($path) && Storage::disk('local')->exists($path), 404);
+
+        return $this->privateMonitoringFileResponse($path, $name);
+    }
+
+    public function viewSupportDecisionFile(
+        Request $request,
+        RecipientSupportDecision $decision,
+        string $kind,
+    ) {
+        abort_unless($request->user()?->isAdmin(), 403);
+        [$path, $name] = match ($kind) {
+            'applicant-response' => [$decision->applicant_response_path, $decision->applicant_response_original_name],
+            'resolution-proof' => [$decision->resolution_proof_path, $decision->resolution_proof_original_name],
+            default => [$decision->decision_document_path, $decision->decision_document_original_name],
+        };
+        abort_unless(filled($path) && Storage::disk('local')->exists($path), 404);
+
+        return $this->privateMonitoringFileResponse($path, $name);
     }
 
     public function scholarshipReviewData(Request $request, Scholarship $scholarship): JsonResponse
@@ -1613,6 +1768,75 @@ class AdminController extends Controller
         }, 'scholarship-applications.csv', ['Content-Type' => 'text/csv']);
     }
 
+    public function exportMonitoring(Request $request)
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        $validated = $request->validate([
+            'status' => ['sometimes', 'nullable', Rule::in(['all', 'attention', 'reviewed', 'stable', 'closed'])],
+            'application_id' => ['sometimes', 'nullable', 'integer', 'exists:scholarship_applications,id'],
+        ]);
+        $status = $validated['status'] ?? 'all';
+        $query = $this->monitoringOversightQuery()->orderBy('id');
+
+        if (filled($validated['application_id'] ?? null)) {
+            $query->whereKey((int) $validated['application_id']);
+        }
+
+        $records = $query->get()
+            ->map(fn (ScholarshipApplication $application): array => $this->monitoringOversightPayload($application))
+            ->when($status !== 'all', fn ($items) => $items->where('oversight_status', $status))
+            ->values();
+        $filename = filled($validated['application_id'] ?? null)
+            ? "recipient-monitoring-application-{$validated['application_id']}.csv"
+            : 'recipient-monitoring-'.$status.'.csv';
+
+        return response()->streamDownload(function () use ($records): void {
+            $handle = fopen('php://output', 'w');
+            CsvExport::writeRow($handle, [
+                'Application ID',
+                'Recipient',
+                'Email',
+                'Program',
+                'Provider',
+                'Support Status',
+                'Oversight Status',
+                'Attention Items',
+                'Requirements Confirmed',
+                'Requirements Total',
+                'Benefits Released',
+                'Benefit Records',
+                'Last Activity',
+                'Latest Admin Outcome',
+                'Latest Admin Note',
+                'Reviewed At',
+            ]);
+
+            foreach ($records as $record) {
+                CsvExport::writeRow($handle, [
+                    $record['application_id'],
+                    $record['applicant_name'],
+                    $record['applicant_email'],
+                    $record['program_title'],
+                    $record['provider_name'],
+                    $record['support_status_label'],
+                    $record['oversight_label'],
+                    collect($record['attention_items'])->pluck('title')->implode('; '),
+                    $record['requirements_confirmed'],
+                    $record['requirements_total'],
+                    $record['released_total'],
+                    $record['release_total'],
+                    $record['last_activity_at'],
+                    data_get($record, 'last_review.outcome_label'),
+                    data_get($record, 'last_review.notes'),
+                    data_get($record, 'last_review.reviewed_at'),
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
     private function adminPermissionsForRole(string $accountTitle, array $permissions): array
     {
         return self::ADMIN_ROLE_PERMISSION_PRESETS[$accountTitle]
@@ -1929,6 +2153,402 @@ class AdminController extends Controller
             ->values();
 
         return $oversight;
+    }
+
+    private function monitoringOversightQuery()
+    {
+        return ScholarshipApplication::query()
+            ->with($this->monitoringOversightRelations())
+            ->where(function ($query): void {
+                $query
+                    ->whereIn('status', ['awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated'])
+                    ->orWhereHas('monitoringSubmissions')
+                    ->orWhereHas('benefitReleaseRecords')
+                    ->orWhereHas('supportDecisions');
+            });
+    }
+
+    private function monitoringOversightRelations(): array
+    {
+        return [
+            'scholarship.provider.providerProfile',
+            'scholarship.monitoringCycles.requirements',
+            'applicant.studentProfile',
+            'monitoringSubmissions.cycle',
+            'monitoringSubmissions.requirement',
+            'monitoringAdjustmentRequests.cycle',
+            'monitoringAdjustmentRequests.requirement',
+            'monitoringAdjustmentRequests.decider',
+            'monitoringInterventions.cycle',
+            'monitoringInterventions.requirement',
+            'monitoringInterventions.creator',
+            'benefitReleaseRecords.release',
+            'benefitReleaseRecords.receiptResponse.resolver',
+            'benefitReleaseRecords.recorder',
+            'supportDecisions.decider',
+            'supportDecisions.resolver',
+            'monitoringOversightReviews.reviewer.adminProfile',
+        ];
+    }
+
+    private function isRecipientMonitoringRecord(ScholarshipApplication $application): bool
+    {
+        return in_array($application->status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated'], true)
+            || $application->monitoringSubmissions()->exists()
+            || $application->benefitReleaseRecords()->exists()
+            || $application->supportDecisions()->exists();
+    }
+
+    private function monitoringOversightPayload(
+        ScholarshipApplication $application,
+        bool $detailed = false,
+    ): array {
+        $application->loadMissing($this->monitoringOversightRelations());
+        $attentionItems = collect();
+        $requirements = collect();
+        $submissions = $application->monitoringSubmissions;
+        $adjustments = $application->monitoringAdjustmentRequests;
+        $today = now()->startOfDay();
+
+        foreach ($application->scholarship?->monitoringCycles ?? collect() as $cycle) {
+            if (! in_array($cycle->status, ['published', 'closed'], true)) {
+                continue;
+            }
+
+            $cycleRequirements = $cycle->requirements->where('required', true);
+            $cycleRequirements = $cycleRequirements->isNotEmpty() ? $cycleRequirements : collect([null]);
+
+            foreach ($cycleRequirements as $requirement) {
+                $submission = $requirement
+                    ? $submissions->firstWhere('recipient_monitoring_cycle_requirement_id', $requirement->id)
+                    : $submissions->first(fn ($item) => $item->recipient_monitoring_cycle_id === $cycle->id
+                        && $item->recipient_monitoring_cycle_requirement_id === null);
+                $adjustment = $adjustments
+                    ->where('recipient_monitoring_cycle_id', $cycle->id)
+                    ->when($requirement, fn ($items) => $items->where('recipient_monitoring_cycle_requirement_id', $requirement->id))
+                    ->where('status', 'approved')
+                    ->sortByDesc('decided_at')
+                    ->first();
+                $dueAt = $adjustment?->approved_due_at
+                    ?? $cycle->due_at?->copy()->addDays((int) $cycle->grace_period_days);
+                $reviewStatus = $submission?->review_status;
+                $status = match (true) {
+                    in_array($reviewStatus, ['met', 'excused'], true) => 'confirmed',
+                    in_array($reviewStatus, ['needs_replacement', 'not_met'], true) => 'attention',
+                    $submission !== null => 'review_pending',
+                    $dueAt?->copy()->endOfDay()->isBefore($today) => 'overdue',
+                    default => 'upcoming',
+                };
+                $title = $requirement?->title ?: $cycle->title;
+
+                if ($status === 'overdue') {
+                    $attentionItems->push([
+                        'severity' => 'high',
+                        'source' => 'requirement',
+                        'title' => 'Requirement is overdue',
+                        'detail' => $title.' has no submission.',
+                    ]);
+                } elseif ($status === 'attention') {
+                    $attentionItems->push([
+                        'severity' => 'high',
+                        'source' => 'requirement',
+                        'title' => 'Requirement was not confirmed',
+                        'detail' => $title.' needs replacement or did not meet the recorded requirement.',
+                    ]);
+                } elseif ($status === 'review_pending') {
+                    $attentionItems->push([
+                        'severity' => 'medium',
+                        'source' => 'requirement',
+                        'title' => 'Submission awaits provider review',
+                        'detail' => $title.' was submitted but has no completed review.',
+                    ]);
+                }
+
+                $requirements->push([
+                    'id' => $requirement?->id ?: "cycle-{$cycle->id}",
+                    'title' => $title,
+                    'cycle_title' => $cycle->title,
+                    'due_on' => $dueAt?->format('M d, Y'),
+                    'status' => $status,
+                    'status_label' => match ($status) {
+                        'confirmed' => 'Confirmed',
+                        'attention' => 'Needs correction',
+                        'review_pending' => 'Provider review pending',
+                        'overdue' => 'Overdue',
+                        default => 'Upcoming',
+                    },
+                    'review_result' => $submission?->review_notes,
+                    'file' => $submission?->path ? [
+                        'name' => $submission->original_name,
+                        'view_url' => route('admin.monitoring-submissions.view', $submission),
+                    ] : null,
+                ]);
+            }
+        }
+
+        foreach ($adjustments->where('status', 'pending') as $adjustment) {
+            $attentionItems->push([
+                'severity' => 'medium',
+                'source' => 'adjustment',
+                'title' => 'Adjustment request is pending',
+                'detail' => ($adjustment->requirement?->title ?: $adjustment->cycle?->title ?: 'Monitoring requirement').' needs a provider decision.',
+            ]);
+        }
+
+        foreach ($application->monitoringInterventions->where('status', 'open') as $intervention) {
+            if ($intervention->follow_up_on?->copy()->endOfDay()->isBefore($today)) {
+                $attentionItems->push([
+                    'severity' => 'high',
+                    'source' => 'intervention',
+                    'title' => 'Follow-up is overdue',
+                    'detail' => $intervention->summary,
+                ]);
+            }
+        }
+
+        foreach ($application->benefitReleaseRecords as $record) {
+            $response = $record->receiptResponse;
+
+            if ($response?->status === 'open') {
+                $attentionItems->push([
+                    'severity' => 'high',
+                    'source' => 'benefit',
+                    'title' => 'Recipient reported a release issue',
+                    'detail' => $record->release?->title ?: 'Benefit release',
+                ]);
+            } elseif (in_array($record->status, ['missed', 'withheld'], true)) {
+                $attentionItems->push([
+                    'severity' => 'medium',
+                    'source' => 'benefit',
+                    'title' => $record->status === 'withheld' ? 'Benefit was withheld' : 'Recipient missed a release',
+                    'detail' => $record->release?->title ?: 'Benefit release',
+                ]);
+            } elseif ($record->status === 'released' && blank($record->receipt_path) && blank($record->notes)) {
+                $attentionItems->push([
+                    'severity' => 'medium',
+                    'source' => 'benefit',
+                    'title' => 'Release has no supporting evidence',
+                    'detail' => $record->release?->title ?: 'Benefit release',
+                ]);
+            }
+        }
+
+        $latestDecision = $application->supportDecisions->first();
+        if ($latestDecision?->response_status === 'open') {
+            $attentionItems->push([
+                'severity' => 'high',
+                'source' => 'outcome',
+                'title' => 'Support outcome response is unresolved',
+                'detail' => $this->labelFromKey((string) $latestDecision->applicant_response_type),
+            ]);
+        } elseif ($latestDecision?->decision === 'terminated') {
+            $attentionItems->push([
+                'severity' => 'medium',
+                'source' => 'outcome',
+                'title' => 'Support ended early',
+                'detail' => $latestDecision->reason ?: $this->labelFromKey((string) $latestDecision->reason_category),
+            ]);
+        }
+
+        $latestReview = $application->monitoringOversightReviews->first();
+        $activityAt = collect([
+            $application->updated_at,
+            $application->scholarship?->monitoringCycles->max('updated_at'),
+            $submissions->max('updated_at'),
+            $adjustments->max('updated_at'),
+            $application->monitoringInterventions->max('updated_at'),
+            $application->benefitReleaseRecords->max('updated_at'),
+            $application->benefitReleaseRecords->pluck('receiptResponse')->filter()->max('updated_at'),
+            $application->supportDecisions->max('updated_at'),
+        ])->filter()->sortByDesc(fn ($date) => $date->timestamp)->first();
+        $reviewIsCurrent = $latestReview?->reviewed_at
+            && (! $activityAt || $latestReview->reviewed_at->greaterThanOrEqualTo($activityAt));
+        $isClosed = in_array($latestDecision?->decision, ['completed', 'terminated'], true)
+            || $application->status === 'benefits_terminated';
+        $oversightStatus = match (true) {
+            $reviewIsCurrent && in_array($latestReview->outcome, ['follow_up_required', 'escalated'], true) => 'attention',
+            $reviewIsCurrent && $latestReview->outcome === 'reviewed' => 'reviewed',
+            $attentionItems->isNotEmpty() => 'attention',
+            $isClosed => 'closed',
+            default => 'stable',
+        };
+        $confirmedRequirements = $requirements->where('status', 'confirmed')->count();
+        $releasedBenefits = $application->benefitReleaseRecords->where('status', 'released')->count();
+
+        $payload = [
+            'application_id' => $application->id,
+            'applicant_id' => $application->applicant_id,
+            'applicant_name' => $application->applicant?->name,
+            'applicant_email' => $application->applicant?->email,
+            'program_id' => $application->scholarship_id,
+            'program_title' => $application->scholarship?->title,
+            'provider_name' => $application->scholarship?->provider?->providerProfile?->provider_name
+                ?: $application->scholarship?->provider?->name,
+            'application_status' => $application->status,
+            'support_status' => $latestDecision?->decision ?: 'active',
+            'support_status_label' => $latestDecision
+                ? match ($latestDecision->decision) {
+                    'renewed' => 'Support renewed',
+                    'completed' => 'Support completed',
+                    'terminated' => 'Support ended early',
+                    default => $this->labelFromKey((string) $latestDecision->decision),
+                }
+                : 'Support active',
+            'oversight_status' => $oversightStatus,
+            'oversight_label' => match ($oversightStatus) {
+                'attention' => 'Needs admin attention',
+                'reviewed' => 'Admin reviewed',
+                'closed' => 'Support closed',
+                default => 'No current issue',
+            },
+            'attention_items' => $attentionItems->values(),
+            'requirements_total' => $requirements->count(),
+            'requirements_confirmed' => $confirmedRequirements,
+            'release_total' => $application->benefitReleaseRecords->count(),
+            'released_total' => $releasedBenefits,
+            'last_activity_at' => $activityAt?->format('M d, Y h:i A'),
+            'last_review' => $latestReview ? [
+                'outcome' => $latestReview->outcome,
+                'outcome_label' => match ($latestReview->outcome) {
+                    'follow_up_required' => 'Provider follow-up required',
+                    'escalated' => 'Escalated',
+                    default => 'Reviewed',
+                },
+                'notes' => $latestReview->notes,
+                'reviewed_by' => $latestReview->reviewer?->name,
+                'reviewed_at' => $latestReview->reviewed_at?->format('M d, Y h:i A'),
+            ] : null,
+            'review_url' => route('admin.monitoring.show', $application),
+        ];
+
+        if (! $detailed) {
+            return $payload;
+        }
+
+        $timeline = collect();
+        foreach ($submissions as $submission) {
+            $timeline->push([
+                'id' => 'submission-'.$submission->id,
+                'type' => 'requirement',
+                'title' => $submission->requirement?->title ?: $submission->cycle?->title ?: 'Monitoring submission',
+                'detail' => $submission->review_notes ?: $submission->applicant_note,
+                'status_label' => $this->labelFromKey((string) $submission->review_status),
+                'occurred_at' => ($submission->reviewed_at ?? $submission->submitted_at)?->format('M d, Y h:i A'),
+                'sort_at' => ($submission->reviewed_at ?? $submission->submitted_at)?->timestamp ?? 0,
+                'files' => $submission->path ? [[
+                    'name' => $submission->original_name,
+                    'view_url' => route('admin.monitoring-submissions.view', $submission),
+                ]] : [],
+            ]);
+        }
+        foreach ($adjustments as $adjustment) {
+            $timeline->push([
+                'id' => 'adjustment-'.$adjustment->id,
+                'type' => 'adjustment',
+                'title' => 'Adjustment: '.($adjustment->requirement?->title ?: $adjustment->cycle?->title ?: 'Monitoring requirement'),
+                'detail' => $adjustment->decision_notes ?: $adjustment->explanation,
+                'status_label' => $this->labelFromKey($adjustment->status),
+                'occurred_at' => ($adjustment->decided_at ?? $adjustment->created_at)?->format('M d, Y h:i A'),
+                'sort_at' => ($adjustment->decided_at ?? $adjustment->created_at)?->timestamp ?? 0,
+                'files' => $adjustment->attachment_path ? [[
+                    'name' => $adjustment->attachment_original_name,
+                    'view_url' => route('admin.monitoring-adjustments.attachment', $adjustment),
+                ]] : [],
+            ]);
+        }
+        foreach ($application->monitoringInterventions as $intervention) {
+            $timeline->push([
+                'id' => 'intervention-'.$intervention->id,
+                'type' => 'follow_up',
+                'title' => $intervention->summary,
+                'detail' => $intervention->completion_notes ?: $intervention->action_required,
+                'status_label' => $this->labelFromKey($intervention->status),
+                'occurred_at' => ($intervention->completed_at ?? $intervention->created_at)?->format('M d, Y h:i A'),
+                'sort_at' => ($intervention->completed_at ?? $intervention->created_at)?->timestamp ?? 0,
+                'files' => [],
+            ]);
+        }
+        foreach ($application->benefitReleaseRecords as $record) {
+            $response = $record->receiptResponse;
+            $files = collect();
+            if ($record->receipt_path) {
+                $files->push(['name' => $record->receipt_original_name, 'view_url' => route('admin.benefit-release-records.receipt', $record)]);
+            }
+            if ($response?->evidence_path) {
+                $files->push(['name' => $response->evidence_original_name, 'view_url' => route('admin.benefit-receipt-responses.file', [$response, 'recipient-evidence'])]);
+            }
+            if ($response?->resolution_proof_path) {
+                $files->push(['name' => $response->resolution_proof_original_name, 'view_url' => route('admin.benefit-receipt-responses.file', [$response, 'resolution-proof'])]);
+            }
+            $timeline->push([
+                'id' => 'release-'.$record->id,
+                'type' => 'benefit',
+                'title' => $record->release?->title ?: 'Benefit release',
+                'detail' => $response?->issue_details ?: $record->notes ?: $record->release?->benefit_description,
+                'status_label' => $response?->status === 'open' ? 'Recipient issue open' : $this->labelFromKey($record->status),
+                'occurred_at' => ($record->recorded_at ?? $record->release?->release_at)?->format('M d, Y h:i A'),
+                'sort_at' => ($record->recorded_at ?? $record->release?->release_at)?->timestamp ?? 0,
+                'files' => $files->values(),
+            ]);
+        }
+        foreach ($application->supportDecisions as $decision) {
+            $files = collect();
+            if ($decision->decision_document_path) {
+                $files->push(['name' => $decision->decision_document_original_name, 'view_url' => route('admin.support-decisions.file', [$decision, 'decision-document'])]);
+            }
+            if ($decision->applicant_response_path) {
+                $files->push(['name' => $decision->applicant_response_original_name, 'view_url' => route('admin.support-decisions.file', [$decision, 'applicant-response'])]);
+            }
+            if ($decision->resolution_proof_path) {
+                $files->push(['name' => $decision->resolution_proof_original_name, 'view_url' => route('admin.support-decisions.file', [$decision, 'resolution-proof'])]);
+            }
+            $timeline->push([
+                'id' => 'decision-'.$decision->id,
+                'type' => 'outcome',
+                'title' => match ($decision->decision) {
+                    'renewed' => 'Support renewed',
+                    'completed' => 'Support completed',
+                    'terminated' => 'Support ended early',
+                    default => $this->labelFromKey($decision->decision),
+                },
+                'detail' => $decision->resolution_notes ?: $decision->applicant_response_message ?: $decision->reason ?: $decision->next_period_terms,
+                'status_label' => $decision->response_status === 'open' ? 'Response unresolved' : $this->labelFromKey($decision->reason_category ?: $decision->decision),
+                'occurred_at' => ($decision->resolved_at ?? $decision->applicant_responded_at ?? $decision->decided_at)?->format('M d, Y h:i A'),
+                'sort_at' => ($decision->resolved_at ?? $decision->applicant_responded_at ?? $decision->decided_at)?->timestamp ?? 0,
+                'files' => $files->values(),
+            ]);
+        }
+
+        return [
+            ...$payload,
+            'requirements' => $requirements->values(),
+            'timeline' => $timeline->sortByDesc('sort_at')->values()->map(function (array $item): array {
+                unset($item['sort_at']);
+
+                return $item;
+            }),
+            'oversight_history' => $application->monitoringOversightReviews->map(fn (RecipientMonitoringOversightReview $review): array => [
+                'id' => $review->id,
+                'outcome' => $review->outcome,
+                'outcome_label' => match ($review->outcome) {
+                    'follow_up_required' => 'Provider follow-up required',
+                    'escalated' => 'Escalated',
+                    default => 'Reviewed',
+                },
+                'notes' => $review->notes,
+                'flags_count' => count($review->flags_snapshot ?? []),
+                'reviewed_by' => $review->reviewer?->name,
+                'reviewed_at' => $review->reviewed_at?->format('M d, Y h:i A'),
+            ])->values(),
+        ];
+    }
+
+    private function privateMonitoringFileResponse(?string $path, ?string $name)
+    {
+        return Storage::disk('local')->response($path, $name, [
+            'Cache-Control' => 'private, no-store',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     private function benefitOversightPayload(RecipientBenefitReleaseRecord $record): array
