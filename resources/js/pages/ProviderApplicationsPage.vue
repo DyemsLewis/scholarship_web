@@ -857,6 +857,19 @@ function scheduleTypeLabel(type) {
     return scheduleTypeCatalog.find((option) => option.value === type)?.label ?? type;
 }
 
+function scheduleModeOptionLabel(mode) {
+    if (scheduleForm.value.type !== 'interview') {
+        return mode.label;
+    }
+
+    return {
+        onsite: 'In-person interview',
+        online: 'Online interview',
+        hybrid: 'In-person and online',
+        provider_managed: 'Arrange with applicant',
+    }[mode.value] ?? mode.label;
+}
+
 function scheduleEvent(type) {
     return programEvents.value.find((event) => event.type === type) ?? null;
 }
@@ -975,17 +988,20 @@ async function saveProgramSchedule() {
     scheduleSaving.value = true;
     scheduleError.value = '';
 
+    const usesVenue = ['onsite', 'hybrid'].includes(scheduleForm.value.mode);
+    const usesOnlineLink = ['online', 'hybrid'].includes(scheduleForm.value.mode);
+
     try {
         const response = await window.axios.post(`/provider/scholarships/${selectedScholarshipId.value}/events`, {
             type: scheduleForm.value.type,
             title: scheduleForm.value.title || null,
             scheduled_at: scheduleForm.value.scheduledAt,
             mode: scheduleForm.value.mode,
-            venue: scheduleForm.value.venue || null,
-            location_address: scheduleMapAddress.value || null,
-            latitude: scheduleForm.value.latitude || null,
-            longitude: scheduleForm.value.longitude || null,
-            online_url: scheduleForm.value.onlineUrl || null,
+            venue: usesVenue ? scheduleForm.value.venue || null : null,
+            location_address: usesVenue ? scheduleMapAddress.value || null : null,
+            latitude: usesVenue ? scheduleForm.value.latitude || null : null,
+            longitude: usesVenue ? scheduleForm.value.longitude || null : null,
+            online_url: usesOnlineLink ? scheduleForm.value.onlineUrl || null : null,
             instructions: scheduleForm.value.instructions,
         });
         const eventIndex = programEvents.value.findIndex((event) => event.type === response.data.event.type);
@@ -1281,7 +1297,7 @@ onMounted(loadProviderData);
                             <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{{ scheduleTypeLabel(scheduleForm.type) }}</p>
-                                    <h4 class="mt-1 font-bold text-slate-950">Publish shared instructions</h4>
+                                    <h4 class="mt-1 font-bold text-slate-950">{{ scheduleForm.type === 'interview' ? 'Schedule the interview' : 'Publish shared instructions' }}</h4>
                                 </div>
                                 <button type="button" class="text-sm font-bold text-slate-500 hover:text-slate-900" @click="closeScheduleEditor">Close</button>
                             </div>
@@ -1296,16 +1312,16 @@ onMounted(loadProviderData);
                                     <input v-model="scheduleForm.scheduledAt" type="datetime-local" :min="minimumScheduleDateTime" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
                                 </div>
                                 <div>
-                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Mode</label>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{{ scheduleForm.type === 'interview' ? 'Interview method' : 'Mode' }}</label>
                                     <select v-model="scheduleForm.mode" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
-                                        <option v-for="mode in scheduleModeOptions" :key="mode.value" :value="mode.value">{{ mode.label }}</option>
+                                        <option v-for="mode in scheduleModeOptions" :key="mode.value" :value="mode.value">{{ scheduleModeOptionLabel(mode) }}</option>
                                     </select>
                                 </div>
                             </div>
 
                             <div v-if="['onsite', 'hybrid'].includes(scheduleForm.mode)" class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                                 <div class="md:col-span-2 xl:col-span-4">
-                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Event venue</label>
+                                    <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{{ scheduleForm.type === 'interview' ? 'Interview venue' : 'Event venue' }}</label>
                                     <input v-model="scheduleForm.venue" type="text" maxlength="500" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
                                 </div>
                                 <div>
@@ -1350,14 +1366,15 @@ onMounted(loadProviderData);
 
                             <div v-if="['online', 'hybrid'].includes(scheduleForm.mode)" class="mt-4">
                                 <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
-                                    Online link
+                                    {{ scheduleForm.type === 'interview' ? 'Meeting link' : 'Online link' }}
                                     <span class="ml-1 text-[10px] text-slate-400">Required</span>
                                 </label>
-                                <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" placeholder="https://..." required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                <input v-model="scheduleForm.onlineUrl" type="url" maxlength="2000" :placeholder="scheduleForm.type === 'interview' ? 'https://meet.google.com/...' : 'https://...'" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600">
+                                <p v-if="scheduleForm.type === 'interview'" class="mt-2 text-xs leading-5 text-slate-500">Applicants will use this link to join at the scheduled time.</p>
                             </div>
 
                             <div class="mt-4">
-                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Applicant instructions</label>
+                                <label class="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{{ scheduleForm.type === 'interview' ? 'Interview instructions' : 'Applicant instructions' }}</label>
                                 <textarea v-model="scheduleForm.instructions" rows="3" maxlength="3000" required class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-600"></textarea>
                             </div>
 

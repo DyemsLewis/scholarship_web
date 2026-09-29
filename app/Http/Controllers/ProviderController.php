@@ -2379,15 +2379,17 @@ class ProviderController extends Controller
 
         $eventLabel = $this->scheduleTypeLabel($validated['type']);
         $scheduledAt = CarbonImmutable::parse($validated['scheduled_at']);
+        $usesVenue = in_array($validated['mode'], ['onsite', 'hybrid'], true);
+        $usesOnlineLink = in_array($validated['mode'], ['online', 'hybrid'], true);
         $scheduleData = [
             'title' => filled($validated['title'] ?? null) ? trim($validated['title']) : "{$eventLabel} schedule",
             'scheduled_at' => $scheduledAt,
             'mode' => $validated['mode'],
-            'venue' => $validated['venue'] ?? null,
-            'location_address' => $validated['location_address'] ?? null,
-            'latitude' => $validated['latitude'] ?? null,
-            'longitude' => $validated['longitude'] ?? null,
-            'online_url' => $validated['online_url'] ?? null,
+            'venue' => $usesVenue ? ($validated['venue'] ?? null) : null,
+            'location_address' => $usesVenue ? ($validated['location_address'] ?? null) : null,
+            'latitude' => $usesVenue ? ($validated['latitude'] ?? null) : null,
+            'longitude' => $usesVenue ? ($validated['longitude'] ?? null) : null,
+            'online_url' => $usesOnlineLink ? ($validated['online_url'] ?? null) : null,
             'instructions' => $validated['instructions'],
             'status' => 'scheduled',
             'attendance_status' => 'not_required',
@@ -5895,8 +5897,12 @@ class ProviderController extends Controller
                 $requestedSlots = array_key_exists('slots_available', $validated)
                     ? $validated['slots_available']
                     : $scholarship->slots_available;
+                $requestedApplicationLimit = array_key_exists('application_limit', $validated)
+                    ? $validated['application_limit']
+                    : $scholarship->application_limit;
 
                 $this->ensureScholarshipAwardCapacity($scholarship, $requestedSlots);
+                $this->ensureScholarshipApplicationCapacity($scholarship, $requestedApplicationLimit);
                 $scholarship->update($validated);
 
                 if ($programEvents !== null) {
@@ -6285,6 +6291,7 @@ class ProviderController extends Controller
             'minimum_gwa' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'minimum_grade_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
             'slots_available' => ['nullable', 'integer', 'min:1', 'max:1000000'],
+            'application_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
             'selection_stages' => ['nullable', 'string', 'max:500', 'json'],
             'program_events' => ['nullable', 'string', 'max:20000', 'json'],
@@ -6651,15 +6658,17 @@ class ProviderController extends Controller
 
         $eventLabel = ScholarshipSelectionPlan::label($eventData['type']);
         $event = $scholarship->events()->firstOrNew(['type' => $eventData['type']]);
+        $usesVenue = in_array($eventData['mode'], ['onsite', 'hybrid'], true);
+        $usesOnlineLink = in_array($eventData['mode'], ['online', 'hybrid'], true);
         $announcementData = [
             'title' => filled($eventData['title'] ?? null) ? trim($eventData['title']) : ucfirst($eventLabel).' schedule',
             'scheduled_at' => CarbonImmutable::parse($eventData['scheduled_at']),
             'mode' => $eventData['mode'],
-            'venue' => $eventData['venue'] ?? null,
-            'location_address' => $eventData['location_address'] ?? null,
-            'latitude' => $eventData['latitude'] ?? null,
-            'longitude' => $eventData['longitude'] ?? null,
-            'online_url' => $eventData['online_url'] ?? null,
+            'venue' => $usesVenue ? ($eventData['venue'] ?? null) : null,
+            'location_address' => $usesVenue ? ($eventData['location_address'] ?? null) : null,
+            'latitude' => $usesVenue ? ($eventData['latitude'] ?? null) : null,
+            'longitude' => $usesVenue ? ($eventData['longitude'] ?? null) : null,
+            'online_url' => $usesOnlineLink ? ($eventData['online_url'] ?? null) : null,
             'instructions' => $eventData['instructions'],
         ];
         $event->fill($announcementData);
@@ -6766,6 +6775,30 @@ class ProviderController extends Controller
         }
     }
 
+    private function ensureScholarshipApplicationCapacity(
+        Scholarship $scholarship,
+        ?int $requestedLimit,
+    ): void {
+        if ($requestedLimit === null) {
+            return;
+        }
+
+        Scholarship::query()
+            ->whereKey($scholarship->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        $applicationCount = ScholarshipApplication::query()
+            ->where('scholarship_id', $scholarship->id)
+            ->count();
+
+        if ($requestedLimit < $applicationCount) {
+            throw ValidationException::withMessages([
+                'application_limit' => "This program already has {$applicationCount} application(s). Keep the application limit at {$applicationCount} or higher.",
+            ]);
+        }
+    }
+
     private function scholarshipHasReviewableChanges(Scholarship $scholarship, array $validated): bool
     {
         $reviewableFields = [
@@ -6803,6 +6836,7 @@ class ProviderController extends Controller
             'minimum_gwa',
             'minimum_grade_scale',
             'slots_available',
+            'application_limit',
             'application_mode',
             'selection_stages',
             'renewal_policy',
@@ -8591,6 +8625,7 @@ class ProviderController extends Controller
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
             'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             'slots_available' => $scholarship->slots_available,
+            'application_limit' => $scholarship->application_limit,
             'applications_count' => $scholarship->applications_count ?? $scholarship->applications()->count(),
             'pending_review_applications_count' => $scholarship->pending_review_applications_count
                 ?? $scholarship->applications()->whereIn('status', ['submitted', 'under_review'])->count(),

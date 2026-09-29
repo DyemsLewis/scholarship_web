@@ -215,6 +215,10 @@ const applyPanelTitle = computed(() => {
         return `Opens ${scholarship.value.application_opens_at}`;
     }
 
+    if (scholarship.value?.application_limit_reached) {
+        return 'Application limit reached';
+    }
+
     if (!isAcceptingApplications.value) {
         return 'Pre-screening is closed';
     }
@@ -238,6 +242,10 @@ const applyPanelDescription = computed(() => {
         return 'Save this scholarship and return when pre-screening opens.';
     }
 
+    if (scholarship.value?.application_limit_reached) {
+        return 'The provider has received the maximum number of applications for this program.';
+    }
+
     if (!isAcceptingApplications.value) {
         return 'New submissions are closed. You can still save this scholarship.';
     }
@@ -248,6 +256,10 @@ const applyPanelDescription = computed(() => {
 
     if (!isEligible.value) {
         return applicationBlockedLabel.value;
+    }
+
+    if (scholarship.value?.application_limit !== null && scholarship.value?.application_limit !== undefined) {
+        return `Review eligibility and files before submitting. ${scholarship.value.application_slots_remaining} application space${scholarship.value.application_slots_remaining === 1 ? '' : 's'} remain.`;
     }
 
     return 'Review eligibility and files before submitting.';
@@ -583,6 +595,7 @@ onMounted(loadScholarship);
                                 <a v-if="scholarship.has_applied" href="/dashboard/applications" class="rounded-sm bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-slate-800">View application</a>
                                 <a v-else-if="canStartApplication" :href="`/dashboard/applications?scholarship=${scholarship.id}`" class="rounded-sm bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-slate-800">Start pre-screening</a>
                                 <span v-else-if="isUpcomingProgram" class="rounded-sm bg-amber-100 px-4 py-2 text-center text-sm font-bold text-amber-900">Opens {{ scholarship.application_opens_at }}</span>
+                                <span v-else-if="scholarship.application_limit_reached" class="rounded-sm bg-slate-200 px-4 py-2 text-center text-sm font-bold text-slate-600">Applications full</span>
                                 <span v-else-if="!isAcceptingApplications" class="rounded-sm bg-slate-200 px-4 py-2 text-center text-sm font-bold text-slate-600">Pre-screening closed</span>
                                 <a v-else-if="!canApply" href="/dashboard/profile" class="rounded-sm bg-slate-950 px-4 py-2 text-center text-sm font-bold text-white transition hover:bg-slate-800">Complete profile</a>
                                 <button v-else-if="!isEligible" type="button" class="rounded-sm bg-slate-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800" @click="selectDetailSection('eligibility', true)">Review eligibility</button>

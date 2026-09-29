@@ -85,14 +85,15 @@ onMounted(loadMonitoringRecord);
                         </div>
                     </section>
 
-                    <ApplicantRecipientMonitoring
-                        class="mt-4"
-                        :monitoring="monitoring"
-                        :application-id="application.id"
-                        :program-title="application.scholarship?.title"
-                        :show-header="false"
-                        @application-updated="applyApplicationUpdate"
-                    />
+                    <div class="mt-4">
+                        <ApplicantRecipientMonitoring
+                            :monitoring="monitoring"
+                            :application-id="application.id"
+                            :program-title="application.scholarship?.title"
+                            :show-header="false"
+                            @application-updated="applyApplicationUpdate"
+                        />
+                    </div>
                 </template>
 
                 <section v-else class="student-card mt-5 rounded-md border-slate-300 p-6 text-center sm:p-8">

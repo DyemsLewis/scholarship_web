@@ -134,6 +134,40 @@ class ProviderWorkflowSafeguardsTest extends TestCase
         $this->assertSame(3, $scholarship->fresh()->slots_available);
     }
 
+    public function test_provider_cannot_reduce_application_limit_below_received_applications(): void
+    {
+        $provider = $this->verifiedProvider();
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Protected Application Capacity',
+            'description' => 'A program with applications already received.',
+            'application_limit' => 3,
+            'status' => 'draft',
+        ]);
+
+        foreach (range(1, 2) as $_index) {
+            ScholarshipApplication::create([
+                'scholarship_id' => $scholarship->id,
+                'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
+                'status' => 'submitted',
+                'document_checklist' => [],
+                'submitted_at' => now(),
+            ]);
+        }
+
+        $this->actingAs($provider)
+            ->putJson("/provider/scholarships/{$scholarship->id}", [
+                'title' => $scholarship->title,
+                'description' => $scholarship->description,
+                'application_limit' => 1,
+                'status' => 'draft',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('application_limit');
+
+        $this->assertSame(3, $scholarship->fresh()->application_limit);
+    }
+
     private function applicationWithRequiredDocument(string $documentName): array
     {
         $provider = $this->verifiedProvider();

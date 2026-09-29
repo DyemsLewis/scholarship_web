@@ -47,6 +47,7 @@ class Scholarship extends Model
         'minimum_gwa',
         'minimum_grade_scale',
         'slots_available',
+        'application_limit',
         'application_mode',
         'selection_stages',
         'exam_duration_minutes',
@@ -77,6 +78,7 @@ class Scholarship extends Model
             'award_amount' => 'decimal:2',
             'minimum_gwa' => 'decimal:2',
             'slots_available' => 'integer',
+            'application_limit' => 'integer',
             'exclude_current_scholarship_recipients' => 'boolean',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
@@ -222,6 +224,11 @@ class Scholarship extends Model
                 $openingQuery
                     ->whereNull('application_opens_at')
                     ->orWhereDate('application_opens_at', '<=', now()->toDateString());
+            })
+            ->where(function (Builder $capacityQuery): void {
+                $capacityQuery
+                    ->whereNull('application_limit')
+                    ->orWhereRaw('(select count(*) from scholarship_applications where scholarship_applications.scholarship_id = scholarships.id) < scholarships.application_limit');
             });
     }
 
@@ -239,7 +246,32 @@ class Scholarship extends Model
     public function isAcceptingApplications(): bool
     {
         return $this->isDiscoverable()
-            && ($this->application_opens_at === null || ! $this->application_opens_at->isAfter(now()->startOfDay()));
+            && ($this->application_opens_at === null || ! $this->application_opens_at->isAfter(now()->startOfDay()))
+            && ! $this->hasReachedApplicationLimit();
+    }
+
+    public function applicationCount(): int
+    {
+        $loadedCount = $this->getAttribute('applications_count');
+
+        return $loadedCount !== null
+            ? (int) $loadedCount
+            : $this->applications()->count();
+    }
+
+    public function remainingApplicationCapacity(): ?int
+    {
+        if ($this->application_limit === null) {
+            return null;
+        }
+
+        return max(0, $this->application_limit - $this->applicationCount());
+    }
+
+    public function hasReachedApplicationLimit(): bool
+    {
+        return $this->application_limit !== null
+            && $this->applicationCount() >= $this->application_limit;
     }
 
     public function isDiscoverable(): bool

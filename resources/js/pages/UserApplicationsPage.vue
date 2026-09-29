@@ -302,6 +302,11 @@ function goToWizardStep(index) {
         return;
     }
 
+    if (selectedScholarship.value?.application_limit_reached) {
+        errorMessage.value = 'This scholarship has reached its application limit.';
+        return;
+    }
+
     if (!canApply.value) {
         errorMessage.value = 'Complete your student profile before starting an application.';
         return;
@@ -864,6 +869,12 @@ async function loadApplications() {
 }
 
 async function submitApplication() {
+    if (selectedScholarship.value?.application_limit_reached) {
+        errorMessage.value = 'This scholarship has reached its application limit.';
+        currentStep.value = 0;
+        return;
+    }
+
     if (!canApply.value) {
         errorMessage.value = 'Complete your student profile before submitting an application.';
         return;
@@ -1143,7 +1154,7 @@ watch(selectedScholarship, (scholarship) => {
                                         <dl class="grid gap-3 sm:grid-cols-3">
                                             <div class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Application starts</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.application_opens_at || 'Open now' }}</dd></div></div>
                                             <div class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Deadline</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.deadline || 'No deadline listed' }}</dd></div></div>
-                                            <div class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Available slots</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.slots_available ?? 'Not specified' }}</dd></div></div>
+                                            <div class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white text-xs text-slate-700 ring-1 ring-slate-200"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><dt class="text-xs font-semibold text-slate-500">Application availability</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ selectedScholarship.application_limit_reached ? 'Applications full' : selectedScholarship.application_limit !== null && selectedScholarship.application_limit !== undefined ? `${selectedScholarship.application_slots_remaining} spaces left` : 'Open without a fixed limit' }}</dd></div></div>
                                         </dl>
 
                                     </div>
@@ -1151,6 +1162,10 @@ watch(selectedScholarship, (scholarship) => {
                             </div>
 
                             <div v-else-if="currentStep === 1 && selectedScholarship" class="grid gap-4">
+                                <div v-if="selectedScholarship.application_limit_reached" class="flex items-start gap-3 rounded-md border border-amber-300 bg-amber-50 p-4 text-amber-950">
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-200"><i class="fa-solid fa-users-slash" aria-hidden="true"></i></span>
+                                    <div><p class="font-bold">Applications are full</p><p class="mt-1 text-sm leading-5">The provider has received the maximum number of applications for this program.</p></div>
+                                </div>
                                 <section :class="['overflow-hidden rounded-lg border', selectedIsEligible ? 'border-slate-200 bg-white' : 'border-rose-200 bg-rose-50']">
                                     <header :class="['flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-center sm:justify-between', selectedIsEligible ? 'border-slate-200 bg-slate-50' : 'border-white/80']">
                                         <div class="flex items-start gap-3">

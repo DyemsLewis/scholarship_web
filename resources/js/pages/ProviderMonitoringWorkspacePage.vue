@@ -32,6 +32,7 @@ const errorMessage = ref('');
 const showCycleForm = ref(false);
 const titleInput = ref(null);
 const previewFile = ref(null);
+const cycleDetailsTarget = ref(null);
 const checklistTarget = ref(null);
 const reviewTarget = ref(null);
 const reviewNotes = ref('');
@@ -49,6 +50,7 @@ const showReleaseForm = ref(false);
 const isSavingRelease = ref(false);
 const releaseForm = ref(defaultReleaseForm());
 const openReleases = ref(new Set());
+const releaseDetailsTarget = ref(null);
 const releaseTarget = ref(null);
 const isRecordingRelease = ref(false);
 const releaseResultForm = ref(defaultReleaseResultForm());
@@ -390,6 +392,14 @@ function releaseIsOpen(releaseId) {
     return openReleases.value.has(releaseId);
 }
 
+function openReleaseDetails(release) {
+    releaseDetailsTarget.value = release;
+}
+
+function closeReleaseDetails() {
+    releaseDetailsTarget.value = null;
+}
+
 function releaseStatusClass(status) {
     if (status === 'released' || status === 'completed') return 'bg-emerald-100 text-emerald-800';
     if (status === 'prepared' || status === 'in_progress') return 'bg-sky-100 text-sky-800';
@@ -438,6 +448,14 @@ function toggleCycle(cycleId) {
 
 function cycleIsOpen(cycleId) {
     return openCycles.value.has(cycleId);
+}
+
+function openCycleDetails(cycle) {
+    cycleDetailsTarget.value = cycle;
+}
+
+function closeCycleDetails() {
+    cycleDetailsTarget.value = null;
 }
 
 function comparisonClass(status) {
@@ -1131,53 +1149,34 @@ onMounted(loadMonitoring);
 
                             <div class="divide-y divide-slate-200">
                                 <article v-for="cycle in cycles" :key="cycle.id">
-                                    <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleCycle(cycle.id)">
-                                        <div class="flex min-w-0 items-start gap-3">
+                                    <div class="flex flex-col gap-3 px-5 py-4 transition hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                        <button type="button" class="flex min-w-0 flex-1 items-start gap-3 text-left" :aria-expanded="cycleIsOpen(cycle.id)" @click="toggleCycle(cycle.id)">
                                             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i :class="cycle.is_plan_check_in ? 'fa-solid fa-list-check' : 'fa-solid fa-graduation-cap'" aria-hidden="true"></i></span>
-                                            <div class="min-w-0">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <h3 class="font-bold text-slate-950">{{ cycle.title }}</h3>
+                                            <span class="min-w-0">
+                                                <span class="flex flex-wrap items-center gap-2">
+                                                    <span class="font-bold text-slate-950">{{ cycle.title }}</span>
                                                     <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', cycle.status === 'open' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">{{ cycle.status }}</span>
-                                                </div>
-                                                <p class="mt-1 text-xs text-slate-500">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}<span v-if="cycle.school_year"> · {{ cycle.school_year }}</span> · Due {{ cycle.due_label }}</p>
-                                            </div>
-                                        </div>
-                                        <div class="flex items-center justify-between gap-4 sm:justify-end">
-                                            <div class="sm:text-right">
+                                                </span>
+                                                <span class="mt-1 block text-xs text-slate-500">{{ cycle.academic_period || labelFromKey(cycle.period_type) }}<span v-if="cycle.school_year"> · {{ cycle.school_year }}</span> · Due {{ cycle.due_label }}</span>
+                                            </span>
+                                        </button>
+                                        <div class="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:justify-end">
+                                            <div class="mr-auto sm:mr-1 sm:text-right">
                                                 <span v-if="cycleAttentionCount(cycle)" class="inline-flex rounded-md bg-amber-100 px-2 py-1 text-[10px] font-bold uppercase text-amber-800">{{ cycleAttentionCount(cycle) }} need attention</span>
                                                 <span v-else class="inline-flex rounded-md bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800">Up to date</span>
                                                 <p class="mt-1 text-xs text-slate-500">{{ cycleCompleteCount(cycle) }} of {{ cycle.recipient_count }} recipients complete</p>
                                             </div>
-                                            <i :class="['fa-solid fa-chevron-down text-xs text-slate-400 transition', cycleIsOpen(cycle.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
+                                            <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-100" aria-label="View check-in details" title="Check-in details" @click="openCycleDetails(cycle)">
+                                                <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                                            </button>
+                                            <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100" :aria-label="cycleIsOpen(cycle.id) ? 'Collapse recipient checklists' : 'Expand recipient checklists'" :aria-expanded="cycleIsOpen(cycle.id)" @click="toggleCycle(cycle.id)">
+                                                <i :class="['fa-solid fa-chevron-down text-xs transition', cycleIsOpen(cycle.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
+                                            </button>
                                         </div>
-                                    </button>
+                                    </div>
 
                                     <div v-if="cycleIsOpen(cycle.id)" class="border-t border-slate-200">
-                                        <dl class="grid bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
-                                            <div class="border-b border-slate-200 px-5 py-3 sm:border-r lg:border-b-0">
-                                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Requirements</dt>
-                                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.is_plan_check_in ? `${cycle.requirements.length} checklist item${cycle.requirements.length === 1 ? '' : 's'}` : cycle.requirement_label }}</dd>
-                                            </div>
-                                            <div class="border-b border-slate-200 px-5 py-3 lg:border-b-0 lg:border-r">
-                                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Received</dt>
-                                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.is_plan_check_in ? `${cycle.item_submitted_count} of ${cycle.item_expected_count} files` : `${cycle.submitted_count} of ${cycle.recipient_count} records` }}</dd>
-                                            </div>
-                                            <div class="border-b border-slate-200 px-5 py-3 sm:border-b-0 sm:border-r">
-                                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Reviewed</dt>
-                                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.reviewed_count }} of {{ cycleRequiredReviewCount(cycle) }}</dd>
-                                            </div>
-                                            <div class="px-5 py-3">
-                                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Deadline</dt>
-                                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.due_label }}</dd>
-                                            </div>
-                                        </dl>
-
-                                        <details v-if="cycle.instructions" class="border-t border-slate-200 px-5 py-3 sm:px-6">
-                                            <summary class="cursor-pointer text-xs font-bold text-slate-700">View recipient instructions</summary>
-                                            <p class="mt-2 text-sm leading-6 text-slate-600">{{ cycle.instructions }}</p>
-                                        </details>
-
-                                        <div class="portal-table-scroll border-t border-slate-200">
+                                        <div class="portal-table-scroll">
                                             <table class="portal-data-table min-w-[820px]">
                                                 <colgroup>
                                                     <col class="w-[32%]">
@@ -1185,7 +1184,7 @@ onMounted(loadMonitoring);
                                                     <col class="w-[26%]">
                                                     <col class="w-[20%]">
                                                 </colgroup>
-                                                <thead class="bg-white text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
+                                                <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">
                                                     <tr>
                                                         <th class="px-5 py-3">Recipient</th>
                                                         <th class="px-4 py-3">Submission</th>
@@ -1197,7 +1196,7 @@ onMounted(loadMonitoring);
                                                     <tr v-if="!cycle.recipients.length">
                                                         <td colspan="4" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this check-in.</td>
                                                     </tr>
-                                                    <tr v-for="recipient in orderedCycleRecipients(cycle)" :key="recipient.application_id">
+                                                    <tr v-for="recipient in orderedCycleRecipients(cycle)" :key="recipient.application_id" class="transition hover:bg-slate-50/70">
                                                         <td class="align-middle px-5 py-3.5">
                                                             <div class="flex items-center gap-3">
                                                                 <img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
@@ -1265,28 +1264,27 @@ onMounted(loadMonitoring);
 
                         <section v-else class="mt-3 space-y-3">
                             <article v-for="release in benefitReleases" :key="release.id" class="provider-panel overflow-hidden">
-                                <button type="button" class="flex w-full flex-col gap-3 px-5 py-4 text-left sm:flex-row sm:items-center sm:justify-between sm:px-6" @click="toggleRelease(release.id)">
-                                    <div class="flex min-w-0 items-start gap-3">
+                                <div class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                    <button type="button" class="flex min-w-0 flex-1 items-start gap-3 text-left" :aria-expanded="releaseIsOpen(release.id)" @click="toggleRelease(release.id)">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-gift" aria-hidden="true"></i></span>
-                                        <div class="min-w-0">
-                                            <div class="flex flex-wrap items-center gap-2"><h2 class="font-bold text-slate-950">{{ release.title }}</h2><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(release.status)]">{{ release.status_label }}</span></div>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">{{ release.release_label }} · {{ release.release_method_label }}<span v-if="release.location"> · {{ release.location }}</span></p>
-                                        </div>
+                                        <span class="min-w-0">
+                                            <span class="flex flex-wrap items-center gap-2"><span class="font-bold text-slate-950">{{ release.title }}</span><span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(release.status)]">{{ release.status_label }}</span></span>
+                                            <span class="mt-1 block text-xs leading-5 text-slate-500">{{ release.release_label }} · {{ release.release_method_label }}<span v-if="release.location"> · {{ release.location }}</span></span>
+                                        </span>
+                                    </button>
+                                    <div class="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:justify-end sm:text-right">
+                                        <div class="mr-auto sm:mr-1"><p class="text-sm font-bold text-slate-950">{{ release.released_count }} of {{ release.recipient_count }} released</p><p class="text-xs text-slate-500">{{ release.pending_count }} pending<span v-if="release.exception_count"> · {{ release.exception_count }} exceptions</span></p></div>
+                                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-100" aria-label="View release details" title="Release details" @click="openReleaseDetails(release)">
+                                            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                                        </button>
+                                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100" :aria-label="releaseIsOpen(release.id) ? 'Collapse recipient releases' : 'Expand recipient releases'" :aria-expanded="releaseIsOpen(release.id)" @click="toggleRelease(release.id)">
+                                            <i :class="['fa-solid fa-chevron-down text-xs transition', releaseIsOpen(release.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
+                                        </button>
                                     </div>
-                                    <div class="flex items-center gap-4 sm:text-right">
-                                        <div><p class="text-sm font-bold text-slate-950">{{ release.released_count }} of {{ release.recipient_count }} released</p><p class="text-xs text-slate-500">{{ release.pending_count }} pending<span v-if="release.exception_count"> · {{ release.exception_count }} exceptions</span></p></div>
-                                        <i :class="['fa-solid fa-chevron-down text-xs text-slate-400 transition', releaseIsOpen(release.id) ? 'rotate-180' : '']" aria-hidden="true"></i>
-                                    </div>
-                                </button>
+                                </div>
 
                                 <div v-if="releaseIsOpen(release.id)" class="border-t border-slate-200">
-                                    <div class="grid gap-px bg-slate-200 sm:grid-cols-3">
-                                        <div class="bg-slate-50 px-5 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Benefit</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.benefit_description }}</p><p v-if="release.amount_label" class="mt-0.5 text-xs text-slate-500">{{ release.amount_label }}</p></div>
-                                        <div class="bg-slate-50 px-5 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Release arrangement</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.release_method_label }}</p><p class="mt-0.5 text-xs text-slate-500">{{ release.location || 'Provider will coordinate the destination' }}</p></div>
-                                        <div class="bg-slate-50 px-5 py-3"><p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Document check</p><p class="mt-1 text-sm font-bold text-slate-950">{{ release.requires_original_verification ? 'Originals required' : 'No original check at release' }}</p><p class="mt-0.5 text-xs text-slate-500">Receipt evidence is recorded per recipient.</p></div>
-                                    </div>
-                                    <p v-if="release.instructions" class="border-t border-slate-200 px-5 py-3 text-sm leading-6 text-slate-600 sm:px-6"><strong class="text-slate-900">Instructions:</strong> {{ release.instructions }}</p>
-                                    <div class="portal-table-scroll border-t border-slate-200">
+                                    <div class="portal-table-scroll">
                                         <table class="portal-data-table min-w-[1040px]">
                                             <colgroup>
                                                 <col class="w-[24%]">
@@ -1308,9 +1306,9 @@ onMounted(loadMonitoring);
                                                 <tr v-if="!release.records.length">
                                                     <td colspan="5" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this benefit release.</td>
                                                 </tr>
-                                                <tr v-for="record in release.records" :key="record.id">
-                                                    <td class="align-top px-5 py-3.5">
-                                                        <div class="flex items-start gap-3">
+                                                <tr v-for="record in release.records" :key="record.id" class="transition hover:bg-slate-50/70">
+                                                    <td class="align-middle px-5 py-3.5">
+                                                        <div class="flex items-center gap-3">
                                                             <img v-if="record.profile_photo_url" :src="record.profile_photo_url" :alt="`${record.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
                                                             <span v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold text-white">{{ personInitials(record) }}</span>
                                                             <div class="min-w-0">
@@ -1319,11 +1317,11 @@ onMounted(loadMonitoring);
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td class="align-top px-4 py-3.5">
+                                                    <td class="align-middle px-4 py-3.5">
                                                         <div class="flex min-h-6 items-center"><span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(record.status)]">{{ record.status_label }}</span></div>
                                                         <p class="mt-0.5 text-xs text-slate-500">{{ record.recorded_at ? `Updated ${record.recorded_at}` : 'Waiting for release result' }}</p>
                                                     </td>
-                                                    <td class="align-top px-4 py-3.5">
+                                                    <td class="align-middle px-4 py-3.5">
                                                         <div class="flex min-h-6 items-center">
                                                             <p :class="['text-xs font-bold', record.originals_verified ? 'text-emerald-700' : 'text-slate-700']">
                                                                 {{ release.requires_original_verification ? (record.originals_verified ? 'Original records verified' : 'Original verification pending') : 'Original records not required' }}
@@ -1333,14 +1331,14 @@ onMounted(loadMonitoring);
                                                         <p v-else-if="record.notes" class="mt-0.5 text-xs text-slate-500">Release documented by provider note</p>
                                                         <p v-else class="mt-0.5 text-xs text-slate-400">No receipt evidence recorded</p>
                                                     </td>
-                                                    <td class="align-top px-4 py-3.5">
+                                                    <td class="align-middle px-4 py-3.5">
                                                         <span :class="['inline-flex rounded-md px-2 py-1 text-[10px] font-bold uppercase', receiptResponseStatusClass(record.receipt_response)]">{{ record.receipt_response?.status_label || (record.status === 'released' ? 'Waiting for recipient' : 'Not available') }}</span>
                                                         <p v-if="record.receipt_response?.issue_type_label" class="mt-1 text-xs font-bold text-rose-700">{{ record.receipt_response.issue_type_label }}</p>
                                                         <p v-else-if="record.receipt_response?.received_label" class="mt-1 text-xs text-slate-500">Received {{ record.receipt_response.received_label }}</p>
                                                         <button v-if="record.receipt_response?.evidence" type="button" class="mt-1 text-xs font-bold text-slate-700 underline decoration-slate-300 underline-offset-4" @click="previewFile = record.receipt_response.evidence">View recipient evidence</button>
                                                     </td>
-                                                    <td class="align-top px-5 py-3.5">
-                                                        <div class="flex min-h-9 items-start justify-end gap-2">
+                                                    <td class="align-middle px-5 py-3.5">
+                                                        <div class="flex min-h-9 items-center justify-end gap-2">
                                                             <button v-if="record.receipt_response?.status === 'open'" type="button" class="rounded-md bg-rose-700 px-3 py-2 text-xs font-bold text-white hover:bg-rose-800" @click="openReceiptIssue(release, record)">Resolve issue</button>
                                                             <button v-else-if="record.status !== 'released'" type="button" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="openReleaseResult(release, record)">Record result</button>
                                                             <a :href="record.application_url" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Applicant</a>
@@ -1427,6 +1425,109 @@ onMounted(loadMonitoring);
 
             </div>
         </section>
+
+        <Teleport to="body">
+            <div v-if="cycleDetailsTarget" class="fixed inset-0 z-[2050] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeCycleDetails" @keydown.esc="closeCycleDetails">
+                <section class="monitoring-modal flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="check-in-details-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Check-in details</p>
+                                <h2 id="check-in-details-title" class="mt-1 text-xl font-bold text-slate-950">{{ cycleDetailsTarget.title }}</h2>
+                                <p class="mt-1 text-sm text-slate-500">{{ cycleDetailsTarget.academic_period || labelFromKey(cycleDetailsTarget.period_type) }}<span v-if="cycleDetailsTarget.school_year"> · {{ cycleDetailsTarget.school_year }}</span></p>
+                            </div>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close check-in details" @click="closeCycleDetails"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto">
+                        <dl class="grid bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
+                            <div class="border-b border-slate-200 px-5 py-4 sm:border-r lg:border-b-0">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Requirements</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycleDetailsTarget.is_plan_check_in ? `${cycleDetailsTarget.requirements.length} checklist item${cycleDetailsTarget.requirements.length === 1 ? '' : 's'}` : cycleDetailsTarget.requirement_label }}</dd>
+                            </div>
+                            <div class="border-b border-slate-200 px-5 py-4 lg:border-b-0 lg:border-r">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Received</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycleDetailsTarget.is_plan_check_in ? `${cycleDetailsTarget.item_submitted_count} of ${cycleDetailsTarget.item_expected_count} files` : `${cycleDetailsTarget.submitted_count} of ${cycleDetailsTarget.recipient_count} records` }}</dd>
+                            </div>
+                            <div class="border-b border-slate-200 px-5 py-4 sm:border-b-0 sm:border-r">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Reviewed</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycleDetailsTarget.reviewed_count }} of {{ cycleRequiredReviewCount(cycleDetailsTarget) }}</dd>
+                            </div>
+                            <div class="px-5 py-4">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Deadline</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ cycleDetailsTarget.due_label }}</dd>
+                            </div>
+                        </dl>
+
+                        <section class="border-t border-slate-200 px-5 py-5 sm:px-6">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Recipient instructions</p>
+                            <p class="mt-2 text-sm leading-6 text-slate-700">{{ cycleDetailsTarget.instructions || 'No additional instructions were added for this check-in.' }}</p>
+                        </section>
+                    </div>
+
+                    <footer class="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+                        <button type="button" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="closeCycleDetails">Close</button>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div v-if="releaseDetailsTarget" class="fixed inset-0 z-[2050] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeReleaseDetails" @keydown.esc="closeReleaseDetails">
+                <section class="monitoring-modal flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-white text-slate-950 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="release-details-title">
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-gift" aria-hidden="true"></i></span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Release details</p>
+                                <div class="mt-1 flex flex-wrap items-center gap-2">
+                                    <h2 id="release-details-title" class="text-xl font-bold text-slate-950">{{ releaseDetailsTarget.title }}</h2>
+                                    <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(releaseDetailsTarget.status)]">{{ releaseDetailsTarget.status_label }}</span>
+                                </div>
+                                <p class="mt-1 text-sm text-slate-500">{{ releaseDetailsTarget.release_label }}</p>
+                            </div>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100" aria-label="Close release details" @click="closeReleaseDetails"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                    </header>
+
+                    <div class="min-h-0 flex-1 overflow-y-auto">
+                        <dl class="grid bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
+                            <div class="border-b border-slate-200 px-5 py-4 sm:border-r lg:border-b-0">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Benefit</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ releaseDetailsTarget.benefit_description }}</dd>
+                                <p v-if="releaseDetailsTarget.amount_label" class="mt-1 text-xs text-slate-500">{{ releaseDetailsTarget.amount_label }}</p>
+                            </div>
+                            <div class="border-b border-slate-200 px-5 py-4 lg:border-b-0 lg:border-r">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Arrangement</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ releaseDetailsTarget.release_method_label }}</dd>
+                                <p class="mt-1 text-xs text-slate-500">{{ releaseDetailsTarget.location || 'Provider-coordinated destination' }}</p>
+                            </div>
+                            <div class="border-b border-slate-200 px-5 py-4 sm:border-b-0 sm:border-r">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Document check</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ releaseDetailsTarget.requires_original_verification ? 'Originals required' : 'Not required' }}</dd>
+                                <p class="mt-1 text-xs text-slate-500">Receipt evidence is recorded per recipient.</p>
+                            </div>
+                            <div class="px-5 py-4">
+                                <dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Recipients</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ releaseDetailsTarget.released_count }} of {{ releaseDetailsTarget.recipient_count }} released</dd>
+                                <p class="mt-1 text-xs text-slate-500">{{ releaseDetailsTarget.pending_count }} pending</p>
+                            </div>
+                        </dl>
+
+                        <section class="border-t border-slate-200 px-5 py-5 sm:px-6">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Recipient instructions</p>
+                            <p class="mt-2 text-sm leading-6 text-slate-700">{{ releaseDetailsTarget.instructions || 'No additional instructions were added for this release.' }}</p>
+                        </section>
+                    </div>
+
+                    <footer class="flex justify-end border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+                        <button type="button" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="closeReleaseDetails">Close</button>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
 
         <Teleport to="body">
             <div v-if="recipientRecordTarget" class="fixed inset-0 z-[2050] flex items-center justify-center bg-slate-950/65 p-3 sm:p-5" @click.self="closeRecipientRecord" @keydown.esc="closeRecipientRecord">

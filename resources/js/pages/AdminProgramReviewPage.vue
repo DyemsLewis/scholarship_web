@@ -108,7 +108,7 @@ const summaryFacts = computed(() => {
         { label: 'Benefits', value: current.benefit_summary || formatAmount(current.award_amount) },
         { label: 'Program cycle', value: current.program_cycle || 'Not specified' },
         { label: 'Deadline', value: current.deadline || 'Not specified' },
-        { label: 'Available slots', value: current.slots_available ?? 'Not specified' },
+        { label: 'Recipient slots', value: current.slots_available ?? 'Not specified' },
     ];
 });
 const decisionSummary = computed(() => {
@@ -127,7 +127,7 @@ const decisionSummary = computed(() => {
         },
         {
             label: 'Applicant submission',
-            value: `${documentItems.value.length} required file${documentItems.value.length === 1 ? '' : 's'} and ${applicationQuestions.value.length} question${applicationQuestions.value.length === 1 ? '' : 's'}`,
+            value: `${current.application_limit ?? 'No fixed'} application limit · ${documentItems.value.length} required file${documentItems.value.length === 1 ? '' : 's'}`,
             ready: documentItems.value.length > 0,
         },
         {

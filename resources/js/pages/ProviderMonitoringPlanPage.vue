@@ -363,7 +363,7 @@ onMounted(loadPlan);
                                 </div>
                             </section>
 
-                            <section v-else class="max-w-4xl">
+                            <section v-else class="w-full">
                                 <div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-800"><i class="fa-solid fa-circle-check" aria-hidden="true"></i></span><div><h3 class="font-bold text-slate-950">Review the monitoring plan</h3><p class="mt-1 text-sm text-slate-500">Confirm the schedule and requirements before activation.</p></div></div>
                                 <dl class="mt-5 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200">
                                     <div class="px-4 py-4 sm:px-5"><dt class="text-xs font-bold text-slate-500">Schedule</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ scheduleSummary }}</dd><p class="mt-1 text-xs text-slate-500">{{ form.grace_period_days }}-day grace period | Exceptions {{ form.allow_exception_requests ? 'allowed' : 'not enabled' }}</p></div>

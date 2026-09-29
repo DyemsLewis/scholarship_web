@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import AlertDialog from '../components/AlertDialog.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import ProgramBenefitsEditor from '../components/ProgramBenefitsEditor.vue';
@@ -720,6 +721,7 @@ const schedulableSelectionStageLabel = computed(() => schedulableSelectionStages
     }[stage]))
     .join(' and '));
 const minimumAwardSlots = computed(() => Math.max(1, awardedSlotsCount.value));
+const minimumApplicationLimit = computed(() => Math.max(1, existingApplicationCount.value));
 const scholarshipImagePreview = computed(() => imagePreviewUrl.value || scholarshipForm.value.imageUrl || '/uploads/scholarship-default.jpg');
 const hasSavedProgramLogo = computed(() => isEditMode.value
     && hasText(scholarshipForm.value.imageUrl)
@@ -1477,6 +1479,7 @@ function emptyScholarshipForm() {
         minimumGwa: '',
         minimumGradeScale: '',
         slotsAvailable: '',
+        applicationLimit: '',
         applicationMode: 'online',
         selectionStages: ['screening', 'formal_application', 'decision'],
         renewalPolicy: '',
@@ -2267,6 +2270,7 @@ function fillScholarshipForm(scholarship) {
         minimumGwa: scholarship.minimum_gwa ?? '',
         minimumGradeScale: scholarship.minimum_grade_scale ?? inferGradeScale(scholarship.minimum_gwa),
         slotsAvailable: scholarship.slots_available ?? '',
+        applicationLimit: scholarship.application_limit ?? '',
         applicationMode: scholarship.application_mode === 'hybrid' ? 'onsite' : (scholarship.application_mode ?? ''),
         selectionStages: normalizeSelectionStages(scholarship.selection_stages),
         renewalPolicy: scholarship.renewal_policy ?? '',
@@ -2809,6 +2813,7 @@ async function saveScholarship(options = {}) {
         minimum_gwa: academicRequirementNeedsValue.value ? scholarshipForm.value.minimumGwa || '' : '',
         minimum_grade_scale: scholarshipForm.value.minimumGradeScale || '',
         slots_available: scholarshipForm.value.slotsAvailable || '',
+        application_limit: scholarshipForm.value.applicationLimit || '',
         application_mode: scholarshipForm.value.applicationMode || '',
         selection_stages: JSON.stringify(scholarshipForm.value.selectionStages),
         renewal_policy: scholarshipForm.value.renewalPolicy || '',
@@ -2914,6 +2919,13 @@ onBeforeUnmount(() => {
             v-bind="confirmation"
             @confirm="confirmConfirmation"
             @cancel="cancelConfirmation"
+        />
+        <AlertDialog
+            :open="Boolean(formError)"
+            title="Complete this section"
+            :message="formError"
+            button-label="Review field"
+            @close="formError = ''"
         />
 
         <section class="provider-page">
@@ -3409,33 +3421,50 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div v-show="activeFormSection === 'support'" class="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 md:col-span-2 md:grid-cols-[minmax(0,1fr)_18rem] md:items-center">
+                                <div v-show="activeFormSection === 'support'" class="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 md:col-span-2 md:grid-cols-[minmax(0,1fr)_minmax(0,28rem)] md:items-center">
                                     <div class="flex min-w-0 items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
                                             <i class="fa-solid fa-users" aria-hidden="true"></i>
                                         </span>
                                         <div>
-                                            <p class="text-sm font-bold text-slate-950">Recipient planning</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">This limits the number of selected recipients, not the number of applicants who may submit.</p>
-                                            <p v-if="awardedSlotsCount > 0" class="mt-1 text-xs font-semibold text-amber-800">
-                                                {{ awardedSlotsCount }} slot{{ awardedSlotsCount === 1 ? ' is' : 's are' }} already occupied.
+                                            <p class="text-sm font-bold text-slate-950">Program capacity</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">Limit applications separately from the recipients who will receive support.</p>
+                                            <p v-if="existingApplicationCount > 0" class="mt-1 text-xs font-semibold text-amber-800">
+                                                {{ existingApplicationCount }} application{{ existingApplicationCount === 1 ? '' : 's' }} received · {{ awardedSlotsCount }} recipient slot{{ awardedSlotsCount === 1 ? '' : 's' }} occupied
                                             </p>
                                         </div>
                                     </div>
-                                    <div :class="basicFieldStackClass">
-                                        <label :class="labelClass" for="scholarship-slots">
-                                            Planned recipient slots
-                                            <span :class="optionalHintClass">Optional</span>
-                                        </label>
-                                        <input
-                                            id="scholarship-slots"
-                                            v-model="scholarshipForm.slotsAvailable"
-                                            type="number"
-                                            :min="minimumAwardSlots"
-                                            step="1"
-                                            placeholder="No fixed limit"
-                                            :class="inputClass"
-                                        >
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div :class="basicFieldStackClass">
+                                            <label :class="labelClass" for="scholarship-slots">
+                                                Recipient slots
+                                                <span :class="optionalHintClass">Optional</span>
+                                            </label>
+                                            <input
+                                                id="scholarship-slots"
+                                                v-model="scholarshipForm.slotsAvailable"
+                                                type="number"
+                                                :min="minimumAwardSlots"
+                                                step="1"
+                                                placeholder="No limit"
+                                                :class="inputClass"
+                                            >
+                                        </div>
+                                        <div :class="basicFieldStackClass">
+                                            <label :class="labelClass" for="scholarship-application-limit">
+                                                Application limit
+                                                <span :class="optionalHintClass">Optional</span>
+                                            </label>
+                                            <input
+                                                id="scholarship-application-limit"
+                                                v-model="scholarshipForm.applicationLimit"
+                                                type="number"
+                                                :min="minimumApplicationLimit"
+                                                step="1"
+                                                placeholder="No limit"
+                                                :class="inputClass"
+                                            >
+                                        </div>
                                     </div>
                                 </div>
 
@@ -5361,10 +5390,7 @@ onBeforeUnmount(() => {
                             <div class="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 p-4 backdrop-blur">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                     <div class="min-w-0">
-                                        <p v-if="formError" class="text-sm font-semibold text-rose-700">
-                                            {{ formError }}
-                                        </p>
-                                        <p v-else class="text-xs font-semibold text-slate-500">
+                                        <p class="text-xs font-semibold text-slate-500">
                                             {{ stepNavigationSaves ? 'Your draft saves when you continue.' : 'Final changes save from Review & submit.' }}
                                         </p>
                                     </div>

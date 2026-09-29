@@ -395,7 +395,7 @@ onMounted(loadProgram);
                             </template>
                             <template v-else>
                                 <span class="inline-flex items-center gap-1.5"><i class="fa-regular fa-calendar text-slate-400" aria-hidden="true"></i>Deadline <strong class="text-slate-800">{{ dateLabel(scholarship.deadline) }}</strong></span>
-                                <span class="inline-flex items-center gap-1.5"><i class="fa-solid fa-users text-slate-400" aria-hidden="true"></i><strong class="text-slate-800">{{ scholarship.applications_count ?? 0 }}</strong> applicant{{ Number(scholarship.applications_count ?? 0) === 1 ? '' : 's' }}</span>
+                                <span class="inline-flex items-center gap-1.5"><i class="fa-solid fa-users text-slate-400" aria-hidden="true"></i><strong class="text-slate-800">{{ scholarship.applications_count ?? 0 }}<template v-if="scholarship.application_limit !== null && scholarship.application_limit !== undefined">/{{ scholarship.application_limit }}</template></strong> applicant{{ Number(scholarship.applications_count ?? 0) === 1 ? '' : 's' }}</span>
                             </template>
                         </template>
                         <template #actions>

@@ -474,6 +474,10 @@ function isUpcomingProgram(scholarship) {
 }
 
 function applicationBlockedLabel(scholarship) {
+    if (scholarship?.application_limit_reached) {
+        return 'This scholarship has reached its application limit.';
+    }
+
     const blockers = scholarship?.eligibility_match?.blocking_criteria ?? [];
     const labels = blockers
         .map((criterion) => criterion.label)
@@ -488,6 +492,10 @@ function applicationBlockedLabel(scholarship) {
 function applicationBlockedActionLabel(scholarship) {
     if (isUpcomingProgram(scholarship)) {
         return `Opens ${scholarship.application_opens_at}`;
+    }
+
+    if (scholarship?.application_limit_reached) {
+        return 'Applications full';
     }
 
     return scholarship?.eligibility_match?.is_eligible === false

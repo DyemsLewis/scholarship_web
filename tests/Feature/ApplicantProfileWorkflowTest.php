@@ -253,6 +253,49 @@ class ApplicantProfileWorkflowTest extends TestCase
         $this->assertFalse($scholarship->fresh()->isAcceptingApplications());
     }
 
+    public function test_application_limit_blocks_new_submissions_without_hiding_the_program(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $scholarship = $this->publishedScholarship($provider, 'Limited Intake Opportunity', 'Academic merit');
+        $scholarship->update([
+            'application_limit' => 1,
+            'application_mode' => 'provider_review',
+        ]);
+        $firstApplicant = $this->completeAdultApplicant();
+        $secondApplicant = $this->completeAdultApplicant();
+
+        $this->actingAs($firstApplicant)
+            ->postJson('/dashboard/applications', [
+                'scholarship_id' => $scholarship->id,
+                'terms_accepted' => '1',
+            ])
+            ->assertCreated();
+
+        $program = collect($this->actingAs($secondApplicant)
+            ->getJson('/dashboard/scholarships/data')
+            ->assertOk()
+            ->json('scholarships'))
+            ->firstWhere('id', $scholarship->id);
+
+        $this->assertNotNull($program);
+        $this->assertSame(1, $program['application_limit']);
+        $this->assertSame(1, $program['applications_count']);
+        $this->assertSame(0, $program['application_slots_remaining']);
+        $this->assertTrue($program['application_limit_reached']);
+        $this->assertFalse($program['is_accepting_applications']);
+        $this->assertFalse($program['can_start_application']);
+
+        $this->actingAs($secondApplicant)
+            ->postJson('/dashboard/applications', [
+                'scholarship_id' => $scholarship->id,
+                'terms_accepted' => '1',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'This scholarship has reached its application limit.');
+
+        $this->assertDatabaseCount('scholarship_applications', 1);
+    }
+
     public function test_grade_point_profile_rejects_values_outside_the_supported_scale(): void
     {
         $applicant = User::factory()->create();

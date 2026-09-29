@@ -1955,6 +1955,7 @@ class AdminController extends Controller
             'longitude' => $scholarship->longitude,
             'map_url' => $this->mapUrl($scholarship),
             'slots_available' => $scholarship->slots_available,
+            'application_limit' => $scholarship->application_limit,
             'application_mode' => $scholarship->application_mode,
             'selection_stages' => ScholarshipSelectionPlan::normalize($scholarship->selection_stages),
             'program_events' => $scholarship->events

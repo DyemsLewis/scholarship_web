@@ -633,9 +633,11 @@ class MobileAuthController extends Controller
 
         if (! $scholarship->isAcceptingApplications()) {
             return response()->json([
-                'message' => $scholarship->application_opens_at?->isFuture()
-                    ? 'Applications open on '.$scholarship->application_opens_at->format('M d, Y').'.'
-                    : 'This scholarship is no longer accepting applications.',
+                'message' => $scholarship->hasReachedApplicationLimit()
+                    ? 'This scholarship has reached its application limit.'
+                    : ($scholarship->application_opens_at?->isFuture()
+                        ? 'Applications open on '.$scholarship->application_opens_at->format('M d, Y').'.'
+                        : 'This scholarship is no longer accepting applications.'),
             ], 422);
         }
 
@@ -706,6 +708,17 @@ class MobileAuthController extends Controller
                 $validated,
                 &$copiedDocumentPaths,
             ): ScholarshipApplication {
+                $lockedScholarship = Scholarship::query()
+                    ->whereKey($scholarship->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($lockedScholarship->hasReachedApplicationLimit()) {
+                    throw ValidationException::withMessages([
+                        'scholarship_id' => 'This scholarship has reached its application limit.',
+                    ]);
+                }
+
                 $application = ScholarshipApplication::create([
                     'scholarship_id' => $scholarship->id,
                     'applicant_id' => $user->id,
@@ -1033,7 +1046,7 @@ class MobileAuthController extends Controller
     {
         return Scholarship::query()
             ->with('provider.providerProfile')
-            ->withCount('bookmarks')
+            ->withCount(['bookmarks', 'applications'])
             ->discoverable()
             ->orderByRaw('deadline is null')
             ->orderBy('deadline')
@@ -1043,7 +1056,7 @@ class MobileAuthController extends Controller
     private function statsPayload(User $user): array
     {
         return [
-            'available_scholarships' => Scholarship::query()->discoverable()->count(),
+            'available_scholarships' => Scholarship::query()->acceptingApplications()->count(),
             'applications' => ScholarshipApplication::query()->where('applicant_id', $user->id)->count(),
             'saved' => ScholarshipBookmark::query()->where('user_id', $user->id)->count(),
         ];
@@ -1080,6 +1093,13 @@ class MobileAuthController extends Controller
             ->exists();
         $profileComplete = (bool) $user->applicantProfileReadiness()['complete'];
         $eligibilityBlockers = $this->applicationEligibilityBlockers($match);
+        $applicationCount = $scholarship->applicationCount();
+        $applicationLimitReached = $scholarship->application_limit !== null
+            && $applicationCount >= $scholarship->application_limit;
+        $remainingApplicationCapacity = $scholarship->application_limit === null
+            ? null
+            : max(0, $scholarship->application_limit - $applicationCount);
+        $isAcceptingApplications = $scholarship->isAcceptingApplications();
 
         return [
             'id' => $scholarship->id,
@@ -1117,6 +1137,10 @@ class MobileAuthController extends Controller
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
             'minimum_grade_label' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             'slots_available' => $scholarship->slots_available,
+            'application_limit' => $scholarship->application_limit,
+            'applications_count' => $applicationCount,
+            'application_slots_remaining' => $remainingApplicationCapacity,
+            'application_limit_reached' => $applicationLimitReached,
             'application_mode' => $scholarship->application_mode,
             'renewal_policy' => $scholarship->renewal_policy,
             'return_service_contract' => $scholarship->return_service_contract,
@@ -1139,8 +1163,8 @@ class MobileAuthController extends Controller
                 ->where('user_id', $user->id)
                 ->exists(),
             'has_applied' => $hasApplied,
-            'is_accepting_applications' => $scholarship->isAcceptingApplications(),
-            'can_start_application' => $scholarship->isAcceptingApplications()
+            'is_accepting_applications' => $isAcceptingApplications,
+            'can_start_application' => $isAcceptingApplications
                 && $profileComplete
                 && $eligibilityBlockers === []
                 && ! $hasApplied,

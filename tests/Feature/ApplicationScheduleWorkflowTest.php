@@ -131,6 +131,44 @@ class ApplicationScheduleWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_online_interview_uses_a_meeting_link_without_saving_a_venue(): void
+    {
+        [$provider, , $application, $scholarship] = $this->applicationAt('interview');
+
+        $response = $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/events", [
+                'type' => 'interview',
+                'title' => 'Online scholarship interview',
+                'scheduled_at' => now()->addDays(2)->format('Y-m-d H:i:s'),
+                'mode' => 'online',
+                'venue' => 'Old provider office',
+                'location_address' => 'An address that should not be retained',
+                'online_url' => 'https://meet.google.com/example-room',
+                'instructions' => 'Join five minutes before the scheduled time.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('event.mode', 'online')
+            ->assertJsonPath('event.online_url', 'https://meet.google.com/example-room')
+            ->assertJsonPath('event.venue', null);
+
+        $this->assertDatabaseHas('scholarship_events', [
+            'scholarship_id' => $scholarship->id,
+            'type' => 'interview',
+            'mode' => 'online',
+            'venue' => null,
+            'location_address' => null,
+            'online_url' => 'https://meet.google.com/example-room',
+        ]);
+        $this->assertDatabaseHas('application_schedules', [
+            'scholarship_application_id' => $application->id,
+            'type' => 'interview',
+            'mode' => 'online',
+            'venue' => null,
+            'location_address' => null,
+            'online_url' => 'https://meet.google.com/example-room',
+        ]);
+    }
+
     public function test_program_schedule_can_be_completed_without_current_applicants(): void
     {
         $provider = $this->provider();
