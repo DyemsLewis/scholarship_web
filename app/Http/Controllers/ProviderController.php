@@ -643,6 +643,7 @@ class ProviderController extends Controller
         return response()->json([
             'user' => [
                 ...$this->providerStaffPayload($user),
+                'activity_summary' => $this->providerProfileActivitySummary($providerOwner),
                 'verification_documents_count' => $providerOwner
                     ->providerVerificationDocuments()
                     ->count(),
@@ -687,6 +688,7 @@ class ProviderController extends Controller
                 'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
                 'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
                 'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
+                'representative_position' => ['nullable', 'string', 'max:255'],
             ];
         }
 
@@ -697,8 +699,17 @@ class ProviderController extends Controller
                 'provider_website' => ['nullable', 'string', 'max:255'],
                 'provider_address' => ['nullable', 'string', 'max:500'],
                 'provider_description' => ['nullable', 'string', 'max:1500'],
+                'provider_mission' => ['nullable', 'string', 'max:1000'],
+                'provider_year_established' => ['nullable', 'integer', 'min:1800', 'max:'.now()->year],
+                'provider_service_area' => ['nullable', 'string', 'max:500'],
                 'provider_contact_email' => ['nullable', 'email', 'max:255'],
                 'provider_contact_number' => ['nullable', 'string', 'max:30', new PhoneNumber],
+                'provider_contact_department' => ['nullable', 'string', 'max:255'],
+                'provider_office_hours' => ['nullable', 'string', 'max:255'],
+                'legal_name' => ['nullable', 'string', 'max:255'],
+                'registration_authority' => ['nullable', 'string', 'max:255'],
+                'registration_number' => ['nullable', 'string', 'max:255'],
+                'registration_date' => ['nullable', 'date', 'before_or_equal:today'],
             ];
         }
 
@@ -709,6 +720,7 @@ class ProviderController extends Controller
             'last_name' => $validated['last_name'],
             'middle_initial' => strtoupper($validated['middle_initial']),
             'contact_number' => $validated['contact_number'],
+            'representative_position' => $validated['representative_position'] ?? null,
         ] : [];
         $emailChanged = $editingRepresentative
             && strcasecmp($user->email, $validated['email']) !== 0;
@@ -720,6 +732,9 @@ class ProviderController extends Controller
             'provider_website' => $validated['provider_website'] ?? null,
             'provider_address' => $validated['provider_address'] ?? null,
             'provider_description' => $validated['provider_description'] ?? null,
+            'mission' => $validated['provider_mission'] ?? null,
+            'year_established' => $validated['provider_year_established'] ?? null,
+            'service_area' => $validated['provider_service_area'] ?? null,
             'provider_contact_email' => strtolower(trim((string) ($validated['provider_contact_email']
                 ?? $profile?->provider_contact_email
                 ?? $providerOwner->email))),
@@ -727,6 +742,12 @@ class ProviderController extends Controller
                 ?? $profile?->provider_contact_number
                 ?? $profile?->contact_number
                 ?? ($validated['contact_number'] ?? null),
+            'contact_department' => $validated['provider_contact_department'] ?? null,
+            'office_hours' => $validated['provider_office_hours'] ?? null,
+            'legal_name' => $validated['legal_name'] ?? null,
+            'registration_authority' => $validated['registration_authority'] ?? null,
+            'registration_number' => $validated['registration_number'] ?? null,
+            'registration_date' => $validated['registration_date'] ?? null,
             'verification_status' => $profile?->verification_status ?? 'pending',
             'verification_notes' => $profile?->verification_notes,
             'verified_by' => $profile?->verified_by,
@@ -740,6 +761,10 @@ class ProviderController extends Controller
                 'provider_website',
                 'provider_address',
                 'provider_description',
+                'legal_name',
+                'registration_authority',
+                'registration_number',
+                'registration_date',
             ])->contains(fn (string $field): bool => $this->comparableScholarshipValue($profile?->{$field})
                 !== $this->comparableScholarshipValue($organizationProfile[$field] ?? null));
 
@@ -867,7 +892,10 @@ class ProviderController extends Controller
                         : ($profileSection === 'representative'
                             ? 'Representative details updated successfully.'
                             : 'Provider profile updated successfully.'))),
-            'user' => $this->providerStaffPayload($user->fresh(['providerProfile'])),
+            'user' => [
+                ...$this->providerStaffPayload($user->fresh(['providerProfile'])),
+                'activity_summary' => $this->providerProfileActivitySummary($providerOwner),
+            ],
             'email_changed' => $emailChanged,
             'verification_reset' => $organizationChanged,
         ]);
@@ -9092,6 +9120,7 @@ class ProviderController extends Controller
     {
         $owner = $user->providerOrganizationOwner()->loadMissing('providerProfile');
         $profile = $owner->providerProfile;
+        $representativeProfile = $user->providerProfile;
 
         return [
             ...$user->publicPayload(),
@@ -9100,10 +9129,45 @@ class ProviderController extends Controller
             'provider_website' => $profile?->provider_website,
             'provider_address' => $profile?->provider_address,
             'provider_description' => $profile?->provider_description,
+            'provider_mission' => $profile?->mission,
+            'provider_year_established' => $profile?->year_established,
+            'provider_service_area' => $profile?->service_area,
             'provider_contact_email' => $profile?->provider_contact_email,
             'provider_contact_number' => $profile?->provider_contact_number,
+            'provider_contact_department' => $profile?->contact_department,
+            'provider_office_hours' => $profile?->office_hours,
+            'representative_position' => $representativeProfile?->representative_position,
+            ...($user->hasPortalPermission('manage_profile') ? [
+                'legal_name' => $profile?->legal_name,
+                'registration_authority' => $profile?->registration_authority,
+                'registration_number' => $profile?->registration_number,
+                'registration_date' => $profile?->registration_date?->format('Y-m-d'),
+            ] : []),
             'verification_status' => $profile?->verification_status,
             'verification_notes' => $profile?->verification_notes,
+        ];
+    }
+
+    private function providerProfileActivitySummary(User $provider): array
+    {
+        $programs = Scholarship::query()->where('provider_id', $provider->id);
+        $applications = ScholarshipApplication::query()
+            ->whereHas('scholarship', fn (Builder $query) => $query->where('provider_id', $provider->id));
+
+        return [
+            'programs' => (clone $programs)->count(),
+            'published_programs' => (clone $programs)->where('status', 'published')->count(),
+            'applications' => (clone $applications)->count(),
+            'selected_recipients' => (clone $applications)
+                ->where(function (Builder $query): void {
+                    $query->where('final_outcome', 'selected')
+                        ->orWhereIn('status', [...self::AWARD_SLOT_STATUSES, 'benefits_terminated']);
+                })
+                ->count(),
+            'benefits_released' => RecipientBenefitReleaseRecord::query()
+                ->where('status', 'released')
+                ->whereHas('release.scholarship', fn (Builder $query) => $query->where('provider_id', $provider->id))
+                ->count(),
         ];
     }
 

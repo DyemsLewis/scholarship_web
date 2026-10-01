@@ -401,12 +401,17 @@ class User extends Authenticatable implements MustVerifyEmail
             'provider_website' => $providerProfile?->provider_website,
             'provider_address' => $providerProfile?->provider_address,
             'provider_description' => $providerProfile?->provider_description,
+            'provider_mission' => $providerProfile?->mission,
+            'provider_year_established' => $providerProfile?->year_established,
+            'provider_service_area' => $providerProfile?->service_area,
             'provider_logo_path' => $providerProfile?->logo_path,
             'provider_logo_url' => filled($providerProfile?->logo_path)
                 ? asset(ltrim($providerProfile->logo_path, '/'))
                 : null,
             'provider_contact_email' => $providerProfile?->provider_contact_email,
             'provider_contact_number' => $providerProfile?->provider_contact_number,
+            'provider_contact_department' => $providerProfile?->contact_department,
+            'provider_office_hours' => $providerProfile?->office_hours,
             'verification_status' => $providerProfile?->verification_status,
             'verification_notes' => $providerProfile?->verification_notes,
             'can_post_scholarships' => $this->isProvider()

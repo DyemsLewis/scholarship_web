@@ -50,13 +50,23 @@ const form = reactive({
     email: '',
     username: '',
     contact_number: '',
+    representative_position: '',
     provider_name: '',
     provider_type: '',
     provider_website: '',
     provider_address: '',
     provider_description: '',
+    provider_mission: '',
+    provider_year_established: '',
+    provider_service_area: '',
     provider_contact_email: '',
     provider_contact_number: '',
+    provider_contact_department: '',
+    provider_office_hours: '',
+    legal_name: '',
+    registration_authority: '',
+    registration_number: '',
+    registration_date: '',
 });
 
 const providerTypeOptions = [
@@ -108,6 +118,32 @@ const providerInitials = computed(() => {
         .join('');
 });
 const providerLogoPreview = computed(() => providerLogoPreviewUrl.value || user.value?.provider_logo_url || '');
+const activitySummary = computed(() => {
+    const activity = user.value?.activity_summary ?? {};
+
+    return [
+        {
+            label: 'Programs',
+            value: Number(activity.programs ?? 0),
+            detail: `${Number(activity.published_programs ?? 0)} published`,
+        },
+        {
+            label: 'Applications',
+            value: Number(activity.applications ?? 0),
+            detail: 'received',
+        },
+        {
+            label: 'Recipients',
+            value: Number(activity.selected_recipients ?? 0),
+            detail: 'selected',
+        },
+        {
+            label: 'Benefit records',
+            value: Number(activity.benefits_released ?? 0),
+            detail: 'released',
+        },
+    ];
+});
 const representativeName = computed(() => [
     user.value?.first_name,
     user.value?.middle_initial ? `${user.value.middle_initial}.` : null,
@@ -183,20 +219,31 @@ const verificationGuidance = computed(() => {
 });
 
 function applyUser(payload) {
-    user.value = payload;
-    form.first_name = payload?.first_name ?? '';
-    form.last_name = payload?.last_name ?? '';
-    form.middle_initial = payload?.middle_initial ?? '';
-    form.email = payload?.email ?? '';
-    form.username = payload?.username ?? '';
-    form.contact_number = payload?.contact_number ?? '';
-    form.provider_name = payload?.provider_name ?? '';
-    form.provider_type = payload?.provider_type ?? '';
-    form.provider_website = payload?.provider_website ?? '';
-    form.provider_address = payload?.provider_address ?? '';
-    form.provider_description = payload?.provider_description ?? '';
-    form.provider_contact_email = payload?.provider_contact_email ?? '';
-    form.provider_contact_number = payload?.provider_contact_number ?? '';
+    user.value = { ...(user.value ?? {}), ...(payload ?? {}) };
+    const current = user.value;
+    form.first_name = current?.first_name ?? '';
+    form.last_name = current?.last_name ?? '';
+    form.middle_initial = current?.middle_initial ?? '';
+    form.email = current?.email ?? '';
+    form.username = current?.username ?? '';
+    form.contact_number = current?.contact_number ?? '';
+    form.representative_position = current?.representative_position ?? '';
+    form.provider_name = current?.provider_name ?? '';
+    form.provider_type = current?.provider_type ?? '';
+    form.provider_website = current?.provider_website ?? '';
+    form.provider_address = current?.provider_address ?? '';
+    form.provider_description = current?.provider_description ?? '';
+    form.provider_mission = current?.provider_mission ?? '';
+    form.provider_year_established = current?.provider_year_established ?? '';
+    form.provider_service_area = current?.provider_service_area ?? '';
+    form.provider_contact_email = current?.provider_contact_email ?? '';
+    form.provider_contact_number = current?.provider_contact_number ?? '';
+    form.provider_contact_department = current?.provider_contact_department ?? '';
+    form.provider_office_hours = current?.provider_office_hours ?? '';
+    form.legal_name = current?.legal_name ?? '';
+    form.registration_authority = current?.registration_authority ?? '';
+    form.registration_number = current?.registration_number ?? '';
+    form.registration_date = current?.registration_date ?? '';
 }
 
 function applyVerificationDocuments(documents) {
@@ -381,8 +428,17 @@ async function saveProviderProfile(section) {
             provider_website: form.provider_website,
             provider_address: form.provider_address,
             provider_description: form.provider_description,
+            provider_mission: form.provider_mission,
+            provider_year_established: form.provider_year_established || null,
+            provider_service_area: form.provider_service_area,
             provider_contact_email: form.provider_contact_email,
             provider_contact_number: form.provider_contact_number,
+            provider_contact_department: form.provider_contact_department,
+            provider_office_hours: form.provider_office_hours,
+            legal_name: form.legal_name,
+            registration_authority: form.registration_authority,
+            registration_number: form.registration_number,
+            registration_date: form.registration_date || null,
         }
         : {
             profile_section: 'representative',
@@ -392,6 +448,7 @@ async function saveProviderProfile(section) {
             email: form.email,
             username: form.username,
             contact_number: form.contact_number,
+            representative_position: form.representative_position,
         };
 
     try {
@@ -587,118 +644,80 @@ onBeforeUnmount(() => {
                         </div>
                     </section>
 
-                    <form v-show="activeProfileSection === 'details'" class="provider-panel overflow-hidden" @submit.prevent="saveProviderProfile('organization')">
-                        <section class="p-5 sm:p-6">
-                            <div class="mb-5 border-b border-slate-200 pb-4">
-                                <p class="font-bold text-slate-950">Organization identity</p>
-                                <p class="mt-1 text-sm text-slate-500">Shown with your scholarships and public provider profile.</p>
-                            </div>
-                            <div>
-                                <div class="mb-5 grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:grid-cols-[4rem_minmax(0,1fr)] sm:items-center">
-                                    <img
-                                        v-if="providerLogoPreview"
-                                        :src="providerLogoPreview"
-                                        alt="Provider logo preview"
-                                        class="h-14 w-14 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
-                                    >
-                                    <div v-else class="grid h-14 w-14 place-items-center rounded-md bg-white text-sm font-black text-slate-700 ring-1 ring-slate-200">
-                                        {{ providerInitials }}
-                                    </div>
-                                    <div class="min-w-0">
+                    <section v-show="activeProfileSection === 'details'" class="provider-panel overflow-hidden">
+                        <div class="border-b border-slate-200 px-5 py-4 sm:px-6">
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Organization activity</p>
+                            <dl class="mt-3 grid grid-cols-2 overflow-hidden rounded-md border border-slate-200 bg-slate-50 lg:grid-cols-4">
+                                <div v-for="(item, index) in activitySummary" :key="item.label" :class="['p-3 sm:p-4', index % 2 === 0 ? 'border-r border-slate-200' : '', index < 2 ? 'border-b border-slate-200 lg:border-b-0' : '', index > 0 ? 'lg:border-l lg:border-slate-200' : '']">
+                                    <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ item.label }}</dt>
+                                    <dd class="mt-1 text-xl font-bold text-slate-950">{{ item.value }}</dd>
+                                    <p class="mt-0.5 text-xs text-slate-500">{{ item.detail }}</p>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <form @submit.prevent="saveProviderProfile('organization')">
+                            <section class="p-5 sm:p-6">
+                                <div class="flex items-start gap-3">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-building" aria-hidden="true"></i></span>
+                                    <div><h3 class="font-bold text-slate-950">Organization identity</h3><p class="mt-1 text-sm text-slate-500">The name and logo shown with every program.</p></div>
+                                </div>
+
+                                <div class="mt-4 flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center">
+                                    <img v-if="providerLogoPreview" :src="providerLogoPreview" alt="Provider logo preview" class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200">
+                                    <div v-else class="grid h-14 w-14 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-black text-white">{{ providerInitials }}</div>
+                                    <div class="min-w-0 flex-1">
                                         <span :class="labelClass">Organization logo</span>
                                         <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
-                                            <input
-                                                ref="providerLogoInput"
-                                                type="file"
-                                                accept="image/jpeg,image/png,image/webp"
-                                                :disabled="!canManageProfile || isUploadingLogo"
-                                                class="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-900 file:px-2.5 file:py-1.5 file:text-xs file:font-bold file:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                                                @change="handleProviderLogo"
-                                            >
-                                            <button
-                                                type="button"
-                                                :disabled="!providerLogoFile || isUploadingLogo || !canManageProfile"
-                                                class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-                                                @click="uploadProviderLogo"
-                                            >
-                                                {{ isUploadingLogo ? 'Uploading...' : 'Save logo' }}
-                                            </button>
+                                            <input ref="providerLogoInput" type="file" accept="image/jpeg,image/png,image/webp" :disabled="!canManageProfile || isUploadingLogo" class="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs text-slate-700 file:mr-2 file:rounded file:border-0 file:bg-slate-900 file:px-2.5 file:py-1.5 file:text-xs file:font-bold file:text-white disabled:cursor-not-allowed disabled:opacity-60" @change="handleProviderLogo">
+                                            <button type="button" :disabled="!providerLogoFile || isUploadingLogo || !canManageProfile" class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60" @click="uploadProviderLogo">{{ isUploadingLogo ? 'Uploading...' : 'Save logo' }}</button>
                                         </div>
-                                        <p class="mt-1.5 text-xs leading-5 text-slate-500">JPG, PNG, or WebP up to 4MB. Reused as the default program logo.</p>
                                         <span v-if="fieldError('logo_file')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('logo_file') }}</span>
                                     </div>
                                 </div>
-                                <div class="grid gap-4 md:grid-cols-2">
-                                <label>
-                                    <span :class="labelClass">Provider name</span>
-                                    <input v-model="form.provider_name" type="text" required placeholder="Organization name" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
-                                    <span v-if="fieldError('provider_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_name') }}</span>
-                                </label>
-                                <label>
-                                    <span :class="labelClass">Provider type</span>
-                                    <select v-model="form.provider_type" required :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
-                                        <option v-for="option in providerTypeOptions" :key="option.value" :value="option.value">
-                                            {{ option.label }}
-                                        </option>
-                                    </select>
-                                    <span v-if="fieldError('provider_type')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_type') }}</span>
-                                </label>
-                                <label>
-                                    <span :class="labelClass">Website</span>
-                                    <input v-model="form.provider_website" type="text" placeholder="https://example.com" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
-                                    <span v-if="fieldError('provider_website')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_website') }}</span>
-                                </label>
-                                <label>
-                                    <span :class="labelClass">Office address</span>
-                                    <input v-model="form.provider_address" type="text" required placeholder="Office address" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
-                                    <span v-if="fieldError('provider_address')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_address') }}</span>
-                                </label>
-                            </div>
 
-                            <div class="mt-5 border-t border-slate-200 pt-5">
-                                <h3 class="font-bold text-slate-950">About the provider</h3>
-                                <label class="mt-3 block">
-                                <span :class="labelClass">Public description</span>
-                                <textarea
-                                    v-model="form.provider_description"
-                                    rows="4"
-                                    placeholder="Briefly describe the scholarship provider."
-                                    :disabled="!canManageProfile"
-                                    :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"
-                                ></textarea>
-                                <span v-if="fieldError('provider_description')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_description') }}</span>
-                                </label>
-                            </div>
-
-                            <div class="mt-5 border-t border-slate-200 pt-5">
-                                <h3 class="font-bold text-slate-950">Applicant contact</h3>
-                                <p class="mt-1 text-sm text-slate-500">Applicants use these details for scholarship questions.</p>
-                                <div class="mt-3 grid gap-4 md:grid-cols-2">
-                                <label>
-                                    <span :class="labelClass">Provider email</span>
-                                    <input v-model="form.provider_contact_email" type="email" autocomplete="organization-email" required placeholder="scholarships@example.org" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']">
-                                    <span v-if="fieldError('provider_contact_email')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_email') }}</span>
-                                </label>
-                                <label>
-                                    <span :class="labelClass">Provider phone</span>
-                                    <input :value="form.provider_contact_number" type="tel" inputmode="numeric" autocomplete="organization-tel" required maxlength="11" placeholder="09170000000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']" @input="form.provider_contact_number = limitPhoneNumber($event.target.value)">
-                                    <span v-if="fieldError('provider_contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_number') }}</span>
-                                </label>
+                                <div class="mt-5 grid gap-4 md:grid-cols-2">
+                                    <label><span :class="labelClass">Provider name</span><input v-model="form.provider_name" type="text" required placeholder="Organization name" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><span v-if="fieldError('provider_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_name') }}</span></label>
+                                    <label><span :class="labelClass">Provider type</span><select v-model="form.provider_type" required :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><option v-for="option in providerTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select><span v-if="fieldError('provider_type')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_type') }}</span></label>
+                                    <label><span :class="labelClass">Year established</span><input v-model="form.provider_year_established" type="number" min="1800" :max="new Date().getFullYear()" placeholder="2010" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><span v-if="fieldError('provider_year_established')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_year_established') }}</span></label>
+                                    <label><span :class="labelClass">Website</span><input v-model="form.provider_website" type="text" placeholder="https://example.com" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><span v-if="fieldError('provider_website')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_website') }}</span></label>
                                 </div>
-                            </div>
-                            </div>
-                        </section>
+                            </section>
 
-                        <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                            <p class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600">
-                                <i :class="['fa-solid fa-circle text-[8px]', providerProfileComplete ? 'text-emerald-500' : 'text-amber-500']" aria-hidden="true"></i>
-                                {{ providerProfileComplete ? 'Required details complete' : 'Complete required details before verification' }}
-                            </p>
-                            <button type="submit" :disabled="isSaving || !canManageProfile" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
-                                {{ isSaving ? 'Saving...' : 'Save provider details' }}
-                            </button>
-                        </div>
-                    </form>
+                            <section class="border-t border-slate-200 p-5 sm:p-6">
+                                <div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-bullseye" aria-hidden="true"></i></span><div><h3 class="font-bold text-slate-950">Public profile</h3><p class="mt-1 text-sm text-slate-500">A short summary applicants can scan before applying.</p></div></div>
+                                <label class="mt-4 block"><span :class="labelClass">Mission</span><textarea v-model="form.provider_mission" rows="2" placeholder="What does your organization aim to support?" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"></textarea><span v-if="fieldError('provider_mission')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_mission') }}</span></label>
+                                <label class="mt-4 block"><span :class="labelClass">About the organization</span><textarea v-model="form.provider_description" rows="3" placeholder="Briefly describe the organization and its scholarship work." :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"></textarea><span v-if="fieldError('provider_description')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_description') }}</span></label>
+                                <label class="mt-4 block"><span :class="labelClass">Service area</span><input v-model="form.provider_service_area" type="text" placeholder="For example: Rizal Province or nationwide" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><span v-if="fieldError('provider_service_area')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_service_area') }}</span></label>
+                            </section>
+
+                            <section class="border-t border-slate-200 p-5 sm:p-6">
+                                <div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700"><i class="fa-solid fa-address-book" aria-hidden="true"></i></span><div><h3 class="font-bold text-slate-950">Applicant contact</h3><p class="mt-1 text-sm text-slate-500">Where applicants can ask program questions.</p></div></div>
+                                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                    <label><span :class="labelClass">Contact department</span><input v-model="form.provider_contact_department" type="text" placeholder="Scholarship desk" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><span v-if="fieldError('provider_contact_department')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_department') }}</span></label>
+                                    <label><span :class="labelClass">Office hours</span><input v-model="form.provider_office_hours" type="text" placeholder="Mon-Fri, 8:00 AM-5:00 PM" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><span v-if="fieldError('provider_office_hours')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_office_hours') }}</span></label>
+                                    <label><span :class="labelClass">Provider email</span><input v-model="form.provider_contact_email" type="email" autocomplete="organization-email" required placeholder="scholarships@example.org" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><span v-if="fieldError('provider_contact_email')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_email') }}</span></label>
+                                    <label><span :class="labelClass">Provider phone</span><input :value="form.provider_contact_number" type="tel" inputmode="numeric" autocomplete="organization-tel" required maxlength="11" placeholder="09170000000" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']" @input="form.provider_contact_number = limitPhoneNumber($event.target.value)"><span v-if="fieldError('provider_contact_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_contact_number') }}</span></label>
+                                    <label class="md:col-span-2"><span :class="labelClass">Office address</span><input v-model="form.provider_address" type="text" required placeholder="Office address" :disabled="!canManageProfile" :class="[inputClass, !canManageProfile ? 'cursor-not-allowed bg-slate-100 text-slate-500' : '']"><span v-if="fieldError('provider_address')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('provider_address') }}</span></label>
+                                </div>
+                            </section>
+
+                            <section v-if="canManageProfile" class="border-t border-slate-200 p-5 sm:p-6">
+                                <div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-lock" aria-hidden="true"></i></span><div><h3 class="font-bold text-slate-950">Private registration record</h3><p class="mt-1 text-sm text-slate-500">Visible to your profile managers and platform administrators only.</p></div></div>
+                                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                    <label class="md:col-span-2"><span :class="labelClass">Official legal name</span><input v-model="form.legal_name" type="text" placeholder="Registered organization name" :class="inputClass"><span v-if="fieldError('legal_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('legal_name') }}</span></label>
+                                    <label><span :class="labelClass">Registration authority</span><input v-model="form.registration_authority" type="text" placeholder="SEC, DTI, DepEd, or other authority" :class="inputClass"><span v-if="fieldError('registration_authority')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('registration_authority') }}</span></label>
+                                    <label><span :class="labelClass">Registration number</span><input v-model="form.registration_number" type="text" placeholder="Official record number" :class="inputClass"><span v-if="fieldError('registration_number')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('registration_number') }}</span></label>
+                                    <label><span :class="labelClass">Registration date</span><input v-model="form.registration_date" type="date" :max="new Date().toISOString().slice(0, 10)" :class="inputClass"><span v-if="fieldError('registration_date')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('registration_date') }}</span></label>
+                                </div>
+                            </section>
+
+                            <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                                <p class="inline-flex items-center gap-2 text-xs font-semibold text-slate-600"><i :class="['fa-solid fa-circle text-[8px]', providerProfileComplete ? 'text-emerald-500' : 'text-amber-500']" aria-hidden="true"></i>{{ providerProfileComplete ? 'Required details complete' : 'Complete required details before verification' }}</p>
+                                <button type="submit" :disabled="isSaving || !canManageProfile" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">{{ isSaving ? 'Saving...' : 'Save provider details' }}</button>
+                            </div>
+                        </form>
+                    </section>
 
                     <form v-show="activeProfileSection === 'representative'" id="representative-account" class="provider-panel overflow-hidden" @submit.prevent="saveProviderProfile('representative')">
                         <section class="p-5 sm:p-6">
@@ -725,6 +744,11 @@ onBeforeUnmount(() => {
                                     <span v-if="fieldError('last_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('last_name') }}</span>
                                 </label>
                             </div>
+                            <label class="mt-4 block">
+                                <span :class="labelClass">Position in the organization</span>
+                                <input v-model="form.representative_position" type="text" placeholder="Program director, scholarship coordinator, or authorized representative" :class="inputClass">
+                                <span v-if="fieldError('representative_position')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('representative_position') }}</span>
+                            </label>
 
                             <div class="mt-5 border-t border-slate-200 pt-5">
                                 <h3 class="font-bold text-slate-950">Sign-in and contact</h3>

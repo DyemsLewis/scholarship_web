@@ -879,39 +879,60 @@ onMounted(loadScholarship);
                                         <h2 class="mt-1 text-xl font-bold text-slate-950">Who manages this program</h2>
                                     </div>
                                 </div>
-                                <a
-                                    v-if="scholarship.official_program_url"
-                                    :href="scholarship.official_program_url"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="inline-flex w-fit items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
-                                >
-                                    Official program page
-                                    <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
-                                </a>
+                                <div class="flex flex-wrap gap-2">
+                                    <a
+                                        v-if="scholarship.provider?.id"
+                                        :href="`/dashboard/providers/${scholarship.provider.id}`"
+                                        class="inline-flex w-fit items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                    >
+                                        View provider
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </a>
+                                    <a
+                                        v-if="scholarship.official_program_url"
+                                        :href="scholarship.official_program_url"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="inline-flex w-fit items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                                    >
+                                        Official program page
+                                        <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                    </a>
+                                </div>
                             </div>
 
                             <div class="p-4 sm:p-5">
                                 <div class="flex items-center gap-3">
                                     <img
-                                        :src="scholarship.image_url"
+                                        :src="scholarship.provider?.logo_url || scholarship.image_url"
                                         :alt="scholarship.provider?.name || 'Scholarship provider'"
                                         class="h-14 w-14 shrink-0 rounded-sm bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
                                     >
                                     <div class="min-w-0">
                                         <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Organization</p>
                                         <h3 class="mt-1 text-base font-bold leading-5 text-slate-950">{{ scholarship.provider?.name || 'Scholarship provider' }}</h3>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ providerTypeLabel(scholarship.provider?.type) }}</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">
+                                            {{ providerTypeLabel(scholarship.provider?.type) }}<span v-if="scholarship.provider?.year_established"> | Established {{ scholarship.provider.year_established }}</span>
+                                        </p>
                                     </div>
                                 </div>
 
+                                <p v-if="scholarship.provider?.mission || scholarship.provider?.description" class="mt-4 max-w-4xl text-sm leading-6 text-slate-600">
+                                    {{ scholarship.provider?.mission || scholarship.provider?.description }}
+                                </p>
+
                                 <dl class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-sm border border-slate-200">
+                                    <div v-if="scholarship.provider?.service_area" class="grid gap-3 p-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-5">
+                                        <dt class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-map text-amber-700" aria-hidden="true"></i>Service area</dt>
+                                        <dd class="text-sm leading-5 text-slate-600">{{ scholarship.provider.service_area }}</dd>
+                                    </div>
                                     <div class="grid gap-3 p-4 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-5">
                                         <dt class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-address-card text-amber-700" aria-hidden="true"></i>Public contact</dt>
-                                        <dd v-if="scholarship.contact_person || scholarship.contact_department || scholarship.contact_email || scholarship.contact_number" class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
-                                            <span v-if="scholarship.contact_department || scholarship.contact_person" class="font-semibold text-slate-800">{{ scholarship.contact_department || scholarship.contact_person }}<span v-if="scholarship.contact_department && scholarship.contact_person" class="font-normal text-slate-500"> | {{ scholarship.contact_person }}</span></span>
+                                        <dd v-if="scholarship.contact_person || scholarship.contact_department || scholarship.contact_email || scholarship.contact_number || scholarship.provider?.contact_department || scholarship.provider?.office_hours" class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
+                                            <span v-if="scholarship.contact_department || scholarship.contact_person || scholarship.provider?.contact_department" class="font-semibold text-slate-800">{{ scholarship.contact_department || scholarship.provider?.contact_department || scholarship.contact_person }}<span v-if="scholarship.contact_department && scholarship.contact_person" class="font-normal text-slate-500"> | {{ scholarship.contact_person }}</span></span>
                                             <a v-if="scholarship.contact_email" :href="`mailto:${scholarship.contact_email}`" class="inline-flex min-w-0 items-center gap-2 hover:text-slate-950"><i class="fa-regular fa-envelope text-slate-400" aria-hidden="true"></i><span class="break-all">{{ scholarship.contact_email }}</span></a>
                                             <a v-if="scholarship.contact_number" :href="`tel:${scholarship.contact_number}`" class="inline-flex items-center gap-2 hover:text-slate-950"><i class="fa-solid fa-phone text-slate-400" aria-hidden="true"></i>{{ scholarship.contact_number }}</a>
+                                            <span v-if="scholarship.provider?.office_hours" class="inline-flex items-center gap-2"><i class="fa-regular fa-clock text-slate-400" aria-hidden="true"></i>{{ scholarship.provider.office_hours }}</span>
                                         </dd>
                                         <dd v-else class="text-sm text-slate-500">No public contact details listed.</dd>
                                     </div>

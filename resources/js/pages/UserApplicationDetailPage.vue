@@ -999,7 +999,7 @@ onMounted(loadApplication);
                                     class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                 >
                                 <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Application #{{ application.id }}</p>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Application record</p>
                                     <h1 class="mt-1 text-xl font-bold leading-tight text-slate-950 sm:text-2xl">{{ application.scholarship?.title || 'Scholarship application' }}</h1>
                                     <p class="mt-1 truncate text-sm font-semibold text-slate-500">{{ application.scholarship?.provider?.name || 'Scholarship provider' }}</p>
                                 </div>

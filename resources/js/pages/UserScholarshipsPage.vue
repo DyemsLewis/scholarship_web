@@ -1084,9 +1084,14 @@ onBeforeUnmount(() => {
                                             <h3 class="line-clamp-2 font-display text-lg font-bold leading-snug text-white">
                                                 {{ scholarship.title }}
                                             </h3>
-                                            <p class="mt-1 truncate text-sm font-semibold text-slate-300">
-                                                {{ scholarship.provider?.name || 'Scholarship Provider' }}
-                                            </p>
+                                            <a
+                                                v-if="scholarship.provider?.id"
+                                                :href="`/dashboard/providers/${scholarship.provider.id}`"
+                                                class="mt-1 block truncate text-sm font-semibold text-slate-300 transition hover:text-amber-200"
+                                            >
+                                                {{ scholarship.provider.name || 'Scholarship Provider' }}
+                                            </a>
+                                            <p v-else class="mt-1 truncate text-sm font-semibold text-slate-300">Scholarship Provider</p>
                                         </div>
                                     </div>
                                 </div>

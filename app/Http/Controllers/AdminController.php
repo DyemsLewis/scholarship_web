@@ -2016,8 +2016,15 @@ class AdminController extends Controller
 
     private function providerReviewPayload(User $provider): array
     {
+        $profile = $provider->providerProfile;
+
         return [
             ...$provider->publicPayload(),
+            'legal_name' => $profile?->legal_name,
+            'registration_authority' => $profile?->registration_authority,
+            'registration_number' => $profile?->registration_number,
+            'registration_date' => $profile?->registration_date?->format('M d, Y'),
+            'representative_position' => $profile?->representative_position,
             'verification_documents' => $provider->providerVerificationDocuments
                 ->sortByDesc('created_at')
                 ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))

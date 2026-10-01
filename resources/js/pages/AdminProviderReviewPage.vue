@@ -41,10 +41,10 @@ const providerReviewChecks = computed(() => {
     return [
         {
             label: 'Organization profile',
-            detail: current.provider_name && current.provider_type && current.provider_description
-                ? 'Name, type, and organization description are provided.'
-                : 'Confirm the organization name, type, and description.',
-            ready: Boolean(current.provider_name && current.provider_type && current.provider_description),
+            detail: current.provider_name && current.provider_type && (current.provider_mission || current.provider_description)
+                ? 'Identity and public organization summary are provided.'
+                : 'Confirm the organization identity and public summary.',
+            ready: Boolean(current.provider_name && current.provider_type && (current.provider_mission || current.provider_description)),
         },
         {
             label: 'Public contact',
@@ -459,6 +459,7 @@ onMounted(loadProvider);
                                     </span>
                                     <div>
                                         <h4 class="font-bold text-slate-950">About the organization</h4>
+                                        <p v-if="provider.provider_mission" class="mt-1 text-sm font-bold leading-6 text-slate-900">{{ provider.provider_mission }}</p>
                                         <p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">
                                             {{ provider.provider_description || 'No organization description provided.' }}
                                         </p>
@@ -466,7 +467,7 @@ onMounted(loadProvider);
                                 </div>
                             </section>
 
-                            <dl class="mt-4 grid overflow-hidden rounded-md border border-slate-200 text-sm md:grid-cols-2">
+                            <dl class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-200 text-sm">
                                 <div class="border-b border-slate-200 p-4 md:border-r">
                                     <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
                                         <i class="fa-solid fa-globe" aria-hidden="true"></i>
@@ -485,14 +486,18 @@ onMounted(loadProvider);
                                         <span v-else>Not provided</span>
                                     </dd>
                                 </div>
-                                <div class="border-b border-slate-200 p-4">
+                                <div class="p-4">
                                     <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
                                         <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
                                         Address
                                     </dt>
                                     <dd class="mt-2 font-bold leading-6 text-slate-950">{{ provider.provider_address || 'Not provided' }}</dd>
                                 </div>
-                                <div class="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
+                                <div v-if="provider.provider_year_established || provider.provider_service_area" class="p-4">
+                                    <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500"><i class="fa-solid fa-map" aria-hidden="true"></i>Reach</dt>
+                                    <dd class="mt-2 font-bold leading-6 text-slate-950"><span v-if="provider.provider_year_established">Established {{ provider.provider_year_established }}</span><span v-if="provider.provider_year_established && provider.provider_service_area"> | </span><span>{{ provider.provider_service_area }}</span></dd>
+                                </div>
+                                <div class="p-4">
                                     <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500">
                                         <i class="fa-solid fa-envelope" aria-hidden="true"></i>
                                         Provider email
@@ -506,7 +511,24 @@ onMounted(loadProvider);
                                     </dt>
                                     <dd class="mt-2 font-bold text-slate-950">{{ provider.provider_contact_number || 'Not provided' }}</dd>
                                 </div>
+                                <div v-if="provider.provider_contact_department || provider.provider_office_hours" class="p-4">
+                                    <dt class="flex items-center gap-2 text-xs font-semibold text-slate-500"><i class="fa-regular fa-clock" aria-hidden="true"></i>Contact desk</dt>
+                                    <dd class="mt-2 font-bold leading-6 text-slate-950">{{ provider.provider_contact_department || 'Department not provided' }}<span v-if="provider.provider_office_hours" class="block font-normal text-slate-600">{{ provider.provider_office_hours }}</span></dd>
+                                </div>
                             </dl>
+
+                            <section class="mt-4 overflow-hidden rounded-md border border-slate-200">
+                                <div class="flex items-start gap-3 border-b border-slate-200 bg-slate-50 p-4">
+                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-lock" aria-hidden="true"></i></span>
+                                    <div><h4 class="font-bold text-slate-950">Private registration record</h4><p class="mt-1 text-xs leading-5 text-slate-500">Use this record with the submitted organization proof.</p></div>
+                                </div>
+                                <dl class="divide-y divide-slate-200 text-sm">
+                                    <div class="p-4"><dt class="font-semibold text-slate-500">Official legal name</dt><dd class="mt-1 font-bold text-slate-950">{{ provider.legal_name || 'Not provided' }}</dd></div>
+                                    <div class="p-4"><dt class="font-semibold text-slate-500">Registration authority</dt><dd class="mt-1 font-bold text-slate-950">{{ provider.registration_authority || 'Not provided' }}</dd></div>
+                                    <div class="p-4"><dt class="font-semibold text-slate-500">Registration number</dt><dd class="mt-1 font-bold text-slate-950">{{ provider.registration_number || 'Not provided' }}</dd></div>
+                                    <div class="p-4"><dt class="font-semibold text-slate-500">Registration date</dt><dd class="mt-1 font-bold text-slate-950">{{ provider.registration_date || 'Not provided' }}</dd></div>
+                                </dl>
+                            </section>
                         </article>
 
                         <article v-if="activeReviewSection === 'representative'" class="admin-panel overflow-hidden">
@@ -540,6 +562,10 @@ onMounted(loadProvider);
                                 <div class="border-b border-slate-200 p-4 lg:border-b-0 lg:border-r">
                                     <dt class="font-semibold text-slate-500">Representative contact</dt>
                                     <dd class="mt-1 font-bold text-slate-950">{{ provider.contact_number || 'Not provided' }}</dd>
+                                </div>
+                                <div class="border-b border-slate-200 p-4 sm:border-r">
+                                    <dt class="font-semibold text-slate-500">Organization position</dt>
+                                    <dd class="mt-1 font-bold text-slate-950">{{ provider.representative_position || 'Not provided' }}</dd>
                                 </div>
                                 <div class="border-b border-slate-200 p-4 sm:border-b-0 sm:border-r">
                                     <dt class="font-semibold text-slate-500">Account status</dt>

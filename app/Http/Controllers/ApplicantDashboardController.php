@@ -38,6 +38,7 @@ use App\Support\ReviewRubric;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -88,6 +89,82 @@ class ApplicantDashboardController extends Controller
         return response()->json([
             'user' => $this->userPayload($request),
             'scholarships' => $scholarships,
+        ]);
+    }
+
+    public function providers(Request $request): View|RedirectResponse
+    {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        return view('dashboard-providers');
+    }
+
+    public function providersData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $providers = User::query()
+            ->where('role', 'provider')
+            ->whereNull('parent_account_id')
+            ->where('account_status', 'active')
+            ->whereNotNull('email_verified_at')
+            ->whereHas('providerProfile', fn (Builder $query) => $query->where('verification_status', 'approved'))
+            ->with([
+                'providerProfile',
+                'providerScholarships' => fn ($query) => $query
+                    ->discoverable()
+                    ->orderByRaw('deadline is null')
+                    ->orderBy('deadline'),
+            ])
+            ->get()
+            ->map(fn (User $provider) => $this->publicProviderPayload($provider))
+            ->sortBy([
+                ['programs_count', 'desc'],
+                ['name', 'asc'],
+            ])
+            ->values();
+
+        return response()->json([
+            'user' => $this->userPayload($request),
+            'providers' => $providers,
+            'summary' => [
+                'providers' => $providers->count(),
+                'programs' => $providers->sum('programs_count'),
+            ],
+        ]);
+    }
+
+    public function providerDetail(Request $request, User $provider): View|RedirectResponse
+    {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        abort_unless($this->isPublicProvider($provider), 404);
+
+        return view('dashboard-providers', ['provider' => $provider]);
+    }
+
+    public function providerDetailData(Request $request, User $provider): JsonResponse
+    {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($this->isPublicProvider($provider), 404);
+
+        $provider->load([
+            'providerProfile',
+            'providerScholarships' => fn ($query) => $query
+                ->with(['provider.providerProfile', 'events'])
+                ->withCount(['bookmarks', 'applications'])
+                ->discoverable()
+                ->orderByRaw('deadline is null')
+                ->orderBy('deadline'),
+        ]);
+
+        return response()->json([
+            'user' => $this->userPayload($request),
+            'provider' => $this->publicProviderPayload($provider, $request->user()),
         ]);
     }
 
@@ -2789,6 +2866,56 @@ class ApplicantDashboardController extends Controller
             ->latest();
     }
 
+    private function isPublicProvider(User $provider): bool
+    {
+        $provider->loadMissing('providerProfile');
+
+        return $provider->isProvider()
+            && ! $provider->isManagedAccount()
+            && $provider->isActive()
+            && $provider->hasVerifiedEmail()
+            && $provider->providerProfile?->isVerified();
+    }
+
+    private function publicProviderPayload(User $provider, ?User $applicant = null): array
+    {
+        $profile = $provider->providerProfile;
+        $programs = $provider->relationLoaded('providerScholarships')
+            ? $provider->providerScholarships->values()
+            : collect();
+
+        return [
+            'id' => $provider->id,
+            'name' => $profile?->provider_name ?: $provider->name,
+            'type' => $profile?->provider_type,
+            'logo_url' => filled($profile?->logo_path)
+                ? asset(ltrim($profile->logo_path, '/'))
+                : null,
+            'mission' => $profile?->mission,
+            'description' => $profile?->provider_description,
+            'year_established' => $profile?->year_established,
+            'service_area' => $profile?->service_area,
+            'website' => $profile?->provider_website,
+            'address' => $profile?->provider_address,
+            'contact_email' => $profile?->provider_contact_email,
+            'contact_number' => $profile?->provider_contact_number,
+            'contact_department' => $profile?->contact_department,
+            'office_hours' => $profile?->office_hours,
+            'is_verified' => true,
+            'programs_count' => $programs->count(),
+            'focus_areas' => $programs
+                ->pluck('category')
+                ->filter()
+                ->unique()
+                ->values(),
+            'programs' => $applicant
+                ? $programs
+                    ->map(fn (Scholarship $scholarship) => $this->scholarshipPayload($scholarship, $applicant))
+                    ->values()
+                : [],
+        ];
+    }
+
     private function userPayload(Request $request): array
     {
         return $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload();
@@ -2797,7 +2924,7 @@ class ApplicantDashboardController extends Controller
     private function statsPayload(Request $request): array
     {
         return [
-            'available_scholarships' => Scholarship::query()->acceptingApplications()->count(),
+            'available_scholarships' => Scholarship::query()->discoverable()->count(),
             'applications' => ScholarshipApplication::query()->where('applicant_id', $request->user()->id)->count(),
             'saved' => ScholarshipBookmark::query()->where('user_id', $request->user()->id)->count(),
         ];
@@ -2928,8 +3055,19 @@ class ApplicantDashboardController extends Controller
                 'note' => AcademicRequirement::requirementLabel($scholarship->minimum_gwa, $scholarship->minimum_grade_scale),
             ],
             'provider' => [
+                'id' => $scholarship->provider?->id,
                 'name' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
                 'type' => $scholarship->provider?->provider_type,
+                'logo_url' => filled($scholarship->provider?->providerProfile?->logo_path)
+                    ? asset(ltrim($scholarship->provider->providerProfile->logo_path, '/'))
+                    : null,
+                'website' => $scholarship->provider?->provider_website,
+                'description' => $scholarship->provider?->provider_description,
+                'mission' => $scholarship->provider?->providerProfile?->mission,
+                'year_established' => $scholarship->provider?->providerProfile?->year_established,
+                'service_area' => $scholarship->provider?->providerProfile?->service_area,
+                'contact_department' => $scholarship->provider?->providerProfile?->contact_department,
+                'office_hours' => $scholarship->provider?->providerProfile?->office_hours,
             ],
         ];
     }

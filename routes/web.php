@@ -28,6 +28,10 @@ Route::post('/account/setup/password', [AuthController::class, 'completeAccountS
 Route::get('/dashboard', [ApplicantDashboardController::class, 'index'])->middleware('auth')->name('dashboard');
 Route::get('/dashboard/scholarships', [ApplicantDashboardController::class, 'scholarships'])->middleware('auth')->name('dashboard.scholarships');
 Route::get('/dashboard/scholarships/data', [ApplicantDashboardController::class, 'scholarshipsData'])->middleware('auth')->name('dashboard.scholarships.data');
+Route::get('/dashboard/providers', [ApplicantDashboardController::class, 'providers'])->middleware('auth')->name('dashboard.providers');
+Route::get('/dashboard/providers/data', [ApplicantDashboardController::class, 'providersData'])->middleware('auth')->name('dashboard.providers.data');
+Route::get('/dashboard/providers/{provider}', [ApplicantDashboardController::class, 'providerDetail'])->middleware('auth')->whereNumber('provider')->name('dashboard.providers.show');
+Route::get('/dashboard/providers/{provider}/data', [ApplicantDashboardController::class, 'providerDetailData'])->middleware('auth')->whereNumber('provider')->name('dashboard.providers.show.data');
 Route::get('/dashboard/scholarships/{scholarship}', [ApplicantDashboardController::class, 'scholarshipDetail'])->middleware('auth')->name('dashboard.scholarships.show');
 Route::get('/dashboard/scholarships/{scholarship}/data', [ApplicantDashboardController::class, 'scholarshipDetailData'])->middleware('auth')->name('dashboard.scholarships.show.data');
 Route::post('/dashboard/scholarships/{scholarship}/application-start', [ApplicantDashboardController::class, 'trackApplicationStart'])->middleware(['auth', 'throttle:30,1'])->name('dashboard.scholarships.application-start');

@@ -19,6 +19,7 @@ const navLinks = [
         icon: 'fa-solid fa-graduation-cap',
         children: [
             { href: '/dashboard/scholarships', label: 'Find scholarships', exact: true, queryless: true },
+            { href: '/dashboard/providers', label: 'Browse providers', activePaths: ['/dashboard/providers'] },
             { href: '/dashboard/scholarships?view=saved', label: 'Saved scholarships', exact: true },
             { href: '/dashboard/scholarships?view=compare', label: 'Compare scholarships', exact: true },
         ],

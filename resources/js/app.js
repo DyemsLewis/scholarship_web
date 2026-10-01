@@ -39,6 +39,7 @@ const pages = {
     dashboardMonitoring: () => import('./pages/UserMonitoringPage.vue'),
     dashboardMonitoringDetail: () => import('./pages/UserMonitoringDetailPage.vue'),
     dashboardProfile: () => import('./pages/UserProfilePage.vue'),
+    dashboardProviders: () => import('./pages/UserProvidersPage.vue'),
     dashboardScholarshipDetail: () => import('./pages/UserScholarshipDetailPage.vue'),
     dashboardScholarships: () => import('./pages/UserScholarshipsPage.vue'),
     forgotPassword: () => import('./pages/ForgotPasswordPage.vue'),
