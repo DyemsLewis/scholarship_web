@@ -7,7 +7,9 @@ use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\SupportReport;
 use App\Models\User;
+use App\Support\AdminWorkspace;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -306,11 +308,79 @@ class SupportReportController extends Controller
         );
     }
 
-    public function adminPage(Request $request): View
+    public function adminPage(Request $request): View|RedirectResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
+        if (AdminWorkspace::usesSupportOfficerWorkspace($request->user())) {
+            return redirect()->route(AdminWorkspace::SUPPORT_OFFICER_ROUTE, $request->query());
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.support', $request->query());
+        }
+
         return view('admin-reports');
+    }
+
+    public function supportOfficerWorkspace(Request $request): View
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reports'), 403);
+
+        return view('admin-support-officer-workspace');
+    }
+
+    public function supportOfficerWorkspaceData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reports'), 403);
+
+        $validated = $request->validate([
+            'category' => ['sometimes', 'nullable', Rule::in(['all', ...array_keys(SupportReport::CATEGORIES), ...array_keys(SupportReport::PROVIDER_CATEGORIES)])],
+            'search' => ['sometimes', 'nullable', 'string', 'max:120'],
+        ]);
+        $category = $validated['category'] ?? 'all';
+        $search = trim((string) ($validated['search'] ?? ''));
+        $summaryQuery = SupportReport::query();
+        $query = SupportReport::query();
+
+        if ($category !== 'all') {
+            $query->where('category', $category);
+        }
+
+        if ($search !== '') {
+            $likeSearch = '%'.$search.'%';
+            $query->where(function ($searchQuery) use ($likeSearch): void {
+                $searchQuery
+                    ->where('subject', 'like', $likeSearch)
+                    ->orWhere('description', 'like', $likeSearch)
+                    ->orWhere('context', 'like', $likeSearch)
+                    ->orWhereHas('applicant', fn ($applicantQuery) => $applicantQuery
+                        ->where('email', 'like', $likeSearch)
+                        ->orWhere('first_name', 'like', $likeSearch)
+                        ->orWhere('last_name', 'like', $likeSearch))
+                    ->orWhereHas('scholarship', fn ($programQuery) => $programQuery
+                        ->where('title', 'like', $likeSearch));
+            });
+        }
+
+        return $this->queueResponse($request, $query, 'admin', [
+            'categories' => collect(SupportReport::CATEGORIES)
+                ->merge(SupportReport::PROVIDER_CATEGORIES)
+                ->map(fn (string $label, string $value): array => compact('value', 'label'))
+                ->values(),
+            'summary' => [
+                'needs_action' => (clone $summaryQuery)->where('admin_status', 'open')->count(),
+                'privacy_open' => (clone $summaryQuery)->where('admin_status', 'open')->where('category', 'privacy')->count(),
+                'shared_open' => (clone $summaryQuery)->where('admin_status', 'open')->where('assigned_role', 'provider')->count(),
+                'provider_submitted_open' => (clone $summaryQuery)
+                    ->where('admin_status', 'open')
+                    ->where('assigned_role', 'admin')
+                    ->whereHas('applicant', fn ($applicantQuery) => $applicantQuery->where('role', 'provider'))
+                    ->count(),
+            ],
+        ]);
     }
 
     public function adminData(Request $request): JsonResponse

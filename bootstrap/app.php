@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureManagedAccountSetupIsComplete;
 use App\Http\Middleware\EnsureProviderIsApproved;
+use App\Http\Middleware\EnsurePortalManagerWorkspace;
 use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsProvider;
@@ -32,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'provider' => EnsureUserIsProvider::class,
             'provider.approved' => EnsureProviderIsApproved::class,
             'permission' => EnsureUserHasPermission::class,
+            'portal.manager' => EnsurePortalManagerWorkspace::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

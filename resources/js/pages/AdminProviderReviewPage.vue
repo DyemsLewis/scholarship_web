@@ -2,11 +2,18 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
+import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
+import ReviewOfficerSidebar from '../components/ReviewOfficerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { formatFileSize } from '../support/display';
 
 const appElement = document.getElementById('app');
 const providerId = appElement?.dataset.providerId;
+const usesReviewOfficerWorkspace = window.location.pathname.startsWith('/admin/workspaces/reviews');
+const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const reviewQueueUrl = usesPortalManagerWorkspace
+    ? '/admin/workspaces/portal/reviews?type=providers'
+    : (usesReviewOfficerWorkspace ? '/admin/workspaces/reviews?type=providers' : '/admin/reviews?type=providers');
 const isLoading = ref(true);
 const isSaving = ref(false);
 const loadError = ref('');
@@ -281,7 +288,9 @@ onMounted(loadProvider);
 
 <template>
     <main class="admin-shell">
-        <AdminSidebar active="reviews" />
+        <PortalManagerSidebar v-if="usesPortalManagerWorkspace" />
+        <ReviewOfficerSidebar v-else-if="usesReviewOfficerWorkspace" />
+        <AdminSidebar v-else active="reviews" />
 
         <FilePreviewModal
             :file="previewDocument"
@@ -293,7 +302,7 @@ onMounted(loadProvider);
         <section class="admin-page">
             <div class="admin-container">
                 <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
-                    <a href="/admin/reviews?type=providers" class="font-bold text-slate-600 transition hover:text-slate-950">Provider reviews</a>
+                    <a :href="reviewQueueUrl" class="font-bold text-slate-600 transition hover:text-slate-950">Provider reviews</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
                     <span class="truncate font-semibold text-slate-950">{{ provider?.provider_name || provider?.name || 'Provider record' }}</span>
                 </nav>
@@ -745,7 +754,7 @@ onMounted(loadProvider);
                         >
                             Next: {{ nextReviewSection.label }}
                         </button>
-                        <a v-else href="/admin/reviews?type=providers" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Back to queue</a>
+                        <a v-else :href="reviewQueueUrl" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Back to queue</a>
                     </nav>
                 </div>
 

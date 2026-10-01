@@ -37,7 +37,9 @@ class AdminFinanceTest extends TestCase
         $provider = User::factory()->create(['role' => 'provider']);
 
         $this->actingAs($superAdmin)->get('/admin/finance')->assertOk();
-        $this->actingAs($financeStaff)->get('/admin/finance')->assertOk();
+        $this->actingAs($financeStaff)
+            ->get('/admin/finance')
+            ->assertRedirect('/admin/workspaces/finance');
         $this->actingAs($financeStaff)->getJson('/admin/finance/data')->assertOk();
         $this->actingAs($billingStaff)->get('/admin/finance')->assertForbidden();
         $this->actingAs($billingStaff)->getJson('/admin/finance/data')->assertForbidden();

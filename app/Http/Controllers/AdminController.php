@@ -17,11 +17,12 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Rules\PhoneNumber;
-use App\Services\DecisionSupportService;
 use App\Services\AcademicRecordOcrService;
+use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
 use App\Services\ScholarshipPublicationGuard;
 use App\Support\AcademicRequirement;
+use App\Support\AdminWorkspace;
 use App\Support\CsvExport;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
@@ -57,6 +58,10 @@ class AdminController extends Controller
         }
 
         abort_unless($request->user()->isAdmin(), 403);
+
+        if ($workspaceRoute = AdminWorkspace::preferredRouteName($request->user())) {
+            return redirect()->route($workspaceRoute);
+        }
 
         return view('admin');
     }
@@ -132,6 +137,14 @@ class AdminController extends Controller
 
         abort_unless($request->user()->isAdmin(), 403);
 
+        if (AdminWorkspace::usesAccountManagerWorkspace($request->user())) {
+            return redirect()->route(AdminWorkspace::ACCOUNT_MANAGER_ROUTE);
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.accounts');
+        }
+
         return view('admin-users');
     }
 
@@ -143,11 +156,43 @@ class AdminController extends Controller
 
         abort_unless($request->user()->isAdmin(), 403);
 
+        if (AdminWorkspace::usesAccountManagerWorkspace($request->user())) {
+            return redirect()->route(AdminWorkspace::ACCOUNT_MANAGER_ROUTE, $user ? ['account' => $user->id] : ['create' => 1]);
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.accounts', $user ? ['account' => $user->id] : ['create' => 1]);
+        }
+
         if ($user) {
             $this->authorizeAdminAccountTarget($request->user(), $user);
         }
 
         return view('admin-account-form');
+    }
+
+    public function accountManagerWorkspace(Request $request): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_accounts'), 403);
+
+        return view('admin-account-manager-workspace');
+    }
+
+    public function accountManagerWorkspaceData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_accounts'), 403);
+
+        $validated = $request->validate([
+            'search' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'role' => ['sometimes', 'nullable', Rule::in(['all', 'applicant', 'provider', 'admin'])],
+            'attention' => ['sometimes', 'nullable', Rule::in(['all', 'unverified', 'password_reset', 'suspended'])],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:50'],
+        ]);
+
+        return response()->json($this->accountDirectoryPayload($request, $validated));
     }
 
     public function profile(Request $request): View|RedirectResponse
@@ -169,7 +214,70 @@ class AdminController extends Controller
 
         abort_unless($request->user()->isAdmin(), 403);
 
+        if (AdminWorkspace::usesReviewOfficerWorkspace($request->user())) {
+            $query = $request->query('type') ? ['type' => $request->query('type')] : [];
+
+            return redirect()->route(AdminWorkspace::REVIEW_OFFICER_ROUTE, $query);
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            $query = $request->query('type') ? ['type' => $request->query('type')] : [];
+
+            return redirect()->route('admin.workspaces.portal.reviews', $query);
+        }
+
         return view('admin-reviews');
+    }
+
+    public function reviewOfficerWorkspace(Request $request): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reviews'), 403);
+
+        return view('admin-review-officer-workspace');
+    }
+
+    public function reviewOfficerWorkspaceData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reviews'), 403);
+
+        return $this->reviewsData($request);
+    }
+
+    public function reviewOfficerProviderReview(Request $request, User $provider): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reviews'), 403);
+        abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
+
+        return view('admin-provider-review', ['provider' => $provider]);
+    }
+
+    public function reviewOfficerProgramReview(Request $request, Scholarship $scholarship): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reviews'), 403);
+
+        return view('admin-program-review', ['scholarship' => $scholarship]);
+    }
+
+    public function reviewOfficerApplicantReview(Request $request, User $applicant): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reviews'), 403);
+        abort_unless($applicant->isApplicant(), 404);
+
+        return view('admin-applicant-review', ['applicant' => $applicant]);
+    }
+
+    public function reviewOfficerMonitoringReview(Request $request, ScholarshipApplication $application): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reviews'), 403);
+        abort_unless($this->isRecipientMonitoringRecord($application), 404);
+
+        return view('admin-monitoring-review', ['application' => $application]);
     }
 
     public function monitoringReview(
@@ -182,6 +290,20 @@ class AdminController extends Controller
 
         abort_unless($request->user()->isAdmin(), 403);
         abort_unless($this->isRecipientMonitoringRecord($application), 404);
+
+        if (AdminWorkspace::usesReviewOfficerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.reviews.monitoring.show', array_merge(
+                $request->query(),
+                ['application' => $application],
+            ));
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.reviews.monitoring.show', array_merge(
+                $request->query(),
+                ['application' => $application],
+            ));
+        }
 
         return view('admin-monitoring-review', [
             'application' => $application,
@@ -197,6 +319,20 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
         abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
 
+        if (AdminWorkspace::usesReviewOfficerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.reviews.providers.show', array_merge(
+                $request->query(),
+                ['provider' => $provider],
+            ));
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.reviews.providers.show', array_merge(
+                $request->query(),
+                ['provider' => $provider],
+            ));
+        }
+
         return view('admin-provider-review', [
             'provider' => $provider,
         ]);
@@ -211,6 +347,20 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
         abort_unless($applicant->isApplicant(), 404);
 
+        if (AdminWorkspace::usesReviewOfficerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.reviews.applicants.show', array_merge(
+                $request->query(),
+                ['applicant' => $applicant],
+            ));
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.reviews.applicants.show', array_merge(
+                $request->query(),
+                ['applicant' => $applicant],
+            ));
+        }
+
         return view('admin-applicant-review', [
             'applicant' => $applicant,
         ]);
@@ -223,6 +373,20 @@ class AdminController extends Controller
         }
 
         abort_unless($request->user()->isAdmin(), 403);
+
+        if (AdminWorkspace::usesReviewOfficerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.reviews.programs.show', array_merge(
+                $request->query(),
+                ['scholarship' => $scholarship],
+            ));
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.reviews.programs.show', array_merge(
+                $request->query(),
+                ['scholarship' => $scholarship],
+            ));
+        }
 
         return view('admin-program-review', [
             'scholarship' => $scholarship,
@@ -237,7 +401,39 @@ class AdminController extends Controller
 
         abort_unless($request->user()->isAdmin(), 403);
 
+        if (AdminWorkspace::usesRecordsOfficerWorkspace($request->user())) {
+            return redirect()->route(AdminWorkspace::RECORDS_OFFICER_ROUTE, $request->query());
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.records.activity', $request->query());
+        }
+
         return view('admin-logs');
+    }
+
+    public function recordsOfficerActivity(Request $request): View
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('view_logs'), 403);
+
+        return view('admin-records-officer-workspace');
+    }
+
+    public function recordsOfficerActivityData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('view_logs'), 403);
+
+        return $this->logEntries($request);
+    }
+
+    public function recordsOfficerExports(Request $request): View
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('export_data'), 403);
+
+        return view('admin-records-officer-workspace');
     }
 
     public function users(Request $request): JsonResponse
@@ -251,8 +447,14 @@ class AdminController extends Controller
             'per_page' => ['sometimes', 'integer', 'min:5', 'max:50'],
         ]);
 
+        return response()->json($this->accountDirectoryPayload($request, $validated));
+    }
+
+    private function accountDirectoryPayload(Request $request, array $validated): array
+    {
         $search = trim((string) ($validated['search'] ?? ''));
         $role = $validated['role'] ?? 'all';
+        $attention = $validated['attention'] ?? 'all';
         $perPage = (int) ($validated['per_page'] ?? 10);
         $visibleUsers = User::query()
             ->when($request->user()->isManagedAccount(), fn ($query) => $query->where('role', '!=', 'admin'));
@@ -269,6 +471,13 @@ class AdminController extends Controller
         if ($role !== 'all') {
             $query->where('role', $role);
         }
+
+        match ($attention) {
+            'unverified' => $query->whereNull('email_verified_at'),
+            'password_reset' => $query->where('must_reset_password', true),
+            'suspended' => $query->where('account_status', 'suspended'),
+            default => null,
+        };
 
         if ($search !== '') {
             $likeSearch = '%'.$search.'%';
@@ -301,15 +510,25 @@ class AdminController extends Controller
 
         $users = $query->paginate($perPage);
 
-        return response()->json([
+        return [
             'stats' => [
                 'total_users' => $totalUsers,
                 'admins' => (int) ($roleCounts['admin'] ?? 0),
                 'applicants' => (int) ($roleCounts['applicant'] ?? 0),
                 'providers' => (int) ($roleCounts['provider'] ?? 0),
+                'active_users' => (clone $visibleUsers)->where('account_status', '!=', 'suspended')->count(),
                 'recent_signups' => (clone $visibleUsers)->where('created_at', '>=', now()->subDays(7))->count(),
+                'unverified_users' => (clone $visibleUsers)->whereNull('email_verified_at')->count(),
                 'suspended_users' => (clone $visibleUsers)->where('account_status', 'suspended')->count(),
                 'password_resets_required' => (clone $visibleUsers)->where('must_reset_password', true)->count(),
+                'attention_total' => (clone $visibleUsers)
+                    ->where(function ($query): void {
+                        $query
+                            ->whereNull('email_verified_at')
+                            ->orWhere('must_reset_password', true)
+                            ->orWhere('account_status', 'suspended');
+                    })
+                    ->count(),
             ],
             'users' => $users->getCollection()->map(fn (User $user) => [
                 ...$user->publicPayload(),
@@ -323,7 +542,7 @@ class AdminController extends Controller
                 'from' => $users->firstItem(),
                 'to' => $users->lastItem(),
             ],
-        ]);
+        ];
     }
 
     public function showUser(Request $request, User $user): JsonResponse
@@ -1646,10 +1865,14 @@ class AdminController extends Controller
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:5', 'max:25'],
             'action' => ['sometimes', 'string', 'max:80'],
+            'actor_role' => ['sometimes', 'nullable', Rule::in(['all', 'admin', 'provider', 'applicant', 'system'])],
+            'search' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
         $perPage = (int) ($validated['per_page'] ?? 10);
         $action = $validated['action'] ?? 'all';
+        $actorRole = $validated['actor_role'] ?? 'all';
+        $search = trim((string) ($validated['search'] ?? ''));
         $baseQuery = ActivityLog::query();
         $actions = (clone $baseQuery)
             ->selectRaw('action, count(*) as total')
@@ -1661,6 +1884,22 @@ class AdminController extends Controller
 
         if ($action !== 'all') {
             $query->where('action', $action);
+        }
+
+        if ($actorRole === 'system') {
+            $query->whereNull('actor_role');
+        } elseif ($actorRole !== 'all') {
+            $query->where('actor_role', $actorRole);
+        }
+
+        if ($search !== '') {
+            $likeSearch = '%'.$search.'%';
+            $query->where(function ($searchQuery) use ($likeSearch): void {
+                $searchQuery
+                    ->where('description', 'like', $likeSearch)
+                    ->orWhere('actor_name', 'like', $likeSearch)
+                    ->orWhere('ip_address', 'like', $likeSearch);
+            });
         }
 
         $logs = $query->paginate($perPage);
@@ -1688,6 +1927,13 @@ class AdminController extends Controller
             'filters' => [
                 'all' => ActivityLog::query()->count(),
                 ...$actions->all(),
+            ],
+            'roles' => [
+                'all' => ActivityLog::query()->count(),
+                'admin' => ActivityLog::query()->where('actor_role', 'admin')->count(),
+                'provider' => ActivityLog::query()->where('actor_role', 'provider')->count(),
+                'applicant' => ActivityLog::query()->where('actor_role', 'applicant')->count(),
+                'system' => ActivityLog::query()->whereNull('actor_role')->count(),
             ],
         ]);
     }

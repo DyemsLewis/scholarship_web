@@ -3,19 +3,53 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProviderServicePurchase;
+use App\Support\AdminWorkspace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class FinanceController extends Controller
 {
-    public function page(Request $request): View
+    public function page(Request $request): View|RedirectResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
+        if (AdminWorkspace::usesFinanceOfficerWorkspace($request->user())) {
+            return redirect()->route(AdminWorkspace::FINANCE_OFFICER_ROUTE);
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.finance');
+        }
+
         return view('admin-finance');
+    }
+
+    public function financeOfficerOverview(Request $request): View
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('view_finance'), 403);
+
+        return view('admin-finance-officer-workspace');
+    }
+
+    public function financeOfficerReceipts(Request $request): View
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('view_finance'), 403);
+
+        return view('admin-finance-officer-workspace');
+    }
+
+    public function financeOfficerData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('view_finance'), 403);
+
+        return $this->data($request);
     }
 
     public function data(Request $request): JsonResponse

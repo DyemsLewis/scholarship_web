@@ -60,7 +60,9 @@ class RolePermissionAccountTest extends TestCase
             'password_reset_required_at' => null,
         ])->save();
 
-        $this->actingAs($staff)->get('/admin/reviews')->assertOk();
+        $this->actingAs($staff)
+            ->get('/admin/reviews')
+            ->assertRedirect('/admin/workspaces/reviews');
         $this->actingAs($staff)->get('/admin/manage-users')->assertForbidden();
         $this->actingAs($staff)->get('/admin/logs')->assertForbidden();
     }

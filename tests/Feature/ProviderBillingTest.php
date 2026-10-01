@@ -308,7 +308,9 @@ class ProviderBillingTest extends TestCase
         $purchase->update(['status' => 'paid', 'paid_at' => now()]);
 
         $this->actingAs($reviewAdmin)->get('/admin/billing')->assertForbidden();
-        $this->actingAs($billingAdmin)->get('/admin/billing')->assertOk();
+        $this->actingAs($billingAdmin)
+            ->get('/admin/billing')
+            ->assertRedirect('/admin/workspaces/billing');
         $this->actingAs($billingAdmin)
             ->patchJson("/admin/billing/{$purchase->id}/fulfillment", [
                 'fulfillment_status' => 'in_progress',

@@ -1,12 +1,23 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import BillingOfficerSidebar from '../components/BillingOfficerSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
+import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
+import ApplicationCycleServiceWorkspace from '../components/provider-services/ApplicationCycleServiceWorkspace.vue';
+import AssistedSetupServiceWorkspace from '../components/provider-services/AssistedSetupServiceWorkspace.vue';
+import IntegrationConsultationServiceWorkspace from '../components/provider-services/IntegrationConsultationServiceWorkspace.vue';
 import { formatFileSize } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
+import { providerServiceWorkspace } from '../support/providerServiceWorkspaces';
 
 const purchaseId = document.getElementById('app')?.dataset.purchaseId;
+const usesBillingOfficerWorkspace = window.location.pathname.startsWith('/admin/workspaces/billing');
+const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const billingQueueUrl = usesPortalManagerWorkspace
+    ? '/admin/workspaces/portal/billing'
+    : (usesBillingOfficerWorkspace ? '/admin/workspaces/billing' : '/admin/billing');
 const isLoading = ref(true);
 const isSaving = ref(false);
 const isUploading = ref(false);
@@ -34,6 +45,16 @@ const minimumTargetDate = new Date(Date.now() - new Date().getTimezoneOffset() *
 const supportingFiles = computed(() => purchase.value?.files?.filter((file) => file.category === 'supporting') ?? []);
 const deliverables = computed(() => purchase.value?.files?.filter((file) => file.category === 'deliverable') ?? []);
 const completedMilestones = computed(() => workflowForm.value.milestones.filter((item) => item.completed).length);
+const workspace = computed(() => providerServiceWorkspace(purchase.value?.plan_code));
+const serviceWorkspaceComponent = computed(() => ({
+    assisted_setup: AssistedSetupServiceWorkspace,
+    application_cycle_support: ApplicationCycleServiceWorkspace,
+    integration_consultation: IntegrationConsultationServiceWorkspace,
+}[purchase.value?.plan_code] ?? AssistedSetupServiceWorkspace));
+const workspacePurchase = computed(() => ({
+    ...purchase.value,
+    milestones: workflowForm.value.milestones,
+}));
 
 function statusLabel(value) {
     return {
@@ -179,12 +200,14 @@ onMounted(loadWorkspace);
 
 <template>
     <main class="admin-shell">
-        <AdminSidebar active="billing" />
+        <PortalManagerSidebar v-if="usesPortalManagerWorkspace" />
+        <BillingOfficerSidebar v-else-if="usesBillingOfficerWorkspace" />
+        <AdminSidebar v-else active="billing" />
 
         <section class="admin-page">
             <div class="admin-container">
                 <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
-                    <a href="/admin/billing" class="font-bold text-slate-600 transition hover:text-slate-950">Service requests</a>
+                    <a :href="billingQueueUrl" class="font-bold text-slate-600 transition hover:text-slate-950">Service requests</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
                     <span class="truncate font-semibold text-slate-950">{{ purchase?.plan_name ?? 'Request workspace' }}</span>
                 </nav>
@@ -193,8 +216,8 @@ onMounted(loadWorkspace);
                     theme="admin"
                     eyebrow="Service request"
                     :title="purchase?.plan_name ?? 'Provider service'"
-                    description="Confirm the meeting, update progress, and share completed work."
-                    icon="fa-solid fa-headset"
+                    :description="workspace.headerDescription"
+                    :icon="workspace.headerIcon"
                 >
                     <template v-if="purchase" #meta>
                         <span>{{ purchase.provider?.name || 'Provider' }}</span>
@@ -221,6 +244,8 @@ onMounted(loadWorkspace);
                         </div>
                     </section>
 
+                    <component :is="serviceWorkspaceComponent" class="mt-5" :purchase="workspacePurchase" />
+
                     <div class="mt-5 flex flex-col gap-4">
                         <div class="contents">
 
@@ -230,8 +255,8 @@ onMounted(loadWorkspace);
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span>
                                         <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Next action</p>
-                                            <h2 class="mt-1 text-xl font-bold text-slate-950">Service meeting</h2>
-                                            <p class="mt-2 text-sm leading-6 text-slate-600">Review and confirm the provider's preferred meeting schedule.</p>
+                                            <h2 class="mt-1 text-xl font-bold text-slate-950">{{ workspace.meetingTitle }}</h2>
+                                            <p class="mt-2 text-sm leading-6 text-slate-600">Review and confirm the provider's preferred schedule for this service.</p>
                                         </div>
                                     </div>
                                     <span v-if="purchase.meeting_status" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold capitalize', meetingStatusClass(purchase.meeting_status)]">{{ purchase.meeting_status }}</span>
@@ -279,7 +304,7 @@ onMounted(loadWorkspace);
 
                             <section class="admin-panel order-2 p-5 sm:p-6">
                                 <div class="flex items-start justify-between gap-3">
-                                    <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Service work</p><h2 class="mt-1 text-xl font-bold text-slate-950">Update progress</h2><p class="mt-2 text-sm text-slate-500">Assign the request, update its status, and mark finished steps.</p></div>
+                                    <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Service work</p><h2 class="mt-1 text-xl font-bold text-slate-950">{{ workspace.adminProgressTitle }}</h2><p class="mt-2 text-sm text-slate-500">{{ workspace.adminProgressDescription }}</p></div>
                                     <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ completedMilestones }}/{{ workflowForm.milestones.length }} complete</span>
                                 </div>
                                 <form class="mt-5" @submit.prevent="saveWorkflow">
@@ -325,17 +350,17 @@ onMounted(loadWorkspace);
                         <div class="contents">
                             <section class="admin-panel order-3 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                                    <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Files</p><h2 class="mt-1 text-xl font-bold text-slate-950">Shared materials</h2></div>
+                                    <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Files</p><h2 class="mt-1 text-xl font-bold text-slate-950">{{ workspace.filesTitle }}</h2><p class="mt-1 text-sm text-slate-500">{{ workspace.filesDescription }}</p></div>
                                     <label v-if="purchase.status === 'paid' && purchase.fulfillment_status !== 'completed'" class="inline-flex w-fit cursor-pointer items-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-xs font-bold text-white"><i class="fa-solid fa-upload" aria-hidden="true"></i><span>{{ isUploading ? 'Uploading...' : 'Upload deliverable' }}</span><input type="file" class="sr-only" :disabled="isUploading" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt" @change="uploadDeliverable"></label>
                                 </div>
                                 <div class="grid gap-5 p-5 sm:p-6 lg:grid-cols-2">
                                     <div>
-                                        <h3 class="text-sm font-bold text-slate-950">From the provider</h3>
-                                        <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in supportingFiles" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-lines text-slate-400" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!supportingFiles.length" class="p-4 text-sm text-slate-500">No provider files uploaded.</p></div>
+                                        <h3 class="text-sm font-bold text-slate-950">{{ workspace.providerFilesLabel }}</h3>
+                                        <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in supportingFiles" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-lines text-slate-400" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!supportingFiles.length" class="p-4 text-sm text-slate-500">{{ workspace.providerFilesEmpty }}</p></div>
                                     </div>
                                     <div>
-                                        <h3 class="text-sm font-bold text-slate-950">For the provider</h3>
-                                        <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in deliverables" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-circle-check text-emerald-600" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!deliverables.length" class="p-4 text-sm text-slate-500">No deliverables uploaded.</p></div>
+                                        <h3 class="text-sm font-bold text-slate-950">{{ workspace.deliverablesLabel }}</h3>
+                                        <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200"><button v-for="file in deliverables" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file"><i class="fa-solid fa-file-circle-check text-emerald-600" aria-hidden="true"></i><span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span></button><p v-if="!deliverables.length" class="p-4 text-sm text-slate-500">{{ workspace.deliverablesEmpty }}</p></div>
                                     </div>
                                 </div>
                             </section>

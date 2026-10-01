@@ -3,7 +3,9 @@ import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
+import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import RecipientAgreementPanel from '../components/RecipientAgreementPanel.vue';
+import ReviewOfficerSidebar from '../components/ReviewOfficerSidebar.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
@@ -11,6 +13,11 @@ import { providerObjectiveDetails } from '../support/providerObjectives';
 
 const appElement = document.getElementById('app');
 const scholarshipId = appElement?.dataset.scholarshipId;
+const usesReviewOfficerWorkspace = window.location.pathname.startsWith('/admin/workspaces/reviews');
+const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const reviewQueueUrl = usesPortalManagerWorkspace
+    ? '/admin/workspaces/portal/reviews?type=programs'
+    : (usesReviewOfficerWorkspace ? '/admin/workspaces/reviews?type=programs' : '/admin/reviews?type=programs');
 const isLoading = ref(true);
 const isSaving = ref(false);
 const loadError = ref('');
@@ -509,12 +516,14 @@ onMounted(loadScholarship);
 
 <template>
     <main class="admin-shell">
-        <AdminSidebar active="reviews" />
+        <PortalManagerSidebar v-if="usesPortalManagerWorkspace" />
+        <ReviewOfficerSidebar v-else-if="usesReviewOfficerWorkspace" />
+        <AdminSidebar v-else active="reviews" />
 
         <section class="admin-page">
             <div class="admin-container">
                 <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
-                    <a href="/admin/reviews?type=programs" class="font-bold text-slate-600 transition hover:text-slate-950">Program reviews</a>
+                    <a :href="reviewQueueUrl" class="font-bold text-slate-600 transition hover:text-slate-950">Program reviews</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
                     <span class="truncate font-semibold text-slate-950">{{ scholarship?.title || 'Program record' }}</span>
                 </nav>
@@ -1151,7 +1160,7 @@ onMounted(loadScholarship);
 
                             <div v-if="scholarship.provider_id" class="border-t border-slate-200 p-4">
                                 <a
-                                    :href="`/admin/providers/${scholarship.provider_id}/review`"
+                                    :href="usesPortalManagerWorkspace ? `/admin/workspaces/portal/reviews/providers/${scholarship.provider_id}` : `/admin/providers/${scholarship.provider_id}/review`"
                                     class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                                 >
                                     Open provider record
@@ -1179,7 +1188,7 @@ onMounted(loadScholarship);
                         >
                             Next: {{ nextReviewSection.label }}
                         </button>
-                        <a v-else href="/admin/reviews?type=programs" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Back to queue</a>
+                        <a v-else :href="reviewQueueUrl" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">Back to queue</a>
                     </nav>
                 </div>
 

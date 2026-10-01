@@ -1,6 +1,13 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
+import AccountManagerSidebar from '../components/AccountManagerSidebar.vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import BillingOfficerSidebar from '../components/BillingOfficerSidebar.vue';
+import FinanceOfficerSidebar from '../components/FinanceOfficerSidebar.vue';
+import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
+import RecordsOfficerSidebar from '../components/RecordsOfficerSidebar.vue';
+import ReviewOfficerSidebar from '../components/ReviewOfficerSidebar.vue';
+import SupportOfficerSidebar from '../components/SupportOfficerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { limitPhoneNumber } from '../support/phoneNumber';
 
@@ -22,6 +29,59 @@ const form = reactive({
 
 const labelClass = 'text-xs font-bold uppercase tracking-[0.14em] text-slate-500';
 const inputClass = 'mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const usesAccountManagerWorkspace = computed(() => {
+    const permissions = [...(window.portalUser?.permissions ?? [])].sort();
+    return Boolean(window.portalUser?.is_managed_account
+        && (String(window.portalUser?.account_title ?? '').trim().toLowerCase() === 'account manager'
+            || (permissions.length === 1 && permissions[0] === 'manage_accounts')));
+});
+const usesReviewOfficerWorkspace = computed(() => {
+    const permissions = [...(window.portalUser?.permissions ?? [])].sort();
+    return Boolean(window.portalUser?.is_managed_account
+        && (String(window.portalUser?.account_title ?? '').trim().toLowerCase() === 'review officer'
+            || (permissions.length === 1 && permissions[0] === 'manage_reviews')));
+});
+const usesSupportOfficerWorkspace = computed(() => {
+    const permissions = [...(window.portalUser?.permissions ?? [])].sort();
+    return Boolean(window.portalUser?.is_managed_account
+        && (String(window.portalUser?.account_title ?? '').trim().toLowerCase() === 'support officer'
+            || (permissions.length === 1 && permissions[0] === 'manage_reports')));
+});
+const usesBillingOfficerWorkspace = computed(() => {
+    const permissions = [...(window.portalUser?.permissions ?? [])].sort();
+    return Boolean(window.portalUser?.is_managed_account
+        && (String(window.portalUser?.account_title ?? '').trim().toLowerCase() === 'billing officer'
+            || (permissions.length === 1 && permissions[0] === 'manage_billing')));
+});
+const usesFinanceOfficerWorkspace = computed(() => {
+    const permissions = [...(window.portalUser?.permissions ?? [])].sort();
+    return Boolean(window.portalUser?.is_managed_account
+        && (String(window.portalUser?.account_title ?? '').trim().toLowerCase() === 'finance officer'
+            || (permissions.length === 1 && permissions[0] === 'view_finance')));
+});
+const usesRecordsOfficerWorkspace = computed(() => {
+    const permissions = [...(window.portalUser?.permissions ?? [])].sort();
+    return Boolean(window.portalUser?.is_managed_account
+        && (String(window.portalUser?.account_title ?? '').trim().toLowerCase() === 'records officer'
+            || (permissions.length === 2 && permissions[0] === 'export_data' && permissions[1] === 'view_logs')));
+});
+const usesPortalManagerWorkspace = computed(() => {
+    const permissions = [...(window.portalUser?.permissions ?? [])].sort();
+    const expectedPermissions = [
+        'export_data',
+        'manage_accounts',
+        'manage_billing',
+        'manage_reports',
+        'manage_reviews',
+        'view_finance',
+        'view_logs',
+    ];
+
+    return Boolean(window.portalUser?.is_managed_account
+        && (String(window.portalUser?.account_title ?? '').trim().toLowerCase() === 'portal manager'
+            || (permissions.length === expectedPermissions.length
+                && permissions.every((permission, index) => permission === expectedPermissions[index]))));
+});
 const adminInitials = computed(() => {
     const name = user.value?.display_name || user.value?.name || 'Admin';
 
@@ -87,7 +147,14 @@ onMounted(loadProfile);
 
 <template>
     <main class="admin-shell">
-        <AdminSidebar active="profile" />
+        <AccountManagerSidebar v-if="usesAccountManagerWorkspace" />
+        <ReviewOfficerSidebar v-else-if="usesReviewOfficerWorkspace" />
+        <SupportOfficerSidebar v-else-if="usesSupportOfficerWorkspace" />
+        <BillingOfficerSidebar v-else-if="usesBillingOfficerWorkspace" />
+        <FinanceOfficerSidebar v-else-if="usesFinanceOfficerWorkspace" />
+        <RecordsOfficerSidebar v-else-if="usesRecordsOfficerWorkspace" />
+        <PortalManagerSidebar v-else-if="usesPortalManagerWorkspace" />
+        <AdminSidebar v-else active="profile" />
 
         <section class="admin-page">
             <div class="admin-container">

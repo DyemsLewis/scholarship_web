@@ -9,7 +9,9 @@ use App\Models\ProviderServicePurchase;
 use App\Models\ProviderServiceUpdate;
 use App\Models\User;
 use App\Services\PayMongoCheckoutService;
+use App\Support\AdminWorkspace;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -634,16 +636,60 @@ class BillingController extends Controller
         return $this->recordPaidCheckout($request, $resource, $eventId, $signature['livemode']);
     }
 
-    public function adminPage(Request $request): View
+    public function adminPage(Request $request): View|RedirectResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
+
+        if (AdminWorkspace::usesBillingOfficerWorkspace($request->user())) {
+            return redirect()->route(AdminWorkspace::BILLING_OFFICER_ROUTE, $request->query());
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.billing', $request->query());
+        }
 
         return view('admin-billing');
     }
 
-    public function adminWorkspacePage(Request $request, ProviderServicePurchase $purchase): View
+    public function billingOfficerWorkspace(Request $request): View
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_billing'), 403);
+
+        return view('admin-billing-officer-workspace');
+    }
+
+    public function billingOfficerWorkspaceData(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_billing'), 403);
+
+        return $this->adminData($request);
+    }
+
+    public function billingOfficerRequest(Request $request, ProviderServicePurchase $purchase): View
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_billing'), 403);
+
+        return view('admin-service-workspace', ['purchase' => $purchase]);
+    }
+
+    public function adminWorkspacePage(Request $request, ProviderServicePurchase $purchase): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isAdmin(), 403);
+
+        if (AdminWorkspace::usesBillingOfficerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.billing.requests.show', [
+                'purchase' => $purchase,
+            ]);
+        }
+
+        if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
+            return redirect()->route('admin.workspaces.portal.billing.requests.show', [
+                'purchase' => $purchase,
+            ]);
+        }
 
         return view('admin-service-workspace', ['purchase' => $purchase]);
     }
@@ -894,7 +940,8 @@ class BillingController extends Controller
         $query = ProviderServicePurchase::query()
             ->with(['provider.providerProfile', 'creator.providerProfile', 'fulfiller.adminProfile', 'assignee.adminProfile'])
             ->when($paymentStatus !== 'all', fn ($builder) => $builder->where('status', $paymentStatus))
-            ->when($fulfillmentStatus !== 'all', fn ($builder) => $builder->where('fulfillment_status', $fulfillmentStatus))
+            ->when($fulfillmentStatus === 'ready', fn ($builder) => $builder->whereIn('fulfillment_status', ['queued', 'ready']))
+            ->when(! in_array($fulfillmentStatus, ['all', 'ready'], true), fn ($builder) => $builder->where('fulfillment_status', $fulfillmentStatus))
             ->when($search !== '', function ($builder) use ($search): void {
                 $builder->where(function ($nested) use ($search): void {
                     $nested->where('reference_number', 'like', "%{$search}%")

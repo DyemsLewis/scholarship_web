@@ -8,6 +8,7 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\PortalManagerController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\SupportReportController;
 use Illuminate\Support\Facades\Route;
@@ -95,6 +96,45 @@ Route::middleware(['auth', 'admin'])
     ->group(function (): void {
         Route::get('/', [AdminController::class, 'index'])->name('index');
         Route::get('/dashboard/data', [AdminController::class, 'dashboardData'])->name('dashboard.data');
+        Route::get('/workspaces/accounts', [AdminController::class, 'accountManagerWorkspace'])->middleware('permission:manage_accounts')->name('workspaces.accounts');
+        Route::get('/workspaces/accounts/data', [AdminController::class, 'accountManagerWorkspaceData'])->middleware('permission:manage_accounts')->name('workspaces.accounts.data');
+        Route::get('/workspaces/reviews', [AdminController::class, 'reviewOfficerWorkspace'])->middleware('permission:manage_reviews')->name('workspaces.reviews');
+        Route::get('/workspaces/reviews/data', [AdminController::class, 'reviewOfficerWorkspaceData'])->middleware('permission:manage_reviews')->name('workspaces.reviews.data');
+        Route::get('/workspaces/reviews/providers/{provider}', [AdminController::class, 'reviewOfficerProviderReview'])->middleware('permission:manage_reviews')->whereNumber('provider')->name('workspaces.reviews.providers.show');
+        Route::get('/workspaces/reviews/programs/{scholarship}', [AdminController::class, 'reviewOfficerProgramReview'])->middleware('permission:manage_reviews')->whereNumber('scholarship')->name('workspaces.reviews.programs.show');
+        Route::get('/workspaces/reviews/applicants/{applicant}', [AdminController::class, 'reviewOfficerApplicantReview'])->middleware('permission:manage_reviews')->whereNumber('applicant')->name('workspaces.reviews.applicants.show');
+        Route::get('/workspaces/reviews/monitoring/{application}', [AdminController::class, 'reviewOfficerMonitoringReview'])->middleware('permission:manage_reviews')->whereNumber('application')->name('workspaces.reviews.monitoring.show');
+        Route::get('/workspaces/support', [SupportReportController::class, 'supportOfficerWorkspace'])->middleware('permission:manage_reports')->name('workspaces.support');
+        Route::get('/workspaces/support/data', [SupportReportController::class, 'supportOfficerWorkspaceData'])->middleware('permission:manage_reports')->name('workspaces.support.data');
+        Route::get('/workspaces/billing', [BillingController::class, 'billingOfficerWorkspace'])->middleware('permission:manage_billing')->name('workspaces.billing');
+        Route::get('/workspaces/billing/data', [BillingController::class, 'billingOfficerWorkspaceData'])->middleware('permission:manage_billing')->name('workspaces.billing.data');
+        Route::get('/workspaces/billing/requests/{purchase}', [BillingController::class, 'billingOfficerRequest'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('workspaces.billing.requests.show');
+        Route::get('/workspaces/finance', [FinanceController::class, 'financeOfficerOverview'])->middleware('permission:view_finance')->name('workspaces.finance');
+        Route::get('/workspaces/finance/receipts', [FinanceController::class, 'financeOfficerReceipts'])->middleware('permission:view_finance')->name('workspaces.finance.receipts');
+        Route::get('/workspaces/finance/data', [FinanceController::class, 'financeOfficerData'])->middleware('permission:view_finance')->name('workspaces.finance.data');
+        Route::get('/workspaces/records/activity', [AdminController::class, 'recordsOfficerActivity'])->middleware('permission:view_logs')->name('workspaces.records.activity');
+        Route::get('/workspaces/records/activity/data', [AdminController::class, 'recordsOfficerActivityData'])->middleware('permission:view_logs')->name('workspaces.records.activity.data');
+        Route::get('/workspaces/records/exports', [AdminController::class, 'recordsOfficerExports'])->middleware('permission:export_data')->name('workspaces.records.exports');
+        Route::middleware('portal.manager')
+            ->prefix('workspaces/portal')
+            ->name('workspaces.portal.')
+            ->group(function (): void {
+                Route::get('/', [PortalManagerController::class, 'index'])->name('index');
+                Route::get('/data', [PortalManagerController::class, 'data'])->name('data');
+                Route::get('/accounts', [PortalManagerController::class, 'accounts'])->name('accounts');
+                Route::get('/reviews', [PortalManagerController::class, 'reviews'])->name('reviews');
+                Route::get('/reviews/providers/{provider}', [PortalManagerController::class, 'providerReview'])->whereNumber('provider')->name('reviews.providers.show');
+                Route::get('/reviews/programs/{scholarship}', [PortalManagerController::class, 'programReview'])->whereNumber('scholarship')->name('reviews.programs.show');
+                Route::get('/reviews/applicants/{applicant}', [PortalManagerController::class, 'applicantReview'])->whereNumber('applicant')->name('reviews.applicants.show');
+                Route::get('/reviews/monitoring/{application}', [PortalManagerController::class, 'monitoringReview'])->whereNumber('application')->name('reviews.monitoring.show');
+                Route::get('/support', [PortalManagerController::class, 'support'])->name('support');
+                Route::get('/billing', [PortalManagerController::class, 'billing'])->name('billing');
+                Route::get('/billing/requests/{purchase}', [PortalManagerController::class, 'billingRequest'])->whereNumber('purchase')->name('billing.requests.show');
+                Route::get('/finance', [PortalManagerController::class, 'finance'])->name('finance');
+                Route::get('/finance/receipts', [PortalManagerController::class, 'finance'])->name('finance.receipts');
+                Route::get('/records/activity', [PortalManagerController::class, 'records'])->name('records.activity');
+                Route::get('/records/exports', [PortalManagerController::class, 'records'])->name('records.exports');
+            });
         Route::get('/manage-users', [AdminController::class, 'manageUsers'])->middleware('permission:manage_accounts')->name('manage-users');
         Route::get('/accounts/create', [AdminController::class, 'accountForm'])->middleware('permission:manage_accounts')->name('accounts.create');
         Route::get('/accounts/{user}/edit', [AdminController::class, 'accountForm'])->middleware('permission:manage_accounts')->name('accounts.edit');

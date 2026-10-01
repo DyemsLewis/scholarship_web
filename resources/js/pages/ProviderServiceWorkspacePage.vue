@@ -3,8 +3,12 @@ import { computed, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
+import ApplicationCycleServiceWorkspace from '../components/provider-services/ApplicationCycleServiceWorkspace.vue';
+import AssistedSetupServiceWorkspace from '../components/provider-services/AssistedSetupServiceWorkspace.vue';
+import IntegrationConsultationServiceWorkspace from '../components/provider-services/IntegrationConsultationServiceWorkspace.vue';
 import { formatFileSize } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
+import { providerServiceWorkspace } from '../support/providerServiceWorkspaces';
 
 const purchaseId = document.getElementById('app')?.dataset.purchaseId;
 const isLoading = ref(true);
@@ -22,6 +26,12 @@ const meetingForm = ref({ meeting_scheduled_for: '', meeting_mode: 'online' });
 const supportingFiles = computed(() => purchase.value?.files?.filter((file) => file.category === 'supporting') ?? []);
 const deliverables = computed(() => purchase.value?.files?.filter((file) => file.category === 'deliverable') ?? []);
 const completedMilestones = computed(() => purchase.value?.milestones?.filter((item) => item.completed).length ?? 0);
+const workspace = computed(() => providerServiceWorkspace(purchase.value?.plan_code));
+const serviceWorkspaceComponent = computed(() => ({
+    assisted_setup: AssistedSetupServiceWorkspace,
+    application_cycle_support: ApplicationCycleServiceWorkspace,
+    integration_consultation: IntegrationConsultationServiceWorkspace,
+}[purchase.value?.plan_code] ?? AssistedSetupServiceWorkspace));
 const canWork = computed(() => purchase.value?.status === 'paid'
     && !['provider_review', 'completed'].includes(purchase.value?.fulfillment_status));
 const canReopen = computed(() => ['provider_review', 'completed'].includes(purchase.value?.fulfillment_status));
@@ -92,7 +102,7 @@ async function requestMeeting() {
     try {
         const response = await window.axios.post(`/provider/billing/${purchaseId}/meeting`, {
             ...meetingForm.value,
-            meeting_purpose: `Discuss the ${purchase.value?.plan_name ?? 'provider service'} request with platform support.`,
+            meeting_purpose: workspace.value.meetingPurpose,
         });
         applyPurchase(response.data.purchase);
         showPortalToast({ title: 'Meeting request sent', message: response.data.message });
@@ -188,8 +198,8 @@ onMounted(loadWorkspace);
                     theme="provider"
                     eyebrow="Service workspace"
                     :title="purchase?.plan_name ?? 'Provider service'"
-                    description="Schedule the support meeting, share files, and follow the work until completion."
-                    icon="fa-solid fa-headset"
+                    :description="workspace.headerDescription"
+                    :icon="workspace.headerIcon"
                     secondary-href="/provider/billing/requests"
                     secondary-label="Back to requests"
                 >
@@ -224,31 +234,13 @@ onMounted(loadWorkspace);
                     <div class="mt-4 space-y-4">
                         <div class="flex flex-col gap-4">
 
-                            <section class="provider-panel order-2 overflow-hidden">
-                                <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
-                                    <div>
-                                        <h2 class="font-bold text-slate-950">Service steps</h2>
-                                        <p class="mt-1 text-sm text-slate-500">The support team updates these steps as work progresses.</p>
-                                    </div>
-                                    <span class="w-fit rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">{{ completedMilestones }} of {{ purchase.milestones?.length ?? 0 }} completed</span>
-                                </div>
-                                <ol class="divide-y divide-slate-200">
-                                    <li v-for="(item, index) in purchase.milestones" :key="item.id" class="flex items-center gap-3 px-4 py-3 sm:px-5">
-                                        <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold', item.completed ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600']">
-                                            <i v-if="item.completed" class="fa-solid fa-check" aria-hidden="true"></i>
-                                            <span v-else>{{ index + 1 }}</span>
-                                        </span>
-                                        <p class="min-w-0 flex-1 text-sm font-bold text-slate-900">{{ item.label }}</p>
-                                        <span :class="['shrink-0 text-xs font-bold', item.completed ? 'text-emerald-700' : 'text-slate-500']">{{ item.completed ? 'Completed' : 'Pending' }}</span>
-                                    </li>
-                                </ol>
-                            </section>
+                            <component :is="serviceWorkspaceComponent" class="order-1" :purchase="purchase" />
 
-                            <section class="provider-panel order-1 overflow-hidden">
+                            <section class="provider-panel order-2 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
                                     <div>
-                                        <h2 class="font-bold text-slate-950">Service meeting</h2>
-                                        <p class="mt-1 text-sm text-slate-500">Choose a preferred time and format for the discussion.</p>
+                                        <h2 class="font-bold text-slate-950">{{ workspace.meetingTitle }}</h2>
+                                        <p class="mt-1 text-sm text-slate-500">{{ workspace.meetingDescription }}</p>
                                     </div>
                                     <span v-if="purchase.meeting_status" :class="['w-fit rounded-md px-3 py-2 text-xs font-bold capitalize', meetingStatusClass(purchase.meeting_status)]">{{ purchase.meeting_status }}</span>
                                 </div>
@@ -299,18 +291,18 @@ onMounted(loadWorkspace);
 
                             <section class="provider-panel order-3 overflow-hidden">
                                 <div class="border-b border-slate-200 p-4 sm:px-5">
-                                    <h2 class="font-bold text-slate-950">Files and deliverables</h2>
-                                    <p class="mt-1 text-sm text-slate-500">Share reference files and review work returned by support.</p>
+                                    <h2 class="font-bold text-slate-950">{{ workspace.filesTitle }}</h2>
+                                    <p class="mt-1 text-sm text-slate-500">{{ workspace.filesDescription }}</p>
                                 </div>
                                 <div class="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
                                     <div class="min-w-0">
-                                        <h3 class="text-sm font-bold text-slate-950">Files from your team</h3>
+                                        <h3 class="text-sm font-bold text-slate-950">{{ workspace.providerFilesLabel }}</h3>
                                         <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200">
                                             <button v-for="file in supportingFiles" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file">
                                                 <i class="fa-solid fa-file-lines text-slate-400" aria-hidden="true"></i>
                                                 <span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="mt-0.5 block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span>
                                             </button>
-                                            <p v-if="!supportingFiles.length" class="p-4 text-sm text-slate-500">No supporting files uploaded.</p>
+                                            <p v-if="!supportingFiles.length" class="p-4 text-sm text-slate-500">{{ workspace.providerFilesEmpty }}</p>
                                         </div>
                                         <div v-if="canWork" class="mt-3 flex justify-start">
                                             <label class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 sm:w-auto">
@@ -321,13 +313,13 @@ onMounted(loadWorkspace);
                                         </div>
                                     </div>
                                     <div class="min-w-0">
-                                        <h3 class="text-sm font-bold text-slate-950">Files from platform support</h3>
+                                        <h3 class="text-sm font-bold text-slate-950">{{ workspace.deliverablesLabel }}</h3>
                                         <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200">
                                             <button v-for="file in deliverables" :key="file.id" type="button" class="flex w-full items-center gap-3 p-3 text-left hover:bg-slate-50" @click="previewFile = file">
                                                 <i class="fa-solid fa-file-circle-check text-emerald-600" aria-hidden="true"></i>
                                                 <span class="min-w-0"><span class="block truncate text-sm font-bold text-slate-900">{{ file.original_name }}</span><span class="mt-0.5 block text-xs text-slate-500">{{ formatFileSize(file.size) }}</span></span>
                                             </button>
-                                            <p v-if="!deliverables.length" class="p-4 text-sm text-slate-500">Deliverables will appear here when shared.</p>
+                                            <p v-if="!deliverables.length" class="p-4 text-sm text-slate-500">{{ workspace.deliverablesEmpty }}</p>
                                         </div>
                                     </div>
                                 </div>

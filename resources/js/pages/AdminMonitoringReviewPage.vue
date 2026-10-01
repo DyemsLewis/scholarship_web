@@ -1,11 +1,18 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
+import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
+import ReviewOfficerSidebar from '../components/ReviewOfficerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { showPortalToast } from '../support/portalToast';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
+const usesReviewOfficerWorkspace = window.location.pathname.startsWith('/admin/workspaces/reviews');
+const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const reviewQueueUrl = usesPortalManagerWorkspace
+    ? '/admin/workspaces/portal/reviews?type=monitoring'
+    : (usesReviewOfficerWorkspace ? '/admin/workspaces/reviews?type=monitoring' : '/admin/reviews?type=monitoring');
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
@@ -109,11 +116,13 @@ onMounted(loadRecord);
 
 <template>
     <main class="admin-shell">
-        <AdminSidebar active="reviews" />
+        <PortalManagerSidebar v-if="usesPortalManagerWorkspace" />
+        <ReviewOfficerSidebar v-else-if="usesReviewOfficerWorkspace" />
+        <AdminSidebar v-else active="reviews" />
 
         <section class="admin-page">
             <div class="admin-container">
-                <a href="/admin/reviews?type=monitoring" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
+                <a :href="reviewQueueUrl" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to monitoring oversight
                 </a>
