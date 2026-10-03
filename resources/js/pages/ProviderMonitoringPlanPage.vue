@@ -23,7 +23,11 @@ const form = ref(defaultPlan());
 const hasPermission = (permission) => Boolean(
     window.portalUser?.has_full_access || window.portalUser?.permissions?.includes(permission),
 );
-const canReviewApplications = hasPermission('review_applications') && window.portalUser?.can_post_scholarships;
+const providerApproved = Boolean(window.portalUser?.can_post_scholarships);
+const canManageMonitoring = hasPermission('manage_monitoring') && providerApproved;
+const canManageBenefits = hasPermission('manage_benefit_releases') && providerApproved;
+const canManageRecipients = hasPermission('manage_recipients') && providerApproved;
+const canAccessMonitoring = canManageMonitoring || canManageBenefits || canManageRecipients;
 const monitoringBaseUrl = `/provider/monitoring/${scholarshipId}`;
 const steps = [
     { label: 'Schedule', icon: 'fa-regular fa-calendar' },
@@ -32,11 +36,11 @@ const steps = [
 ];
 const navigationLinks = computed(() => [
     { label: 'Monitoring plan', href: `${monitoringBaseUrl}/plan`, active: true },
-    ...(canReviewApplications ? [
+    ...(canAccessMonitoring ? [
         { label: 'Overview', href: monitoringBaseUrl },
-        { label: 'Check-ins', href: `${monitoringBaseUrl}/academic` },
-        { label: 'Benefit releases', href: `${monitoringBaseUrl}/releases` },
-        { label: 'Support outcomes', href: `${monitoringBaseUrl}/outcomes` },
+        ...(canManageMonitoring ? [{ label: 'Check-ins', href: `${monitoringBaseUrl}/academic` }] : []),
+        ...(canManageBenefits ? [{ label: 'Benefit releases', href: `${monitoringBaseUrl}/releases` }] : []),
+        ...((canManageMonitoring || canManageRecipients) ? [{ label: 'Support outcomes', href: `${monitoringBaseUrl}/outcomes` }] : []),
     ] : []),
 ]);
 const requirementTypeMap = computed(() => new Map(
@@ -280,9 +284,9 @@ onMounted(loadPlan);
                         icon="fa-solid fa-list-check"
                     >
                         <template #actions>
-                            <a :href="canReviewApplications ? '/provider/monitoring' : '/provider/programs'" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                            <a :href="canAccessMonitoring ? '/provider/monitoring' : '/provider/programs'" class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50">
                                 <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                                {{ canReviewApplications ? 'All monitoring' : 'All programs' }}
+                                {{ canAccessMonitoring ? 'All monitoring' : 'All programs' }}
                             </a>
                         </template>
                     </TaskPageHeader>

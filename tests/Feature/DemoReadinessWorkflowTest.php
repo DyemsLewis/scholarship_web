@@ -61,6 +61,14 @@ class DemoReadinessWorkflowTest extends TestCase
 
         // Production requests reload the authenticated provider after admin approval.
         $provider = $provider->fresh(['providerProfile']);
+        $this->actingAs($provider)
+            ->patchJson('/provider/governance/operating-mode', [
+                'mode' => 'solo_operator',
+                'current_password' => 'password123',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.provider_operating_mode', 'solo_operator');
+        $provider = $provider->fresh(['providerProfile']);
 
         $applicationOpensAt = now()->subDay()->toDateString();
         $deadline = now()->addMonth()->toDateString();

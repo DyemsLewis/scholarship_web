@@ -14,16 +14,31 @@ const applicationWorkflowCounts = ref({
     final_decision: 0,
     all: 0,
 });
-const canManagePrograms = computed(() => Boolean(
+const hasPermission = (permission) => Boolean(
     window.portalUser?.has_full_access
-        || window.portalUser?.permissions?.includes('manage_programs'),
+        || window.portalUser?.permissions?.includes(permission),
+);
+const canManagePrograms = computed(() => Boolean(
+    hasPermission('manage_programs'),
 ));
 const canReviewApplications = computed(() => Boolean(
     window.portalUser?.can_post_scholarships
-        && (
-            window.portalUser?.has_full_access
-            || window.portalUser?.permissions?.includes('review_applications')
-        ),
+        && ['verify_applications', 'manage_selection_activities', 'record_final_decisions']
+            .some((permission) => hasPermission(permission)),
+));
+const canVerifyApplications = computed(() => (
+    window.portalUser?.can_post_scholarships && hasPermission('verify_applications')
+));
+const canManageSelectionActivities = computed(() => (
+    window.portalUser?.can_post_scholarships && hasPermission('manage_selection_activities')
+));
+const canRecordFinalDecisions = computed(() => (
+    window.portalUser?.can_post_scholarships && hasPermission('record_final_decisions')
+));
+const canAccessRecipientWorkflow = computed(() => Boolean(
+    window.portalUser?.can_post_scholarships
+        && ['manage_recipients', 'manage_monitoring', 'manage_benefit_releases']
+            .some((permission) => hasPermission(permission)),
 ));
 const canManageProfile = computed(() => Boolean(
     window.portalUser?.has_full_access
@@ -37,7 +52,9 @@ const canManageBilling = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_billing'),
 ));
-const canViewPrograms = computed(() => canManagePrograms.value || canReviewApplications.value);
+const canViewPrograms = computed(() => (
+    canManagePrograms.value || canReviewApplications.value || canAccessRecipientWorkflow.value
+));
 const roleLabel = computed(() => {
     if (!window.portalUser?.is_managed_account) return 'Organization owner';
 
@@ -49,6 +66,7 @@ const workspaceDescription = computed(() => {
     if (canManagePrograms.value && canReviewApplications.value) return 'Manage programs, applicant reviews, and outcomes.';
     if (canManagePrograms.value) return 'Create programs and keep published scholarship details current.';
     if (canReviewApplications.value) return 'Review applicants, activities, announcements, and decisions.';
+    if (canAccessRecipientWorkflow.value) return 'Manage selected recipients, monitoring, and benefit releases.';
     if (canManageReports.value) return 'Handle applicant concerns connected to Tulay Aral programs.';
     if (canManageBilling.value) return 'Manage service requests, meetings, payments, and deliverables.';
 
@@ -63,35 +81,36 @@ const draftPrograms = computed(() => scholarships.value.filter((program) => prog
 const rejectedPrograms = computed(() => scholarships.value.filter((program) => program.status === 'rejected'));
 const pendingPrograms = computed(() => scholarships.value.filter((program) => program.status === 'pending_review'));
 const applicantWorkQueues = computed(() => [
-    {
+    ...(canVerifyApplications.value ? [{
         key: 'needs_review',
         label: 'Needs review',
         description: 'Check applicant details, eligibility, and files.',
         icon: 'fa-solid fa-user-check',
         href: '/provider/applications/review',
-    },
-    {
+    }] : []),
+    ...(canManageSelectionActivities.value ? [{
         key: 'ready_result',
         label: 'Ready for result',
         description: 'Record results for completed scheduled activities.',
         icon: 'fa-solid fa-clipboard-check',
         href: '/provider/applications/results',
-    },
-    {
+    }] : []),
+    ...(canRecordFinalDecisions.value ? [{
         key: 'final_decision',
         label: 'Final decision',
         description: 'Select, waitlist, or decline qualified applicants.',
         icon: 'fa-solid fa-award',
         href: '/provider/applications/decisions',
-    },
-    {
+    }] : []),
+    ...(canManageSelectionActivities.value ? [{
         key: 'waiting_activity',
         label: 'Waiting for activity',
         description: 'Applicants are waiting for a formal application, exam, or interview.',
         icon: 'fa-solid fa-calendar-day',
         href: '/provider/applications/activities',
-    },
+    }] : []),
 ]);
+const firstApplicationQueueHref = computed(() => applicantWorkQueues.value[0]?.href ?? '/provider/programs');
 const providerProfileNeedsCompletion = computed(() => [
     user.value?.provider_name,
     user.value?.provider_type,
@@ -213,7 +232,7 @@ const nextAction = computed(() => {
         };
     }
 
-    if (applicationWorkflowCounts.value.needs_review > 0 && canReviewApplications.value) {
+    if (applicationWorkflowCounts.value.needs_review > 0 && canVerifyApplications.value) {
         return {
             eyebrow: 'Priority - Applicant review',
             title: `${applicationWorkflowCounts.value.needs_review} applicant${applicationWorkflowCounts.value.needs_review === 1 ? '' : 's'} need review`,
@@ -224,7 +243,7 @@ const nextAction = computed(() => {
         };
     }
 
-    if (applicationWorkflowCounts.value.ready_result > 0 && canReviewApplications.value) {
+    if (applicationWorkflowCounts.value.ready_result > 0 && canManageSelectionActivities.value) {
         return {
             eyebrow: 'Priority - Record results',
             title: `${applicationWorkflowCounts.value.ready_result} applicant${applicationWorkflowCounts.value.ready_result === 1 ? '' : 's'} ready for a result`,
@@ -235,7 +254,7 @@ const nextAction = computed(() => {
         };
     }
 
-    if (applicationWorkflowCounts.value.final_decision > 0 && canReviewApplications.value) {
+    if (applicationWorkflowCounts.value.final_decision > 0 && canRecordFinalDecisions.value) {
         return {
             eyebrow: 'Priority - Final decisions',
             title: `${applicationWorkflowCounts.value.final_decision} applicant${applicationWorkflowCounts.value.final_decision === 1 ? '' : 's'} await a final decision`,
@@ -270,7 +289,7 @@ const nextAction = computed(() => {
         };
     }
 
-    if (applicationWorkflowCounts.value.waiting_activity > 0 && canReviewApplications.value) {
+    if (applicationWorkflowCounts.value.waiting_activity > 0 && canManageSelectionActivities.value) {
         return {
             eyebrow: 'Applicant activities',
             title: `${applicationWorkflowCounts.value.waiting_activity} applicant${applicationWorkflowCounts.value.waiting_activity === 1 ? '' : 's'} waiting for an activity`,
@@ -425,7 +444,7 @@ onMounted(loadProviderData);
                                     <h3 class="text-lg font-bold text-slate-950">Applicant tasks</h3>
                                     <p class="mt-1 text-xs text-slate-500">Open the queue that needs action.</p>
                                 </div>
-                                <a href="/provider/applications/review" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
+                                <a :href="firstApplicationQueueHref" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
                                     Open review <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
                                 </a>
                             </header>

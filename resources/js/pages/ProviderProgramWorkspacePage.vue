@@ -34,16 +34,15 @@ const canManagePrograms = computed(() => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes('manage_programs'),
 ));
-const canReviewApplications = computed(() => Boolean(
+const canAccessApplicantWorkflow = computed(() => Boolean(
     window.portalUser?.has_full_access
-        || window.portalUser?.permissions?.includes('review_applications'),
+        || ['verify_applications', 'manage_selection_activities', 'record_final_decisions']
+            .some((permission) => window.portalUser?.permissions?.includes(permission)),
 ));
 const providerIsApproved = computed(() => Boolean(window.portalUser?.can_post_scholarships));
-const canAccessApplicantWorkspace = computed(() => (
-    canReviewApplications.value && providerIsApproved.value
-));
+const canAccessApplicantWorkspace = computed(() => canAccessApplicantWorkflow.value && providerIsApproved.value);
 const canSendAnnouncements = computed(() => (
-    canReviewApplications.value && providerIsApproved.value
+    canManagePrograms.value && providerIsApproved.value
 ));
 const announcements = computed(() => scholarship.value?.announcements ?? []);
 const announcementAudiences = [

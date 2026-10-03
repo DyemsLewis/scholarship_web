@@ -17,6 +17,9 @@ const cycleSupportAreas = ref([]);
 const cycleSupportNote = ref('');
 const syncingReference = ref('');
 const activeView = window.location.pathname.replace(/\/$/, '').endsWith('/requests') ? 'requests' : 'services';
+const usesBillingStaffWorkspace = window.portalUser?.provider_workspace_url === '/provider/workspaces/billing';
+const servicesUrl = usesBillingStaffWorkspace ? '/provider/workspaces/billing/services' : '/provider/billing';
+const requestsUrl = usesBillingStaffWorkspace ? '/provider/workspaces/billing' : '/provider/billing/requests';
 const needsCycleSupportScope = computed(() => selectedPlan.value?.code === 'application_cycle_support');
 const canStartCheckout = computed(() => acceptsTerms.value
     && (!needsCycleSupportScope.value || cycleSupportAreas.value.length > 0));
@@ -307,7 +310,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                     :title="activeView === 'requests' ? 'Your service requests' : 'Optional support services'"
                     :description="activeView === 'requests' ? 'Track payment, meetings, support work, and completed requests.' : 'Purchase one-time assistance only when your team needs additional platform help.'"
                     :icon="activeView === 'requests' ? 'fa-solid fa-receipt' : 'fa-solid fa-headset'"
-                    :action-href="activeView === 'requests' ? '/provider/billing' : '/provider/billing/requests'"
+                    :action-href="activeView === 'requests' ? servicesUrl : requestsUrl"
                     :action-label="activeView === 'requests' ? 'Browse services' : 'View your requests'"
                 >
                     <template #meta>
@@ -395,7 +398,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown));
                             <div>
                                 <p class="text-sm font-bold text-slate-900">No support requests yet</p>
                                 <p class="mt-1 text-sm leading-5 text-slate-500">Optional support appears here after your team requests a service.</p>
-                                <a href="/provider/billing" class="mt-2 inline-flex items-center gap-2 text-xs font-bold text-slate-800 hover:text-amber-700">
+                                <a :href="servicesUrl" class="mt-2 inline-flex items-center gap-2 text-xs font-bold text-slate-800 hover:text-amber-700">
                                     Browse available services
                                     <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                                 </a>

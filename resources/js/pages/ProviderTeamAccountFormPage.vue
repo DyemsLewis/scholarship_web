@@ -12,30 +12,50 @@ const errorMessage = ref('');
 const formElement = ref(null);
 const availablePrograms = ref([]);
 const canAssignAllPrograms = ref(true);
+const grantablePermissionValues = ref([...(window.portalUser?.permissions ?? [])]);
 
 const allPermissions = [
     { value: 'manage_programs', label: 'Manage programs', description: 'Create, edit, duplicate, and submit scholarship programs.' },
-    { value: 'review_applications', label: 'Review applicants', description: 'Open applicant records, review files, and record decisions.' },
+    { value: 'verify_applications', label: 'Verify applications', description: 'Review applicant profiles, eligibility, and supporting files.' },
+    { value: 'manage_selection_activities', label: 'Manage selection activities', description: 'Schedule and record formal applications, exams, and interviews.' },
+    { value: 'record_final_decisions', label: 'Record final decisions', description: 'Select, waitlist, or decline applicants after all required stages.' },
+    { value: 'manage_recipients', label: 'Manage recipients', description: 'Handle recipient agreements, onboarding, and support outcomes.' },
+    { value: 'manage_monitoring', label: 'Manage monitoring', description: 'Create plans and review check-ins, requests, and interventions.' },
+    { value: 'manage_benefit_releases', label: 'Manage benefit releases', description: 'Schedule releases and verify distribution records and proof.' },
     { value: 'manage_reports', label: 'Manage reported issues', description: 'Review and resolve applicant concerns about your programs.' },
     { value: 'manage_profile', label: 'Manage organization profile', description: 'Update provider details and verification documents.' },
     { value: 'manage_team', label: 'Manage team accounts', description: 'Create and maintain other provider staff accounts.' },
     { value: 'manage_billing', label: 'Manage optional services', description: 'Start provider service payments and review order status.' },
 ];
 const availablePermissions = computed(() => allPermissions.filter((permission) => (
-    window.portalUser?.has_full_access || window.portalUser?.permissions?.includes(permission.value)
+    grantablePermissionValues.value.includes(permission.value)
 )));
 const roleOptions = [
     { value: 'manager', label: 'Manager', description: 'Oversees the provider workspace and team.' },
     { value: 'program_coordinator', label: 'Program coordinator', description: 'Creates and maintains scholarship programs.' },
-    { value: 'application_reviewer', label: 'Application reviewer', description: 'Reviews applicant records and decisions.' },
+    { value: 'application_reviewer', label: 'Application reviewer', description: 'Verifies applicant records and supporting evidence.' },
+    { value: 'selection_officer', label: 'Selection officer', description: 'Manages application activities, exams, and interviews.' },
+    { value: 'decision_officer', label: 'Decision officer', description: 'Records final selection and waitlist outcomes.' },
+    { value: 'recipient_officer', label: 'Recipient officer', description: 'Handles agreements, onboarding, and support outcomes.' },
+    { value: 'monitoring_officer', label: 'Monitoring officer', description: 'Reviews recipient check-ins and interventions.' },
+    { value: 'benefit_release_officer', label: 'Benefit release officer', description: 'Records benefit distribution and release proof.' },
+    { value: 'organization_profile_manager', label: 'Organization profile manager', description: 'Maintains organization details and verification evidence.' },
+    { value: 'team_administrator', label: 'Team administrator', description: 'Creates staff accounts and assigns access.' },
     { value: 'support_staff', label: 'Support staff', description: 'Handles applicant concerns and reports.' },
     { value: 'billing_staff', label: 'Billing staff', description: 'Manages optional provider service purchases.' },
     { value: 'custom', label: 'Custom role', description: 'Build a role by selecting permissions manually.' },
 ];
 const rolePresets = {
-    manager: ['manage_programs', 'review_applications', 'manage_reports', 'manage_profile', 'manage_team', 'manage_billing'],
+    manager: allPermissions.map((permission) => permission.value),
     program_coordinator: ['manage_programs'],
-    application_reviewer: ['review_applications'],
+    application_reviewer: ['verify_applications'],
+    selection_officer: ['manage_selection_activities'],
+    decision_officer: ['record_final_decisions'],
+    recipient_officer: ['manage_recipients'],
+    monitoring_officer: ['manage_monitoring'],
+    benefit_release_officer: ['manage_benefit_releases'],
+    organization_profile_manager: ['manage_profile'],
+    team_administrator: ['manage_team'],
     support_staff: ['manage_reports'],
     billing_staff: ['manage_billing'],
     custom: [],
@@ -96,6 +116,7 @@ async function loadAccount() {
         const response = await window.axios.get(accountId
             ? `/provider/team/accounts/${accountId}`
             : '/provider/team/data');
+        grantablePermissionValues.value = response.data.available_permissions ?? [];
         availablePrograms.value = response.data.available_programs ?? [];
         canAssignAllPrograms.value = response.data.can_assign_all_programs !== false;
 

@@ -52,7 +52,7 @@ class ApplicationDocumentController extends Controller
         }
 
         return $user->isProvider()
-            && $user->hasPortalPermission('review_applications')
+            && $user->hasPortalPermission('verify_applications')
             && $document->application?->scholarship?->provider_id === $user->providerOrganizationId();
     }
 }

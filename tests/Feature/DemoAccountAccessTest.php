@@ -71,29 +71,29 @@ class DemoAccountAccessTest extends TestCase
 
             $this->assertCount(2, $ownPrograms);
             $this->get('/provider')->assertOk();
-            $this->get('/provider/programs')->assertOk();
-            $this->get('/provider/programs/create')->assertOk();
-            $this->get('/provider/applications')->assertOk();
-            $this->get('/provider/review')->assertRedirect('/provider/applications?filter=needs_review');
+            $this->get('/provider/governance')->assertOk();
+            $this->getJson('/provider/governance/data')
+                ->assertOk()
+                ->assertJsonPath('operating_mode', 'governance');
+            $this->get('/provider/team')->assertOk();
             $this->get('/provider/profile')->assertOk();
+            $this->get('/provider/programs')->assertForbidden();
+            $this->get('/provider/programs/create')->assertForbidden();
+            $this->get('/provider/applications')->assertForbidden();
             $this->getJson('/provider/dashboard/data')
                 ->assertOk()
                 ->assertJsonPath('user.role', 'provider')
-                ->assertJsonCount(2, 'scholarships');
-            $this->getJson('/provider/scholarships')->assertOk()->assertJsonCount(2, 'scholarships');
-            $this->getJson('/provider/applications/data')->assertOk();
-            $this->getJson('/provider/insights/data')->assertOk();
+                ->assertJsonCount(0, 'scholarships');
+            $this->getJson('/provider/scholarships')->assertForbidden();
+            $this->getJson('/provider/applications/data')->assertForbidden();
+            $this->getJson('/provider/insights/data')->assertForbidden();
             $this->getJson('/provider/profile/data')->assertOk()->assertJsonPath('user.role', 'provider');
             $this->getJson('/notifications')->assertOk();
 
             foreach ($ownPrograms as $program) {
-                $this->get("/provider/programs/{$program->id}/edit")
-                    ->assertRedirect("/provider/programs/{$program->id}/edit/basics");
-                $this->get("/provider/programs/{$program->id}/applications")
-                    ->assertRedirect("/provider/programs/{$program->id}/applications/review");
-                $this->getJson("/provider/scholarships/{$program->id}")
-                    ->assertOk()
-                    ->assertJsonPath('scholarship.id', $program->id);
+                $this->get("/provider/programs/{$program->id}/edit")->assertForbidden();
+                $this->get("/provider/programs/{$program->id}/applications")->assertForbidden();
+                $this->getJson("/provider/scholarships/{$program->id}")->assertForbidden();
             }
 
             $this->getJson("/provider/scholarships/{$otherProgram->id}")->assertForbidden();

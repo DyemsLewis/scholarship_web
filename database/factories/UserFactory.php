@@ -40,6 +40,12 @@ class UserFactory extends Factory
             }
 
             if ($user->isProvider()) {
+                // Most feature tests create a provider as the acting operator.
+                // Governance-only owner behavior is tested with an explicit [] permission set.
+                if (! $user->isManagedAccount() && $user->permissions === null) {
+                    $user->forceFill(['permissions' => User::PROVIDER_PERMISSIONS])->save();
+                }
+
                 $user->providerProfile()->firstOrCreate([
                     'user_id' => $user->id,
                 ], [

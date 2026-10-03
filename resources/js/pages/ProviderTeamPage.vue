@@ -19,7 +19,12 @@ const {
 
 const permissionLabels = {
     manage_programs: 'Programs',
-    review_applications: 'Applications',
+    verify_applications: 'Application verification',
+    manage_selection_activities: 'Selection activities',
+    record_final_decisions: 'Final decisions',
+    manage_recipients: 'Recipients',
+    manage_monitoring: 'Monitoring',
+    manage_benefit_releases: 'Benefit releases',
     manage_reports: 'Reported issues',
     manage_profile: 'Organization profile',
     manage_team: 'Team accounts',

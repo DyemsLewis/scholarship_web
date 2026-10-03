@@ -10,6 +10,7 @@ use App\Models\ProviderServiceUpdate;
 use App\Models\User;
 use App\Services\PayMongoCheckoutService;
 use App\Support\AdminWorkspace;
+use App\Support\ProviderWorkspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -73,6 +74,84 @@ class BillingController extends Controller
                 ])
                 ->values(),
             'purchases' => $purchases->map(fn (ProviderServicePurchase $purchase) => $this->purchasePayload($purchase))->values(),
+        ]);
+    }
+
+    public function providerBillingStaffWorkspace(Request $request): View
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless(ProviderWorkspace::usesBillingStaffWorkspace($request->user()), 403);
+
+        return view('provider-billing-staff-workspace');
+    }
+
+    public function providerBillingStaffWorkspaceData(Request $request): JsonResponse
+    {
+        $staff = $request->user();
+        abort_unless($staff?->isProvider(), 403);
+        abort_unless(ProviderWorkspace::usesBillingStaffWorkspace($staff), 403);
+
+        $validated = $request->validate([
+            'queue' => ['sometimes', Rule::in(['needs_action', 'active', 'waiting', 'completed'])],
+            'search' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
+        ]);
+        $queue = $validated['queue'] ?? 'needs_action';
+        $search = trim((string) ($validated['search'] ?? ''));
+        $perPage = (int) ($validated['per_page'] ?? 10);
+        $owner = $staff->providerOrganizationOwner()->loadMissing('providerProfile');
+        $base = ProviderServicePurchase::query()
+            ->with(['creator.providerProfile', 'assignee.adminProfile'])
+            ->where('provider_id', $owner->id);
+
+        $summary = [
+            'needs_action' => $this->applyProviderBillingQueue((clone $base), 'needs_action')->count(),
+            'active' => $this->applyProviderBillingQueue((clone $base), 'active')->count(),
+            'waiting' => $this->applyProviderBillingQueue((clone $base), 'waiting')->count(),
+            'completed' => $this->applyProviderBillingQueue((clone $base), 'completed')->count(),
+            'total' => (clone $base)->count(),
+        ];
+
+        $nextPurchase = $this->applyProviderBillingQueue((clone $base), 'needs_action')
+            ->orderByRaw("CASE WHEN fulfillment_status = 'provider_review' THEN 0 WHEN fulfillment_status = 'needs_information' THEN 1 WHEN status = 'pending' THEN 2 ELSE 3 END")
+            ->oldest()
+            ->first();
+
+        $purchases = $this->applyProviderBillingQueue((clone $base), $queue)
+            ->when($search !== '', function ($query) use ($search): void {
+                $query->where(function ($builder) use ($search): void {
+                    $builder
+                        ->where('plan_name', 'like', "%{$search}%")
+                        ->orWhere('reference_number', 'like', "%{$search}%")
+                        ->orWhere('request_summary', 'like', "%{$search}%");
+                });
+            })
+            ->latest()
+            ->paginate($perPage);
+
+        return response()->json([
+            'workspace' => [
+                'role' => 'Billing staff',
+                'organization_name' => $owner->provider_name ?: $owner->name,
+                'gateway_name' => 'PayMongo',
+                'gateway_configured' => $this->payMongo->isConfigured(),
+                'service_count' => count(config('billing.plans', [])),
+                'services_url' => route('provider.workspaces.billing.services'),
+            ],
+            'summary' => $summary,
+            'next_task' => $nextPurchase ? $this->providerBillingWorkspacePayload($nextPurchase) : null,
+            'purchases' => collect($purchases->items())
+                ->map(fn (ProviderServicePurchase $purchase) => $this->providerBillingWorkspacePayload($purchase))
+                ->values(),
+            'pagination' => [
+                'current_page' => $purchases->currentPage(),
+                'last_page' => $purchases->lastPage(),
+                'per_page' => $purchases->perPage(),
+                'total' => $purchases->total(),
+                'from' => $purchases->firstItem(),
+                'to' => $purchases->lastItem(),
+            ],
         ]);
     }
 
@@ -1360,6 +1439,99 @@ class BillingController extends Controller
                     'action_url' => "/admin/billing/{$purchase->id}",
                 ]);
             });
+    }
+
+    private function applyProviderBillingQueue($query, string $queue)
+    {
+        return match ($queue) {
+            'needs_action' => $query->where(function ($builder): void {
+                $builder
+                    ->whereIn('status', ['pending', 'failed'])
+                    ->orWhere(function ($paid): void {
+                        $paid
+                            ->where('status', 'paid')
+                            ->whereIn('fulfillment_status', ['needs_information', 'provider_review']);
+                    });
+            }),
+            'active' => $query
+                ->where('status', 'paid')
+                ->where('fulfillment_status', 'in_progress'),
+            'waiting' => $query
+                ->where('status', 'paid')
+                ->whereIn('fulfillment_status', ['queued', 'ready']),
+            'completed' => $query
+                ->where('status', 'paid')
+                ->where('fulfillment_status', 'completed'),
+            default => $query,
+        };
+    }
+
+    private function providerBillingWorkspacePayload(ProviderServicePurchase $purchase): array
+    {
+        $payload = $this->purchasePayload($purchase);
+        $workState = match (true) {
+            $purchase->status === 'pending' => 'needs_action',
+            $purchase->status === 'failed' => 'needs_action',
+            $purchase->fulfillment_status === 'needs_information' => 'needs_action',
+            $purchase->fulfillment_status === 'provider_review' => 'needs_action',
+            $purchase->fulfillment_status === 'in_progress' => 'active',
+            $purchase->fulfillment_status === 'completed' => 'completed',
+            default => 'waiting',
+        };
+        [$workLabel, $workDetail, $actionLabel, $actionUrl] = match (true) {
+            $purchase->status === 'pending' => [
+                'Payment pending',
+                'Complete payment or refresh its status to start this request.',
+                $purchase->checkout_url ? 'Complete payment' : 'Check payment',
+                $purchase->checkout_url ?: $payload['workspace_url'],
+            ],
+            $purchase->status === 'failed' => [
+                'Payment failed',
+                'This request did not start. Choose the service again when ready.',
+                'Browse services',
+                route('provider.workspaces.billing.services'),
+            ],
+            $purchase->fulfillment_status === 'needs_information' => [
+                'Response needed',
+                $purchase->fulfillment_notes ?: 'Platform support needs more information before work can continue.',
+                'Respond',
+                $payload['workspace_url'],
+            ],
+            $purchase->fulfillment_status === 'provider_review' => [
+                'Review delivery',
+                'Check the delivered work, then confirm completion or request changes.',
+                'Review result',
+                $payload['workspace_url'],
+            ],
+            $purchase->fulfillment_status === 'in_progress' => [
+                'In progress',
+                $purchase->fulfillment_notes ?: 'Platform support is working on this request.',
+                'Open request',
+                $payload['workspace_url'],
+            ],
+            $purchase->fulfillment_status === 'completed' => [
+                'Completed',
+                $purchase->fulfillment_notes ?: 'This service request is complete.',
+                'View record',
+                $payload['workspace_url'],
+            ],
+            default => [
+                'Waiting for support',
+                'Payment is confirmed and the request is waiting for platform support.',
+                'Open request',
+                $payload['workspace_url'],
+            ],
+        };
+
+        return [
+            ...$payload,
+            'work_state' => $workState,
+            'work_label' => $workLabel,
+            'work_detail' => $workDetail,
+            'action_label' => $actionLabel,
+            'action_url' => $actionUrl,
+            'can_refresh_payment' => $purchase->status === 'pending',
+        ];
     }
 
     private function purchasePayload(ProviderServicePurchase $purchase, bool $includeProvider = false): array

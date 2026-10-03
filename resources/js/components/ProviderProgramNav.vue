@@ -12,48 +12,51 @@ const props = defineProps({
     },
 });
 
-const canReviewApplications = computed(() => Boolean(
-    window.portalUser?.can_post_scholarships
-        && (
-            window.portalUser?.has_full_access
-            || window.portalUser?.permissions?.includes('review_applications')
-        ),
-));
+const hasPermission = (permission) => Boolean(
+    window.portalUser?.has_full_access || window.portalUser?.permissions?.includes(permission),
+);
+const providerApproved = Boolean(window.portalUser?.can_post_scholarships);
+const canManagePrograms = hasPermission('manage_programs');
+const canVerifyApplications = hasPermission('verify_applications') && providerApproved;
+const canManageSelectionActivities = hasPermission('manage_selection_activities') && providerApproved;
+const canRecordFinalDecisions = hasPermission('record_final_decisions') && providerApproved;
+const canManageRecipients = hasPermission('manage_recipients') && providerApproved;
+const canManageMonitoring = hasPermission('manage_monitoring') && providerApproved;
+const canManageBenefitReleases = hasPermission('manage_benefit_releases') && providerApproved;
 const programBase = computed(() => `/provider/programs/${props.programId}`);
-const applicationLinks = computed(() => canReviewApplications.value ? [
-    {
+const applicationLinks = computed(() => [
+    ...(canVerifyApplications ? [{
         key: 'applicants',
         label: 'Review',
         href: `${programBase.value}/applications/review`,
-    },
-    {
+    }] : []),
+    ...(canManageSelectionActivities ? [{
         key: 'schedule',
         label: 'Activities',
         href: `${programBase.value}/applications/activities`,
-    },
-    {
+    }, {
         key: 'results',
         label: 'Results',
         href: `${programBase.value}/applications/results`,
-    },
-    {
+    }] : []),
+    ...(canRecordFinalDecisions ? [{
         key: 'decisions',
         label: 'Decisions',
         href: `${programBase.value}/applications/decisions`,
-    },
-] : []);
-const recipientLinks = computed(() => canReviewApplications.value ? [
-    {
+    }] : []),
+]);
+const recipientLinks = computed(() => [
+    ...((canManageRecipients || canManageMonitoring || canManageBenefitReleases) ? [{
         key: 'recipients',
         label: 'Selected',
         href: `${programBase.value}/applications/recipients`,
-    },
-    {
+    }] : []),
+    ...(canRecordFinalDecisions ? [{
         key: 'waitlist',
         label: 'Waitlist',
         href: `${programBase.value}/applications/waitlist`,
-    },
-] : []);
+    }] : []),
+]);
 const primaryLinks = computed(() => [
     {
         key: 'overview',
@@ -61,19 +64,23 @@ const primaryLinks = computed(() => [
         icon: 'fa-solid fa-house',
         href: programBase.value,
     },
-    ...(canReviewApplications.value ? [
+    ...(applicationLinks.value.length ? [
         {
             key: 'applications',
             label: 'Applications',
             icon: 'fa-solid fa-user-check',
             href: applicationLinks.value[0].href,
         },
+    ] : []),
+    ...(recipientLinks.value.length ? [
         {
             key: 'recipients-section',
             label: 'Recipients',
             icon: 'fa-solid fa-award',
             href: recipientLinks.value[0].href,
         },
+    ] : []),
+    ...(canManagePrograms ? [
         {
             key: 'announcements',
             label: 'Updates',

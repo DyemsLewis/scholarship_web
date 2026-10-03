@@ -205,7 +205,9 @@ class RolePermissionAccountTest extends TestCase
             'permissions' => ['manage_billing'],
         ]);
 
-        $this->actingAs($coordinator)->get('/provider/programs')->assertOk();
+        $this->actingAs($coordinator)
+            ->get('/provider/programs')
+            ->assertRedirect('/provider/workspaces/programs');
         $this->actingAs($coordinator)->get('/provider/applications')->assertForbidden();
         $this->actingAs($reviewer)->get("/provider/programs/{$program->id}")->assertOk();
         $this->actingAs($reviewer)->get('/provider/applications')->assertOk();
@@ -247,6 +249,7 @@ class RolePermissionAccountTest extends TestCase
         ])->assertCreated();
 
         $staff = User::query()->findOrFail($response->json('account.id'));
+        $this->assertSame(['verify_applications'], $staff->permissions);
         $this->postJson('/logout')->assertOk();
 
         $this->postJson('/login', [
@@ -289,7 +292,7 @@ class RolePermissionAccountTest extends TestCase
         $staff->refresh();
         $this->assertTrue($staff->hasVerifiedEmail());
         $this->assertFalse($staff->must_reset_password);
-        $this->get('/provider')->assertOk();
+        $this->get('/provider')->assertRedirect('/provider/workspaces/reviews');
     }
 
     public function test_provider_staff_can_update_personal_credentials_without_editing_organization_details(): void

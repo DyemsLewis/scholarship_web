@@ -8,6 +8,8 @@ use App\Models\Scholarship;
 use App\Models\SupportReport;
 use App\Models\User;
 use App\Support\AdminWorkspace;
+use App\Support\ProviderWorkspace;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -164,9 +166,173 @@ class SupportReportController extends Controller
         ], 201);
     }
 
-    public function providerPage(Request $request): View
+    public function providerSupportWorkspace(Request $request): View
     {
         abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reports'), 403);
+
+        return view('provider-support-staff-workspace');
+    }
+
+    public function providerSupportWorkspaceData(Request $request): JsonResponse
+    {
+        $staff = $request->user();
+        abort_unless($staff?->isProvider(), 403);
+        abort_unless($staff->hasPortalPermission('manage_reports'), 403);
+
+        $validated = $request->validate([
+            'queue' => ['sometimes', Rule::in(['needs_action', 'waiting', 'submitted', 'resolved'])],
+            'search' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
+        ]);
+        $queue = $validated['queue'] ?? 'needs_action';
+        $search = trim((string) ($validated['search'] ?? ''));
+        $perPage = (int) ($validated['per_page'] ?? 10);
+        $owner = $staff->providerOrganizationOwner()->loadMissing('providerProfile');
+        $programs = $this->providerSupportProgramsQuery($staff)
+            ->orderBy('title')
+            ->get(['id', 'title', 'status']);
+
+        if (! empty($validated['program_id'])) {
+            abort_unless($programs->contains('id', (int) $validated['program_id']), 403);
+        }
+
+        $base = $this->providerSupportReportsQuery($staff);
+        $summary = [
+            'needs_action' => (clone $base)
+                ->where('assigned_role', 'provider')
+                ->where('provider_status', 'open')
+                ->count(),
+            'waiting' => (clone $base)
+                ->where('assigned_role', 'provider')
+                ->where('provider_status', 'resolved')
+                ->where('status', 'open')
+                ->count(),
+            'submitted' => (clone $base)
+                ->where('assigned_role', 'admin')
+                ->where('admin_status', 'open')
+                ->whereHas('applicant', fn (Builder $query) => $query->where('role', 'provider'))
+                ->count(),
+            'resolved' => (clone $base)
+                ->where(function (Builder $query): void {
+                    $query
+                        ->where(function (Builder $incoming): void {
+                            $incoming->where('assigned_role', 'provider')->where('status', 'resolved');
+                        })
+                        ->orWhere(function (Builder $submitted): void {
+                            $submitted
+                                ->where('assigned_role', 'admin')
+                                ->where('admin_status', 'resolved')
+                                ->whereHas('applicant', fn (Builder $applicant) => $applicant->where('role', 'provider'));
+                        });
+                })
+                ->count(),
+            'total' => (clone $base)->count(),
+        ];
+        $nextReport = (clone $base)
+            ->where('assigned_role', 'provider')
+            ->where('provider_status', 'open')
+            ->with(['applicant:id,role,first_name,last_name,email', 'scholarship:id,title'])
+            ->oldest()
+            ->first();
+        $query = clone $base;
+
+        match ($queue) {
+            'needs_action' => $query
+                ->where('assigned_role', 'provider')
+                ->where('provider_status', 'open'),
+            'waiting' => $query
+                ->where('assigned_role', 'provider')
+                ->where('provider_status', 'resolved')
+                ->where('status', 'open'),
+            'submitted' => $query
+                ->where('assigned_role', 'admin')
+                ->where('admin_status', 'open')
+                ->whereHas('applicant', fn (Builder $applicant) => $applicant->where('role', 'provider')),
+            'resolved' => $query->where(function (Builder $resolved): void {
+                $resolved
+                    ->where(function (Builder $incoming): void {
+                        $incoming->where('assigned_role', 'provider')->where('status', 'resolved');
+                    })
+                    ->orWhere(function (Builder $submitted): void {
+                        $submitted
+                            ->where('assigned_role', 'admin')
+                            ->where('admin_status', 'resolved')
+                            ->whereHas('applicant', fn (Builder $applicant) => $applicant->where('role', 'provider'));
+                    });
+            }),
+        };
+
+        if (! empty($validated['program_id'])) {
+            $query->where('scholarship_id', (int) $validated['program_id']);
+        }
+
+        if ($search !== '') {
+            $likeSearch = '%'.$search.'%';
+            $query->where(function (Builder $searchQuery) use ($likeSearch): void {
+                $searchQuery
+                    ->where('subject', 'like', $likeSearch)
+                    ->orWhere('description', 'like', $likeSearch)
+                    ->orWhere('context', 'like', $likeSearch)
+                    ->orWhereHas('applicant', fn (Builder $applicant) => $applicant
+                        ->where('email', 'like', $likeSearch)
+                        ->orWhere('first_name', 'like', $likeSearch)
+                        ->orWhere('last_name', 'like', $likeSearch))
+                    ->orWhereHas('scholarship', fn (Builder $program) => $program->where('title', 'like', $likeSearch));
+            });
+        }
+
+        $query->with([
+            'applicant:id,role,first_name,last_name,email',
+            'scholarship:id,title',
+            'providerResolver:id,role,username,email',
+            'adminResolver:id,role,username,email',
+        ]);
+
+        if ($queue === 'needs_action') {
+            $query->oldest();
+        } else {
+            $query->latest('updated_at')->latest('id');
+        }
+
+        $reports = $query->paginate($perPage);
+        $reports->setCollection($reports->getCollection()
+            ->map(fn (SupportReport $report): array => $this->providerSupportWorkspaceItem($report)));
+
+        return response()->json([
+            'workspace' => [
+                'role' => 'Support staff',
+                'staff_name' => $staff->name,
+                'organization_name' => $owner->providerProfile?->provider_name ?: $owner->name,
+                'program_access_mode' => $staff->hasLimitedProviderProgramAccess() ? 'selected' : 'all',
+            ],
+            'summary' => $summary,
+            'next_task' => $nextReport ? [
+                'report_id' => $nextReport->id,
+                'title' => $nextReport->subject,
+                'applicant' => $nextReport->applicant?->name ?: 'Applicant',
+                'program' => $nextReport->scholarship?->title ?: 'General concern',
+                'submitted_at' => $nextReport->created_at?->format('M d, Y h:i A'),
+            ] : null,
+            'categories' => collect(SupportReport::PROVIDER_CATEGORIES)
+                ->map(fn (string $label, string $value): array => compact('value', 'label'))
+                ->values(),
+            'programs' => $programs,
+            'reports' => $reports->items(),
+            'pagination' => $this->paginationPayload($reports),
+            'active_queue' => $queue,
+        ]);
+    }
+
+    public function providerPage(Request $request): View|RedirectResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        if (ProviderWorkspace::usesSupportStaffWorkspace($request->user())) {
+            return redirect()->route(ProviderWorkspace::SUPPORT_STAFF_ROUTE, $request->query());
+        }
 
         return view('provider-reports');
     }
@@ -175,19 +341,15 @@ class SupportReportController extends Controller
     {
         abort_unless($request->user()?->isProvider(), 403);
 
-        $providerId = $request->user()->providerOrganizationId();
-
         return $this->queueResponse(
             $request,
-            SupportReport::query()
-                ->where('provider_id', $providerId),
+            $this->providerSupportReportsQuery($request->user()),
             'provider',
             [
                 'categories' => collect(SupportReport::PROVIDER_CATEGORIES)
                     ->map(fn (string $label, string $value): array => compact('value', 'label'))
                     ->values(),
-                'programs' => Scholarship::query()
-                    ->where('provider_id', $providerId)
+                'programs' => $this->providerSupportProgramsQuery($request->user())
                     ->orderBy('title')
                     ->get(['id', 'title']),
             ],
@@ -210,8 +372,7 @@ class SupportReportController extends Controller
         $scholarship = null;
 
         if (filled($validated['scholarship_id'] ?? null)) {
-            $scholarship = Scholarship::query()
-                ->where('provider_id', $providerId)
+            $scholarship = $this->providerSupportProgramsQuery($request->user())
                 ->whereKey($validated['scholarship_id'])
                 ->first();
 
@@ -296,7 +457,7 @@ class SupportReportController extends Controller
         abort_unless($user?->isAdmin() || $user?->isProvider(), 403);
 
         if ($user->isProvider()) {
-            abort_unless($report->provider_id === $user->providerOrganizationId(), 403);
+            abort_unless($this->canAccessProviderSupportReport($user, $report), 403);
         }
 
         abort_if(blank($report->attachment_path) || ! Storage::disk('local')->exists($report->attachment_path), 404);
@@ -402,7 +563,7 @@ class SupportReportController extends Controller
         if ($user->isProvider()) {
             abort_unless(
                 $report->assigned_role === 'provider'
-                    && $report->provider_id === $user->providerOrganizationId(),
+                    && $this->canAccessProviderSupportReport($user, $report),
                 403,
             );
         }
@@ -506,6 +667,79 @@ class SupportReportController extends Controller
                     ->orWhereHas('applications', fn ($applicationQuery) => $applicationQuery
                         ->where('applicant_id', $applicant->id));
             });
+    }
+
+    private function providerSupportReportsQuery(User $staff): Builder
+    {
+        $query = SupportReport::query()
+            ->where('provider_id', $staff->providerOrganizationId());
+
+        if ($staff->hasLimitedProviderProgramAccess()) {
+            $query->where(function (Builder $scope) use ($staff): void {
+                $scope
+                    ->whereNull('scholarship_id')
+                    ->orWhereIn('scholarship_id', $staff->assignedProviderProgramIds());
+            });
+        }
+
+        return $query;
+    }
+
+    private function providerSupportProgramsQuery(User $staff): Builder
+    {
+        $query = Scholarship::query()
+            ->where('provider_id', $staff->providerOrganizationId());
+
+        if ($staff->hasLimitedProviderProgramAccess()) {
+            $query->whereIn('id', $staff->assignedProviderProgramIds());
+        }
+
+        return $query;
+    }
+
+    private function canAccessProviderSupportReport(User $staff, SupportReport $report): bool
+    {
+        if ((int) $report->provider_id !== $staff->providerOrganizationId()) {
+            return false;
+        }
+
+        return ! $staff->hasLimitedProviderProgramAccess()
+            || $report->scholarship_id === null
+            || in_array((int) $report->scholarship_id, $staff->assignedProviderProgramIds(), true);
+    }
+
+    private function providerSupportWorkspaceItem(SupportReport $report): array
+    {
+        $payload = $this->reportPayload($report, true, 'provider');
+        [$state, $label, $detail] = match (true) {
+            $report->assigned_role === 'provider' && $report->provider_status === 'open' => [
+                'needs_action',
+                'Response needed',
+                'Review the concern and record the provider response.',
+            ],
+            $report->assigned_role === 'provider' && $report->status === 'open' => [
+                'waiting',
+                'Waiting for platform',
+                'The provider response is complete; platform support is still reviewing.',
+            ],
+            $report->assigned_role === 'admin' && $report->admin_status === 'open' => [
+                'submitted',
+                'With platform support',
+                'Your organization submitted this report and is waiting for an update.',
+            ],
+            default => [
+                'resolved',
+                'Resolved',
+                'All required support handling is complete.',
+            ],
+        };
+
+        return [
+            ...$payload,
+            'work_state' => $state,
+            'work_label' => $label,
+            'work_detail' => $detail,
+        ];
     }
 
     private function queueResponse(Request $request, $query, string $viewerRole, array $extra = []): JsonResponse

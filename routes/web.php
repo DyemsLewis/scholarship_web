@@ -199,45 +199,119 @@ Route::middleware(['auth', 'provider'])
     ->name('provider.')
     ->group(function (): void {
         Route::get('/', [ProviderController::class, 'index'])->name('index');
+        Route::get('/governance', [ProviderController::class, 'governance'])->name('governance');
+        Route::get('/governance/data', [ProviderController::class, 'governanceData'])->name('governance.data');
+        Route::patch('/governance/operating-mode', [ProviderController::class, 'updateOperatingMode'])
+            ->middleware('throttle:5,1')
+            ->name('governance.operating-mode');
+        Route::get('/workspaces/programs', [ProviderController::class, 'programCoordinatorWorkspace'])
+            ->middleware('permission:manage_programs')
+            ->name('workspaces.programs');
+        Route::get('/workspaces/programs/data', [ProviderController::class, 'programCoordinatorWorkspaceData'])
+            ->middleware('permission:manage_programs')
+            ->name('workspaces.programs.data');
+        Route::get('/workspaces/reviews', [ProviderController::class, 'applicationReviewerWorkspace'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->name('workspaces.reviews');
+        Route::get('/workspaces/reviews/data', [ProviderController::class, 'applicationReviewerWorkspaceData'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->name('workspaces.reviews.data');
+        Route::get('/workspaces/selection', [ProviderController::class, 'selectionOfficerWorkspace'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection');
+        Route::get('/workspaces/selection/data', [ProviderController::class, 'selectionOfficerWorkspaceData'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.data');
+        Route::get('/workspaces/decisions', [ProviderController::class, 'decisionOfficerWorkspace'])
+            ->middleware(['permission:record_final_decisions', 'provider.approved'])
+            ->name('workspaces.decisions');
+        Route::get('/workspaces/decisions/data', [ProviderController::class, 'decisionOfficerWorkspaceData'])
+            ->middleware(['permission:record_final_decisions', 'provider.approved'])
+            ->name('workspaces.decisions.data');
+        Route::get('/workspaces/recipients', [ProviderController::class, 'recipientOfficerWorkspace'])
+            ->middleware(['permission:manage_recipients', 'provider.approved'])
+            ->name('workspaces.recipients');
+        Route::get('/workspaces/recipients/data', [ProviderController::class, 'recipientOfficerWorkspaceData'])
+            ->middleware(['permission:manage_recipients', 'provider.approved'])
+            ->name('workspaces.recipients.data');
+        Route::get('/workspaces/monitoring', [ProviderController::class, 'monitoringOfficerWorkspace'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->name('workspaces.monitoring');
+        Route::get('/workspaces/monitoring/data', [ProviderController::class, 'monitoringOfficerWorkspaceData'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->name('workspaces.monitoring.data');
+        Route::get('/workspaces/releases', [ProviderController::class, 'benefitReleaseOfficerWorkspace'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases');
+        Route::get('/workspaces/releases/data', [ProviderController::class, 'benefitReleaseOfficerWorkspaceData'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases.data');
+        Route::get('/workspaces/organization-profile', [ProviderController::class, 'organizationProfileManagerWorkspace'])
+            ->middleware('permission:manage_profile')
+            ->name('workspaces.organization-profile');
+        Route::get('/workspaces/organization-profile/data', [ProviderController::class, 'organizationProfileManagerWorkspaceData'])
+            ->middleware('permission:manage_profile')
+            ->name('workspaces.organization-profile.data');
+        Route::get('/workspaces/team', [ProviderController::class, 'teamAdministratorWorkspace'])
+            ->middleware('permission:manage_team')
+            ->name('workspaces.team');
+        Route::get('/workspaces/team/data', [ProviderController::class, 'teamAdministratorWorkspaceData'])
+            ->middleware('permission:manage_team')
+            ->name('workspaces.team.data');
+        Route::get('/workspaces/support', [SupportReportController::class, 'providerSupportWorkspace'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support');
+        Route::get('/workspaces/support/data', [SupportReportController::class, 'providerSupportWorkspaceData'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support.data');
+        Route::get('/workspaces/billing', [BillingController::class, 'providerBillingStaffWorkspace'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing');
+        Route::get('/workspaces/billing/data', [BillingController::class, 'providerBillingStaffWorkspaceData'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.data');
+        Route::get('/workspaces/billing/services', [BillingController::class, 'providerPage'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.services');
         Route::get('/dashboard/data', [ProviderController::class, 'dashboardData'])->name('dashboard.data');
-        Route::get('/programs', [ProviderController::class, 'programs'])->middleware('permission:manage_programs,review_applications')->name('programs');
+        Route::get('/programs', [ProviderController::class, 'programs'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->name('programs');
         Route::redirect('/exams', '/provider/programs')->name('exams');
         Route::get('/programs/create', [ProviderController::class, 'programForm'])->middleware('permission:manage_programs')->name('programs.create');
         Route::redirect('/programs/edit', '/provider/programs')->middleware('permission:manage_programs')->name('programs.edit-directory');
-        Route::redirect('/programs/manage', '/provider/programs')->middleware('permission:manage_programs,review_applications')->name('programs.manage-directory');
-        Route::get('/programs/{scholarship}', [ProviderController::class, 'programWorkspace'])->middleware('permission:manage_programs,review_applications')->whereNumber('scholarship')->name('programs.show');
-        Route::get('/programs/{scholarship}/updates', [ProviderController::class, 'programWorkspace'])->middleware('permission:manage_programs,review_applications')->whereNumber('scholarship')->name('programs.updates');
-        Route::get('/programs/{scholarship}/monitoring', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'summary')->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring');
-        Route::get('/programs/{scholarship}/monitoring/plan', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'plan')->middleware(['permission:manage_programs,review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.plan');
-        Route::get('/programs/{scholarship}/monitoring/academic', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'academic')->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.academic');
-        Route::get('/programs/{scholarship}/monitoring/releases', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'releases')->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.releases');
-        Route::get('/programs/{scholarship}/monitoring/outcomes', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'outcomes')->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.outcomes');
+        Route::redirect('/programs/manage', '/provider/programs')->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->name('programs.manage-directory');
+        Route::get('/programs/{scholarship}', [ProviderController::class, 'programWorkspace'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->whereNumber('scholarship')->name('programs.show');
+        Route::get('/programs/{scholarship}/updates', [ProviderController::class, 'programWorkspace'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->whereNumber('scholarship')->name('programs.updates');
+        Route::get('/programs/{scholarship}/monitoring', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'summary')->middleware(['permission:manage_monitoring,manage_benefit_releases,manage_recipients', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring');
+        Route::get('/programs/{scholarship}/monitoring/plan', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'plan')->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.plan');
+        Route::get('/programs/{scholarship}/monitoring/academic', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'academic')->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.academic');
+        Route::get('/programs/{scholarship}/monitoring/releases', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'releases')->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.releases');
+        Route::get('/programs/{scholarship}/monitoring/outcomes', [ProviderController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'outcomes')->middleware(['permission:manage_recipients,manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.outcomes');
         Route::get('/programs/{scholarship}/edit', [ProviderController::class, 'programForm'])->middleware('permission:manage_programs')->name('programs.edit');
         Route::get('/programs/{scholarship}/edit/{step}', [ProviderController::class, 'programForm'])
             ->middleware('permission:manage_programs')
             ->whereNumber('scholarship')
             ->where('step', 'basics|support|dates-location|eligibility|application|selection|review')
             ->name('programs.edit.step');
-        Route::get('/programs/{scholarship}/applications', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications');
-        Route::get('/programs/{scholarship}/applications/review', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.review');
-        Route::get('/programs/{scholarship}/applications/activities', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.activities');
-        Route::get('/programs/{scholarship}/applications/results', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.results');
-        Route::get('/programs/{scholarship}/applications/decisions', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.decisions');
-        Route::get('/programs/{scholarship}/applications/recipients', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.recipients');
-        Route::get('/programs/{scholarship}/applications/waitlist', [ProviderController::class, 'programApplications'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.waitlist');
-        Route::get('/applications', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications');
-        Route::get('/applications/review', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.review');
-        Route::get('/applications/activities', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.activities');
-        Route::get('/applications/results', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.results');
-        Route::get('/applications/decisions', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.decisions');
-        Route::get('/applications/recipients', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.recipients');
-        Route::get('/applications/waitlist', [ProviderController::class, 'applications'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.waitlist-directory');
-        Route::get('/monitoring', [ProviderController::class, 'recipientMonitoringDirectory'])->middleware(['permission:review_applications', 'provider.approved'])->name('monitoring');
-        Route::get('/monitoring/{scholarship}', [ProviderController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.show');
-        Route::get('/monitoring/{scholarship}/plan', [ProviderController::class, 'recipientMonitoringPlanWorkspace'])->middleware(['permission:manage_programs,review_applications', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.plan');
-        Route::get('/monitoring/{scholarship}/academic', [ProviderController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.academic');
-        Route::get('/monitoring/{scholarship}/releases', [ProviderController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.releases');
-        Route::get('/monitoring/{scholarship}/outcomes', [ProviderController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.outcomes');
+        Route::get('/programs/{scholarship}/applications', [ProviderController::class, 'programApplications'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions,manage_recipients', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications');
+        Route::get('/programs/{scholarship}/applications/review', [ProviderController::class, 'programApplications'])->middleware(['permission:verify_applications', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.review');
+        Route::get('/programs/{scholarship}/applications/activities', [ProviderController::class, 'programApplications'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.activities');
+        Route::get('/programs/{scholarship}/applications/results', [ProviderController::class, 'programApplications'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.results');
+        Route::get('/programs/{scholarship}/applications/decisions', [ProviderController::class, 'programApplications'])->middleware(['permission:record_final_decisions', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.decisions');
+        Route::get('/programs/{scholarship}/applications/recipients', [ProviderController::class, 'programApplications'])->middleware(['permission:manage_recipients,manage_monitoring,manage_benefit_releases', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.recipients');
+        Route::get('/programs/{scholarship}/applications/waitlist', [ProviderController::class, 'programApplications'])->middleware(['permission:record_final_decisions', 'provider.approved'])->whereNumber('scholarship')->name('programs.applications.waitlist');
+        Route::get('/applications', [ProviderController::class, 'applications'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions,manage_recipients', 'provider.approved'])->name('applications');
+        Route::get('/applications/review', [ProviderController::class, 'applications'])->middleware(['permission:verify_applications', 'provider.approved'])->name('applications.review');
+        Route::get('/applications/activities', [ProviderController::class, 'applications'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->name('applications.activities');
+        Route::get('/applications/results', [ProviderController::class, 'applications'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->name('applications.results');
+        Route::get('/applications/decisions', [ProviderController::class, 'applications'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.decisions');
+        Route::get('/applications/recipients', [ProviderController::class, 'applications'])->middleware(['permission:manage_recipients,manage_monitoring,manage_benefit_releases', 'provider.approved'])->name('applications.recipients');
+        Route::get('/applications/waitlist', [ProviderController::class, 'applications'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.waitlist-directory');
+        Route::get('/monitoring', [ProviderController::class, 'recipientMonitoringDirectory'])->middleware(['permission:manage_monitoring,manage_benefit_releases,manage_recipients', 'provider.approved'])->name('monitoring');
+        Route::get('/monitoring/{scholarship}', [ProviderController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:manage_monitoring,manage_benefit_releases,manage_recipients', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.show');
+        Route::get('/monitoring/{scholarship}/plan', [ProviderController::class, 'recipientMonitoringPlanWorkspace'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.plan');
+        Route::get('/monitoring/{scholarship}/academic', [ProviderController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.academic');
+        Route::get('/monitoring/{scholarship}/releases', [ProviderController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.releases');
+        Route::get('/monitoring/{scholarship}/outcomes', [ProviderController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:manage_recipients,manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.outcomes');
         Route::get('/profile', [ProviderController::class, 'profile'])->name('profile');
         Route::get('/profile/details', [ProviderController::class, 'profile'])->name('profile.details');
         Route::get('/profile/verification', [ProviderController::class, 'profile'])->name('profile.verification');
@@ -270,7 +344,7 @@ Route::middleware(['auth', 'provider'])
         Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.status');
         Route::redirect('/insights', '/provider/applications?filter=needs_review')->name('insights.redirect');
         Route::redirect('/review', '/provider/applications?filter=needs_review')
-            ->middleware(['permission:review_applications', 'provider.approved'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('review');
         Route::get('/profile/data', [ProviderController::class, 'profileData'])->name('profile.data');
         Route::patch('/profile', [ProviderController::class, 'updateProfile'])->name('profile.update');
@@ -279,68 +353,68 @@ Route::middleware(['auth', 'provider'])
         Route::get('/verification-documents/{document}/view', [ProviderController::class, 'viewVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.view');
         Route::get('/verification-documents/{document}/download', [ProviderController::class, 'downloadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.download');
         Route::delete('/verification-documents/{document}', [ProviderController::class, 'deleteVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.destroy');
-        Route::get('/insights/data', [ProviderController::class, 'insightsData'])->middleware(['permission:review_applications', 'provider.approved'])->name('insights.data');
-        Route::get('/applications/data', [ProviderController::class, 'applicationsData'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.data');
-        Route::get('/applications/{application}', [ProviderController::class, 'applicationDetail'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('application')->name('applications.show');
-        Route::get('/applications/{application}/data', [ProviderController::class, 'applicationDetailData'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('application')->name('applications.show.data');
-        Route::patch('/scholarships/{scholarship}/applications/bulk-advance', [ProviderController::class, 'bulkAdvanceApplications'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('applications.bulk-advance');
-        Route::patch('/applications/{application}/reviewer', [ProviderController::class, 'assignApplicationReviewer'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('application')->name('applications.reviewer');
+        Route::get('/insights/data', [ProviderController::class, 'insightsData'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions', 'provider.approved'])->name('insights.data');
+        Route::get('/applications/data', [ProviderController::class, 'applicationsData'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions,manage_recipients', 'provider.approved'])->name('applications.data');
+        Route::get('/applications/{application}', [ProviderController::class, 'applicationDetail'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions,manage_recipients', 'provider.approved'])->whereNumber('application')->name('applications.show');
+        Route::get('/applications/{application}/data', [ProviderController::class, 'applicationDetailData'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions,manage_recipients', 'provider.approved'])->whereNumber('application')->name('applications.show.data');
+        Route::patch('/scholarships/{scholarship}/applications/bulk-advance', [ProviderController::class, 'bulkAdvanceApplications'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('applications.bulk-advance');
+        Route::patch('/applications/{application}/reviewer', [ProviderController::class, 'assignApplicationReviewer'])->middleware(['permission:verify_applications', 'provider.approved'])->whereNumber('application')->name('applications.reviewer');
         Route::get('/applications/{application}/profile-proofs/{document}/view', [ProviderController::class, 'viewApplicantProfileProof'])
             ->whereNumber('application')
             ->whereNumber('document')
-            ->middleware(['permission:review_applications', 'provider.approved'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('applications.profile-proofs.view');
         Route::get('/applications/{application}/profile-photo', [ProviderController::class, 'viewApplicantProfilePhoto'])
             ->whereNumber('application')
-            ->middleware(['permission:review_applications', 'provider.approved'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('applications.profile-photo.view');
         Route::patch('/applications/{application}/profile-photo-review', [ProviderController::class, 'reviewApplicantProfilePhoto'])
             ->whereNumber('application')
-            ->middleware(['permission:review_applications', 'provider.approved'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('applications.profile-photo-review');
         Route::patch('/applications/{application}/profile-verification', [ProviderController::class, 'verifyApplicantProfile'])
             ->whereNumber('application')
-            ->middleware(['permission:review_applications', 'provider.approved'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('applications.profile-verification');
-        Route::post('/applications/{application}/schedules', [ProviderController::class, 'upsertApplicationSchedule'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.schedules.upsert');
-        Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.schedules.tracking');
-        Route::patch('/applications/{application}/decision', [ProviderController::class, 'decideApplication'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.decision');
-        Route::patch('/applications/{application}/stages/{stage}/result', [ProviderController::class, 'recordApplicationStageResult'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.stages.result');
-        Route::patch('/applications/{application}/final-outcome', [ProviderController::class, 'recordApplicationFinalOutcome'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.final-outcome');
-        Route::patch('/applications/{application}/correction', [ProviderController::class, 'handleApplicationCorrection'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.correction');
-        Route::patch('/applications/{application}/waitlist', [ProviderController::class, 'handleApplicationWaitlist'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.waitlist');
-        Route::patch('/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware(['permission:review_applications', 'provider.approved'])->name('applications.status');
-        Route::patch('/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->middleware(['permission:review_applications', 'provider.approved'])->name('documents.status');
-        Route::get('/export/applications', [ProviderController::class, 'exportApplications'])->middleware(['permission:review_applications', 'provider.approved'])->name('export.applications');
-        Route::get('/scholarships/{scholarship}/monitoring/export', [ProviderController::class, 'exportRecipientMonitoring'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring.export');
-        Route::get('/scholarships', [ProviderController::class, 'scholarships'])->middleware('permission:manage_programs,review_applications')->name('scholarships');
+        Route::post('/applications/{application}/schedules', [ProviderController::class, 'upsertApplicationSchedule'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->name('applications.schedules.upsert');
+        Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->name('applications.schedules.tracking');
+        Route::patch('/applications/{application}/decision', [ProviderController::class, 'decideApplication'])->middleware(['permission:verify_applications,manage_selection_activities', 'provider.approved'])->name('applications.decision');
+        Route::patch('/applications/{application}/stages/{stage}/result', [ProviderController::class, 'recordApplicationStageResult'])->middleware(['permission:verify_applications,manage_selection_activities', 'provider.approved'])->name('applications.stages.result');
+        Route::patch('/applications/{application}/final-outcome', [ProviderController::class, 'recordApplicationFinalOutcome'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.final-outcome');
+        Route::patch('/applications/{application}/correction', [ProviderController::class, 'handleApplicationCorrection'])->middleware(['permission:verify_applications', 'provider.approved'])->name('applications.correction');
+        Route::patch('/applications/{application}/waitlist', [ProviderController::class, 'handleApplicationWaitlist'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.waitlist');
+        Route::patch('/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.status');
+        Route::patch('/documents/{document}/status', [ProviderController::class, 'updateDocumentStatus'])->middleware(['permission:verify_applications', 'provider.approved'])->name('documents.status');
+        Route::get('/export/applications', [ProviderController::class, 'exportApplications'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions', 'provider.approved'])->name('export.applications');
+        Route::get('/scholarships/{scholarship}/monitoring/export', [ProviderController::class, 'exportRecipientMonitoring'])->middleware(['permission:manage_monitoring,manage_benefit_releases', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring.export');
+        Route::get('/scholarships', [ProviderController::class, 'scholarships'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->name('scholarships');
         Route::post('/scholarships', [ProviderController::class, 'storeScholarship'])->middleware('permission:manage_programs')->name('scholarships.store');
         Route::post('/scholarships/{scholarship}/events', [ProviderController::class, 'upsertScholarshipEvent'])->middleware(['permission:manage_programs', 'provider.approved'])->name('scholarships.events.upsert');
-        Route::post('/scholarships/{scholarship}/announcements', [ProviderController::class, 'storeScholarshipAnnouncement'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.announcements.store');
-        Route::get('/scholarships/{scholarship}/monitoring-cycles', [ProviderController::class, 'recipientMonitoringData'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring-cycles.index');
-        Route::get('/scholarships/{scholarship}/monitoring-plan', [ProviderController::class, 'recipientMonitoringPlanData'])->middleware(['permission:manage_programs,review_applications', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring-plan.show');
-        Route::put('/scholarships/{scholarship}/monitoring-plan', [ProviderController::class, 'upsertRecipientMonitoringPlan'])->middleware(['permission:manage_programs', 'provider.approved', 'throttle:20,1'])->whereNumber('scholarship')->name('scholarships.monitoring-plan.update');
-        Route::post('/scholarships/{scholarship}/monitoring-cycles', [ProviderController::class, 'storeRecipientMonitoringCycle'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.monitoring-cycles.store');
-        Route::post('/scholarships/{scholarship}/monitoring-check-ins', [ProviderController::class, 'storeRecipientMonitoringCheckIn'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.monitoring-check-ins.store');
-        Route::post('/monitoring-requirements/{requirement}/applications/{application}/record', [ProviderController::class, 'recordRecipientMonitoringRequirement'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber(['requirement', 'application'])->name('monitoring-requirements.record');
-        Route::patch('/monitoring-adjustment-requests/{adjustment}/decision', [ProviderController::class, 'decideRecipientMonitoringAdjustmentRequest'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('adjustment')->name('monitoring-adjustment-requests.decision');
-        Route::get('/monitoring-adjustment-requests/{adjustment}/attachment', [ProviderController::class, 'viewRecipientMonitoringAdjustmentAttachment'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('adjustment')->name('monitoring-adjustment-requests.attachment');
-        Route::post('/monitoring-requirements/{requirement}/applications/{application}/interventions', [ProviderController::class, 'storeRecipientMonitoringIntervention'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber(['requirement', 'application'])->name('monitoring-interventions.store');
-        Route::patch('/monitoring-interventions/{intervention}/complete', [ProviderController::class, 'completeRecipientMonitoringIntervention'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('intervention')->name('monitoring-interventions.complete');
-        Route::patch('/monitoring-submissions/{submission}/review', [ProviderController::class, 'reviewRecipientMonitoringSubmission'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('submission')->name('monitoring-submissions.review');
-        Route::get('/monitoring-submissions/{submission}/view', [ProviderController::class, 'viewRecipientMonitoringSubmission'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('submission')->name('monitoring-submissions.view');
-        Route::post('/scholarships/{scholarship}/benefit-releases', [ProviderController::class, 'storeRecipientBenefitRelease'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.benefit-releases.store');
-        Route::post('/benefit-release-records/{record}/result', [ProviderController::class, 'recordRecipientBenefitRelease'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('record')->name('benefit-release-records.result');
-        Route::get('/benefit-release-records/{record}/receipt', [ProviderController::class, 'viewRecipientBenefitReleaseReceipt'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('record')->name('benefit-release-records.receipt');
-        Route::post('/benefit-receipt-responses/{response}/resolve', [ProviderController::class, 'resolveRecipientBenefitReceiptResponse'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('response')->name('benefit-receipt-responses.resolve');
-        Route::get('/benefit-receipt-responses/{response}/files/{kind}', [ProviderController::class, 'viewRecipientBenefitReceiptResponseFile'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('response')->whereIn('kind', ['evidence', 'resolution-proof'])->name('benefit-receipt-responses.file');
-        Route::get('/applications/{application}/recipient-record', [ProviderController::class, 'recipientSupportRecord'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('application')->name('applications.recipient-record');
-        Route::post('/applications/{application}/support-decision', [ProviderController::class, 'recordRecipientSupportDecision'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('application')->name('applications.support-decision');
-        Route::post('/support-decisions/{decision}/resolve', [ProviderController::class, 'resolveRecipientSupportDecisionResponse'])->middleware(['permission:review_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('decision')->name('support-decisions.resolve');
-        Route::get('/support-decisions/{decision}/files/{kind}', [ProviderController::class, 'viewRecipientSupportDecisionFile'])->middleware(['permission:review_applications', 'provider.approved'])->whereNumber('decision')->whereIn('kind', ['decision-document', 'applicant-response', 'resolution-proof'])->name('support-decisions.file');
-        Route::patch('/scholarships/{scholarship}/events/{event}/complete', [ProviderController::class, 'completeScholarshipEvent'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.events.complete');
-        Route::patch('/scholarships/{scholarship}/events/{event}/attendance', [ProviderController::class, 'bulkUpdateScholarshipEventAttendance'])->middleware(['permission:review_applications', 'provider.approved'])->name('scholarships.events.attendance');
-        Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->middleware('permission:manage_programs,review_applications')->name('scholarships.show');
+        Route::post('/scholarships/{scholarship}/announcements', [ProviderController::class, 'storeScholarshipAnnouncement'])->middleware(['permission:manage_programs', 'provider.approved'])->name('scholarships.announcements.store');
+        Route::get('/scholarships/{scholarship}/monitoring-cycles', [ProviderController::class, 'recipientMonitoringData'])->middleware(['permission:manage_monitoring,manage_benefit_releases,manage_recipients', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring-cycles.index');
+        Route::get('/scholarships/{scholarship}/monitoring-plan', [ProviderController::class, 'recipientMonitoringPlanData'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring-plan.show');
+        Route::put('/scholarships/{scholarship}/monitoring-plan', [ProviderController::class, 'upsertRecipientMonitoringPlan'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('scholarship')->name('scholarships.monitoring-plan.update');
+        Route::post('/scholarships/{scholarship}/monitoring-cycles', [ProviderController::class, 'storeRecipientMonitoringCycle'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.monitoring-cycles.store');
+        Route::post('/scholarships/{scholarship}/monitoring-check-ins', [ProviderController::class, 'storeRecipientMonitoringCheckIn'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.monitoring-check-ins.store');
+        Route::post('/monitoring-requirements/{requirement}/applications/{application}/record', [ProviderController::class, 'recordRecipientMonitoringRequirement'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber(['requirement', 'application'])->name('monitoring-requirements.record');
+        Route::patch('/monitoring-adjustment-requests/{adjustment}/decision', [ProviderController::class, 'decideRecipientMonitoringAdjustmentRequest'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('adjustment')->name('monitoring-adjustment-requests.decision');
+        Route::get('/monitoring-adjustment-requests/{adjustment}/attachment', [ProviderController::class, 'viewRecipientMonitoringAdjustmentAttachment'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('adjustment')->name('monitoring-adjustment-requests.attachment');
+        Route::post('/monitoring-requirements/{requirement}/applications/{application}/interventions', [ProviderController::class, 'storeRecipientMonitoringIntervention'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber(['requirement', 'application'])->name('monitoring-interventions.store');
+        Route::patch('/monitoring-interventions/{intervention}/complete', [ProviderController::class, 'completeRecipientMonitoringIntervention'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('intervention')->name('monitoring-interventions.complete');
+        Route::patch('/monitoring-submissions/{submission}/review', [ProviderController::class, 'reviewRecipientMonitoringSubmission'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('submission')->name('monitoring-submissions.review');
+        Route::get('/monitoring-submissions/{submission}/view', [ProviderController::class, 'viewRecipientMonitoringSubmission'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('submission')->name('monitoring-submissions.view');
+        Route::post('/scholarships/{scholarship}/benefit-releases', [ProviderController::class, 'storeRecipientBenefitRelease'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.benefit-releases.store');
+        Route::post('/benefit-release-records/{record}/result', [ProviderController::class, 'recordRecipientBenefitRelease'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:20,1'])->whereNumber('record')->name('benefit-release-records.result');
+        Route::get('/benefit-release-records/{record}/receipt', [ProviderController::class, 'viewRecipientBenefitReleaseReceipt'])->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('record')->name('benefit-release-records.receipt');
+        Route::post('/benefit-receipt-responses/{response}/resolve', [ProviderController::class, 'resolveRecipientBenefitReceiptResponse'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:20,1'])->whereNumber('response')->name('benefit-receipt-responses.resolve');
+        Route::get('/benefit-receipt-responses/{response}/files/{kind}', [ProviderController::class, 'viewRecipientBenefitReceiptResponseFile'])->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('response')->whereIn('kind', ['evidence', 'resolution-proof'])->name('benefit-receipt-responses.file');
+        Route::get('/applications/{application}/recipient-record', [ProviderController::class, 'recipientSupportRecord'])->middleware(['permission:manage_recipients,manage_monitoring,manage_benefit_releases', 'provider.approved'])->whereNumber('application')->name('applications.recipient-record');
+        Route::post('/applications/{application}/support-decision', [ProviderController::class, 'recordRecipientSupportDecision'])->middleware(['permission:manage_recipients', 'provider.approved', 'throttle:20,1'])->whereNumber('application')->name('applications.support-decision');
+        Route::post('/support-decisions/{decision}/resolve', [ProviderController::class, 'resolveRecipientSupportDecisionResponse'])->middleware(['permission:manage_recipients', 'provider.approved', 'throttle:20,1'])->whereNumber('decision')->name('support-decisions.resolve');
+        Route::get('/support-decisions/{decision}/files/{kind}', [ProviderController::class, 'viewRecipientSupportDecisionFile'])->middleware(['permission:manage_recipients', 'provider.approved'])->whereNumber('decision')->whereIn('kind', ['decision-document', 'applicant-response', 'resolution-proof'])->name('support-decisions.file');
+        Route::patch('/scholarships/{scholarship}/events/{event}/complete', [ProviderController::class, 'completeScholarshipEvent'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->name('scholarships.events.complete');
+        Route::patch('/scholarships/{scholarship}/events/{event}/attendance', [ProviderController::class, 'bulkUpdateScholarshipEventAttendance'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->name('scholarships.events.attendance');
+        Route::get('/scholarships/{scholarship}', [ProviderController::class, 'showScholarship'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->name('scholarships.show');
         Route::put('/scholarships/{scholarship}', [ProviderController::class, 'updateScholarship'])->middleware('permission:manage_programs')->name('scholarships.update');
         Route::delete('/scholarships/{scholarship}', [ProviderController::class, 'destroyScholarship'])->middleware('permission:manage_programs')->name('scholarships.destroy');
         Route::post('/scholarships/{scholarship}/duplicate', [ProviderController::class, 'duplicateScholarship'])->middleware('permission:manage_programs')->name('scholarships.duplicate');

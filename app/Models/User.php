@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\AcademicRequirement;
+use App\Support\ProviderWorkspace;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -30,11 +31,38 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public const PROVIDER_PERMISSIONS = [
         'manage_programs',
-        'review_applications',
+        'verify_applications',
+        'manage_selection_activities',
+        'record_final_decisions',
+        'manage_recipients',
+        'manage_monitoring',
+        'manage_benefit_releases',
         'manage_reports',
         'manage_profile',
         'manage_team',
         'manage_billing',
+    ];
+
+    public const PROVIDER_GOVERNANCE_PERMISSIONS = [
+        'manage_profile',
+        'manage_team',
+    ];
+
+    /**
+     * Legacy permissions remain readable so existing provider accounts keep
+     * working while their roles are migrated to the focused workspaces.
+     *
+     * @var array<string, list<string>>
+     */
+    public const PROVIDER_LEGACY_PERMISSION_BUNDLES = [
+        'review_applications' => [
+            'verify_applications',
+            'manage_selection_activities',
+            'record_final_decisions',
+            'manage_recipients',
+            'manage_monitoring',
+            'manage_benefit_releases',
+        ],
     ];
 
     /**
@@ -212,11 +240,66 @@ class User extends Authenticatable implements MustVerifyEmail
             return false;
         }
 
-        if (! $this->isManagedAccount()) {
+        if ($this->isAdmin() && ! $this->isManagedAccount()) {
             return true;
         }
 
-        return in_array($permission, $this->permissions ?? [], true);
+        return in_array($permission, $this->effectivePortalPermissions(), true);
+    }
+
+    /** @param  iterable<string>  $permissions */
+    public function hasAnyPortalPermission(iterable $permissions): bool
+    {
+        foreach ($permissions as $permission) {
+            if ($this->hasPortalPermission($permission)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @return list<string> */
+    public function effectivePortalPermissions(): array
+    {
+        if (! $this->isAdmin() && ! $this->isProvider()) {
+            return [];
+        }
+
+        if ($this->isAdmin() && ! $this->isManagedAccount()) {
+            return self::ADMIN_PERMISSIONS;
+        }
+
+        $permissions = collect(
+            $this->isProvider() && ! $this->isManagedAccount() && empty($this->permissions)
+                ? self::PROVIDER_GOVERNANCE_PERMISSIONS
+                : ($this->permissions ?? []),
+        );
+
+        if ($this->isProvider()) {
+            foreach (self::PROVIDER_LEGACY_PERMISSION_BUNDLES as $legacyPermission => $expandedPermissions) {
+                if ($permissions->contains($legacyPermission)) {
+                    $permissions = $permissions->merge($expandedPermissions);
+                }
+            }
+        }
+
+        return $permissions
+            ->filter(fn ($permission): bool => is_string($permission))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function providerOperatingMode(): ?string
+    {
+        if (! $this->isProvider() || $this->isManagedAccount()) {
+            return null;
+        }
+
+        return array_diff(self::PROVIDER_PERMISSIONS, $this->effectivePortalPermissions()) === []
+            ? 'solo_operator'
+            : 'governance';
     }
 
     public function providerOrganizationId(): int
@@ -370,9 +453,15 @@ class User extends Authenticatable implements MustVerifyEmail
             'id' => $this->id,
             'parent_account_id' => $this->parent_account_id,
             'account_title' => $this->account_title,
-            'permissions' => array_values($this->permissions ?? []),
+            'permissions' => $this->isProvider()
+                ? array_values(array_intersect(self::PROVIDER_PERMISSIONS, $this->effectivePortalPermissions()))
+                : array_values($this->permissions ?? []),
             'is_managed_account' => $this->isManagedAccount(),
-            'has_full_access' => ! $this->isManagedAccount() && ($this->isAdmin() || $this->isProvider()),
+            'has_full_access' => ! $this->isManagedAccount()
+                && ($this->isAdmin() || $this->providerOperatingMode() === 'solo_operator'),
+            'is_organization_owner' => $this->isProvider() && ! $this->isManagedAccount(),
+            'provider_operating_mode' => $this->providerOperatingMode(),
+            'provider_workspace_url' => ProviderWorkspace::preferredPath($this),
             'name' => $this->name,
             'first_name' => $this->first_name,
             'last_name' => $this->last_name,

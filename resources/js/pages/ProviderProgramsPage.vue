@@ -33,7 +33,8 @@ const canReviewApplications = computed(() => Boolean(
     window.portalUser?.can_post_scholarships
         && (
             window.portalUser?.has_full_access
-            || window.portalUser?.permissions?.includes('review_applications')
+            || ['verify_applications', 'manage_selection_activities', 'record_final_decisions']
+                .some((permission) => window.portalUser?.permissions?.includes(permission))
         ),
 ));
 const canManageProfile = computed(() => Boolean(
