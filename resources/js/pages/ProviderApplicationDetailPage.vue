@@ -13,6 +13,14 @@ import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { decisionReasonOptions } from '../support/applicationDecisionReasons';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
+import {
+    applicationStatusClass as statusClass,
+    documentStatusClass,
+    eligibilityStatusClass,
+    evidenceStatusClass as evidenceClass,
+    profileVerificationStatusClass as profileVerificationClass,
+    recommendationStatusClass as recommendationClass,
+} from '../support/providerStatusStyles';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
@@ -686,38 +694,6 @@ function statusLabel(status) {
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function statusClass(status) {
-    if (['approved', 'awarded', 'disbursed', 'renewed', 'exam_passed'].includes(status)) {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (['withdrawn', 'rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'].includes(status)) {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (['under_review', 'shortlisted', 'interview', 'exam_qualified', 'exam_scheduled', 'exam_taken', 'distribution_scheduled', 'waitlisted'].includes(status)) {
-        return 'bg-slate-100 text-slate-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
-function eligibilityStatusClass(status) {
-    if (status === 'pass') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'fail') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'missing') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-slate-100 text-slate-700';
-}
-
 function eligibilityStatusIcon(status) {
     return {
         pass: 'fa-solid fa-circle-check',
@@ -786,58 +762,6 @@ function scheduleModeLabel(mode) {
     return scheduleModeOptions.find((option) => option.value === mode)?.label ?? labelFromKey(mode);
 }
 
-function recommendationClass(recommendation) {
-    if (recommendation === 'highly_recommended') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (recommendation === 'recommended') {
-        return 'bg-slate-100 text-slate-800';
-    }
-
-    if (recommendation === 'needs_review') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    if (recommendation === 'not_recommended') {
-        return 'bg-slate-200 text-slate-700';
-    }
-
-    return 'bg-rose-100 text-rose-800';
-}
-
-function documentStatusClass(status) {
-    if (status === 'accepted') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'needs_replacement') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-slate-100 text-slate-700';
-}
-
-function profileVerificationClass(status) {
-    if (status === 'approved') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'pending') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-slate-100 text-slate-700';
-}
-
 function profileVerificationLabel(status) {
     return {
         approved: 'Academic record verified',
@@ -856,26 +780,6 @@ function evidenceLabel(status) {
         not_required: 'Not required',
         self_declared: 'Self-declared',
     }[status] ?? 'Self-declared';
-}
-
-function evidenceClass(status) {
-    if (status === 'verified') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'document_supported') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    if (status === 'needs_replacement') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'missing') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-slate-100 text-slate-600';
 }
 
 function profileProofEvidenceState(proof, verifiedWithAcademicReview = false) {

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ProviderPageHeader from '../components/ProviderPageHeader.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 
 const isLoading = ref(true);
@@ -138,20 +139,13 @@ onMounted(loadGovernance);
                 </div>
 
                 <template v-else>
-                    <header class="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_10px_28px_rgba(8,20,38,0.07)]">
-                        <div class="h-1 bg-slate-950"></div>
-                        <div class="flex flex-col gap-5 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="flex min-w-0 items-start gap-4">
-                                <span class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-black tracking-wide text-amber-300">
+                    <ProviderPageHeader role-key="governance" title="Governance and access" description="Assign responsibility, protect account access, and keep provider workflows accountable." icon="fa-solid fa-shield-halved">
+                        <template #leading>
+                                <span class="grid h-11 w-11 shrink-0 place-items-center rounded bg-amber-300 text-sm font-black tracking-wide text-slate-950">
                                     {{ initials(organization?.name) }}
                                 </span>
-                                <div class="min-w-0">
-                                    <p class="text-[0.68rem] font-black uppercase tracking-[0.2em] text-amber-700">Organization workspace</p>
-                                    <h1 class="mt-1 font-display text-2xl font-bold text-slate-950">Governance and access</h1>
-                                    <p class="mt-1 max-w-2xl text-sm text-slate-600">Assign responsibility, protect account access, and keep each provider workflow accountable.</p>
-                                </div>
-                            </div>
-
+                        </template>
+                        <template #actions>
                             <div class="flex flex-wrap items-center gap-2 lg:justify-end">
                                 <span :class="['rounded-md px-3 py-1.5 text-xs font-black uppercase tracking-wide', verificationTone]">
                                     {{ organization?.verification_status_label }}
@@ -160,27 +154,14 @@ onMounted(loadGovernance);
                                     <i class="fa-solid fa-user-plus mr-2 text-amber-300"></i>Add team member
                                 </a>
                             </div>
-                        </div>
-
-                        <div class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-2 lg:grid-cols-4">
-                            <div class="border-b border-slate-200 px-5 py-3.5 sm:border-r lg:border-b-0">
-                                <p class="text-[0.65rem] font-black uppercase tracking-[0.16em] text-slate-500">Organization</p>
-                                <p class="mt-1 truncate text-sm font-bold text-slate-950">{{ organization?.name }}</p>
-                            </div>
-                            <div class="border-b border-slate-200 px-5 py-3.5 lg:border-b-0 lg:border-r">
-                                <p class="text-[0.65rem] font-black uppercase tracking-[0.16em] text-slate-500">Representative</p>
-                                <p class="mt-1 truncate text-sm font-bold text-slate-950">{{ representative?.name }}</p>
-                            </div>
-                            <div class="border-b border-slate-200 px-5 py-3.5 sm:border-r sm:border-b-0">
-                                <p class="text-[0.65rem] font-black uppercase tracking-[0.16em] text-slate-500">Operating model</p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">{{ isSoloOperator ? 'Solo operator' : 'Role-based team' }}</p>
-                            </div>
-                            <div class="px-5 py-3.5">
-                                <p class="text-[0.65rem] font-black uppercase tracking-[0.16em] text-slate-500">Programs</p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">{{ organization?.published_program_count }} published · {{ organization?.program_count }} total</p>
-                            </div>
-                        </div>
-                    </header>
+                        </template>
+                        <template #meta>
+                            <span><i class="fa-solid fa-building mr-2 text-slate-400"></i>{{ organization?.name }}</span>
+                            <span><i class="fa-solid fa-user-tie mr-2 text-slate-400"></i>{{ representative?.name }}</span>
+                            <span><i class="fa-solid fa-users-gear mr-2 text-slate-400"></i>{{ isSoloOperator ? 'Solo operator' : 'Role-based team' }}</span>
+                            <span><i class="fa-solid fa-graduation-cap mr-2 text-slate-400"></i>{{ organization?.published_program_count }} published</span>
+                        </template>
+                    </ProviderPageHeader>
 
                     <section v-if="nextAction" class="mt-4 overflow-hidden rounded-lg border border-amber-300 bg-amber-50 shadow-sm">
                         <div class="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">

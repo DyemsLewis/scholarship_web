@@ -287,7 +287,7 @@ class RolePermissionAccountTest extends TestCase
             'password' => 'new-password123',
             'password_confirmation' => 'new-password123',
         ])->assertOk()
-            ->assertJsonPath('redirect', '/provider');
+            ->assertJsonPath('redirect', '/provider/workspaces/reviews');
 
         $staff->refresh();
         $this->assertTrue($staff->hasVerifiedEmail());

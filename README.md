@@ -209,6 +209,17 @@ Run these before pushing or deploying:
 
 ```bash
 npm run build
+npm run test:frontend
 php artisan test
 php artisan platform:readiness --strict
 ```
+
+For an authenticated browser smoke test of all provider role workspaces, start the local app and use a verified provider manager account:
+
+```bash
+PROVIDER_SMOKE_LOGIN=provider-manager@example.test \\
+PROVIDER_SMOKE_PASSWORD=your-local-password \\
+npm run test:browser:provider
+```
+
+The runner uses an installed Chrome or Edge browser and defaults to `http://127.0.0.1:8000`. Override `PROVIDER_SMOKE_BASE_URL` or `PROVIDER_SMOKE_BROWSER` when needed. Keep real credentials out of source control and shell history.

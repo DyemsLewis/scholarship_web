@@ -49,6 +49,13 @@
     .provider-shell,
     .admin-shell {
         @apply min-h-screen text-slate-900 lg:grid lg:grid-cols-[16rem_1fr];
+    }
+
+    .provider-shell {
+        background: #f1f4f7;
+    }
+
+    .admin-shell {
         background:
             radial-gradient(circle at 88% 3rem, rgba(252, 211, 77, 0.12), transparent 18rem),
             linear-gradient(rgba(8, 20, 38, 0.025) 1px, transparent 1px),
@@ -91,6 +98,12 @@
         background:
             linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0) 3.5rem),
             #fff;
+    }
+
+    .provider-page .provider-panel {
+        @apply rounded-md border-slate-300;
+        background: #fff;
+        box-shadow: 0 3px 12px rgba(8, 20, 38, 0.035);
     }
 
     .student-container {
@@ -159,10 +172,6 @@
         overflow: hidden;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
-    }
-
-    .provider-page .provider-panel {
-        box-shadow: 0 5px 16px rgba(8, 20, 38, 0.045);
     }
 
     .provider-page .provider-help {

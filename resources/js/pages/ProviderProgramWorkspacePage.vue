@@ -129,19 +129,37 @@ const waitingActivityCount = computed(() => activityStatuses.value.reduce(
     (total, activity) => total + Number(activity.waiting_applicants || 0),
     0,
 ));
-const programFacts = computed(() => {
+const programOverviewRows = computed(() => {
     const program = scholarship.value;
     if (!program) return [];
 
-    const educationLevels = Array.isArray(program.eligible_education_levels)
-        ? program.eligible_education_levels.map(readableLabel).join(', ')
-        : '';
+    const educationLevels = listLabels(program.eligible_education_levels);
+    const courses = listLabels(program.eligible_courses);
+    const eligibleLearners = [
+        educationLevels || 'All education levels',
+        courses ? `Courses: ${courses}` : null,
+    ].filter(Boolean).join(' · ');
+    const applicationWindow = [
+        `Opens ${dateLabel(program.application_opens_at, 'not set')}`,
+        `Deadline ${dateLabel(program.deadline)}`,
+    ].join(' · ');
+    const intake = [
+        `${Number(program.applications_count ?? 0)} received`,
+        program.application_limit ? `${program.application_limit} application limit` : 'No application limit',
+        program.slots_available ? `${program.slots_available} recipient slots` : 'Recipient slots not set',
+    ].join(' · ');
+    const applicationMethod = [
+        readableLabel(program.application_mode) || 'Portal application',
+        program.location_name || null,
+    ].filter(Boolean).join(' · ');
 
     return [
-        { label: 'Category', value: readableLabel(program.category) || 'Not specified' },
-        { label: 'Education level', value: educationLevels || 'Open to all' },
-        { label: 'Program cycle', value: program.program_cycle || 'Not specified' },
-        { label: 'Support', value: program.benefit_summary || 'See program setup' },
+        { label: 'Program type', value: [readableLabel(program.category), program.program_cycle].filter(Boolean).join(' · ') || 'Not specified' },
+        { label: 'Support package', value: program.benefit_summary || 'Benefits not specified' },
+        { label: 'Eligible learners', value: eligibleLearners },
+        { label: 'Application period', value: applicationWindow },
+        { label: 'Intake and awards', value: intake },
+        { label: 'Application method', value: applicationMethod },
     ];
 });
 const recommendedAction = computed(() => {
@@ -269,8 +287,8 @@ function statusGuidance(status) {
     }[status] ?? 'Review the program setup and applicant activity.';
 }
 
-function dateLabel(value) {
-    if (!value) return 'No deadline';
+function dateLabel(value, fallback = 'No deadline') {
+    if (!value) return fallback;
 
     const parsed = new Date(`${value}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return value;
@@ -286,6 +304,15 @@ function readableLabel(value) {
     return String(value ?? '')
         .replaceAll('_', ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function listLabels(value) {
+    if (!Array.isArray(value)) return '';
+
+    return value
+        .map((item) => readableLabel(typeof item === 'object' ? item?.label ?? item?.value : item))
+        .filter(Boolean)
+        .join(', ');
 }
 
 async function loadProgram() {
@@ -445,53 +472,56 @@ onMounted(loadProgram);
                             </div>
                         </section>
 
-                        <section class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
-                            <div class="flex items-start justify-between gap-4 px-4 py-4 sm:px-5">
-                                <div class="flex min-w-0 items-start gap-3">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded bg-amber-100 text-amber-800">
-                                        <i class="fa-solid fa-graduation-cap text-sm" aria-hidden="true"></i>
-                                    </span>
-                                    <div class="min-w-0">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program at a glance</p>
-                                        <p class="mt-1 line-clamp-2 max-w-5xl text-sm leading-6 text-slate-600">{{ scholarship.description || 'No program summary has been added yet.' }}</p>
-                                    </div>
+                        <section class="overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
+                            <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3.5 sm:px-5">
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program brief</p>
+                                    <h2 class="mt-1 text-base font-bold text-slate-950">Program at a glance</h2>
                                 </div>
-                                <a v-if="canManagePrograms" :href="`/provider/programs/${scholarship.id}/edit`" class="hidden shrink-0 items-center gap-2 rounded border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 sm:inline-flex">
+                                <a v-if="canManagePrograms" :href="`/provider/programs/${scholarship.id}/edit`" class="inline-flex shrink-0 items-center gap-2 rounded border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50">
                                     Edit setup
                                     <i class="fa-solid fa-arrow-up-right-from-square text-[9px]" aria-hidden="true"></i>
                                 </a>
+                            </header>
+
+                            <div class="px-4 py-4 sm:px-5">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Public description</p>
+                                <p class="mt-2 line-clamp-3 max-w-6xl text-sm leading-6 text-slate-700">{{ scholarship.description || 'No program summary has been added yet.' }}</p>
                             </div>
-                            <dl class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
-                                <div v-for="fact in programFacts" :key="fact.label" class="min-w-0 bg-slate-50 px-4 py-3 sm:px-5">
-                                    <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{{ fact.label }}</dt>
-                                    <dd class="mt-1 line-clamp-2 text-sm font-bold leading-5 text-slate-900">{{ fact.value }}</dd>
+
+                            <dl class="divide-y divide-slate-200 border-t border-slate-200">
+                                <div v-for="row in programOverviewRows" :key="row.label" class="grid gap-1 px-4 py-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-5 sm:px-5">
+                                    <dt class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 sm:pt-0.5">{{ row.label }}</dt>
+                                    <dd class="text-sm font-semibold leading-5 text-slate-900">{{ row.value }}</dd>
                                 </div>
                             </dl>
                         </section>
 
-                        <section v-if="canAccessApplicantWorkspace && ['published', 'closed'].includes(scholarship.status)" class="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                        <section v-if="canAccessApplicantWorkspace && ['published', 'closed'].includes(scholarship.status)" class="overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
                             <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3.5 sm:px-5">
                                 <div>
                                     <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant workflow</p>
-                                    <h2 class="mt-1 text-base font-bold text-slate-950">Work by stage</h2>
+                                    <h2 class="mt-1 text-base font-bold text-slate-950">Application queues</h2>
                                 </div>
-                                <span class="rounded bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ openWorkflowCount }} open</span>
+                                <span class="border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700">{{ openWorkflowCount }} awaiting action</span>
                             </header>
 
-                            <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+                            <div class="divide-y divide-slate-200">
                                 <a
-                                    v-for="queue in workflowQueues"
+                                    v-for="(queue, index) in workflowQueues"
                                     :key="queue.key"
                                     :href="queue.href"
-                                    class="group flex min-h-20 items-center gap-3 bg-white px-4 py-3.5 transition hover:bg-slate-50"
+                                    class="group grid gap-3 px-4 py-3.5 transition hover:bg-slate-50 sm:grid-cols-[2.25rem_minmax(0,1fr)_auto_auto] sm:items-center sm:px-5"
                                 >
-                                    <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded text-sm transition', queue.count ? 'bg-amber-100 text-amber-800' : 'bg-slate-50 text-slate-400 group-hover:bg-white']"><i :class="queue.icon" aria-hidden="true"></i></span>
-                                    <span class="min-w-0 flex-1">
-                                        <span class="flex items-center justify-between gap-3">
-                                            <strong class="text-sm text-slate-950">{{ queue.label }}</strong>
-                                            <strong :class="['text-lg leading-none', queue.count ? 'text-slate-950' : 'text-slate-400']">{{ queue.count }}</strong>
-                                        </span>
-                                        <span class="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-slate-400 transition group-hover:text-slate-700">Open queue <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></span>
+                                    <span :class="['grid h-9 w-9 place-items-center border text-xs font-black', queue.count ? 'border-amber-300 bg-amber-100 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-400']">{{ index + 1 }}</span>
+                                    <span class="min-w-0">
+                                        <strong class="block text-sm text-slate-950">{{ queue.label }}</strong>
+                                        <span class="mt-0.5 block text-xs leading-5 text-slate-500">{{ queue.description }}</span>
+                                    </span>
+                                    <span :class="['justify-self-start text-sm font-bold sm:justify-self-end', queue.count ? 'text-slate-950' : 'text-slate-400']">{{ queue.count }} applicant{{ queue.count === 1 ? '' : 's' }}</span>
+                                    <span class="inline-flex items-center gap-2 justify-self-start text-xs font-bold text-slate-600 transition group-hover:text-slate-950 sm:justify-self-end">
+                                        Open
+                                        <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i>
                                     </span>
                                 </a>
                             </div>
@@ -505,7 +535,10 @@ onMounted(loadProgram);
                                             <p class="mt-0.5 text-xs text-slate-500">{{ waitingActivityCount }} applicant{{ waitingActivityCount === 1 ? '' : 's' }} waiting</p>
                                         </div>
                                     </div>
-                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-xs font-bold text-slate-600">View schedules</span>
+                                        <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                    </div>
                                 </summary>
                                 <div class="grid gap-2 border-t border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 sm:px-5">
                                         <a v-for="activity in activityStatuses" :key="activity.type" :href="`${applicantWorkspaceUrl}/activities`" class="flex min-w-0 items-center justify-between gap-3 rounded border border-slate-200 bg-white px-3 py-2.5 transition hover:border-slate-300">

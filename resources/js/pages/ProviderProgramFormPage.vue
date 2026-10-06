@@ -26,18 +26,15 @@ import {
 } from '../support/philippineLocations';
 import { cashGrantAmount, normalizeScholarshipBenefits as normalizeBenefits } from '../support/scholarshipBenefits';
 import { providerObjectiveDetails, providerObjectiveOptions } from '../support/providerObjectives';
+import {
+    providerProgramFormSections as formSections,
+    providerProgramFormStepUrl,
+    providerProgramFormSubsections as formSubsections,
+    sectionFromProviderProgramFormPath,
+} from '../support/providerProgramFormNavigation';
 
 const programFormPathMatch = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
 const scholarshipId = ref(programFormPathMatch?.[1] ?? null);
-const programStepSectionMap = {
-    basics: 'details',
-    support: 'support',
-    'dates-location': 'logistics',
-    eligibility: 'eligibility',
-    application: 'application',
-    selection: 'selection',
-    review: 'review',
-};
 const isEditMode = computed(() => Boolean(scholarshipId.value));
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -52,7 +49,7 @@ const imageFile = ref(null);
 const imagePreviewUrl = ref('');
 const useProviderLogoSelected = ref(false);
 const providerLocationMessage = ref('');
-const activeFormSection = ref(programStepSectionMap[programFormPathMatch?.[2]] ?? 'details');
+const activeFormSection = ref(sectionFromProviderProgramFormPath(window.location.pathname));
 const showLocationMap = ref(false);
 const showProviderPurpose = ref(false);
 const showCoreMatchingRules = ref(false);
@@ -104,31 +101,6 @@ const formGridClass = 'grid items-start gap-x-5 gap-y-5 md:grid-cols-2';
 const currentLocalDateTime = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
     .toISOString();
 const todayDate = currentLocalDateTime.slice(0, 10);
-const formSections = [
-    { id: 'details', slug: 'basics', label: 'Basics', help: 'Name the scholarship and give applicants a short, clear summary.' },
-    { id: 'support', slug: 'support', label: 'Support', help: 'List what recipients receive and how many can be selected.' },
-    { id: 'logistics', slug: 'dates-location', label: 'Dates & location', help: 'Set the application dates, public contact, and program location.' },
-    { id: 'eligibility', slug: 'eligibility', label: 'Eligible applicants', help: 'Set who can apply and how profile matching should work.' },
-    { id: 'application', slug: 'application', label: 'Application', help: 'Choose the files, questions, and formal application instructions.' },
-    { id: 'selection', slug: 'selection', label: 'Selection', help: 'Arrange the provider stages and review scoring.' },
-    { id: 'review', slug: 'review', label: 'Review & submit', help: 'Check the program, save a draft, or send it for admin review.' },
-];
-const formSubsections = {
-    eligibility: [
-        { id: 'requirements', label: 'Requirements', icon: 'fa-solid fa-list-check' },
-        { id: 'matching', label: 'Matching rules', icon: 'fa-solid fa-sliders' },
-    ],
-    application: [
-        { id: 'files', label: 'Portal files', icon: 'fa-solid fa-folder-open' },
-        { id: 'questions', label: 'Questions', icon: 'fa-solid fa-message' },
-        { id: 'handoff', label: 'Formal application', icon: 'fa-solid fa-arrow-right-to-bracket' },
-        { id: 'expectations', label: 'Recipient terms', icon: 'fa-solid fa-handshake' },
-    ],
-    selection: [
-        { id: 'flow', label: 'Process stages', icon: 'fa-solid fa-route' },
-        { id: 'scoring', label: 'Review scoring', icon: 'fa-solid fa-star-half-stroke' },
-    ],
-};
 const activeFormSubsection = ref({
     eligibility: 'requirements',
     application: 'files',
@@ -1072,19 +1044,11 @@ const submitButtonLabel = computed(() => {
 const stepNavigationSaves = computed(() => !isEditMode.value || scholarshipForm.value.status === 'draft');
 
 function formSectionFromLocation() {
-    const step = window.location.pathname.match(/\/provider\/programs\/\d+\/edit\/([a-z-]+)$/)?.[1];
-
-    return programStepSectionMap[step] ?? 'details';
+    return sectionFromProviderProgramFormPath(window.location.pathname);
 }
 
 function programStepUrl(sectionId) {
-    const section = formSections.find((item) => item.id === sectionId);
-
-    if (!scholarshipId.value || !section) {
-        return '';
-    }
-
-    return `/provider/programs/${scholarshipId.value}/edit/${section.slug}`;
+    return providerProgramFormStepUrl(scholarshipId.value, sectionId);
 }
 
 function syncProgramStepUrl(sectionId, replace = false) {

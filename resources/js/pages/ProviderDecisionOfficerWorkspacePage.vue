@@ -1,6 +1,10 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import ProviderPagination from '../components/ProviderPagination.vue';
+import ProviderPageHeader from '../components/ProviderPageHeader.vue';
+import ProviderQueueTabs from '../components/ProviderQueueTabs.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import ProviderWorkspaceState from '../components/ProviderWorkspaceState.vue';
 
 const isLoading = ref(true);
 const isRefreshing = ref(false);
@@ -27,6 +31,7 @@ const queueTabs = computed(() => [
     { key: 'waitlist', label: 'Waitlist', count: Number(summary.value.waitlist ?? 0) },
     { key: 'recorded', label: 'Recorded', count: Number(summary.value.recorded ?? 0) },
 ]);
+const activeQueueTab = computed(() => queueTabs.value.find((tab) => tab.key === activeQueue.value) ?? queueTabs.value[0]);
 const queueHeading = computed(() => ({
     pending: 'Candidates ready for an outcome',
     waitlist: 'Candidates held for an available slot',
@@ -45,7 +50,7 @@ function applicantInitials(name) {
 function decisionClass(state) {
     return {
         pending: 'bg-amber-100 text-amber-900',
-        waitlist: 'bg-sky-100 text-sky-800',
+        waitlist: 'bg-slate-100 text-slate-700',
         selected: 'bg-emerald-100 text-emerald-800',
         not_selected: 'bg-slate-200 text-slate-700',
     }[state] ?? 'bg-slate-100 text-slate-700';
@@ -127,173 +132,124 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
         <section class="provider-page">
             <div class="provider-container">
-                <div v-if="isLoading" class="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-                    Loading decision docket...
-                </div>
+                <ProviderWorkspaceState v-if="isLoading" title="Loading decision docket" message="Preparing candidates, waitlist positions, and award capacity." />
 
-                <div v-else-if="errorMessage && !workspace" class="rounded-lg border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-800">
-                    {{ errorMessage }}
-                </div>
+                <ProviderWorkspaceState v-else-if="errorMessage && !workspace" tone="error" title="Final decisions are unavailable" :message="errorMessage" />
 
                 <template v-else>
-                    <header class="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_10px_28px_rgba(8,20,38,0.07)]">
-                        <div class="flex flex-col gap-4 border-l-4 border-slate-950 px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="flex min-w-0 items-center gap-4">
-                                <span class="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
-                                    <i class="fa-solid fa-gavel"></i>
-                                </span>
-                                <div class="min-w-0">
-                                    <p class="text-[0.68rem] font-black uppercase tracking-[0.2em] text-amber-700">Decision officer</p>
-                                    <h1 class="mt-1 text-2xl font-black tracking-tight text-slate-950">Final decisions</h1>
-                                    <p class="mt-1 text-sm text-slate-600">Record outcomes and manage the waitlist within available award slots.</p>
-                                </div>
-                            </div>
-                            <div class="border-t border-slate-200 pt-3 text-left lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0 lg:text-right">
-                                <p class="text-xs font-bold text-slate-900">{{ workspace.organization_name }}</p>
-                                <p class="mt-1 text-xs text-slate-500">{{ accessLabel }}</p>
-                            </div>
-                        </div>
-                    </header>
+                    <ProviderPageHeader role-key="decisions" title="Final decisions" description="Record auditable outcomes and manage the waitlist within available award slots." icon="fa-solid fa-gavel">
+                        <template #meta>
+                            <span><i class="fa-solid fa-building mr-2 text-slate-400"></i>{{ workspace.organization_name }}</span>
+                            <span><i class="fa-solid fa-lock mr-2 text-slate-400"></i>{{ accessLabel }}</span>
+                        </template>
+                    </ProviderPageHeader>
 
-                    <section v-if="nextDecision" class="mt-4 overflow-hidden rounded-lg border border-slate-900 bg-white shadow-sm">
-                        <div class="grid lg:grid-cols-[8rem_minmax(0,1fr)_minmax(13rem,.55fr)_auto] lg:items-stretch">
-                            <div class="flex items-center justify-center bg-slate-950 px-4 py-4 text-white lg:py-5">
-                                <div class="text-center">
-                                    <p class="text-[0.62rem] font-black uppercase tracking-[0.18em] text-amber-300">Next decision</p>
-                                    <i class="fa-solid fa-scale-balanced mt-2 text-lg"></i>
-                                </div>
-                            </div>
-                            <div class="flex min-w-0 items-center gap-3 border-b border-slate-200 px-5 py-4 lg:border-b-0 lg:border-r">
-                                <img v-if="nextDecision.applicant.profile_photo_url" :src="nextDecision.applicant.profile_photo_url" :alt="nextDecision.applicant.name" class="h-11 w-11 shrink-0 rounded-md object-cover">
-                                <span v-else class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-100 text-sm font-black text-slate-600">{{ applicantInitials(nextDecision.applicant.name) }}</span>
+                    <section v-if="nextDecision" class="mt-3 overflow-hidden rounded border border-amber-300 bg-white shadow-sm">
+                        <div class="flex items-center gap-3 px-4 py-3 sm:px-5">
+                            <span class="grid h-9 w-9 shrink-0 place-items-center bg-amber-300 text-slate-950"><i class="fa-solid fa-scale-balanced text-sm"></i></span>
+                            <div class="flex min-w-0 flex-1 items-center gap-3">
+                                <img v-if="nextDecision.applicant.profile_photo_url" :src="nextDecision.applicant.profile_photo_url" :alt="nextDecision.applicant.name" class="h-9 w-9 shrink-0 object-cover">
+                                <span v-else class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-xs font-black text-slate-600">{{ applicantInitials(nextDecision.applicant.name) }}</span>
                                 <div class="min-w-0">
-                                    <h2 class="truncate text-base font-bold text-slate-950">{{ nextDecision.applicant.name }}</h2>
-                                    <p class="mt-1 truncate text-sm text-slate-500">{{ nextDecision.program.title }}</p>
+                                    <p class="text-[0.62rem] font-black uppercase tracking-[0.16em] text-amber-700">Next decision</p>
+                                    <h2 class="mt-0.5 truncate text-sm font-bold text-slate-950">{{ nextDecision.applicant.name }}</h2>
+                                    <p class="mt-0.5 truncate text-xs text-slate-500">{{ nextDecision.program.title }}</p>
                                 </div>
                             </div>
-                            <div class="flex items-center border-b border-slate-200 px-5 py-4 lg:border-b-0 lg:border-r">
-                                <div>
-                                    <p class="text-[0.65rem] font-black uppercase tracking-[0.15em] text-slate-400">Award capacity</p>
-                                    <p class="mt-1 text-sm font-bold text-slate-900">{{ nextDecision.capacity.label }}</p>
-                                    <p :class="['mt-0.5 text-xs font-semibold', capacityClass(nextDecision.capacity.state)]">{{ capacityDetail(nextDecision.capacity) }}</p>
-                                </div>
+                            <div class="shrink-0 border-l border-slate-200 pl-4">
+                                <p class="text-xs font-bold text-slate-900">{{ nextDecision.capacity.label }}</p>
+                                <p :class="['mt-0.5 text-xs font-semibold', capacityClass(nextDecision.capacity.state)]">{{ capacityDetail(nextDecision.capacity) }}</p>
                             </div>
-                            <div class="flex items-center px-5 py-4">
-                                <a :href="nextDecision.detail_url" class="w-full rounded-md bg-amber-300 px-4 py-2.5 text-center text-sm font-black text-slate-950 transition hover:bg-amber-400 lg:w-auto">
+                            <div class="shrink-0">
+                                <a :href="nextDecision.detail_url" class="inline-flex items-center bg-slate-950 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-slate-800">
                                     {{ nextDecision.decision.action_label }}<i class="fa-solid fa-arrow-right ml-2 text-xs"></i>
                                 </a>
                             </div>
                         </div>
                     </section>
 
-                    <section v-else class="mt-4 flex items-center gap-4 rounded-lg border border-emerald-200 bg-emerald-50 px-5 py-4 sm:px-6">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-200 text-emerald-900"><i class="fa-solid fa-check"></i></span>
+                    <section v-else class="mt-3 flex items-center gap-3 rounded border border-slate-200 bg-white px-4 py-3 sm:px-5">
+                        <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-check"></i></span>
                         <div>
-                            <h2 class="text-sm font-bold text-emerald-950">No final decision is waiting</h2>
-                            <p class="mt-0.5 text-sm text-emerald-800">New candidates appear after all configured selection activities are complete.</p>
+                            <h2 class="text-sm font-bold text-slate-950">No final decision is waiting</h2>
+                            <p class="mt-0.5 text-xs text-slate-500">New candidates appear after all configured selection activities are complete.</p>
                         </div>
                     </section>
 
-                    <section class="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                        <div class="border-b border-slate-200">
-                            <div class="flex flex-col gap-4 px-5 py-4 sm:px-6 xl:flex-row xl:items-end xl:justify-between">
-                                <div>
-                                    <p class="text-[0.68rem] font-black uppercase tracking-[0.18em] text-amber-700">Decision docket</p>
-                                    <h2 class="mt-1 text-lg font-bold text-slate-950">{{ queueHeading }}</h2>
-                                </div>
-                                <div class="grid gap-2 sm:grid-cols-[minmax(15rem,1fr)_minmax(12rem,.7fr)] xl:w-[38rem]">
-                                    <label class="relative block">
-                                        <span class="sr-only">Search candidates</span>
-                                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
-                                        <input v-model="searchQuery" type="search" placeholder="Search candidate or program" class="w-full rounded-md border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
-                                    </label>
-                                    <label>
-                                        <span class="sr-only">Filter by program</span>
-                                        <select v-model="selectedProgram" class="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
-                                            <option value="">All assigned programs</option>
-                                            <option v-for="program in programs" :key="program.id" :value="String(program.id)">{{ program.title }}</option>
-                                        </select>
-                                    </label>
-                                </div>
+                    <section class="mt-3 overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
+                        <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3.5">
+                            <div>
+                                <p class="text-[0.65rem] font-black uppercase tracking-[0.16em] text-amber-700">Decision docket</p>
+                                <h2 class="mt-0.5 text-base font-bold text-slate-950">{{ queueHeading }}</h2>
                             </div>
+                            <p class="shrink-0 text-xs font-semibold text-slate-500">{{ activeQueueTab.count }} {{ activeQueueTab.count === 1 ? 'candidate' : 'candidates' }}</p>
+                        </header>
 
-                            <div class="flex items-center gap-1 overflow-x-auto border-t border-slate-200 bg-slate-50 px-5 py-2 sm:px-6" aria-label="Decision queues">
-                                <button
-                                    v-for="tab in queueTabs"
-                                    :key="tab.key"
-                                    type="button"
-                                    :class="[
-                                        'shrink-0 border-b-2 px-4 py-2 text-xs font-bold transition',
-                                        activeQueue === tab.key ? 'border-slate-950 text-slate-950' : 'border-transparent text-slate-500 hover:text-slate-800',
-                                    ]"
-                                    @click="selectQueue(tab.key)"
-                                >
-                                    {{ tab.label }} <span :class="['ml-1 rounded px-1.5 py-0.5', activeQueue === tab.key ? 'bg-amber-200 text-slate-950' : 'bg-slate-200 text-slate-600']">{{ tab.count }}</span>
-                                </button>
-                                <span v-if="isRefreshing" class="ml-auto shrink-0 text-xs font-semibold text-slate-400"><i class="fa-solid fa-circle-notch mr-1 animate-spin"></i>Updating</span>
-                            </div>
+                        <ProviderQueueTabs :tabs="queueTabs" :active-key="activeQueue" :busy="isRefreshing" aria-label="Decision queues" @select="selectQueue" />
+
+                        <div class="grid gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3 xl:grid-cols-[minmax(18rem,1fr)_minmax(14rem,.45fr)]">
+                            <label class="relative block">
+                                <span class="sr-only">Search candidates</span>
+                                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
+                                <input v-model="searchQuery" type="search" placeholder="Search candidate or program" class="w-full rounded border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                            </label>
+                            <label>
+                                <span class="sr-only">Filter by program</span>
+                                <select v-model="selectedProgram" class="w-full rounded border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                                    <option value="">All assigned programs</option>
+                                    <option v-for="program in programs" :key="program.id" :value="String(program.id)">{{ program.title }}</option>
+                                </select>
+                            </label>
                         </div>
 
                         <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800 sm:px-6">{{ errorMessage }}</div>
 
                         <div v-if="applications.length" class="divide-y divide-slate-200">
-                            <div class="hidden grid-cols-[minmax(15rem,1.2fr)_minmax(13rem,1fr)_minmax(12rem,.75fr)_minmax(10rem,.7fr)_10rem] gap-4 bg-slate-50 px-6 py-3 text-[0.65rem] font-black uppercase tracking-[0.15em] text-slate-500 xl:grid">
+                            <div class="hidden grid-cols-[minmax(16rem,1.1fr)_minmax(21rem,1.25fr)_minmax(13rem,.75fr)_10rem] gap-4 bg-slate-50 px-5 py-2.5 text-[0.65rem] font-black uppercase tracking-[0.15em] text-slate-500 xl:grid">
                                 <span>Candidate</span>
-                                <span>Program</span>
-                                <span>Capacity</span>
-                                <span>Decision state</span>
+                                <span>Program and capacity</span>
+                                <span>Decision status</span>
                                 <span class="text-right">Action</span>
                             </div>
 
-                            <article v-for="application in applications" :key="application.id" class="grid gap-4 px-5 py-4 transition hover:bg-slate-50 sm:px-6 xl:grid-cols-[minmax(15rem,1.2fr)_minmax(13rem,1fr)_minmax(12rem,.75fr)_minmax(10rem,.7fr)_10rem] xl:items-center">
+                            <article v-for="application in applications" :key="application.id" class="grid gap-4 px-5 py-3.5 transition hover:bg-slate-50 xl:grid-cols-[minmax(16rem,1.1fr)_minmax(21rem,1.25fr)_minmax(13rem,.75fr)_10rem] xl:items-center">
                                 <div class="flex min-w-0 items-center gap-3">
-                                    <img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="application.applicant.name" class="h-11 w-11 shrink-0 rounded-md object-cover">
-                                    <span v-else class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-slate-100 text-xs font-black text-slate-600">{{ applicantInitials(application.applicant.name) }}</span>
+                                    <img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="application.applicant.name" class="h-10 w-10 shrink-0 object-cover">
+                                    <span v-else class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-xs font-black text-slate-600">{{ applicantInitials(application.applicant.name) }}</span>
                                     <div class="min-w-0">
                                         <h3 class="truncate text-sm font-bold text-slate-950">{{ application.applicant.name }}</h3>
-                                        <p class="mt-1 truncate text-xs text-slate-500">{{ application.applicant.education || application.stage_status }}</p>
+                                        <p class="mt-0.5 truncate text-xs text-slate-500">{{ application.applicant.education || application.stage_status }}</p>
                                     </div>
                                 </div>
 
                                 <div class="min-w-0">
                                     <p class="truncate text-sm font-bold text-slate-800">{{ application.program.title }}</p>
-                                    <p class="mt-1 text-xs text-slate-500">{{ application.stage_status }}</p>
+                                    <div class="mt-1 flex items-center gap-2 text-xs">
+                                        <span class="font-semibold text-slate-600">{{ application.capacity.label }}</span>
+                                        <span class="text-slate-300">|</span>
+                                        <span :class="['font-semibold', capacityClass(application.capacity.state)]">{{ capacityDetail(application.capacity) }}</span>
+                                    </div>
                                 </div>
 
                                 <div>
-                                    <p class="text-sm font-bold text-slate-900">{{ application.capacity.label }}</p>
-                                    <p :class="['mt-1 text-xs font-semibold', capacityClass(application.capacity.state)]">{{ capacityDetail(application.capacity) }}</p>
+                                    <span :class="['inline-flex px-2.5 py-1.5 text-[0.67rem] font-black uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span>
+                                    <p class="mt-1.5 text-xs text-slate-500">{{ application.decision.recorded_at || application.stage_status }}</p>
                                 </div>
 
-                                <div>
-                                    <span :class="['inline-flex rounded px-2.5 py-1.5 text-[0.67rem] font-black uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span>
-                                    <p class="mt-1.5 text-xs text-slate-500">{{ application.decision.recorded_at }}</p>
-                                </div>
-
-                                <a :href="application.detail_url" class="rounded-md bg-slate-950 px-3.5 py-2.5 text-center text-xs font-bold text-white transition hover:bg-slate-800">
+                                <a :href="application.detail_url" class="bg-slate-950 px-3.5 py-2.5 text-center text-xs font-bold text-white transition hover:bg-slate-800">
                                     {{ application.decision.action_label }}<i class="fa-solid fa-arrow-right ml-2 text-[0.65rem] text-amber-300"></i>
                                 </a>
                             </article>
                         </div>
 
                         <div v-else class="px-6 py-12 text-center">
-                            <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-400"><i class="fa-solid fa-inbox"></i></span>
+                            <span class="mx-auto grid h-11 w-11 place-items-center bg-slate-100 text-slate-400"><i class="fa-solid fa-inbox"></i></span>
                             <h3 class="mt-3 text-sm font-bold text-slate-900">No candidates in this docket</h3>
                             <p class="mt-1 text-sm text-slate-500">Try another decision state, program, or search.</p>
                         </div>
 
-                        <div v-if="pagination.last_page > 1" class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3 sm:px-6">
-                            <p class="text-xs font-semibold text-slate-500">{{ pagination.from }}-{{ pagination.to }} of {{ pagination.total }}</p>
-                            <div class="flex gap-2">
-                                <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40" :disabled="pagination.current_page <= 1 || isRefreshing" @click="loadWorkspace(pagination.current_page - 1)">Previous</button>
-                                <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isRefreshing" @click="loadWorkspace(pagination.current_page + 1)">Next</button>
-                            </div>
-                        </div>
+                        <ProviderPagination :pagination="pagination" :busy="isRefreshing" item-label="candidates" @change="loadWorkspace" />
                     </section>
-
-                    <p class="mt-4 border-l-2 border-amber-400 px-4 py-2 text-sm text-slate-600">
-                        Use the published program terms and completed stage records. Add a clear reason whenever an applicant is not selected.
-                    </p>
                 </template>
             </div>
         </section>

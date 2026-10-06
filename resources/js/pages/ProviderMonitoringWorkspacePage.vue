@@ -6,6 +6,15 @@ import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
+import {
+    adjustmentRequestStatusClass as adjustmentStatusClass,
+    benefitReleaseStatusClass as releaseStatusClass,
+    monitoringReviewStatusClass as reviewStatusClass,
+    receiptResponseStatusClass,
+    recipientRecordStatusClass as recordStatusClass,
+    recipientSupportStatusClass as supportStatusClass,
+    requirementComparisonStatusClass as comparisonClass,
+} from '../support/providerStatusStyles';
 
 const scholarshipId = document.getElementById('app')?.dataset.scholarshipId;
 const scholarship = ref(null);
@@ -259,20 +268,6 @@ function changeSupportDecision() {
     supportForm.value.reason_category = supportReasonOptions(supportForm.value.decision)[0].value;
 }
 
-function supportStatusClass(status) {
-    if (status === 'renewed') return 'bg-sky-100 text-sky-800';
-    if (status === 'completed') return 'bg-emerald-100 text-emerald-800';
-    if (status === 'terminated') return 'bg-rose-100 text-rose-700';
-    return 'bg-amber-100 text-amber-800';
-}
-
-function recordStatusClass(status) {
-    if (['accepted', 'met', 'excused', 'released', 'renewed', 'completed'].includes(status)) return 'bg-emerald-100 text-emerald-800';
-    if (['not_met', 'missed', 'withheld', 'terminated', 'declined'].includes(status)) return 'bg-rose-100 text-rose-700';
-    if (['needs_correction', 'prepared'].includes(status)) return 'bg-amber-100 text-amber-800';
-    return 'bg-slate-100 text-slate-600';
-}
-
 function personInitials(person) {
     return String(person?.name || person?.email || 'Applicant')
         .split(/\s+/)
@@ -400,19 +395,6 @@ function closeReleaseDetails() {
     releaseDetailsTarget.value = null;
 }
 
-function releaseStatusClass(status) {
-    if (status === 'released' || status === 'completed') return 'bg-emerald-100 text-emerald-800';
-    if (status === 'prepared' || status === 'in_progress') return 'bg-sky-100 text-sky-800';
-    if (status === 'missed' || status === 'withheld') return 'bg-rose-100 text-rose-700';
-    return 'bg-amber-100 text-amber-800';
-}
-
-function receiptResponseStatusClass(response) {
-    if (!response) return 'bg-slate-100 text-slate-600';
-    if (response.status === 'confirmed' || response.status === 'resolved') return 'bg-emerald-100 text-emerald-800';
-    return 'bg-rose-100 text-rose-700';
-}
-
 function openReleaseResult(release, record) {
     releaseTarget.value = { release, record };
     releaseResultForm.value = {
@@ -458,31 +440,11 @@ function closeCycleDetails() {
     cycleDetailsTarget.value = null;
 }
 
-function comparisonClass(status) {
-    if (status === 'pass') return 'bg-emerald-100 text-emerald-800';
-    if (status === 'fail') return 'bg-rose-100 text-rose-700';
-    return 'bg-amber-100 text-amber-800';
-}
-
 function comparisonLabel(submission) {
     if (!submission?.grade) return 'Result needs review';
     if (submission.comparison?.status === 'pass') return 'Meets requirement';
     if (submission.comparison?.status === 'fail') return 'Below requirement';
     return 'Manual review';
-}
-
-function reviewStatusClass(status) {
-    if (status === 'met') return 'bg-emerald-100 text-emerald-800';
-    if (status === 'not_met') return 'bg-rose-100 text-rose-700';
-    if (status === 'needs_correction') return 'bg-amber-100 text-amber-800';
-    if (status === 'excused') return 'bg-sky-100 text-sky-800';
-    return 'bg-slate-100 text-slate-600';
-}
-
-function adjustmentStatusClass(status) {
-    if (status === 'approved') return 'bg-emerald-100 text-emerald-800';
-    if (status === 'declined') return 'bg-rose-100 text-rose-800';
-    return 'bg-amber-100 text-amber-900';
 }
 
 function recipientCheckInState(cycle, recipient) {

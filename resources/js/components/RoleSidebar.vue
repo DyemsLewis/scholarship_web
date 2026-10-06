@@ -38,6 +38,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    neutralAccent: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const currentUrl = new URL(window.location.href);
@@ -183,12 +187,12 @@ async function requestLogout() {
 
 <template>
     <aside class="relative overflow-visible border-r border-white/10 bg-[#081426] text-white lg:sticky lg:top-0 lg:h-screen">
-        <div class="absolute inset-x-0 top-0 h-0.5 bg-amber-300"></div>
+        <div :class="['absolute inset-x-0 top-0 h-0.5', neutralAccent ? 'bg-slate-600' : 'bg-amber-300']"></div>
 
         <div :class="['relative flex flex-col px-4 lg:h-full lg:min-h-0', mobileCollapsible ? 'min-h-0 py-3 lg:pb-4 lg:pt-5' : 'min-h-64 pb-4 pt-5']">
             <header :class="['flex shrink-0 items-center justify-between gap-3', mobileCollapsible && !mobileMenuOpen ? 'pb-0 lg:pb-4' : 'pb-4']">
                 <a :href="homeHref" class="group flex min-w-0 items-center gap-3 rounded-md px-1 py-1">
-                    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-300 text-sm font-black text-slate-950 transition group-hover:bg-amber-200">
+                    <span :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm font-black transition', neutralAccent ? 'border border-white/15 bg-white/[0.08] text-white group-hover:bg-white/[0.13]' : 'bg-amber-300 text-slate-950 group-hover:bg-amber-200']">
                         <i :class="icon" aria-hidden="true"></i>
                     </span>
                     <span class="min-w-0">
@@ -237,8 +241,8 @@ async function requestLogout() {
                         :aria-expanded="isGroupExpanded(link)"
                         @click="toggleGroup(link)"
                     >
-                        <span v-if="isGroupActive(link)" class="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-amber-300"></span>
-                        <span :class="['grid h-6 w-6 shrink-0 place-items-center text-xs transition', isGroupActive(link) ? 'text-amber-300' : 'text-slate-500 group-hover:text-slate-300']">
+                        <span v-if="isGroupActive(link)" :class="['absolute inset-y-2 left-0 w-0.5 rounded-r-full', neutralAccent ? 'bg-slate-200' : 'bg-amber-300']"></span>
+                        <span :class="['grid h-6 w-6 shrink-0 place-items-center text-xs transition', isGroupActive(link) ? (neutralAccent ? 'text-white' : 'text-amber-300') : 'text-slate-500 group-hover:text-slate-300']">
                             <i :class="link.icon" aria-hidden="true"></i>
                         </span>
                         <span class="min-w-0 flex-1 truncate">{{ link.label }}</span>
@@ -254,7 +258,7 @@ async function requestLogout() {
                             :class="[
                                 'rounded-md px-3 py-2 text-xs font-semibold transition',
                                 isActive(child)
-                                    ? 'bg-amber-300 text-slate-950'
+                                    ? (neutralAccent ? 'bg-white/[0.12] text-white' : 'bg-amber-300 text-slate-950')
                                     : 'text-slate-500 hover:bg-white/[0.05] hover:text-white',
                             ]"
                         >
@@ -273,8 +277,8 @@ async function requestLogout() {
                                 : 'text-slate-400 hover:bg-white/[0.05] hover:text-white',
                         ]"
                     >
-                        <span v-if="isActive(link)" class="absolute inset-y-2 left-0 w-0.5 rounded-r-full bg-amber-300"></span>
-                        <span :class="['grid h-6 w-6 shrink-0 place-items-center text-xs transition', isActive(link) ? 'text-amber-300' : 'text-slate-500 group-hover:text-slate-300']">
+                        <span v-if="isActive(link)" :class="['absolute inset-y-2 left-0 w-0.5 rounded-r-full', neutralAccent ? 'bg-slate-200' : 'bg-amber-300']"></span>
+                        <span :class="['grid h-6 w-6 shrink-0 place-items-center text-xs transition', isActive(link) ? (neutralAccent ? 'text-white' : 'text-amber-300') : 'text-slate-500 group-hover:text-slate-300']">
                             <i :class="link.icon" aria-hidden="true"></i>
                         </span>
                         <span class="min-w-0 truncate">{{ link.label }}</span>
@@ -284,7 +288,7 @@ async function requestLogout() {
 
             <div :class="['mt-4 shrink-0 border-t border-white/10 pt-3 lg:block', mobileCollapsible && !mobileMenuOpen ? 'hidden' : 'block']">
                 <div class="flex min-w-0 items-center gap-2.5 px-2 py-1.5">
-                    <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/[0.08] text-[11px] font-black text-amber-200">
+                    <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/[0.08] text-[11px] font-black', neutralAccent ? 'text-slate-200' : 'text-amber-200']">
                         {{ accountInitials }}
                     </span>
                     <span class="min-w-0">

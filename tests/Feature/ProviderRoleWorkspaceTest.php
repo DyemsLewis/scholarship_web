@@ -41,6 +41,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertOk()
             ->assertViewIs('provider-program-coordinator-workspace');
 
+        foreach (['drafts', 'review', 'published', 'closed'] as $section) {
+            $this->actingAs($coordinator)
+                ->get("/provider/workspaces/programs/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-program-coordinator-workspace');
+        }
+
         $this->assertSame(
             '/provider/workspaces/programs',
             $coordinator->fresh('providerProfile')->publicPayload()['provider_workspace_url'],
@@ -68,12 +75,29 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('phases.published', 1)
             ->assertJsonPath('next_action.title', 'Address the requested program changes')
             ->assertJsonPath('next_action.href', "/provider/programs/{$rejected->id}/edit")
-            ->assertJsonCount(3, 'programs');
+            ->assertJsonPath('section', 'overview')
+            ->assertJsonCount(0, 'programs');
+
+        $draftResponse = $this->actingAs($coordinator)
+            ->getJson('/provider/workspaces/programs/data?section=drafts')
+            ->assertOk()
+            ->assertJsonPath('section', 'drafts')
+            ->assertJsonPath('pagination.total', 2)
+            ->assertJsonCount(2, 'programs');
+
+        $publishedResponse = $this->actingAs($coordinator)
+            ->getJson('/provider/workspaces/programs/data?section=published')
+            ->assertOk()
+            ->assertJsonPath('section', 'published')
+            ->assertJsonPath('programs.0.id', $published->id)
+            ->assertJsonCount(1, 'programs');
 
         $this->assertEqualsCanonicalizing(
-            [$draft->id, $rejected->id, $published->id],
-            collect($response->json('programs'))->pluck('id')->all(),
+            [$draft->id, $rejected->id],
+            collect($draftResponse->json('programs'))->pluck('id')->all(),
         );
+
+        $this->assertSame($published->id, $publishedResponse->json('programs.0.id'));
     }
 
     public function test_non_program_staff_cannot_open_the_coordinator_workspace(): void
@@ -88,6 +112,7 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)->get('/provider/workspaces/programs')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/programs/data')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/programs/drafts')->assertForbidden();
     }
 
     public function test_application_reviewer_enters_a_dedicated_verification_workspace(): void
@@ -116,6 +141,55 @@ class ProviderRoleWorkspaceTest extends TestCase
         $this->assertSame(
             '/provider/workspaces/reviews',
             $reviewer->fresh('providerProfile')->publicPayload()['provider_workspace_url'],
+        );
+    }
+
+    public function test_application_reviewer_login_opens_the_dedicated_workspace_directly(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $reviewer = $this->applicationReviewer($owner);
+        $reviewer->forceFill([
+            'password' => 'review-password123',
+            'email_verified_at' => now(),
+            'must_reset_password' => false,
+        ])->save();
+
+        $this->postJson('/login', [
+            'email' => $reviewer->email,
+            'password' => 'review-password123',
+        ])->assertOk()
+            ->assertJsonPath('redirect', '/provider/workspaces/reviews')
+            ->assertJsonPath('user.provider_workspace_url', '/provider/workspaces/reviews');
+    }
+
+    public function test_specialist_keeps_the_primary_workspace_and_can_open_additional_granted_workspaces(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $reviewer = $this->applicationReviewer($owner);
+        $reviewer->update([
+            'permissions' => ['verify_applications', 'manage_selection_activities'],
+        ]);
+
+        $this->actingAs($reviewer)
+            ->get('/provider')
+            ->assertRedirect('/provider/workspaces/reviews');
+
+        $this->actingAs($reviewer)
+            ->get('/provider/workspaces/reviews')
+            ->assertOk()
+            ->assertViewIs('provider-application-reviewer-workspace');
+
+        $this->actingAs($reviewer)
+            ->get('/provider/workspaces/selection')
+            ->assertOk()
+            ->assertViewIs('provider-selection-officer-workspace');
+
+        $payload = $reviewer->fresh('providerProfile')->publicPayload();
+
+        $this->assertSame('/provider/workspaces/reviews', $payload['provider_workspace_url']);
+        $this->assertEqualsCanonicalizing(
+            ['verify_applications', 'manage_selection_activities'],
+            $payload['permissions'],
         );
     }
 

@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import RoleSidebar from './RoleSidebar.vue';
+import { supplementalProviderWorkspaceLinks } from '../support/providerWorkspaceNavigation';
 
 const hasPermission = (permission) => Boolean(
     window.portalUser?.has_full_access
@@ -19,6 +20,13 @@ const usesOrganizationProfileManagerWorkspace = providerWorkspaceUrl === '/provi
 const usesTeamAdministratorWorkspace = providerWorkspaceUrl === '/provider/workspaces/team';
 const usesSupportStaffWorkspace = providerWorkspaceUrl === '/provider/workspaces/support';
 const usesBillingStaffWorkspace = providerWorkspaceUrl === '/provider/workspaces/billing';
+const usesDedicatedWorkspace = Boolean(providerWorkspaceUrl);
+const supplementalWorkspaceLinks = computed(() => supplementalProviderWorkspaceLinks({
+    primaryWorkspaceUrl: providerWorkspaceUrl,
+    permissions: window.portalUser?.permissions ?? [],
+    hasFullAccess: Boolean(window.portalUser?.has_full_access),
+    providerApproved: Boolean(window.portalUser?.can_post_scholarships),
+}));
 const providerHomeHref = providerWorkspaceUrl || '/provider';
 const canManagePrograms = hasPermission('manage_programs');
 const providerApproved = Boolean(window.portalUser?.can_post_scholarships);
@@ -43,7 +51,11 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-compass-drafting',
             activePathPatterns: ['^/provider/(?:workspaces/programs|programs)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Program workbench', exact: true },
+                { href: providerWorkspaceUrl, label: 'Overview', exact: true },
+                { href: '/provider/workspaces/programs/drafts', label: 'Drafts and changes', exact: true },
+                { href: '/provider/workspaces/programs/review', label: 'Admin review', exact: true },
+                { href: '/provider/workspaces/programs/published', label: 'Published programs', exact: true },
+                { href: '/provider/workspaces/programs/closed', label: 'Closed programs', exact: true },
                 { href: '/provider/programs/create', label: 'Create program', exact: true },
             ],
         }];
@@ -189,7 +201,9 @@ const entryLinks = computed(() => {
         ],
     }] : [])];
 });
-const navLinks = computed(() => [
+const navLinks = computed(() => usesDedicatedWorkspace
+    ? [...entryLinks.value, ...supplementalWorkspaceLinks.value]
+    : [
     ...entryLinks.value,
     ...(canAccessApplicationWorkflow && !usesApplicationReviewerWorkspace && !usesSelectionOfficerWorkspace && !usesDecisionOfficerWorkspace ? [{
         href: canVerifyApplications
@@ -259,5 +273,6 @@ const navLinks = computed(() => [
         :nav-links="navLinks"
         logout-message="You will need to sign in again to continue using the provider portal."
         mobile-collapsible
+        neutral-accent
     />
 </template>

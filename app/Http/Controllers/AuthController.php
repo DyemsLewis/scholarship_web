@@ -9,6 +9,7 @@ use App\Models\PortalNotification;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\PasswordResetLinkService;
+use App\Support\ProviderWorkspace;
 use App\Support\Terms;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
@@ -340,11 +341,7 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Login successful.',
-            'redirect' => match (true) {
-                $request->user()->isAdmin() => '/admin',
-                $request->user()->isProvider() => '/provider',
-                default => '/dashboard',
-            },
+            'redirect' => $this->portalPath($request->user()),
             'email_verified' => $request->user()->hasVerifiedEmail(),
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ]);
@@ -373,11 +370,7 @@ class AuthController extends Controller
                 'message' => $setupRequired
                     ? 'Your email address is verified. Create a new password to finish setting up your staff account.'
                     : 'Your email address has been verified successfully.',
-                'action_url' => $setupRequired ? '/account/setup' : match (true) {
-                    $user->isAdmin() => '/admin',
-                    $user->isProvider() => '/provider',
-                    default => '/dashboard',
-                },
+                'action_url' => $setupRequired ? '/account/setup' : $this->portalPath($user),
             ]);
 
             ActivityLog::record(
@@ -407,11 +400,7 @@ class AuthController extends Controller
             return redirect('/account/setup?verified=1');
         }
 
-        $redirect = match (true) {
-            $request->user()->isAdmin() => '/admin',
-            $request->user()->isProvider() => '/provider',
-            default => '/dashboard',
-        };
+        $redirect = $this->portalPath($request->user());
 
         return redirect($redirect.'?verified=1');
     }
@@ -476,7 +465,7 @@ class AuthController extends Controller
         if (! $user->must_reset_password) {
             return response()->json([
                 'message' => 'Your staff account setup is already complete.',
-                'redirect' => $user->isAdmin() ? '/admin' : '/provider',
+                'redirect' => $this->portalPath($user),
             ]);
         }
 
@@ -510,12 +499,12 @@ class AuthController extends Controller
             'type' => 'password_changed',
             'title' => 'Staff account setup complete',
             'message' => 'Your email is verified and your temporary password has been replaced.',
-            'action_url' => $user->isAdmin() ? '/admin' : '/provider',
+            'action_url' => $this->portalPath($user),
         ]);
 
         return response()->json([
             'message' => 'Account setup complete. You can now use your staff workspace.',
-            'redirect' => $user->isAdmin() ? '/admin' : '/provider',
+            'redirect' => $this->portalPath($user),
             'user' => $user->fresh(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
         ]);
     }
@@ -539,6 +528,15 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Logged out successfully.',
         ]);
+    }
+
+    private function portalPath(User $user): string
+    {
+        return match (true) {
+            $user->isAdmin() => '/admin',
+            $user->isProvider() => ProviderWorkspace::preferredPath($user) ?? '/provider',
+            default => '/dashboard',
+        };
     }
 
     public function forgotPassword(Request $request): JsonResponse
