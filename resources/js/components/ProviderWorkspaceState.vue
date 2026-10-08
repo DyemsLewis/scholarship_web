@@ -40,11 +40,11 @@ const iconToneClass = computed(() => ({
 
 <template>
     <section
-        :class="['flex items-start gap-3 rounded-md border p-5', panelClass]"
+        :class="['flex items-start gap-3 rounded-sm border border-l-[3px] p-5', panelClass]"
         :role="tone === 'error' ? 'alert' : 'status'"
         aria-live="polite"
     >
-        <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-md', iconToneClass]">
+        <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-sm', iconToneClass]">
             <i :class="iconClass" aria-hidden="true"></i>
         </span>
         <div class="min-w-0 pt-0.5">

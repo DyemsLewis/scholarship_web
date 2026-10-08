@@ -146,13 +146,13 @@ class DatabaseSeeder extends Seeder
             'verified_by' => $admin->id,
         ]);
 
-        $demoPhotoSource = public_path('images/study-student.jpg');
+        $demoPhotoSource = public_path('images/demo/default-applicant-avatar.jpg');
         if (is_file($demoPhotoSource)) {
-            $demoPhotoPath = "profile-photos/{$student->id}/demo-applicant.jpg";
+            $demoPhotoPath = "profile-photos/{$student->id}/default-applicant-avatar.jpg";
             Storage::disk('local')->put($demoPhotoPath, file_get_contents($demoPhotoSource));
             $studentProfile->update([
                 'profile_photo_path' => $demoPhotoPath,
-                'profile_photo_original_name' => 'demo-applicant.jpg',
+                'profile_photo_original_name' => 'default-applicant-avatar.jpg',
                 'profile_photo_mime_type' => 'image/jpeg',
                 'profile_photo_size' => filesize($demoPhotoSource),
                 'profile_photo_updated_at' => now(),

@@ -10,7 +10,7 @@ const completed = computed(() => steps.value.filter((step) => step.completed).le
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section class="overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
         <header class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
             <div class="flex items-start gap-3">
                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">

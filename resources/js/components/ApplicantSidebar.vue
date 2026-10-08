@@ -42,7 +42,7 @@ const navLinks = [
     },
     {
         href: '/dashboard/documents',
-        label: 'Documents',
+        label: 'My Documents',
         icon: 'fa-solid fa-folder-open',
         children: [
             { href: '/dashboard/documents', label: 'Prepared files', exact: true, queryless: true },

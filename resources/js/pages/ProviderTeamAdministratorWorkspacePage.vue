@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import ProviderPagination from '../components/ProviderPagination.vue';
 import ProviderPageHeader from '../components/ProviderPageHeader.vue';
-import ProviderQueueTabs from '../components/ProviderQueueTabs.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import ProviderWorkspaceState from '../components/ProviderWorkspaceState.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
@@ -18,51 +17,52 @@ const roles = ref([]);
 const accounts = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: 0, to: 0 });
 const updatingId = ref(null);
-const allowedQueues = ['attention', 'active', 'suspended'];
-const pageUrl = new URL(window.location.href);
-const requestedQueue = pageUrl.searchParams.get('queue');
-const activeQueue = ref(allowedQueues.includes(requestedQueue) ? requestedQueue : 'attention');
-const selectedRole = ref(pageUrl.searchParams.get('role') ?? '');
+const url = new URL(window.location.href);
+const pathSection = url.pathname.split('/').filter(Boolean).at(-1);
+const pathQueueMap = { setup: 'attention', active: 'active', suspended: 'suspended' };
+const queueOptions = ['attention', 'active', 'suspended'];
+const requestedQueue = pathQueueMap[pathSection] ?? url.searchParams.get('queue');
+const activeQueue = ref(queueOptions.includes(requestedQueue) ? requestedQueue : 'attention');
+const selectedRole = ref(url.searchParams.get('role') ?? '');
 const searchQuery = ref('');
 let searchTimer = null;
-const {
-    confirmation,
-    requestConfirmation,
-    confirmConfirmation,
-    cancelConfirmation,
-} = useConfirmationDialog();
+const { confirmation, requestConfirmation, confirmConfirmation, cancelConfirmation } = useConfirmationDialog();
 
-const accessLabel = computed(() => workspace.value?.program_access_mode === 'selected'
-    ? 'Delegation limited to assigned programs'
-    : `${workspace.value?.grantable_permission_count ?? 0} permission area${Number(workspace.value?.grantable_permission_count) === 1 ? '' : 's'} grantable`);
-const queueTabs = computed(() => [
-    { key: 'attention', label: 'Needs attention', count: Number(summary.value.attention ?? 0) },
-    { key: 'active', label: 'Active access', count: Number(summary.value.active ?? 0) },
-    { key: 'suspended', label: 'Suspended', count: Number(summary.value.suspended ?? 0) },
+const queueSections = computed(() => [
+    { key: 'attention', label: 'Setup required', shortLabel: 'Setup', description: 'Finish account setup before staff begin provider work.', count: Number(summary.value.attention ?? 0), href: '/provider/workspaces/team/setup', icon: 'fa-user-clock' },
+    { key: 'active', label: 'Active staff accounts', shortLabel: 'Active', description: 'Manage staff roles, permissions, and program scope.', count: Number(summary.value.active ?? 0), href: '/provider/workspaces/team/active', icon: 'fa-user-check' },
+    { key: 'suspended', label: 'Suspended staff accounts', shortLabel: 'Suspended', description: 'Review accounts whose sign-in access is disabled.', count: Number(summary.value.suspended ?? 0), href: '/provider/workspaces/team/suspended', icon: 'fa-user-lock' },
 ]);
-const activeQueueTab = computed(() => queueTabs.value.find((tab) => tab.key === activeQueue.value) ?? queueTabs.value[0]);
-const queueHeading = computed(() => ({
-    attention: 'Accounts with incomplete setup',
-    active: 'Staff with active access',
-    suspended: 'Accounts without sign-in access',
-}[activeQueue.value]));
-
-function accountInitials(name) {
-    return String(name ?? 'Staff')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part.charAt(0).toUpperCase())
-        .join('');
-}
+const activeSection = computed(() => queueSections.value.find((section) => section.key === activeQueue.value) ?? queueSections.value[0]);
+const leadTask = computed(() => {
+    if (activeQueue.value !== 'attention') return null;
+    if (accounts.value[0]) {
+        return {
+            title: accounts.value[0].name,
+            detail: accounts.value[0].detail,
+            action_label: 'Review account',
+            action_url: accounts.value[0].action_url,
+        };
+    }
+    return nextTask.value?.state === 'create' ? nextTask.value : null;
+});
 
 function stateClass(state) {
     return {
-        attention: 'bg-amber-100 text-amber-900',
-        active: 'bg-slate-100 text-slate-700',
-        suspended: 'bg-rose-100 text-rose-800',
-        create: 'bg-amber-100 text-amber-900',
-    }[state] ?? 'bg-slate-100 text-slate-700';
+        attention: 'text-amber-700',
+        active: 'text-emerald-700',
+        suspended: 'text-rose-700',
+        create: 'text-amber-700',
+    }[state] ?? 'text-slate-700';
+}
+
+function stateIcon(state) {
+    return {
+        attention: 'fa-solid fa-triangle-exclamation',
+        active: 'fa-solid fa-circle-check',
+        suspended: 'fa-solid fa-circle-pause',
+        create: 'fa-solid fa-user-plus',
+    }[state] ?? 'fa-solid fa-circle-info';
 }
 
 function scopeLabel(account) {
@@ -72,8 +72,9 @@ function scopeLabel(account) {
 
 function syncUrl() {
     const nextUrl = new URL(window.location.href);
+    const usesQueuePath = Object.prototype.hasOwnProperty.call(pathQueueMap, pathSection);
 
-    if (activeQueue.value === 'attention') nextUrl.searchParams.delete('queue');
+    if (usesQueuePath || activeQueue.value === 'attention') nextUrl.searchParams.delete('queue');
     else nextUrl.searchParams.set('queue', activeQueue.value);
 
     if (selectedRole.value) nextUrl.searchParams.set('role', selectedRole.value);
@@ -109,11 +110,6 @@ async function loadWorkspace(page = 1, initial = false) {
         isLoading.value = false;
         isRefreshing.value = false;
     }
-}
-
-function selectQueue(queue) {
-    activeQueue.value = queue;
-    loadWorkspace(1);
 }
 
 async function toggleStatus(account) {
@@ -160,73 +156,59 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
         <section class="provider-page">
             <div class="provider-container">
-                <ProviderWorkspaceState v-if="isLoading" title="Loading team access" message="Preparing account setup, active access, and suspended records." />
+                <ProviderWorkspaceState v-if="isLoading" title="Loading team access" message="Preparing staff account records." />
                 <ProviderWorkspaceState v-else-if="errorMessage && !workspace" tone="error" title="Team access is unavailable" :message="errorMessage" />
 
                 <template v-else>
-                    <ProviderPageHeader role-key="team" title="Team access" description="Maintain individual staff accounts and deliberately scoped workspace access." icon="fa-solid fa-users-gear">
-                        <template #actions>
-                            <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                                <a href="/provider/team/accounts/create" class="bg-slate-950 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-user-plus mr-2 text-amber-300"></i>Add member</a>
-                            </div>
-                        </template>
-                        <template #meta>
-                            <span><i class="fa-solid fa-building mr-2 text-slate-400"></i>{{ workspace.organization_name }}</span>
-                            <span><i class="fa-solid fa-lock mr-2 text-slate-400"></i>{{ accessLabel }}</span>
-                        </template>
+                    <ProviderPageHeader role-key="team" :show-role-guide="false" :title="activeSection.label" :description="activeSection.description" icon="fa-solid fa-users-gear">
+                        <template #actions><a href="/provider/team/accounts/create" class="bg-slate-950 px-4 py-2.5 text-center text-xs font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-user-plus mr-2 text-amber-300" aria-hidden="true"></i>Add staff account</a></template>
                     </ProviderPageHeader>
 
-                    <section v-if="nextTask" class="mt-3 overflow-hidden rounded border border-amber-300 bg-white shadow-sm">
-                        <div class="flex items-center gap-3 px-4 py-3 sm:px-5">
-                            <span class="grid h-9 w-9 shrink-0 place-items-center bg-amber-300 text-slate-950"><i :class="['fa-solid text-sm', nextTask.state === 'create' ? 'fa-user-plus' : 'fa-user-clock']"></i></span>
-                            <div class="min-w-0 flex-1">
-                                <p class="text-[0.62rem] font-black uppercase tracking-[0.16em] text-amber-700">Next task</p>
-                                <h2 class="mt-0.5 truncate text-sm font-bold text-slate-950">{{ nextTask.title }}</h2>
-                                <p class="mt-0.5 truncate text-xs text-slate-500">{{ workspace.organization_name }}</p>
-                            </div>
-                            <div class="shrink-0 border-l border-slate-200 pl-4">
-                                <span :class="['inline-flex px-2 py-1 text-[0.62rem] font-black uppercase tracking-wide', stateClass(nextTask.state)]">{{ nextTask.label }}</span>
-                                <p class="mt-1 max-w-sm text-xs font-semibold text-slate-600">{{ nextTask.detail }}</p>
-                            </div>
-                            <a :href="nextTask.action_url" class="shrink-0 bg-slate-950 px-3.5 py-2 text-xs font-bold text-white hover:bg-slate-800">{{ nextTask.action_label }}<i class="fa-solid fa-arrow-right ml-2 text-[0.65rem] text-amber-300"></i></a>
+                    <nav class="mt-4 grid grid-cols-3 border border-slate-300 bg-white" aria-label="Team access pages">
+                        <a v-for="section in queueSections" :key="section.key" :href="section.href" :aria-current="section.key === activeQueue ? 'page' : undefined" :class="['flex min-h-14 items-center gap-3 border-r border-slate-200 px-4 last:border-r-0', section.key === activeQueue ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950']">
+                            <i :class="['fa-solid', section.icon, section.key === activeQueue ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
+                            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-bold">{{ section.shortLabel }}</span><span :class="['mt-0.5 block truncate text-[0.68rem]', section.key === activeQueue ? 'text-slate-300' : 'text-slate-500']">{{ section.count }} account{{ section.count === 1 ? '' : 's' }}</span></span>
+                        </a>
+                    </nav>
+
+                    <section v-if="leadTask" class="mt-3 border border-slate-300 border-l-4 border-l-amber-500 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                        <div class="flex items-center gap-4 px-5 py-4">
+                            <span class="grid h-9 w-9 shrink-0 place-items-center bg-amber-100 text-amber-700"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span>
+                            <div class="min-w-0 flex-1"><p class="text-[0.64rem] font-black uppercase tracking-[0.16em] text-amber-700">Review next</p><h2 class="mt-0.5 truncate text-base font-bold text-slate-950">{{ leadTask.title }}</h2><p class="mt-0.5 line-clamp-1 text-sm text-slate-500">{{ leadTask.detail }}</p></div>
+                            <a v-if="leadTask.action_url" :href="leadTask.action_url" class="shrink-0 bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">{{ leadTask.action_label }}<i class="fa-solid fa-arrow-right ml-2 text-xs text-amber-300" aria-hidden="true"></i></a>
                         </div>
                     </section>
 
-                    <section v-else class="mt-3 flex items-center gap-3 rounded border border-slate-200 bg-white px-4 py-3 sm:px-5">
-                        <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-check"></i></span>
-                        <div><h2 class="text-sm font-bold text-slate-950">Staff setup is current</h2><p class="mt-0.5 text-xs text-slate-500">No active team account is waiting for first-login setup.</p></div>
-                    </section>
-
-                    <section class="mt-3 overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
-                        <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3.5">
-                            <div><p class="text-[0.65rem] font-black uppercase tracking-[0.16em] text-amber-700">Access directory</p><h2 class="mt-0.5 text-base font-bold text-slate-950">{{ queueHeading }}</h2></div>
-                            <p class="shrink-0 text-xs font-semibold text-slate-500">{{ activeQueueTab.count }} {{ activeQueueTab.count === 1 ? 'account' : 'accounts' }}</p>
+                    <section class="mt-3 border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                        <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-5 py-4">
+                            <div><h2 class="text-base font-bold text-slate-950">{{ pagination.total }} account{{ pagination.total === 1 ? '' : 's' }}</h2><p class="mt-0.5 text-xs text-slate-500">{{ summary.total }} total staff records in this organization.</p></div>
+                            <span v-if="isRefreshing" class="text-xs font-semibold text-slate-500"><i class="fa-solid fa-circle-notch mr-1.5 animate-spin" aria-hidden="true"></i>Updating</span>
                         </header>
 
-                        <ProviderQueueTabs :tabs="queueTabs" :active-key="activeQueue" :busy="isRefreshing" aria-label="Team access states" @select="selectQueue" />
-
-                        <div class="grid gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3 xl:grid-cols-[minmax(18rem,1fr)_minmax(14rem,.45fr)]">
-                            <label class="relative block"><span class="sr-only">Search team accounts</span><i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i><input v-model="searchQuery" type="search" placeholder="Search member, email, or role" class="w-full rounded border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100"></label>
-                            <label><span class="sr-only">Filter by role</span><select v-model="selectedRole" class="w-full rounded border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100"><option value="">All roles</option><option v-for="role in roles" :key="role.value" :value="role.value">{{ role.label }}</option></select></label>
+                        <div class="grid grid-cols-[minmax(18rem,1fr)_minmax(15rem,.55fr)] gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3">
+                            <label class="relative block"><span class="sr-only">Search team accounts</span><i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="searchQuery" type="search" placeholder="Search staff name, email, or role" class="w-full border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100"></label>
+                            <label><span class="sr-only">Filter by role</span><select v-model="selectedRole" class="w-full border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100"><option value="">All assigned roles</option><option v-for="role in roles" :key="role.value" :value="role.value">{{ role.label }}</option></select></label>
                         </div>
 
-                        <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800 sm:px-6">{{ errorMessage }}</div>
+                        <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
-                        <div v-if="accounts.length" class="divide-y divide-slate-200">
-                            <div class="hidden grid-cols-[minmax(18rem,1.2fr)_minmax(17rem,1fr)_minmax(16rem,.9fr)_10rem] gap-4 bg-slate-50 px-5 py-2.5 text-[0.65rem] font-black uppercase tracking-[0.15em] text-slate-500 xl:grid"><span>Staff member</span><span>Access state</span><span>Assigned scope</span><span class="text-right">Actions</span></div>
-                            <article v-for="account in accounts" :key="account.id" class="grid gap-4 px-5 py-3.5 transition hover:bg-slate-50 xl:grid-cols-[minmax(18rem,1.2fr)_minmax(17rem,1fr)_minmax(16rem,.9fr)_10rem] xl:items-center">
-                                <div class="flex min-w-0 items-center gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-950 text-xs font-black text-amber-300">{{ accountInitials(account.name) }}</span><div class="min-w-0"><div class="flex items-center gap-2"><h3 class="truncate text-sm font-bold text-slate-950">{{ account.name }}</h3><span v-if="account.is_current_account" class="bg-slate-200 px-1.5 py-0.5 text-[0.6rem] font-black uppercase text-slate-600">You</span></div><p class="mt-0.5 truncate text-xs text-slate-500">{{ account.email }}</p><p class="mt-0.5 text-xs font-semibold text-slate-700">{{ account.team_role_label }}</p></div></div>
-                                <div><span :class="['inline-flex px-2.5 py-1.5 text-[0.67rem] font-black uppercase tracking-wide', stateClass(account.work_state)]">{{ account.work_label }}</span><p class="mt-1.5 text-xs leading-5 text-slate-500">{{ account.detail }}</p></div>
-                                <div><p class="text-sm font-bold text-slate-900">{{ scopeLabel(account) }}</p><p class="mt-1 text-xs text-slate-500">{{ account.permission_count }} permission area{{ Number(account.permission_count) === 1 ? '' : 's' }}</p><p v-if="!account.can_manage" class="mt-1 text-xs font-semibold text-amber-700"><i class="fa-solid fa-lock mr-1"></i>Protected access</p></div>
-                                <div class="flex items-center justify-end gap-2">
-                                    <a v-if="account.action_url" :href="account.action_url" class="grid h-9 w-9 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-900" title="Edit account" aria-label="Edit account"><i class="fa-solid fa-pen"></i></a>
-                                    <button v-if="account.can_manage && !account.is_current_account" type="button" :disabled="updatingId === account.id" :class="['grid h-9 w-9 place-items-center border disabled:opacity-50', account.account_status === 'suspended' ? 'border-slate-300 bg-white text-slate-700' : 'border-rose-300 bg-rose-50 text-rose-700']" :title="account.account_status === 'suspended' ? 'Reactivate account' : 'Suspend account'" :aria-label="account.account_status === 'suspended' ? 'Reactivate account' : 'Suspend account'" @click="toggleStatus(account)"><i :class="['fa-solid', updatingId === account.id ? 'fa-circle-notch animate-spin' : (account.account_status === 'suspended' ? 'fa-user-check' : 'fa-user-slash')]" aria-hidden="true"></i></button>
-                                    <span v-if="!account.can_manage" class="text-xs font-bold text-slate-400">Owner only</span>
-                                </div>
-                            </article>
+                        <div v-if="accounts.length" class="portal-table-scroll">
+                            <table class="portal-data-table min-w-[72rem] table-fixed">
+                                <caption class="sr-only">{{ activeSection.label }}</caption>
+                                <colgroup><col class="w-[31%]"><col class="w-[24%]"><col class="w-[27%]"><col class="w-[18%]"></colgroup>
+                                <thead><tr><th scope="col">Staff member and role</th><th scope="col">Access status</th><th scope="col">Assigned access</th><th scope="col">Account controls</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="account in accounts" :key="account.id">
+                                        <td><div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-user-shield" aria-hidden="true"></i></span><div class="min-w-0"><p class="truncate font-bold text-slate-950">{{ account.name }}<span v-if="account.is_current_account" class="font-normal text-slate-500"> (You)</span></p><p class="mt-0.5 truncate text-xs text-slate-500">{{ account.team_role_label }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ account.email }}</p></div></div></td>
+                                        <td><p :class="['font-semibold', stateClass(account.work_state)]"><i :class="[stateIcon(account.work_state), 'mr-1.5']" aria-hidden="true"></i>{{ account.work_label }}</p><p class="mt-1 line-clamp-2 text-xs text-slate-500">{{ account.detail }}</p></td>
+                                        <td><p class="font-semibold text-slate-800">{{ scopeLabel(account) }}</p><p class="mt-1 text-xs text-slate-500">{{ account.permission_count }} permission area{{ Number(account.permission_count) === 1 ? '' : 's' }}</p><p v-if="!account.can_manage" class="mt-1 text-xs text-slate-500"><i class="fa-solid fa-lock mr-1" aria-hidden="true"></i>Protected account</p></td>
+                                        <td><div class="flex flex-wrap items-center gap-3"><a v-if="account.action_url" :href="account.action_url" class="inline-flex items-center border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">Manage<i class="fa-solid fa-arrow-right ml-2 text-[9px]" aria-hidden="true"></i></a><button v-if="account.can_manage && !account.is_current_account" type="button" :disabled="updatingId === account.id" :class="['px-3 py-2 text-xs font-bold disabled:cursor-wait disabled:opacity-50', account.account_status === 'suspended' ? 'border border-slate-300 bg-white text-slate-700 hover:border-slate-950' : 'border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100']" @click="toggleStatus(account)"><i :class="[updatingId === account.id ? 'fa-circle-notch animate-spin' : (account.account_status === 'suspended' ? 'fa-circle-play' : 'fa-circle-pause'), 'fa-solid mr-1.5']" aria-hidden="true"></i>{{ account.account_status === 'suspended' ? 'Reactivate' : 'Suspend' }}</button><span v-if="!account.can_manage && !account.action_url" class="text-xs text-slate-400"><i class="fa-solid fa-lock mr-1" aria-hidden="true"></i>Protected</span></div></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
 
-                        <div v-else class="px-6 py-12 text-center"><span class="mx-auto grid h-11 w-11 place-items-center bg-slate-100 text-slate-400"><i class="fa-solid fa-users"></i></span><h3 class="mt-3 text-sm font-bold text-slate-900">No accounts in this view</h3><p class="mt-1 text-sm text-slate-500">Try another access state, role, or search.</p></div>
+                        <div v-else class="px-6 py-12 text-center"><i class="fa-solid fa-users text-2xl text-slate-300" aria-hidden="true"></i><h3 class="mt-3 text-sm font-bold text-slate-900">No accounts on this page</h3><p class="mt-1 text-sm text-slate-500">{{ searchQuery || selectedRole ? 'Clear the filters to check the full list.' : 'Staff accounts will appear here when they reach this access state.' }}</p></div>
 
                         <ProviderPagination :pagination="pagination" :busy="isRefreshing" item-label="accounts" @change="loadWorkspace" />
                     </section>

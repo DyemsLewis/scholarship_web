@@ -11,6 +11,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    eyebrow: {
+        type: String,
+        default: '',
+    },
     icon: {
         type: String,
         default: 'fa-solid fa-list-check',
@@ -19,24 +23,29 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    showRoleGuide: {
+        type: Boolean,
+        default: true,
+    },
 });
 
 const role = computed(() => getProviderRoleGuidance(props.roleKey));
+const workspaceLabel = computed(() => role.value ? `${role.value.label} workspace` : props.eyebrow);
 </script>
 
 <template>
-    <header class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_4px_14px_rgba(8,20,38,0.04)]">
-        <div class="flex flex-col gap-4 border-l-[3px] border-slate-950 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+    <header class="overflow-hidden rounded-sm border border-slate-300 border-t-2 border-t-slate-950 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+        <div class="flex flex-col gap-4 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex min-w-0 items-center gap-3.5">
                 <slot name="leading">
-                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded border border-slate-200 bg-slate-100 text-slate-700">
+                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-950 text-white">
                         <i :class="[icon, 'text-sm']" aria-hidden="true"></i>
                     </span>
                 </slot>
 
                 <div class="min-w-0">
-                    <p v-if="role" class="mb-1 text-[0.65rem] font-black uppercase tracking-[0.16em] text-slate-500">{{ role.label }} workspace</p>
-                    <h1 class="font-display text-xl font-bold leading-tight text-slate-950 sm:text-2xl">{{ title }}</h1>
+                    <p v-if="workspaceLabel" class="mb-1 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500">{{ workspaceLabel }}</p>
+                    <h1 class="font-sans text-xl font-bold leading-tight tracking-[-0.015em] text-slate-950 sm:text-2xl">{{ title }}</h1>
                     <p v-if="description" class="mt-1 max-w-3xl text-sm leading-5 text-slate-600 sm:line-clamp-2">{{ description }}</p>
                 </div>
             </div>
@@ -50,8 +59,8 @@ const role = computed(() => getProviderRoleGuidance(props.roleKey));
             <slot name="meta"></slot>
         </div>
 
-        <details v-if="role" class="group border-t border-slate-200 bg-white">
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:px-5">
+        <details v-if="role && showRoleGuide" class="group border-t border-slate-200 bg-white">
+            <summary class="flex min-h-10 cursor-pointer list-none items-center justify-between gap-4 px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:px-5">
                 <span class="flex min-w-0 items-center gap-2.5">
                     <i class="fa-regular fa-circle-question text-slate-400" aria-hidden="true"></i>
                     <span>What this role owns</span>

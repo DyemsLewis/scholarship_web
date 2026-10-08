@@ -10,7 +10,6 @@ use App\Models\ProviderServiceUpdate;
 use App\Models\User;
 use App\Services\PayMongoCheckoutService;
 use App\Support\AdminWorkspace;
-use App\Support\ProviderWorkspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -80,7 +79,7 @@ class BillingController extends Controller
     public function providerBillingStaffWorkspace(Request $request): View
     {
         abort_unless($request->user()?->isProvider(), 403);
-        abort_unless(ProviderWorkspace::usesBillingStaffWorkspace($request->user()), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_billing'), 403);
 
         return view('provider-billing-staff-workspace');
     }
@@ -89,17 +88,16 @@ class BillingController extends Controller
     {
         $staff = $request->user();
         abort_unless($staff?->isProvider(), 403);
-        abort_unless(ProviderWorkspace::usesBillingStaffWorkspace($staff), 403);
+        abort_unless($staff->hasPortalPermission('manage_billing'), 403);
 
         $validated = $request->validate([
             'queue' => ['sometimes', Rule::in(['needs_action', 'active', 'waiting', 'completed'])],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'needs_action';
         $search = trim((string) ($validated['search'] ?? ''));
-        $perPage = (int) ($validated['per_page'] ?? 10);
+        $perPage = 5;
         $owner = $staff->providerOrganizationOwner()->loadMissing('providerProfile');
         $base = ProviderServicePurchase::query()
             ->with(['creator.providerProfile', 'assignee.adminProfile'])

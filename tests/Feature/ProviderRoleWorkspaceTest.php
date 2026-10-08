@@ -23,6 +23,40 @@ class ProviderRoleWorkspaceTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_full_access_manager_enters_the_manager_overview_and_keeps_role_workspaces_available(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $manager = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $owner->id,
+            'account_title' => 'manager',
+            'permissions' => User::PROVIDER_PERMISSIONS,
+        ]);
+
+        $this->actingAs($manager)
+            ->get('/provider')
+            ->assertOk()
+            ->assertViewIs('provider');
+
+        $this->assertNull($manager->fresh('providerProfile')->publicPayload()['provider_workspace_url']);
+
+        foreach ([
+            '/provider/workspaces/programs',
+            '/provider/workspaces/reviews',
+            '/provider/workspaces/selection',
+            '/provider/workspaces/decisions',
+            '/provider/workspaces/recipients',
+            '/provider/workspaces/monitoring',
+            '/provider/workspaces/releases',
+            '/provider/workspaces/organization-profile',
+            '/provider/workspaces/team',
+            '/provider/workspaces/support',
+            '/provider/workspaces/billing',
+        ] as $workspace) {
+            $this->actingAs($manager)->get($workspace)->assertOk();
+        }
+    }
+
     public function test_program_coordinator_enters_a_dedicated_workspace(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
@@ -100,6 +134,30 @@ class ProviderRoleWorkspaceTest extends TestCase
         $this->assertSame($published->id, $publishedResponse->json('programs.0.id'));
     }
 
+    public function test_program_coordinator_queue_paginates_five_programs_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $programs = collect(range(1, 6))->map(
+            fn (int $number) => $this->program($owner, "Coordinator Draft {$number}", 'draft'),
+        );
+        $coordinator = $this->programCoordinator($owner, $programs->pluck('id')->all());
+
+        $this->actingAs($coordinator)
+            ->getJson('/provider/workspaces/programs/data?section=drafts')
+            ->assertOk()
+            ->assertJsonCount(5, 'programs')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($coordinator)
+            ->getJson('/provider/workspaces/programs/data?section=drafts&page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'programs')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
     public function test_non_program_staff_cannot_open_the_coordinator_workspace(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
@@ -137,6 +195,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/reviews')
             ->assertOk()
             ->assertViewIs('provider-application-reviewer-workspace');
+
+        foreach (['assigned', 'unassigned', 'returned', 'history'] as $section) {
+            $this->actingAs($reviewer)
+                ->get("/provider/workspaces/reviews/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-application-reviewer-workspace');
+        }
 
         $this->assertSame(
             '/provider/workspaces/reviews',
@@ -228,12 +293,87 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonCount(1, 'applications');
     }
 
+    public function test_application_review_queue_paginates_five_applications_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Reviewer Pagination Program', 'published');
+        $reviewer = $this->applicationReviewer($owner, [$program->id]);
+
+        foreach (range(1, 6) as $number) {
+            $this->application(
+                $program,
+                $this->applicant("Review{$number}", 'Applicant'),
+                'screening',
+                $reviewer->id,
+                now()->subDays($number),
+            );
+        }
+
+        $this->actingAs($reviewer)
+            ->getJson('/provider/workspaces/reviews/data')
+            ->assertOk()
+            ->assertJsonCount(5, 'applications')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($reviewer)
+            ->getJson('/provider/workspaces/reviews/data?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'applications')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
+    public function test_application_reviewer_has_separate_returned_and_history_queues(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Reviewer Queue Program', 'published');
+        $reviewer = $this->applicationReviewer($owner, [$program->id]);
+        $returned = $this->application(
+            $program,
+            $this->applicant('Returned', 'Applicant'),
+            'screening',
+            $reviewer->id,
+            now()->subDays(2),
+        );
+        $returned->update(['correction_status' => 'submitted']);
+        $reviewed = $this->application(
+            $program,
+            $this->applicant('Reviewed', 'Applicant'),
+            'exam',
+            $reviewer->id,
+            now()->subDays(5),
+        );
+        $reviewed->update([
+            'reviewed_by' => $reviewer->id,
+            'reviewed_at' => now()->subDay(),
+        ]);
+
+        $this->actingAs($reviewer)
+            ->getJson('/provider/workspaces/reviews/data?queue=returned')
+            ->assertOk()
+            ->assertJsonPath('summary.returned', 1)
+            ->assertJsonPath('applications.0.id', $returned->id)
+            ->assertJsonPath('applications.0.evidence.state', 'returned')
+            ->assertJsonCount(1, 'applications');
+
+        $this->actingAs($reviewer)
+            ->getJson('/provider/workspaces/reviews/data?queue=history')
+            ->assertOk()
+            ->assertJsonPath('summary.history', 1)
+            ->assertJsonPath('applications.0.id', $reviewed->id)
+            ->assertJsonPath('applications.0.reviewed_at', $reviewed->reviewed_at->format('M d, Y h:i A'))
+            ->assertJsonCount(1, 'applications');
+    }
+
     public function test_non_review_staff_cannot_open_the_verification_workspace(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $coordinator = $this->programCoordinator($owner);
 
         $this->actingAs($coordinator)->get('/provider/workspaces/reviews')->assertForbidden();
+        $this->actingAs($coordinator)->get('/provider/workspaces/reviews/returned')->assertForbidden();
         $this->actingAs($coordinator)->getJson('/provider/workspaces/reviews/data')->assertForbidden();
     }
 
@@ -263,6 +403,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/selection')
             ->assertOk()
             ->assertViewIs('provider-selection-officer-workspace');
+
+        foreach (['setup', 'results', 'active'] as $section) {
+            $this->actingAs($officer)
+                ->get("/provider/workspaces/selection/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-selection-officer-workspace');
+        }
 
         $this->assertSame(
             '/provider/workspaces/selection',
@@ -322,12 +469,45 @@ class ProviderRoleWorkspaceTest extends TestCase
         );
     }
 
+    public function test_selection_activity_queue_paginates_five_candidates_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Selection Pagination Program', 'published');
+        $officer = $this->selectionOfficer($owner, [$program->id]);
+
+        foreach (range(1, 6) as $number) {
+            $this->application(
+                $program,
+                $this->applicant("Candidate{$number}", 'Selection'),
+                'exam',
+                null,
+                now()->subDays($number),
+            );
+        }
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/selection/data')
+            ->assertOk()
+            ->assertJsonCount(5, 'applications')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/selection/data?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'applications')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
     public function test_non_selection_staff_cannot_open_the_selection_workspace(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/selection')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/selection/results')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/selection/data')->assertForbidden();
     }
 
@@ -357,6 +537,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/decisions')
             ->assertOk()
             ->assertViewIs('provider-decision-officer-workspace');
+
+        foreach (['pending', 'waitlist', 'recorded'] as $section) {
+            $this->actingAs($officer)
+                ->get("/provider/workspaces/decisions/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-decision-officer-workspace');
+        }
 
         $this->assertSame(
             '/provider/workspaces/decisions',
@@ -432,12 +619,46 @@ class ProviderRoleWorkspaceTest extends TestCase
         );
     }
 
+    public function test_decision_docket_paginates_five_candidates_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Decision Pagination Program', 'published');
+        $officer = $this->decisionOfficer($owner, [$program->id]);
+
+        foreach (range(1, 6) as $number) {
+            $application = $this->application(
+                $program,
+                $this->applicant("Decision{$number}", 'Candidate'),
+                'decision',
+                null,
+                now()->subDays($number),
+            );
+            $application->update(['status' => 'approved', 'application_state' => 'awaiting_decision']);
+        }
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/decisions/data')
+            ->assertOk()
+            ->assertJsonCount(5, 'applications')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/decisions/data?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'applications')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
     public function test_non_decision_staff_cannot_open_the_final_decision_workspace(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/decisions')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/decisions/waitlist')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/decisions/data')->assertForbidden();
     }
 
@@ -468,6 +689,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertOk()
             ->assertViewIs('provider-recipient-officer-workspace');
 
+        foreach (['agreements', 'active', 'declined', 'closed'] as $section) {
+            $this->actingAs($officer)
+                ->get("/provider/workspaces/recipients/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-recipient-officer-workspace');
+        }
+
         $this->assertSame(
             '/provider/workspaces/recipients',
             $officer->fresh('providerProfile')->publicPayload()['provider_workspace_url'],
@@ -486,7 +714,9 @@ class ProviderRoleWorkspaceTest extends TestCase
         $outsideProgram = $this->program($owner, 'Outside Recipient Program', 'published');
         $officer = $this->recipientOfficer($owner, [$assignedProgram->id]);
 
-        $awaiting = $this->selectedRecipient($assignedProgram, $this->applicant('Awaiting', 'Recipient'));
+        $awaitingApplicant = $this->applicant('Awaiting', 'Recipient');
+        $awaitingApplicant->studentProfile()->update(['profile_photo_path' => 'profile-photos/awaiting-recipient.jpg']);
+        $awaiting = $this->selectedRecipient($assignedProgram, $awaitingApplicant->fresh('studentProfile'));
         $active = $this->selectedRecipient($assignedProgram, $this->applicant('Active', 'Recipient'), 'accepted');
         $declined = $this->selectedRecipient($assignedProgram, $this->applicant('Declined', 'Recipient'), 'declined');
         $declined->update(['student_response_note' => 'I cannot complete the current recipient terms.']);
@@ -514,6 +744,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('next_recipient.onboarding.state', 'declined')
             ->assertJsonPath('recipients.0.id', $awaiting->id)
             ->assertJsonPath('recipients.0.onboarding.state', 'awaiting')
+            ->assertJsonPath('recipients.0.applicant.profile_photo_url', route('provider.applications.profile-photo.view', $awaiting, false))
             ->assertJsonCount(1, 'recipients');
 
         $this->actingAs($officer)
@@ -538,12 +769,39 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonCount(1, 'recipients');
     }
 
+    public function test_recipient_register_paginates_five_recipients_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Recipient Pagination Program', 'published');
+        $officer = $this->recipientOfficer($owner, [$program->id]);
+
+        foreach (range(1, 6) as $number) {
+            $this->selectedRecipient($program, $this->applicant("Recipient{$number}", 'Awaiting'));
+        }
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/recipients/data')
+            ->assertOk()
+            ->assertJsonCount(5, 'recipients')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/recipients/data?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'recipients')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
     public function test_non_recipient_staff_cannot_open_the_recipient_workspace(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/recipients')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/recipients/active')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/recipients/data')->assertForbidden();
     }
 
@@ -565,6 +823,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/monitoring')
             ->assertOk()
             ->assertViewIs('provider-monitoring-officer-workspace');
+
+        foreach (['review', 'follow-ups', 'awaiting', 'history'] as $section) {
+            $this->actingAs($officer)
+                ->get("/provider/workspaces/monitoring/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-monitoring-officer-workspace');
+        }
 
         $this->assertSame(
             '/provider/workspaces/monitoring',
@@ -710,12 +975,65 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonCount(1, 'check_ins');
     }
 
+    public function test_monitoring_desk_paginates_five_check_ins_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Monitoring Pagination Program', 'published');
+        $officer = $this->monitoringOfficer($owner, [$program->id]);
+        $this->selectedRecipient($program, $this->applicant('Monitoring', 'Recipient'), 'accepted');
+        $plan = RecipientMonitoringPlan::query()->create([
+            'scholarship_id' => $program->id,
+            'created_by' => $owner->id,
+            'updated_by' => $owner->id,
+            'frequency' => 'semester',
+            'starts_on' => now()->toDateString(),
+            'ends_on' => now()->addYear()->toDateString(),
+            'grace_period_days' => 7,
+            'allow_exception_requests' => true,
+            'status' => 'active',
+            'version' => 1,
+            'activated_at' => now(),
+        ]);
+
+        foreach (range(1, 6) as $number) {
+            $cycle = $this->monitoringCycle(
+                $program,
+                $plan,
+                "Awaiting check-in {$number}",
+                now()->addDays(20 + $number)->toDateString(),
+            );
+            $cycle->requirements()->create([
+                'type' => 'enrollment',
+                'title' => "Enrollment record {$number}",
+                'required' => true,
+                'requires_file' => true,
+                'sort_order' => 0,
+            ]);
+        }
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/monitoring/data?queue=awaiting')
+            ->assertOk()
+            ->assertJsonCount(5, 'check_ins')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/monitoring/data?queue=awaiting&page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'check_ins')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
     public function test_non_monitoring_staff_cannot_open_the_monitoring_desk(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/monitoring')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/monitoring/follow-ups')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/monitoring/data')->assertForbidden();
     }
 
@@ -737,6 +1055,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/releases')
             ->assertOk()
             ->assertViewIs('provider-benefit-release-officer-workspace');
+
+        foreach (['issues', 'record', 'upcoming', 'history'] as $section) {
+            $this->actingAs($officer)
+                ->get("/provider/workspaces/releases/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-benefit-release-officer-workspace');
+        }
 
         $this->assertSame(
             '/provider/workspaces/releases',
@@ -810,12 +1135,46 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonCount(1, 'releases');
     }
 
+    public function test_release_desk_paginates_five_distributions_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Release Pagination Program', 'published');
+        $officer = $this->benefitReleaseOfficer($owner, [$program->id]);
+        $recipient = $this->selectedRecipient($program, $this->applicant('Release', 'Pagination'), 'accepted');
+
+        foreach (range(1, 6) as $number) {
+            $release = $this->benefitRelease(
+                $program,
+                $owner,
+                "Upcoming release {$number}",
+                now()->addDays(10 + $number),
+            );
+            $this->benefitReleaseRecord($release, $recipient, 'prepared');
+        }
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/releases/data?queue=upcoming')
+            ->assertOk()
+            ->assertJsonCount(5, 'releases')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/releases/data?queue=upcoming&page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'releases')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
     public function test_non_release_staff_cannot_open_the_release_desk(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/releases')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/releases/record')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/releases/data')->assertForbidden();
     }
 
@@ -830,6 +1189,11 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($manager)
             ->get('/provider/workspaces/organization-profile')
+            ->assertOk()
+            ->assertViewIs('provider-organization-profile-manager-workspace');
+
+        $this->actingAs($manager)
+            ->get('/provider/workspaces/organization-profile/readiness')
             ->assertOk()
             ->assertViewIs('provider-organization-profile-manager-workspace');
 
@@ -962,6 +1326,7 @@ class ProviderRoleWorkspaceTest extends TestCase
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/organization-profile')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/organization-profile/readiness')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/organization-profile/data')->assertForbidden();
     }
 
@@ -982,6 +1347,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/team')
             ->assertOk()
             ->assertViewIs('provider-team-administrator-workspace');
+
+        foreach (['setup', 'active', 'suspended'] as $section) {
+            $this->actingAs($administrator)
+                ->get("/provider/workspaces/team/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-team-administrator-workspace');
+        }
 
         $this->assertSame(
             '/provider/workspaces/team',
@@ -1050,12 +1422,53 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonCount(1, 'accounts');
     }
 
+    public function test_team_access_registry_paginates_five_staff_accounts_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $administrator = $this->teamAdministrator($owner);
+
+        foreach (range(1, 5) as $index) {
+            $this->teamAdministrator($owner, [
+                'email' => "registry.staff.{$index}@example.test",
+                'username' => "registry_staff_{$index}",
+            ]);
+        }
+
+        $firstPage = $this->actingAs($administrator)
+            ->getJson('/provider/workspaces/team/data?queue=active')
+            ->assertOk()
+            ->assertJsonCount(5, 'accounts')
+            ->assertJsonPath('pagination.current_page', 1)
+            ->assertJsonPath('pagination.last_page', 2)
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.from', 1)
+            ->assertJsonPath('pagination.to', 5);
+
+        $secondPage = $this->actingAs($administrator)
+            ->getJson('/provider/workspaces/team/data?queue=active&page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'accounts')
+            ->assertJsonPath('pagination.current_page', 2)
+            ->assertJsonPath('pagination.last_page', 2)
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+
+        $this->assertNotSame(
+            $firstPage->json('accounts.0.id'),
+            $secondPage->json('accounts.0.id'),
+        );
+    }
+
     public function test_non_team_staff_cannot_open_the_team_access_desk(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/team')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/team/active')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/team/data')->assertForbidden();
     }
 
@@ -1076,6 +1489,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/support')
             ->assertOk()
             ->assertViewIs('provider-support-staff-workspace');
+
+        foreach (['needs-response', 'waiting', 'platform', 'resolved'] as $section) {
+            $this->actingAs($staff)
+                ->get("/provider/workspaces/support/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-support-staff-workspace');
+        }
 
         $this->assertSame(
             '/provider/workspaces/support',
@@ -1139,6 +1559,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('next_task.report_id', $needsAction->id)
             ->assertJsonPath('reports.0.id', $needsAction->id)
             ->assertJsonPath('reports.0.work_state', 'needs_action')
+            ->assertJsonStructure(['reports' => [['applicant' => ['profile_photo_url']]]])
             ->assertJsonCount(1, 'reports')
             ->assertJsonCount(1, 'programs');
 
@@ -1168,12 +1589,42 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_support_case_desk_paginates_five_cases_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Support Pagination Program', 'published');
+        $staff = $this->supportStaff($owner, [$program->id]);
+        $applicant = $this->applicant('Support', 'Pagination');
+
+        foreach (range(1, 6) as $number) {
+            $this->supportReport($owner, $applicant, $program, [
+                'subject' => "Support pagination case {$number}",
+            ]);
+        }
+
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/support/data')
+            ->assertOk()
+            ->assertJsonCount(5, 'reports')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/support/data?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'reports')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
     public function test_non_support_staff_cannot_open_the_provider_support_desk(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/support')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/support/waiting')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/support/data')->assertForbidden();
     }
 
@@ -1190,6 +1641,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/billing')
             ->assertOk()
             ->assertViewIs('provider-billing-staff-workspace');
+
+        foreach (['action', 'active', 'waiting', 'completed'] as $section) {
+            $this->actingAs($staff)
+                ->get("/provider/workspaces/billing/{$section}")
+                ->assertOk()
+                ->assertViewIs('provider-billing-staff-workspace');
+        }
 
         $this->actingAs($staff)
             ->get('/provider/workspaces/billing/services')
@@ -1250,12 +1708,42 @@ class ProviderRoleWorkspaceTest extends TestCase
         $this->assertNotNull($needsInformation);
     }
 
+    public function test_service_request_desk_paginates_five_requests_per_page(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $staff = $this->billingStaff($owner);
+
+        foreach (range(1, 6) as $number) {
+            $this->servicePurchase($owner, [
+                'plan_name' => "Pagination service {$number}",
+                'status' => 'pending',
+                'fulfillment_status' => 'ready',
+            ]);
+        }
+
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/billing/data')
+            ->assertOk()
+            ->assertJsonCount(5, 'purchases')
+            ->assertJsonPath('pagination.per_page', 5)
+            ->assertJsonPath('pagination.total', 6)
+            ->assertJsonPath('pagination.last_page', 2);
+
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/billing/data?page=2')
+            ->assertOk()
+            ->assertJsonCount(1, 'purchases')
+            ->assertJsonPath('pagination.from', 6)
+            ->assertJsonPath('pagination.to', 6);
+    }
+
     public function test_non_billing_staff_cannot_open_the_service_request_desk(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/billing')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/billing/active')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/billing/data')->assertForbidden();
     }
 

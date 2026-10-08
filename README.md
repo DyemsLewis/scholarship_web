@@ -53,6 +53,16 @@ The seeder creates four verified local accounts. All use `password123` unless th
 
 Both fictional community providers are approved and own published scholarship programs. Change the demo account environment variables before seeding a hosted/production database.
 
+### Complete Workflow Demo
+
+To replace the local database with dedicated provider and admin role accounts, six program lifecycle examples, and 24 applicants covering the main workflow plus exception branches, run:
+
+```bash
+php artisan migrate:fresh --seeder=CompleteDemoSeeder --force
+```
+
+This command is destructive and the seeder is restricted to `local` and `testing` environments. See [Complete Demo Accounts](docs/complete-demo-accounts.md) for the account and stage matrix.
+
 ## Hosting Checklist
 
 Use `.env.production.example` as the starting point for hosted environments.

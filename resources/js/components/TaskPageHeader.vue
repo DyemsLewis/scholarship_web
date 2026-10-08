@@ -56,6 +56,7 @@ const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props
         v-if="isProvider"
         :title="title"
         :description="description"
+        :eyebrow="eyebrow"
         :icon="icon"
         :role-key="roleKey"
     >

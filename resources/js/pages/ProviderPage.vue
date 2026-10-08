@@ -1,7 +1,8 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ProviderPageHeader from '../components/ProviderPageHeader.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
-import TaskPageHeader from '../components/TaskPageHeader.vue';
+import ProviderWorkspaceState from '../components/ProviderWorkspaceState.vue';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -62,21 +63,16 @@ const roleLabel = computed(() => {
         .replace(/_/g, ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase());
 });
-const workspaceDescription = computed(() => {
-    if (canManagePrograms.value && canReviewApplications.value) return 'Manage programs, applicant reviews, and outcomes.';
-    if (canManagePrograms.value) return 'Create programs and keep published scholarship details current.';
-    if (canReviewApplications.value) return 'Review applicants, activities, announcements, and decisions.';
-    if (canAccessRecipientWorkflow.value) return 'Manage selected recipients, monitoring, and benefit releases.';
-    if (canManageReports.value) return 'Handle applicant concerns connected to Tulay Aral programs.';
-    if (canManageBilling.value) return 'Manage service requests, meetings, payments, and deliverables.';
-
-    return 'View your account and the organization information available to you.';
-});
-
-const recentPrograms = computed(() => scholarships.value.slice(0, 3));
+const recentPrograms = computed(() => scholarships.value.slice(0, 5));
 const verificationDocumentCount = computed(() => Number(user.value?.verification_documents_count ?? 0));
 const providerName = computed(() => user.value?.provider_name || user.value?.name || 'Provider');
 const publishedProgramCount = computed(() => scholarships.value.filter((program) => program.status === 'published').length);
+const openApplicationWorkCount = computed(() => [
+    'needs_review',
+    'waiting_activity',
+    'ready_result',
+    'final_decision',
+].reduce((total, key) => total + Number(applicationWorkflowCounts.value[key] ?? 0), 0));
 const draftPrograms = computed(() => scholarships.value.filter((program) => program.status === 'draft'));
 const rejectedPrograms = computed(() => scholarships.value.filter((program) => program.status === 'rejected'));
 const pendingPrograms = computed(() => scholarships.value.filter((program) => program.status === 'pending_review'));
@@ -86,31 +82,30 @@ const applicantWorkQueues = computed(() => [
         label: 'Needs review',
         description: 'Check applicant details, eligibility, and files.',
         icon: 'fa-solid fa-user-check',
-        href: '/provider/applications/review',
+        href: '/provider/workspaces/reviews',
     }] : []),
     ...(canManageSelectionActivities.value ? [{
         key: 'ready_result',
         label: 'Ready for result',
         description: 'Record results for completed scheduled activities.',
         icon: 'fa-solid fa-clipboard-check',
-        href: '/provider/applications/results',
+        href: '/provider/workspaces/selection?queue=results',
     }] : []),
     ...(canRecordFinalDecisions.value ? [{
         key: 'final_decision',
         label: 'Final decision',
         description: 'Select, waitlist, or decline qualified applicants.',
         icon: 'fa-solid fa-award',
-        href: '/provider/applications/decisions',
+        href: '/provider/workspaces/decisions',
     }] : []),
     ...(canManageSelectionActivities.value ? [{
         key: 'waiting_activity',
         label: 'Waiting for activity',
         description: 'Applicants are waiting for a formal application, exam, or interview.',
         icon: 'fa-solid fa-calendar-day',
-        href: '/provider/applications/activities',
+        href: '/provider/workspaces/selection?queue=upcoming',
     }] : []),
 ]);
-const firstApplicationQueueHref = computed(() => applicantWorkQueues.value[0]?.href ?? '/provider/programs');
 const providerProfileNeedsCompletion = computed(() => [
     user.value?.provider_name,
     user.value?.provider_type,
@@ -193,7 +188,7 @@ const nextAction = computed(() => {
             eyebrow: 'Your workspace - Reports',
             title: 'Review provider and applicant concerns',
             description: 'Open the report queue, check the concern details, and record the appropriate response or resolution.',
-            href: '/provider/reports',
+            href: '/provider/workspaces/support',
             label: 'Open reports',
             icon: 'fa-solid fa-circle-exclamation',
         };
@@ -204,7 +199,7 @@ const nextAction = computed(() => {
             eyebrow: 'Your workspace - Services',
             title: 'Manage Tulay Aral service requests',
             description: 'Track purchased support, meeting schedules, shared files, payments, and service progress.',
-            href: '/provider/billing/requests',
+            href: '/provider/workspaces/billing',
             label: 'Open service requests',
             icon: 'fa-solid fa-headset',
         };
@@ -226,7 +221,7 @@ const nextAction = computed(() => {
             eyebrow: 'Step 2 - Programs',
             title: 'Create your first scholarship program',
             description: 'Define the support, eligible learners, required files, and selection process before sending it for admin review.',
-            href: canManagePrograms.value ? '/provider/programs/create' : '/provider/programs',
+            href: canManagePrograms.value ? '/provider/programs/create' : '/provider/workspaces/programs',
             label: canManagePrograms.value ? 'Create program' : 'View programs',
             icon: 'fa-solid fa-file-circle-plus',
         };
@@ -237,7 +232,7 @@ const nextAction = computed(() => {
             eyebrow: 'Priority - Applicant review',
             title: `${applicationWorkflowCounts.value.needs_review} applicant${applicationWorkflowCounts.value.needs_review === 1 ? '' : 's'} need review`,
             description: 'Review eligibility, applicant information, and submitted files before advancing or declining each application.',
-            href: '/provider/applications/review',
+            href: '/provider/workspaces/reviews',
             label: 'Review applicants',
             icon: 'fa-solid fa-user-check',
         };
@@ -248,7 +243,7 @@ const nextAction = computed(() => {
             eyebrow: 'Priority - Record results',
             title: `${applicationWorkflowCounts.value.ready_result} applicant${applicationWorkflowCounts.value.ready_result === 1 ? '' : 's'} ready for a result`,
             description: 'A scheduled formal application, exam, or interview is complete and ready for your decision.',
-            href: '/provider/applications/results',
+            href: '/provider/workspaces/selection?queue=results',
             label: 'Record results',
             icon: 'fa-solid fa-clipboard-check',
         };
@@ -259,7 +254,7 @@ const nextAction = computed(() => {
             eyebrow: 'Priority - Final decisions',
             title: `${applicationWorkflowCounts.value.final_decision} applicant${applicationWorkflowCounts.value.final_decision === 1 ? '' : 's'} await a final decision`,
             description: 'Complete recipient selection for applicants who finished the required stages.',
-            href: '/provider/applications/decisions',
+            href: '/provider/workspaces/decisions',
             label: 'Make decisions',
             icon: 'fa-solid fa-award',
         };
@@ -283,7 +278,7 @@ const nextAction = computed(() => {
             eyebrow: 'Step 2 - Programs',
             title: 'Program review is in progress',
             description: 'An administrator is reviewing your submitted program. You can check its status while you wait.',
-            href: '/provider/programs?status=pending_review',
+            href: '/provider/workspaces/programs/review',
             label: 'Check program status',
             icon: 'fa-solid fa-hourglass-half',
         };
@@ -294,7 +289,7 @@ const nextAction = computed(() => {
             eyebrow: 'Applicant activities',
             title: `${applicationWorkflowCounts.value.waiting_activity} applicant${applicationWorkflowCounts.value.waiting_activity === 1 ? '' : 's'} waiting for an activity`,
             description: 'Check formal application, exam, and interview schedules to keep applicants moving.',
-            href: '/provider/applications/activities',
+            href: '/provider/workspaces/selection?queue=upcoming',
             label: 'Check activities',
             icon: 'fa-solid fa-calendar-day',
         };
@@ -304,7 +299,7 @@ const nextAction = computed(() => {
         eyebrow: 'Published programs',
         title: 'Monitor your open programs',
         description: 'Your programs are ready for applicant pre-screening. Review activity and keep deadlines or public details current.',
-        href: '/provider/programs',
+        href: '/provider/workspaces/programs',
         label: 'View programs',
         icon: 'fa-solid fa-binoculars',
     };
@@ -321,11 +316,28 @@ function statusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
+    if (status === 'rejected') {
+        return 'bg-rose-100 text-rose-800';
+    }
+
+    if (status === 'pending_review') {
+        return 'bg-amber-100 text-amber-800';
+    }
+
     if (status === 'closed') {
         return 'bg-slate-200 text-slate-700';
     }
 
-    return 'bg-amber-100 text-amber-800';
+    return 'bg-slate-100 text-slate-700';
+}
+
+function statusIcon(status) {
+    return {
+        published: 'fa-solid fa-circle-check',
+        rejected: 'fa-solid fa-triangle-exclamation',
+        pending_review: 'fa-solid fa-hourglass-half',
+        closed: 'fa-solid fa-lock',
+    }[status] ?? 'fa-regular fa-pen-to-square';
 }
 
 function programActionLabel(program) {
@@ -378,158 +390,153 @@ onMounted(loadProviderData);
 
         <section class="provider-page">
             <div class="provider-container">
-                <TaskPageHeader
-                    theme="provider"
-                    eyebrow="Provider dashboard"
-                    title="Dashboard"
-                    :description="workspaceDescription"
-                    icon="fa-solid fa-gauge-high"
-                >
-                    <template #meta>
-                        <span>{{ roleLabel }}</span>
-                        <span>{{ verificationLabel(user?.verification_status) }} provider</span>
-                        <span v-if="canViewPrograms">{{ scholarships.length }} program{{ scholarships.length === 1 ? '' : 's' }}</span>
-                    </template>
-                </TaskPageHeader>
+                <ProviderWorkspaceState
+                    v-if="isLoading"
+                    title="Loading manager overview"
+                    message="Preparing the organization summary and current handoff counts."
+                />
 
-                <div v-if="isLoading" class="provider-panel mt-4 p-6 text-sm text-slate-500">
-                    Loading provider dashboard...
-                </div>
+                <ProviderWorkspaceState
+                    v-else-if="errorMessage"
+                    tone="error"
+                    title="Manager overview is unavailable"
+                    :message="errorMessage"
+                />
 
-                <div v-else-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
-                    {{ errorMessage }}
-                </div>
+                <template v-else>
+                    <ProviderPageHeader
+                        role-key="manager"
+                        eyebrow="Manager workspace"
+                        title="Provider management"
+                        description="Review organization readiness and current workload, then open the dedicated workspace responsible for the next action."
+                        icon="fa-solid fa-briefcase"
+                        :show-role-guide="false"
+                    >
+                        <template #meta>
+                            <span><i class="fa-solid fa-building mr-2 text-slate-400" aria-hidden="true"></i>{{ providerName }}</span>
+                            <span><i class="fa-solid fa-user-tie mr-2 text-slate-400" aria-hidden="true"></i>{{ roleLabel }}</span>
+                            <span><i class="fa-solid fa-key mr-2 text-slate-400" aria-hidden="true"></i>Full operational access</span>
+                        </template>
+                        <template #actions>
+                            <a href="/provider/profile/details" class="border border-slate-300 px-4 py-2.5 text-center text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                <i class="fa-solid fa-building-circle-check mr-2 text-xs text-slate-400" aria-hidden="true"></i>Organization
+                            </a>
+                            <a v-if="user?.can_post_scholarships && canManagePrograms" href="/provider/programs/create" class="bg-slate-950 px-4 py-2.5 text-center text-sm font-bold text-white hover:bg-slate-800">
+                                <i class="fa-solid fa-plus mr-2 text-xs text-amber-300" aria-hidden="true"></i>New program
+                            </a>
+                        </template>
+                    </ProviderPageHeader>
 
-                <div v-else class="provider-content-stack">
                     <section
                         :class="[
-                            'provider-panel overflow-hidden border-l-4',
-                            user?.can_post_scholarships ? 'border-l-slate-950' : 'border-l-amber-400',
+                            'mt-4 border border-slate-300 border-l-4 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]',
+                            user?.can_post_scholarships ? 'border-l-slate-950' : 'border-l-amber-500',
                         ]"
                     >
-                        <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                        <div class="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex min-w-0 items-start gap-3">
-                                <span
-                                    class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"
-                                >
-                                    <i :class="[nextAction.icon, 'text-sm']" aria-hidden="true"></i>
-                                </span>
+                                <i :class="[nextAction.icon, 'mt-1 w-4 shrink-0 text-center text-amber-600']" aria-hidden="true"></i>
                                 <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">{{ nextAction.eyebrow }}</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">
-                                        {{ nextAction.title }}
-                                    </h3>
-                                    <p class="mt-1 max-w-3xl text-sm leading-5 text-slate-600">
-                                        {{ nextAction.description }}
-                                    </p>
-                                    <p v-if="!user?.can_post_scholarships && user?.verification_notes" class="mt-2 text-xs leading-5 text-amber-800">
-                                        <span class="font-bold">Admin note:</span> {{ user.verification_notes }}
-                                    </p>
+                                    <p class="text-[0.65rem] font-black uppercase tracking-[0.14em] text-amber-700">{{ nextAction.eyebrow }}</p>
+                                    <h2 class="mt-1 text-base font-bold text-slate-950">{{ nextAction.title }}</h2>
+                                    <p class="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{{ nextAction.description }}</p>
+                                    <p v-if="!user?.can_post_scholarships && user?.verification_notes" class="mt-2 text-xs leading-5 text-amber-800"><strong>Admin note:</strong> {{ user.verification_notes }}</p>
                                 </div>
                             </div>
-                            <a
-                                :href="nextAction.href"
-                                class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                            >
-                                {{ nextAction.label }}
-                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                            <a :href="nextAction.href" class="inline-flex shrink-0 items-center justify-center bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">
+                                {{ nextAction.label }}<i class="fa-solid fa-arrow-right ml-2 text-xs text-amber-300" aria-hidden="true"></i>
                             </a>
                         </div>
                     </section>
 
-                    <div v-if="canReviewApplications">
-                        <section class="provider-panel h-full overflow-hidden">
-                            <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4">
-                                <div>
-                                    <h3 class="text-lg font-bold text-slate-950">Applicant tasks</h3>
-                                    <p class="mt-1 text-xs text-slate-500">Open the queue that needs action.</p>
-                                </div>
-                                <a :href="firstApplicationQueueHref" class="shrink-0 text-xs font-bold text-slate-600 transition hover:text-slate-950">
-                                    Open review <i class="fa-solid fa-arrow-right ml-1" aria-hidden="true"></i>
-                                </a>
-                            </header>
-
-                            <div class="grid sm:grid-cols-2">
-                                <a
-                                    v-for="(queue, index) in applicantWorkQueues"
-                                    :key="queue.key"
-                                    :href="queue.href"
-                                    :class="[
-                                        'group flex items-center gap-3 border-slate-200 px-4 py-3 transition hover:bg-slate-50',
-                                        index < applicantWorkQueues.length - 1 ? 'border-b' : '',
-                                        index === 2 ? 'sm:border-b-0' : '',
-                                        index % 2 === 0 ? 'sm:border-r' : '',
-                                    ]"
-                                >
-                                    <span
-                                        :class="[
-                                            'grid h-9 w-9 shrink-0 place-items-center rounded-md text-xs',
-                                            Number(applicationWorkflowCounts[queue.key] ?? 0) > 0
-                                                ? 'bg-amber-100 text-amber-800'
-                                                : 'bg-slate-100 text-slate-500',
-                                        ]"
-                                    >
-                                        <i :class="queue.icon" aria-hidden="true"></i>
-                                    </span>
-                                    <span class="min-w-0 flex-1">
-                                        <span class="flex items-center justify-between gap-3">
-                                            <span class="text-sm font-bold text-slate-950">{{ queue.label }}</span>
-                                            <span class="text-lg font-bold leading-none text-slate-950">{{ applicationWorkflowCounts[queue.key] ?? 0 }}</span>
-                                        </span>
-                                    </span>
-                                </a>
+                    <section class="mt-4 border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                        <div class="grid grid-cols-2 sm:grid-cols-4">
+                            <div class="border-b border-slate-200 px-5 py-4 sm:border-b-0">
+                                <p class="flex items-center gap-2 text-xs font-bold text-slate-500"><i class="fa-regular fa-folder-open" aria-hidden="true"></i>Programs</p>
+                                <p class="mt-2 text-2xl font-black text-slate-950">{{ scholarships.length }}</p>
+                                <p class="mt-1 text-xs text-slate-500">Organization total</p>
                             </div>
-                        </section>
-                    </div>
+                            <div class="border-b border-l border-slate-200 px-5 py-4 sm:border-b-0">
+                                <p class="flex items-center gap-2 text-xs font-bold text-slate-500"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>Published</p>
+                                <p class="mt-2 text-2xl font-black text-slate-950">{{ publishedProgramCount }}</p>
+                                <p class="mt-1 text-xs text-slate-500">Visible to applicants</p>
+                            </div>
+                            <div class="px-5 py-4 sm:border-l sm:border-slate-200">
+                                <p class="flex items-center gap-2 text-xs font-bold text-slate-500"><i class="fa-solid fa-list-check" aria-hidden="true"></i>Application work</p>
+                                <p :class="['mt-2 text-2xl font-black', openApplicationWorkCount ? 'text-amber-700' : 'text-slate-950']">{{ openApplicationWorkCount }}</p>
+                                <p class="mt-1 text-xs text-slate-500">Across active handoffs</p>
+                            </div>
+                            <div class="border-l border-slate-200 px-5 py-4">
+                                <p class="flex items-center gap-2 text-xs font-bold text-slate-500"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i>Organization</p>
+                                <p :class="['mt-2 text-sm font-black uppercase tracking-wide', user?.can_post_scholarships ? 'text-emerald-700' : 'text-amber-700']">{{ verificationLabel(user?.verification_status) }}</p>
+                                <p class="mt-1 text-xs text-slate-500">Verification status</p>
+                            </div>
+                        </div>
+                    </section>
 
-                    <section v-if="canViewPrograms" class="provider-panel overflow-hidden">
+                    <section v-if="canReviewApplications" class="mt-4 border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                        <header class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <h2 class="flex items-center gap-2 text-lg font-bold text-slate-950"><i class="fa-solid fa-arrow-right-arrow-left text-sm text-slate-500" aria-hidden="true"></i>Operational handoffs</h2>
+                                <p class="mt-1 text-sm text-slate-500">Each row opens its dedicated role workspace; detailed records stay off this page.</p>
+                            </div>
+                            <p class="text-sm font-semibold text-slate-600"><strong :class="openApplicationWorkCount ? 'text-amber-700' : 'text-emerald-700'">{{ openApplicationWorkCount }}</strong> open item{{ openApplicationWorkCount === 1 ? '' : 's' }}</p>
+                        </header>
+                        <div class="portal-table-scroll">
+                            <table class="portal-data-table min-w-[48rem] table-fixed">
+                                <caption class="sr-only">Application workflow handoffs</caption>
+                                <colgroup><col class="w-[25%]"><col class="w-[48%]"><col class="w-[12%]"><col class="w-[15%]"></colgroup>
+                                <thead><tr><th scope="col">Workspace</th><th scope="col">Responsibility</th><th scope="col" class="text-right">Open</th><th scope="col">Action</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="queue in applicantWorkQueues" :key="queue.key">
+                                        <td class="font-semibold text-slate-950"><i :class="[queue.icon, 'mr-2 w-4 text-center text-slate-500']" aria-hidden="true"></i>{{ queue.label }}</td>
+                                        <td class="text-slate-600">{{ queue.description }}</td>
+                                        <td :class="['text-right text-base font-black', Number(applicationWorkflowCounts[queue.key] ?? 0) ? 'text-amber-700' : 'text-slate-950']">{{ applicationWorkflowCounts[queue.key] ?? 0 }}</td>
+                                        <td><a :href="queue.href" class="inline-flex items-center border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">Open<i class="fa-solid fa-arrow-right ml-2 text-[0.65rem]" aria-hidden="true"></i></a></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section v-if="canViewPrograms" class="mt-4 border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
                         <header class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                                <h3 class="text-lg font-bold text-slate-950">Recent programs</h3>
-                                <p class="mt-1 text-xs text-slate-500">Continue the next program task.</p>
+                                <h2 class="flex items-center gap-2 text-lg font-bold text-slate-950"><i class="fa-solid fa-table-list text-sm text-slate-500" aria-hidden="true"></i>Recently updated programs</h2>
+                                <p class="mt-1 text-sm text-slate-500">Showing only the five most recent records.</p>
                             </div>
-                            <div class="flex gap-2">
-                                <a v-if="user?.can_post_scholarships && canManagePrograms" href="/provider/programs/create" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">New program</a>
-                                <a href="/provider/programs" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800">View all programs</a>
-                            </div>
+                            <a href="/provider/workspaces/programs" class="inline-flex items-center border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">Open program workspace<i class="fa-solid fa-arrow-right ml-2 text-[0.65rem]" aria-hidden="true"></i></a>
                         </header>
 
-                        <div v-if="recentPrograms.length" class="divide-y divide-slate-200">
-                            <a
-                                v-for="program in recentPrograms"
-                                :key="program.id"
-                                :href="programActionHref(program)"
-                                class="group flex items-center gap-3 px-5 py-3.5 transition hover:bg-slate-50"
-                            >
-                                <img :src="program.image_url || '/uploads/scholarship-default.jpg'" :alt="program.title" class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200">
-                                <span class="min-w-0 flex-1">
-                                    <span class="flex min-w-0 items-center gap-2">
-                                        <span class="truncate text-sm font-bold text-slate-950">{{ program.title }}</span>
-                                        <span :class="['hidden shrink-0 rounded px-2 py-1 text-[9px] font-bold uppercase sm:inline-flex', statusClass(program.status)]">{{ verificationLabel(program.status) }}</span>
-                                    </span>
-                                    <span class="mt-0.5 block text-xs text-slate-500">
-                                        <template v-if="canReviewApplications">
-                                            {{ program.applications_count ?? 0 }} applicant{{ Number(program.applications_count ?? 0) === 1 ? '' : 's' }}
-                                            <span class="mx-1 text-slate-300">/</span>
-                                        </template>
-                                        Updated {{ program.updated_at || 'recently' }}
-                                    </span>
-                                </span>
-                                <span class="hidden shrink-0 text-xs font-bold text-slate-600 sm:block">{{ programActionLabel(program) }}</span>
-                                <i class="fa-solid fa-arrow-right text-xs text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
-                            </a>
+                        <div v-if="recentPrograms.length" class="portal-table-scroll">
+                            <table class="portal-data-table min-w-[64rem] table-fixed">
+                                <caption class="sr-only">Recently updated scholarship programs</caption>
+                                <colgroup><col class="w-[35%]"><col class="w-[15%]"><col class="w-[17%]"><col class="w-[17%]"><col class="w-[16%]"></colgroup>
+                                <thead><tr><th scope="col">Program</th><th scope="col">Status</th><th scope="col">Applicants</th><th scope="col">Updated</th><th scope="col">Action</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="program in recentPrograms" :key="program.id">
+                                        <td>
+                                            <div class="flex min-w-0 items-start gap-2.5">
+                                                <i class="fa-regular fa-folder mt-1 w-4 shrink-0 text-center text-slate-400" aria-hidden="true"></i>
+                                                <div class="min-w-0"><p class="truncate font-semibold text-slate-950">{{ program.title }}</p><p class="mt-0.5 truncate text-xs text-slate-500">{{ [program.category, program.program_cycle].filter(Boolean).join(' · ') || 'Program record' }}</p></div>
+                                            </div>
+                                        </td>
+                                        <td><span :class="['inline-flex items-center gap-1.5 px-2 py-1 text-[0.65rem] font-black uppercase tracking-wide', statusClass(program.status)]"><i :class="statusIcon(program.status)" aria-hidden="true"></i>{{ verificationLabel(program.status) }}</span></td>
+                                        <td><p class="font-bold text-slate-950">{{ program.applications_count ?? 0 }}</p><p class="mt-0.5 text-xs text-slate-500">{{ program.pending_review_applications_count ?? 0 }} need review</p></td>
+                                        <td class="text-slate-600"><i class="fa-regular fa-clock mr-1.5 text-xs text-slate-400" aria-hidden="true"></i>{{ program.updated_at || 'Recently' }}</td>
+                                        <td><a :href="programActionHref(program)" class="inline-flex items-center border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">{{ programActionLabel(program) }}<i class="fa-solid fa-arrow-right ml-2 text-[0.65rem]" aria-hidden="true"></i></a></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
-                        <div v-else class="flex flex-col items-start gap-3 px-5 py-6 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                                <p class="text-sm font-bold text-slate-950">No programs yet</p>
-                                <p class="mt-1 text-xs leading-5 text-slate-500">Complete organization verification, then create the first program.</p>
-                            </div>
-                            <a :href="verificationActionHref" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">Start setup</a>
+                        <div v-else class="px-6 py-10 text-center">
+                            <i class="fa-regular fa-folder-open text-2xl text-slate-300" aria-hidden="true"></i>
+                            <h3 class="mt-3 text-sm font-bold text-slate-900">No program records yet</h3>
+                            <p class="mt-1 text-sm text-slate-500">Complete organization verification, then create the first scholarship program.</p>
+                            <a :href="verificationActionHref" class="mt-4 inline-flex border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Start setup</a>
                         </div>
                     </section>
-
-                </div>
-
+                </template>
             </div>
         </section>
     </main>

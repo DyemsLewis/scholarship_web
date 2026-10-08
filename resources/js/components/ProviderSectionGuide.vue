@@ -11,7 +11,7 @@ defineProps({
     <details class="provider-panel group mt-3 overflow-hidden" aria-label="Section guide">
         <summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 px-4 py-2.5 text-sm [&::-webkit-details-marker]:hidden sm:px-5">
             <span class="flex min-w-0 items-center gap-2.5">
-                <span class="grid h-7 w-7 shrink-0 place-items-center rounded border border-slate-200 bg-slate-100 text-[11px] text-slate-600">
+                <span class="grid h-7 w-7 shrink-0 place-items-center rounded-sm border border-slate-200 bg-slate-100 text-[11px] text-slate-600">
                     <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
                 </span>
                 <span class="min-w-0">

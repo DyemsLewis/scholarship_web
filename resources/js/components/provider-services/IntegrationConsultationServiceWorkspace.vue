@@ -14,7 +14,7 @@ const phaseDescriptions = [
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section class="overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
         <header class="flex items-start gap-3 border-b border-slate-200 p-4 sm:px-5">
             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-sky-100 text-sky-800">
                 <i class="fa-solid fa-diagram-project" aria-hidden="true"></i>

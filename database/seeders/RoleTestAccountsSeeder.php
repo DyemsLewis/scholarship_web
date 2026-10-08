@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Support\Terms;
 use Illuminate\Database\Seeder;
@@ -27,6 +28,19 @@ class RoleTestAccountsSeeder extends Seeder
             ->whereNull('parent_account_id')
             ->with('providerProfile')
             ->first();
+
+        if (! $providerOwner && app()->environment(['local', 'testing'])) {
+            $providerOwner = User::query()
+                ->where('role', 'provider')
+                ->whereNull('parent_account_id')
+                ->where(function ($query): void {
+                    $query
+                        ->where('username', 'tulayaral')
+                        ->orWhere('email', 'programs@tulayaral.test');
+                })
+                ->with('providerProfile')
+                ->first();
+        }
 
         if (! $adminOwner || ! $providerOwner) {
             throw new RuntimeException('Seed the demo admin and Tulay Aral provider before creating role test accounts.');
@@ -64,6 +78,24 @@ class RoleTestAccountsSeeder extends Seeder
                 ]);
             }
 
+            $reviewer = User::query()
+                ->where('parent_account_id', $providerOwner->id)
+                ->where('username', 'tulay.reviewer')
+                ->first();
+            $reviewApplicationIds = ScholarshipApplication::query()
+                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerOwner->id))
+                ->where('workflow_stage', 'screening')
+                ->whereNull('assigned_reviewer_id')
+                ->orderBy('id')
+                ->limit(2)
+                ->pluck('id');
+
+            if ($reviewer && $reviewApplicationIds->isNotEmpty()) {
+                ScholarshipApplication::query()
+                    ->whereIn('id', $reviewApplicationIds)
+                    ->update(['assigned_reviewer_id' => $reviewer->id]);
+            }
+
             foreach ($this->adminAccounts() as $account) {
                 $user = $this->seedManagedUser(
                     owner: $adminOwner,
@@ -90,6 +122,19 @@ class RoleTestAccountsSeeder extends Seeder
      */
     private function seedManagedUser(User $owner, string $role, array $account, string $password): User
     {
+        $programScopedProviderRoles = [
+            'program_coordinator',
+            'application_reviewer',
+            'selection_officer',
+            'decision_officer',
+            'recipient_officer',
+            'monitoring_officer',
+            'benefit_release_officer',
+        ];
+        $assignedProgramIds = $role === 'provider'
+            && in_array($account['account_title'], $programScopedProviderRoles, true)
+                ? $owner->providerScholarships()->pluck('id')->map(fn ($id): int => (int) $id)->all()
+                : null;
         $user = User::query()->updateOrCreate([
             'email' => $account['email'],
         ], [
@@ -98,7 +143,7 @@ class RoleTestAccountsSeeder extends Seeder
             'role' => $role,
             'account_title' => $account['account_title'],
             'permissions' => $account['permissions'],
-            'assigned_program_ids' => null,
+            'assigned_program_ids' => $assignedProgramIds,
             'password' => $password,
             'account_status' => 'active',
             'must_reset_password' => false,

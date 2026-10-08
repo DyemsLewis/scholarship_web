@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
-import ProviderSectionGuide from '../components/ProviderSectionGuide.vue';
+import ProviderPagination from '../components/ProviderPagination.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { labelFromKey } from '../support/display';
@@ -78,6 +78,8 @@ const recipientRecordTarget = ref(null);
 const recipientRecord = ref(null);
 const recipientRecordError = ref('');
 const isLoadingRecipientRecord = ref(false);
+const tablePages = ref({});
+const tablePageSize = 5;
 
 const eligibleCandidates = computed(() => releaseCandidates.value.filter((candidate) => candidate.eligible));
 const activeSupportCount = computed(() => supportRecipients.value.filter((recipient) => !recipient.is_closed).length);
@@ -130,28 +132,6 @@ const activeViewTitle = computed(() => ({
     releases: 'Benefit releases',
     outcomes: 'Support outcomes',
 }[activeTab.value]));
-const monitoringGuide = computed(() => ({
-    summary: [
-        { label: 'Purpose', text: 'See the recipient work that needs attention across the program.' },
-        { label: 'Records shown', text: 'Upcoming deadlines, pending reviews, releases, and outcomes.' },
-        { label: 'Next action', text: 'Open an attention item or choose a monitoring section below.' },
-    ],
-    monitoring: [
-        { label: 'Purpose', text: 'Request the records in the active monitoring plan.' },
-        { label: 'Records shown', text: 'Published check-ins and recipient submission progress.' },
-        { label: 'Next action', text: 'Publish a check-in, then track the checklist.' },
-    ],
-    releases: [
-        { label: 'Purpose', text: 'Prepare benefits and document what each recipient received.' },
-        { label: 'Records shown', text: 'Release schedules, recipient status, and receipt evidence.' },
-        { label: 'Next action', text: 'Schedule a release and record the result for each recipient.' },
-    ],
-    outcomes: [
-        { label: 'Purpose', text: 'Close the current support cycle using the recipient history.' },
-        { label: 'Records shown', text: 'Academic checks, releases received, and current support status.' },
-        { label: 'Next action', text: 'Renew, complete, or end support with a recorded reason.' },
-    ],
-}[activeTab.value] ?? []));
 const overviewWorkItems = computed(() => [
     ...(programSummary.value?.attention ?? []).map((item, index) => ({
         ...item,
@@ -168,6 +148,10 @@ const overviewWorkItems = computed(() => [
         tone: 'bg-sky-100 text-sky-800',
     })),
 ]);
+const pagedOverviewWorkItems = computed(() => pagedRows(overviewWorkItems.value, 'overview'));
+const overviewPagination = computed(() => paginationFor(overviewWorkItems.value, 'overview'));
+const pagedSupportRecipients = computed(() => pagedRows(supportRecipients.value, 'outcomes'));
+const supportPagination = computed(() => paginationFor(supportRecipients.value, 'outcomes'));
 const checkInOverview = computed(() => {
     const recipientStates = cycles.value.flatMap((cycle) => (
         (cycle.recipients ?? []).map((recipient) => recipientCheckInState(cycle, recipient).key)
@@ -193,6 +177,55 @@ function defaultForm() {
         grading_scale: 'percentage',
         instructions: '',
     };
+}
+
+function currentTablePage(key) {
+    return Math.max(1, Number(tablePages.value[key] ?? 1));
+}
+
+function pagedRows(rows, key) {
+    const items = Array.isArray(rows) ? rows : [];
+    const lastPage = Math.max(1, Math.ceil(items.length / tablePageSize));
+    const page = Math.min(currentTablePage(key), lastPage);
+    const offset = (page - 1) * tablePageSize;
+
+    return items.slice(offset, offset + tablePageSize);
+}
+
+function paginationFor(rows, key) {
+    const items = Array.isArray(rows) ? rows : [];
+    const total = items.length;
+    const lastPage = Math.max(1, Math.ceil(total / tablePageSize));
+    const currentPage = Math.min(currentTablePage(key), lastPage);
+    const from = total ? ((currentPage - 1) * tablePageSize) + 1 : 0;
+
+    return {
+        current_page: currentPage,
+        last_page: lastPage,
+        from,
+        to: total ? Math.min(currentPage * tablePageSize, total) : 0,
+        total,
+    };
+}
+
+function changeTablePage(key, page) {
+    tablePages.value = { ...tablePages.value, [key]: page };
+}
+
+function pagedCycleRecipients(cycle) {
+    return pagedRows(orderedCycleRecipients(cycle), `cycle-${cycle.id}`);
+}
+
+function cyclePagination(cycle) {
+    return paginationFor(orderedCycleRecipients(cycle), `cycle-${cycle.id}`);
+}
+
+function pagedReleaseRecords(release) {
+    return pagedRows(release.records, `release-${release.id}`);
+}
+
+function releasePagination(release) {
+    return paginationFor(release.records, `release-${release.id}`);
 }
 
 function defaultReleaseForm() {
@@ -1005,24 +1038,6 @@ onMounted(loadMonitoring);
 
                     <p v-if="errorMessage" class="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
 
-                    <nav class="provider-panel mt-3 overflow-x-auto p-1.5" aria-label="Recipient monitoring views">
-                        <div class="grid min-w-[40rem] grid-cols-5 gap-1">
-                            <a
-                                v-for="view in viewTabs"
-                                :key="view.value"
-                                :href="view.href"
-                                :aria-current="activeTab === view.value ? 'page' : undefined"
-                                :class="['flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-center text-[11px] font-bold leading-4 transition sm:text-sm', activeTab === view.value ? 'bg-amber-50 text-slate-950 ring-1 ring-amber-200' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900']"
-                            >
-                                <span class="sm:hidden">{{ view.shortLabel }}</span>
-                                <span class="hidden sm:inline">{{ view.label }}</span>
-                                <span v-if="view.count" class="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">{{ view.count }}</span>
-                            </a>
-                        </div>
-                    </nav>
-
-                    <ProviderSectionGuide v-if="activeTab !== 'monitoring'" :items="monitoringGuide" />
-
                     <template v-if="activeTab === 'summary'">
                         <section class="provider-panel mt-3 overflow-hidden">
                             <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
@@ -1062,7 +1077,7 @@ onMounted(loadMonitoring);
                                                 <p class="mt-1 text-sm text-slate-500">Academic checks, releases, and support outcomes are currently up to date.</p>
                                             </td>
                                         </tr>
-                                        <tr v-for="item in overviewWorkItems" :key="item.row_key">
+                                        <tr v-for="item in pagedOverviewWorkItems" :key="item.row_key">
                                             <td class="px-5 py-3.5">
                                                 <p class="font-bold text-slate-950">{{ item.title }}</p>
                                                 <p class="mt-0.5 line-clamp-1 text-xs text-slate-500">{{ item.detail }}</p>
@@ -1074,6 +1089,7 @@ onMounted(loadMonitoring);
                                     </tbody>
                                 </table>
                             </div>
+                            <ProviderPagination :pagination="overviewPagination" item-label="tasks" @change="changeTablePage('overview', $event)" />
                         </section>
                     </template>
 
@@ -1158,7 +1174,7 @@ onMounted(loadMonitoring);
                                                     <tr v-if="!cycle.recipients.length">
                                                         <td colspan="4" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this check-in.</td>
                                                     </tr>
-                                                    <tr v-for="recipient in orderedCycleRecipients(cycle)" :key="recipient.application_id" class="transition hover:bg-slate-50/70">
+                                                    <tr v-for="recipient in pagedCycleRecipients(cycle)" :key="recipient.application_id" class="transition hover:bg-slate-50/70">
                                                         <td class="align-middle px-5 py-3.5">
                                                             <div class="flex items-center gap-3">
                                                                 <img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
@@ -1192,6 +1208,7 @@ onMounted(loadMonitoring);
                                                 </tbody>
                                             </table>
                                         </div>
+                                        <ProviderPagination :pagination="cyclePagination(cycle)" item-label="recipients" @change="changeTablePage(`cycle-${cycle.id}`, $event)" />
                                     </div>
                                 </article>
                             </div>
@@ -1268,7 +1285,7 @@ onMounted(loadMonitoring);
                                                 <tr v-if="!release.records.length">
                                                     <td colspan="5" class="px-5 py-8 text-center text-sm text-slate-500">No recipients are included in this benefit release.</td>
                                                 </tr>
-                                                <tr v-for="record in release.records" :key="record.id" class="transition hover:bg-slate-50/70">
+                                                <tr v-for="record in pagedReleaseRecords(release)" :key="record.id" class="transition hover:bg-slate-50/70">
                                                     <td class="align-middle px-5 py-3.5">
                                                         <div class="flex items-center gap-3">
                                                             <img v-if="record.profile_photo_url" :src="record.profile_photo_url" :alt="`${record.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
@@ -1310,6 +1327,7 @@ onMounted(loadMonitoring);
                                             </tbody>
                                         </table>
                                     </div>
+                                    <ProviderPagination :pagination="releasePagination(release)" item-label="recipients" @change="changeTablePage(`release-${release.id}`, $event)" />
                                 </div>
                             </article>
                         </section>
@@ -1345,7 +1363,7 @@ onMounted(loadMonitoring);
                                                 <p class="mt-1 text-sm text-slate-500">Recipients appear here after accepting their scholarship offer.</p>
                                             </td>
                                         </tr>
-                                        <tr v-for="recipient in supportRecipients" :key="recipient.application_id">
+                                        <tr v-for="recipient in pagedSupportRecipients" :key="recipient.application_id">
                                             <td class="align-top px-5 py-3.5">
                                                 <div class="flex items-start gap-3">
                                                     <img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile photo`" class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200">
@@ -1381,6 +1399,7 @@ onMounted(loadMonitoring);
                                     </tbody>
                                 </table>
                             </div>
+                            <ProviderPagination :pagination="supportPagination" item-label="recipients" @change="changeTablePage('outcomes', $event)" />
                         </section>
                     </template>
                 </template>

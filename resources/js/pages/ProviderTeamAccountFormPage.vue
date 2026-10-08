@@ -10,6 +10,7 @@ const isLoading = ref(Boolean(accountId));
 const isSaving = ref(false);
 const errorMessage = ref('');
 const formElement = ref(null);
+const activeFormStep = ref('account');
 const availablePrograms = ref([]);
 const canAssignAllPrograms = ref(true);
 const grantablePermissionValues = ref([...(window.portalUser?.permissions ?? [])]);
@@ -76,6 +77,12 @@ const selectedPermissions = computed(() => availablePermissions.value.filter((pe
 const labelClass = 'mb-2 block text-sm font-semibold text-slate-700';
 const inputClass = 'w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const compactInputClass = 'w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
+const formSteps = [
+    { value: 'account', label: 'Account', description: 'Identity and contact', icon: 'fa-regular fa-address-card' },
+    { value: 'access', label: 'Access', description: 'Role and programs', icon: 'fa-solid fa-key' },
+    { value: 'security', label: 'Security', description: 'Password and review', icon: 'fa-solid fa-lock' },
+];
+const activeFormStepIndex = computed(() => formSteps.findIndex((step) => step.value === activeFormStep.value));
 
 const form = ref(emptyForm());
 
@@ -107,6 +114,53 @@ function handleMiddleInitial(event) {
 
 function handleContactNumber(event) {
     form.value.contactNumber = limitPhoneNumber(event.target.value);
+}
+
+function validateVisibleStep() {
+    errorMessage.value = '';
+    const invalidField = [...(formElement.value?.querySelectorAll('input, select, textarea') ?? [])]
+        .find((field) => !field.checkValidity());
+
+    if (invalidField) {
+        invalidField.reportValidity();
+        return false;
+    }
+
+    if (activeFormStep.value === 'access' && !form.value.permissions.length) {
+        errorMessage.value = 'Select at least one permission.';
+        return false;
+    }
+
+    if (activeFormStep.value === 'access'
+        && form.value.programAccessMode === 'selected'
+        && !form.value.assignedProgramIds.length) {
+        errorMessage.value = 'Select at least one program or allow access to all programs.';
+        return false;
+    }
+
+    if (activeFormStep.value === 'security'
+        && form.value.password !== form.value.passwordConfirmation) {
+        errorMessage.value = 'Passwords must match.';
+        return false;
+    }
+
+    return true;
+}
+
+function goToStep(step) {
+    errorMessage.value = '';
+    activeFormStep.value = step;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function goToNextStep() {
+    if (!validateVisibleStep()) return;
+
+    goToStep(formSteps[Math.min(activeFormStepIndex.value + 1, formSteps.length - 1)].value);
+}
+
+function goToPreviousStep() {
+    goToStep(formSteps[Math.max(activeFormStepIndex.value - 1, 0)].value);
 }
 
 async function loadAccount() {
@@ -156,7 +210,11 @@ async function loadAccount() {
 async function saveAccount() {
     errorMessage.value = '';
 
-    if (!formElement.value?.reportValidity()) {
+    if (!validateVisibleStep()) return;
+
+    if (![form.value.firstName, form.value.lastName, form.value.middleInitial, form.value.email, form.value.username, form.value.contactNumber].every(Boolean)) {
+        activeFormStep.value = 'account';
+        errorMessage.value = 'Complete the required account details before saving.';
         return;
     }
 
@@ -237,7 +295,30 @@ onMounted(loadAccount);
                 <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Loading account...</div>
 
                 <form v-else ref="formElement" class="mt-4 grid gap-4" @submit.prevent="saveAccount">
-                    <section class="provider-panel overflow-hidden">
+                    <nav class="grid overflow-hidden border border-slate-300 bg-white sm:grid-cols-3" aria-label="Team account setup steps">
+                        <button
+                            v-for="(step, index) in formSteps"
+                            :key="step.value"
+                            type="button"
+                            :aria-current="activeFormStep === step.value ? 'step' : undefined"
+                            :class="[
+                                'flex min-w-0 items-center gap-3 border-b border-slate-200 px-4 py-3 text-left transition last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0',
+                                activeFormStep === step.value ? 'bg-slate-950 text-white' : 'bg-white text-slate-700 hover:bg-slate-50',
+                            ]"
+                            @click="goToStep(step.value)"
+                        >
+                            <span :class="['grid h-8 w-8 shrink-0 place-items-center border text-xs', activeFormStep === step.value ? 'border-slate-700 bg-slate-900 text-amber-300' : 'border-slate-200 bg-slate-50 text-slate-500']">
+                                <i :class="step.icon" aria-hidden="true"></i>
+                            </span>
+                            <span class="min-w-0">
+                                <span class="block text-[10px] font-bold uppercase tracking-[0.12em] opacity-70">Step {{ index + 1 }}</span>
+                                <span class="block truncate text-sm font-bold">{{ step.label }}</span>
+                                <span :class="['mt-0.5 block truncate text-xs', activeFormStep === step.value ? 'text-slate-300' : 'text-slate-500']">{{ step.description }}</span>
+                            </span>
+                        </button>
+                    </nav>
+
+                    <section v-if="activeFormStep === 'account'" class="provider-panel overflow-hidden">
                         <div class="border-b border-slate-200 px-5 py-4 sm:px-6">
                             <h2 class="font-bold text-slate-950">Account details</h2>
                             <p class="mt-1 text-sm text-slate-500">Identity and contact information for this staff member.</p>
@@ -302,7 +383,7 @@ onMounted(loadAccount);
                         </div>
                     </section>
 
-                    <section class="provider-panel overflow-hidden">
+                    <section v-else-if="activeFormStep === 'access'" class="provider-panel overflow-hidden">
                         <div class="border-b border-slate-200 px-5 py-4 sm:px-6">
                             <h2 class="font-bold text-slate-950">Role and access</h2>
                             <p class="mt-1 text-sm text-slate-500">Choose the work this member can perform and the programs they can open.</p>
@@ -429,7 +510,7 @@ onMounted(loadAccount);
                         </div>
                     </section>
 
-                    <section class="provider-panel overflow-hidden">
+                    <section v-else class="provider-panel overflow-hidden">
                         <div class="border-b border-slate-200 px-5 py-4 sm:px-6">
                             <h2 class="font-bold text-slate-950">{{ isEditMode ? 'Password reset' : 'Temporary password' }}</h2>
                             <p class="mt-1 text-sm text-slate-500">{{ isEditMode ? 'Leave both fields blank to keep the current password.' : 'The member verifies their email before choosing a new password.' }}</p>
@@ -467,12 +548,19 @@ onMounted(loadAccount);
                         <p v-if="!isEditMode" class="border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs leading-5 text-slate-600 sm:px-6">Share the temporary password separately; it is not included in the welcome email.</p>
                     </section>
 
-                    <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                        <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
-                        <span v-else class="text-xs font-semibold text-slate-500">The member can only receive access available to your account.</span>
-                        <button type="submit" :disabled="isSaving" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-70">
-                            {{ isSaving ? 'Saving...' : isEditMode ? 'Update account' : 'Create account' }}
-                        </button>
+                    <div class="flex flex-col gap-3 border border-slate-300 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p v-if="errorMessage" class="text-sm font-semibold text-rose-700"><i class="fa-solid fa-circle-exclamation mr-2" aria-hidden="true"></i>{{ errorMessage }}</p>
+                            <span v-else class="text-xs font-semibold text-slate-500">Only the current step is shown. Your entries remain saved while you move between steps.</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 sm:flex">
+                            <a v-if="activeFormStepIndex === 0" href="/provider/team" class="border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</a>
+                            <button v-else type="button" class="border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="goToPreviousStep"><i class="fa-solid fa-arrow-left mr-2 text-xs" aria-hidden="true"></i>Back</button>
+                            <button v-if="activeFormStepIndex < formSteps.length - 1" type="button" class="bg-slate-950 px-5 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="goToNextStep">Continue<i class="fa-solid fa-arrow-right ml-2 text-xs" aria-hidden="true"></i></button>
+                            <button v-else type="submit" :disabled="isSaving" class="bg-slate-950 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-70">
+                                {{ isSaving ? 'Saving...' : isEditMode ? 'Update account' : 'Create account' }}
+                            </button>
+                        </div>
                     </div>
                 </form>
 

@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
+import ProviderApplicantPhoto from '../components/ProviderApplicantPhoto.vue';
 import ProviderProgramHeader from '../components/ProviderProgramHeader.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSectionGuide from '../components/ProviderSectionGuide.vue';
@@ -641,16 +642,6 @@ function statusClass(status) {
     }
 
     return 'bg-amber-100 text-amber-800';
-}
-
-function applicantInitials(application) {
-    return String(application.applicant?.name || application.applicant?.email || 'Applicant')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((word) => word.charAt(0))
-        .join('')
-        .toUpperCase();
 }
 
 function documentIssueCount(application) {
@@ -1596,15 +1587,7 @@ onMounted(loadProviderData);
                                         <input v-model="selectedBulkApplicationIds" type="checkbox" :value="application.id" :disabled="!canBulkAdvance(application)" class="h-4 w-4 rounded border-slate-300 text-slate-950 focus:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-30">
                                         <span class="sr-only">Select {{ application.applicant?.name || 'applicant' }}</span>
                                     </label>
-                                    <img
-                                        v-if="application.applicant?.profile_photo_url"
-                                        :src="application.applicant.profile_photo_url"
-                                        :alt="`${application.applicant?.name || 'Applicant'} profile photo`"
-                                        class="h-10 w-10 shrink-0 rounded-md bg-slate-100 object-cover ring-1 ring-slate-200"
-                                    >
-                                    <div v-else class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-[11px] font-bold tracking-[0.08em] text-white ring-1 ring-slate-200">
-                                        {{ applicantInitials(application) }}
-                                    </div>
+                                    <ProviderApplicantPhoto :src="application.applicant?.profile_photo_url" :name="application.applicant?.name || 'Applicant'" />
 
                                     <div class="min-w-0 flex-1">
                                         <div class="flex min-w-0 items-center gap-2">

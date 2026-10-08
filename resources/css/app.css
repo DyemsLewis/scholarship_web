@@ -32,6 +32,29 @@
     body {
         @apply bg-slate-950 text-slate-100 antialiased;
     }
+
+    [role='dialog'] {
+        color: #0f172a;
+    }
+
+    [role='dialog'] input:not([type='checkbox']):not([type='radio']),
+    [role='dialog'] select,
+    [role='dialog'] textarea {
+        color: #0f172a;
+    }
+
+    [role='dialog'] input::placeholder,
+    [role='dialog'] textarea::placeholder {
+        color: #94a3b8;
+        opacity: 1;
+    }
+
+    [role='dialog'] select,
+    [role='dialog'] select option {
+        background-color: #fff;
+        color: #0f172a;
+        color-scheme: light;
+    }
 }
 
 @layer components {
@@ -52,7 +75,8 @@
     }
 
     .provider-shell {
-        background: #f1f4f7;
+        @apply lg:grid-cols-[16.5rem_1fr];
+        background: #edf1f5;
     }
 
     .admin-shell {
@@ -70,12 +94,16 @@
     }
 
     .provider-page {
-        @apply py-4 lg:py-5;
+        @apply py-4 lg:px-8 lg:py-6;
     }
 
     .provider-container,
     .admin-container {
         @apply mx-auto w-full max-w-[90rem];
+    }
+
+    .provider-container {
+        max-width: 92rem;
     }
 
     .provider-container-narrow,
@@ -101,9 +129,73 @@
     }
 
     .provider-page .provider-panel {
-        @apply rounded-md border-slate-300;
+        @apply rounded-sm border-slate-300;
         background: #fff;
-        box-shadow: 0 3px 12px rgba(8, 20, 38, 0.035);
+        box-shadow: 0 1px 4px rgba(8, 20, 38, 0.035);
+    }
+
+    .provider-page h1,
+    .provider-page h2,
+    .provider-page h3 {
+        font-family: var(--font-sans);
+    }
+
+    .provider-page .rounded-lg {
+        border-radius: 0.25rem;
+    }
+
+    .provider-page .rounded-md,
+    .provider-page .rounded {
+        border-radius: 0.1875rem;
+    }
+
+    .provider-page button:not([class*='rounded-full']),
+    .provider-page input,
+    .provider-page select,
+    .provider-page textarea,
+    .provider-page a[class*='bg-']:not([class*='rounded-full']),
+    .provider-page a[class*='border']:not([class*='rounded-full']) {
+        border-radius: 0.1875rem;
+    }
+
+    .provider-page input:not([type='checkbox']):not([type='radio']),
+    .provider-page select,
+    .provider-page textarea {
+        color: #0f172a;
+    }
+
+    .provider-page input::placeholder,
+    .provider-page textarea::placeholder {
+        color: #94a3b8;
+        opacity: 1;
+    }
+
+    .provider-page select option {
+        background-color: #fff;
+        color: #0f172a;
+        color-scheme: light;
+    }
+
+    .provider-page .shadow-sm {
+        box-shadow: 0 1px 4px rgba(8, 20, 38, 0.04);
+    }
+
+    .provider-page input:focus,
+    .provider-page select:focus,
+    .provider-page textarea:focus {
+        border-color: #475569;
+        box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.12);
+        outline: none;
+    }
+
+    .provider-page .portal-data-table thead,
+    .provider-page .portal-record-head {
+        @apply border-y border-slate-200 bg-slate-50;
+    }
+
+    .provider-page .portal-data-table tbody tr,
+    .provider-page .portal-record-row {
+        @apply border-slate-200 hover:bg-slate-50;
     }
 
     .student-container {
@@ -138,7 +230,7 @@
     }
 
     .provider-page .provider-hero {
-        @apply px-4 py-3 sm:px-5;
+        @apply rounded-sm px-4 py-3 shadow-[0_1px_4px_rgba(8,20,38,0.035)] sm:px-5;
         background: #ffffff;
     }
 
@@ -175,7 +267,7 @@
     }
 
     .provider-page .provider-help {
-        @apply rounded-md border border-slate-200 bg-slate-50;
+        @apply rounded-sm border border-slate-300 bg-slate-50;
     }
 
     .provider-page .provider-help summary {

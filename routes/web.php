@@ -229,60 +229,162 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/reviews', [ProviderWorkspacePageController::class, 'reviews'])
             ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('workspaces.reviews');
+        Route::get('/workspaces/reviews/assigned', [ProviderWorkspacePageController::class, 'reviews'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->name('workspaces.reviews.assigned');
+        Route::get('/workspaces/reviews/unassigned', [ProviderWorkspacePageController::class, 'reviews'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->name('workspaces.reviews.unassigned');
+        Route::get('/workspaces/reviews/returned', [ProviderWorkspacePageController::class, 'reviews'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->name('workspaces.reviews.returned');
+        Route::get('/workspaces/reviews/history', [ProviderWorkspacePageController::class, 'reviews'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->name('workspaces.reviews.history');
         Route::get('/workspaces/reviews/data', [ProviderController::class, 'applicationReviewerWorkspaceData'])
             ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('workspaces.reviews.data');
         Route::get('/workspaces/selection', [ProviderWorkspacePageController::class, 'selection'])
             ->middleware(['permission:manage_selection_activities', 'provider.approved'])
             ->name('workspaces.selection');
+        Route::get('/workspaces/selection/setup', [ProviderWorkspacePageController::class, 'selection'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.setup');
+        Route::get('/workspaces/selection/results', [ProviderWorkspacePageController::class, 'selection'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.results');
+        Route::get('/workspaces/selection/active', [ProviderWorkspacePageController::class, 'selection'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.active');
         Route::get('/workspaces/selection/data', [ProviderController::class, 'selectionOfficerWorkspaceData'])
             ->middleware(['permission:manage_selection_activities', 'provider.approved'])
             ->name('workspaces.selection.data');
         Route::get('/workspaces/decisions', [ProviderWorkspacePageController::class, 'decisions'])
             ->middleware(['permission:record_final_decisions', 'provider.approved'])
             ->name('workspaces.decisions');
+        Route::get('/workspaces/decisions/pending', [ProviderWorkspacePageController::class, 'decisions'])
+            ->middleware(['permission:record_final_decisions', 'provider.approved'])
+            ->name('workspaces.decisions.pending');
+        Route::get('/workspaces/decisions/waitlist', [ProviderWorkspacePageController::class, 'decisions'])
+            ->middleware(['permission:record_final_decisions', 'provider.approved'])
+            ->name('workspaces.decisions.waitlist');
+        Route::get('/workspaces/decisions/recorded', [ProviderWorkspacePageController::class, 'decisions'])
+            ->middleware(['permission:record_final_decisions', 'provider.approved'])
+            ->name('workspaces.decisions.recorded');
         Route::get('/workspaces/decisions/data', [ProviderController::class, 'decisionOfficerWorkspaceData'])
             ->middleware(['permission:record_final_decisions', 'provider.approved'])
             ->name('workspaces.decisions.data');
         Route::get('/workspaces/recipients', [ProviderWorkspacePageController::class, 'recipients'])
             ->middleware(['permission:manage_recipients', 'provider.approved'])
             ->name('workspaces.recipients');
+        Route::get('/workspaces/recipients/agreements', [ProviderWorkspacePageController::class, 'recipients'])
+            ->middleware(['permission:manage_recipients', 'provider.approved'])
+            ->name('workspaces.recipients.agreements');
+        Route::get('/workspaces/recipients/active', [ProviderWorkspacePageController::class, 'recipients'])
+            ->middleware(['permission:manage_recipients', 'provider.approved'])
+            ->name('workspaces.recipients.active');
+        Route::get('/workspaces/recipients/declined', [ProviderWorkspacePageController::class, 'recipients'])
+            ->middleware(['permission:manage_recipients', 'provider.approved'])
+            ->name('workspaces.recipients.declined');
+        Route::get('/workspaces/recipients/closed', [ProviderWorkspacePageController::class, 'recipients'])
+            ->middleware(['permission:manage_recipients', 'provider.approved'])
+            ->name('workspaces.recipients.closed');
         Route::get('/workspaces/recipients/data', [ProviderController::class, 'recipientOfficerWorkspaceData'])
             ->middleware(['permission:manage_recipients', 'provider.approved'])
             ->name('workspaces.recipients.data');
         Route::get('/workspaces/monitoring', [ProviderWorkspacePageController::class, 'monitoring'])
             ->middleware(['permission:manage_monitoring', 'provider.approved'])
             ->name('workspaces.monitoring');
+        Route::get('/workspaces/monitoring/review', [ProviderWorkspacePageController::class, 'monitoring'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->name('workspaces.monitoring.review');
+        Route::get('/workspaces/monitoring/follow-ups', [ProviderWorkspacePageController::class, 'monitoring'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->name('workspaces.monitoring.followups');
+        Route::get('/workspaces/monitoring/awaiting', [ProviderWorkspacePageController::class, 'monitoring'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->name('workspaces.monitoring.awaiting');
+        Route::get('/workspaces/monitoring/history', [ProviderWorkspacePageController::class, 'monitoring'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->name('workspaces.monitoring.history');
         Route::get('/workspaces/monitoring/data', [ProviderController::class, 'monitoringOfficerWorkspaceData'])
             ->middleware(['permission:manage_monitoring', 'provider.approved'])
             ->name('workspaces.monitoring.data');
         Route::get('/workspaces/releases', [ProviderWorkspacePageController::class, 'releases'])
             ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
             ->name('workspaces.releases');
+        Route::get('/workspaces/releases/issues', [ProviderWorkspacePageController::class, 'releases'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases.issues');
+        Route::get('/workspaces/releases/record', [ProviderWorkspacePageController::class, 'releases'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases.record');
+        Route::get('/workspaces/releases/upcoming', [ProviderWorkspacePageController::class, 'releases'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases.upcoming');
+        Route::get('/workspaces/releases/history', [ProviderWorkspacePageController::class, 'releases'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases.history');
         Route::get('/workspaces/releases/data', [ProviderController::class, 'benefitReleaseOfficerWorkspaceData'])
             ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
             ->name('workspaces.releases.data');
         Route::get('/workspaces/organization-profile', [ProviderWorkspacePageController::class, 'organizationProfile'])
             ->middleware('permission:manage_profile')
             ->name('workspaces.organization-profile');
+        Route::get('/workspaces/organization-profile/readiness', [ProviderWorkspacePageController::class, 'organizationProfile'])
+            ->middleware('permission:manage_profile')
+            ->name('workspaces.organization-profile.readiness');
         Route::get('/workspaces/organization-profile/data', [ProviderController::class, 'organizationProfileManagerWorkspaceData'])
             ->middleware('permission:manage_profile')
             ->name('workspaces.organization-profile.data');
         Route::get('/workspaces/team', [ProviderWorkspacePageController::class, 'team'])
             ->middleware('permission:manage_team')
             ->name('workspaces.team');
+        Route::get('/workspaces/team/setup', [ProviderWorkspacePageController::class, 'team'])
+            ->middleware('permission:manage_team')
+            ->name('workspaces.team.setup');
+        Route::get('/workspaces/team/active', [ProviderWorkspacePageController::class, 'team'])
+            ->middleware('permission:manage_team')
+            ->name('workspaces.team.active');
+        Route::get('/workspaces/team/suspended', [ProviderWorkspacePageController::class, 'team'])
+            ->middleware('permission:manage_team')
+            ->name('workspaces.team.suspended');
         Route::get('/workspaces/team/data', [ProviderController::class, 'teamAdministratorWorkspaceData'])
             ->middleware('permission:manage_team')
             ->name('workspaces.team.data');
         Route::get('/workspaces/support', [SupportReportController::class, 'providerSupportWorkspace'])
             ->middleware(['permission:manage_reports', 'provider.approved'])
             ->name('workspaces.support');
+        Route::get('/workspaces/support/needs-response', [SupportReportController::class, 'providerSupportWorkspace'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support.needs-response');
+        Route::get('/workspaces/support/waiting', [SupportReportController::class, 'providerSupportWorkspace'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support.waiting');
+        Route::get('/workspaces/support/platform', [SupportReportController::class, 'providerSupportWorkspace'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support.platform');
+        Route::get('/workspaces/support/resolved', [SupportReportController::class, 'providerSupportWorkspace'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support.resolved');
         Route::get('/workspaces/support/data', [SupportReportController::class, 'providerSupportWorkspaceData'])
             ->middleware(['permission:manage_reports', 'provider.approved'])
             ->name('workspaces.support.data');
         Route::get('/workspaces/billing', [BillingController::class, 'providerBillingStaffWorkspace'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing');
+        Route::get('/workspaces/billing/action', [BillingController::class, 'providerBillingStaffWorkspace'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.action');
+        Route::get('/workspaces/billing/active', [BillingController::class, 'providerBillingStaffWorkspace'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.active');
+        Route::get('/workspaces/billing/waiting', [BillingController::class, 'providerBillingStaffWorkspace'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.waiting');
+        Route::get('/workspaces/billing/completed', [BillingController::class, 'providerBillingStaffWorkspace'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.completed');
         Route::get('/workspaces/billing/data', [BillingController::class, 'providerBillingStaffWorkspaceData'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing.data');
@@ -357,6 +459,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/reports/data', [SupportReportController::class, 'providerData'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.data');
         Route::post('/reports', [SupportReportController::class, 'storeProvider'])->middleware(['permission:manage_reports', 'provider.approved', 'throttle:6,1'])->name('reports.store');
         Route::get('/reports/{report}/attachment', [SupportReportController::class, 'viewAttachment'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.attachment');
+        Route::get('/reports/{report}/applicant-photo', [SupportReportController::class, 'viewApplicantPhoto'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.applicant-photo');
         Route::patch('/reports/{report}/status', [SupportReportController::class, 'updateStatus'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.status');
         Route::redirect('/insights', '/provider/applications?filter=needs_review')->name('insights.redirect');
         Route::redirect('/review', '/provider/applications?filter=needs_review')

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onMounted, ref } from 'vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
+import ProviderPagination from '../components/ProviderPagination.vue';
 import ProviderProgramHeader from '../components/ProviderProgramHeader.vue';
 import ProviderProgramNav from '../components/ProviderProgramNav.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
@@ -18,6 +19,7 @@ const isPublishingAnnouncement = ref(false);
 const announcementError = ref('');
 const announcementTitleInput = ref(null);
 const selectedAnnouncement = ref(null);
+const announcementPage = ref(1);
 const announcementForm = ref({
     audience: 'active_applicants',
     title: '',
@@ -45,6 +47,28 @@ const canSendAnnouncements = computed(() => (
     canManagePrograms.value && providerIsApproved.value
 ));
 const announcements = computed(() => scholarship.value?.announcements ?? []);
+const announcementPageSize = 5;
+const pagedAnnouncements = computed(() => {
+    const lastPage = Math.max(1, Math.ceil(announcements.value.length / announcementPageSize));
+    const page = Math.min(announcementPage.value, lastPage);
+    const offset = (page - 1) * announcementPageSize;
+
+    return announcements.value.slice(offset, offset + announcementPageSize);
+});
+const announcementPagination = computed(() => {
+    const total = announcements.value.length;
+    const lastPage = Math.max(1, Math.ceil(total / announcementPageSize));
+    const currentPage = Math.min(announcementPage.value, lastPage);
+    const from = total ? ((currentPage - 1) * announcementPageSize) + 1 : 0;
+
+    return {
+        current_page: currentPage,
+        last_page: lastPage,
+        from,
+        to: total ? Math.min(currentPage * announcementPageSize, total) : 0,
+        total,
+    };
+});
 const announcementAudiences = [
     { value: 'active_applicants', label: 'All active applicants', help: 'Everyone whose application is still active.' },
     { value: 'under_review', label: 'Applicants under review', help: 'Applicants still completing pre-screening.' },
@@ -370,6 +394,7 @@ async function publishAnnouncement() {
             response.data.announcement,
             ...announcements.value,
         ];
+        announcementPage.value = 1;
         announcementForm.value = {
             audience: 'active_applicants',
             title: '',
@@ -607,7 +632,7 @@ onMounted(loadProgram);
                                             <p class="mt-1 text-sm text-slate-500">New applicant updates will appear here.</p>
                                         </td>
                                     </tr>
-                                    <tr v-for="announcement in announcements" :key="announcement.id">
+                                    <tr v-for="announcement in pagedAnnouncements" :key="announcement.id">
                                         <td class="px-5 py-3.5">
                                             <p class="truncate font-bold text-slate-950">{{ announcement.title }}</p>
                                             <p class="mt-0.5 line-clamp-1 text-xs leading-5 text-slate-500">{{ announcement.message }}</p>
@@ -627,6 +652,11 @@ onMounted(loadProgram);
                                 </tbody>
                             </table>
                         </div>
+                        <ProviderPagination
+                            :pagination="announcementPagination"
+                            item-label="updates"
+                            @change="announcementPage = $event"
+                        />
                     </section>
                 </template>
 

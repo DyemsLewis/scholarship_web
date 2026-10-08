@@ -22,25 +22,26 @@ defineEmits(['select']);
 </script>
 
 <template>
-    <nav class="flex items-center gap-2 overflow-x-auto border-b border-slate-200 px-4 sm:px-5" :aria-label="ariaLabel">
+    <nav class="flex items-center gap-5 overflow-x-auto border-b border-slate-200 bg-slate-50 px-4 sm:px-5" :aria-label="ariaLabel">
         <button
             v-for="tab in tabs"
             :key="tab.key"
             type="button"
             :aria-pressed="activeKey === tab.key"
             :class="[
-                '-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-1 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-700 focus-visible:ring-offset-2',
+                '-mb-px inline-flex min-h-11 shrink-0 items-center gap-2 border-b-2 px-0.5 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-700 focus-visible:ring-offset-2',
                 activeKey === tab.key
                     ? 'border-slate-950 text-slate-950'
                     : 'border-transparent text-slate-500 hover:text-slate-800',
             ]"
             @click="$emit('select', tab.key)"
         >
+            <i v-if="tab.icon" :class="[tab.icon, 'text-xs']" aria-hidden="true"></i>
             <span>{{ tab.label }}</span>
             <span
                 :class="[
-                    'min-w-6 rounded-full px-1.5 py-0.5 text-center text-[0.68rem] font-black',
-                    activeKey === tab.key ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500',
+                    'min-w-6 rounded-sm border px-1.5 py-0.5 text-center text-[0.68rem] font-black tabular-nums',
+                    activeKey === tab.key ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-500',
                 ]"
             >
                 {{ tab.count }}

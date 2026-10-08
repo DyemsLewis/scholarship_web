@@ -9,22 +9,77 @@ const login = process.env.PROVIDER_SMOKE_LOGIN;
 const password = process.env.PROVIDER_SMOKE_PASSWORD;
 const timeoutMs = Number(process.env.PROVIDER_SMOKE_TIMEOUT_MS ?? 20_000);
 
-const workspaces = [
+const governanceWorkspaces = [
+    ['/provider', 'Governance overview'],
+    ['/provider?view=responsibilities', 'Responsibility coverage'],
+    ['/provider?view=access', 'Operating model'],
+    ['/provider?view=activity', 'Governance activity'],
+];
+
+const operationalWorkspaces = [
     ['/provider/workspaces/programs', 'Program coordination'],
-    ['/provider/workspaces/reviews', 'Application verification'],
-    ['/provider/workspaces/selection', 'Selection activities'],
-    ['/provider/workspaces/decisions', 'Final decisions'],
-    ['/provider/workspaces/recipients', 'Recipient onboarding'],
-    ['/provider/workspaces/monitoring', 'Recipient monitoring'],
-    ['/provider/workspaces/releases', 'Benefit distribution'],
-    ['/provider/workspaces/organization-profile', 'Organization profile'],
-    ['/provider/workspaces/team', 'Team access'],
-    ['/provider/workspaces/support', 'Support desk'],
+    ['/provider/workspaces/programs/drafts', 'Drafts and requested changes'],
+    ['/provider/workspaces/programs/review', 'Programs in admin review'],
+    ['/provider/workspaces/programs/published', 'Published programs'],
+    ['/provider/workspaces/programs/closed', 'Closed programs'],
+    ['/provider/workspaces/reviews', 'Assigned reviews'],
+    ['/provider/workspaces/reviews/assigned', 'Assigned reviews'],
+    ['/provider/workspaces/reviews/unassigned', 'Unassigned applications'],
+    ['/provider/workspaces/reviews/returned', 'Returned corrections'],
+    ['/provider/workspaces/reviews/history', 'Review history'],
+    ['/provider/workspaces/selection', 'Activity setup'],
+    ['/provider/workspaces/selection/setup', 'Activity setup'],
+    ['/provider/workspaces/selection/results', 'Results to record'],
+    ['/provider/workspaces/selection/active', 'Active pipeline'],
+    ['/provider/workspaces/decisions', 'Pending decisions'],
+    ['/provider/workspaces/decisions/pending', 'Pending decisions'],
+    ['/provider/workspaces/decisions/waitlist', 'Waitlist'],
+    ['/provider/workspaces/decisions/recorded', 'Decision history'],
+    ['/provider/workspaces/recipients', 'Agreement responses'],
+    ['/provider/workspaces/recipients/agreements', 'Agreement responses'],
+    ['/provider/workspaces/recipients/active', 'Active recipients'],
+    ['/provider/workspaces/recipients/declined', 'Declined responses'],
+    ['/provider/workspaces/recipients/closed', 'Closed recipient records'],
+    ['/provider/workspaces/monitoring', 'Monitoring review'],
+    ['/provider/workspaces/monitoring/review', 'Monitoring review'],
+    ['/provider/workspaces/monitoring/follow-ups', 'Recipient follow-ups'],
+    ['/provider/workspaces/monitoring/awaiting', 'Awaiting uploads'],
+    ['/provider/workspaces/monitoring/history', 'Check-in history'],
+    ['/provider/workspaces/releases', 'Reported release issues'],
+    ['/provider/workspaces/releases/issues', 'Reported release issues'],
+    ['/provider/workspaces/releases/record', 'Record distribution'],
+    ['/provider/workspaces/releases/upcoming', 'Upcoming releases'],
+    ['/provider/workspaces/releases/history', 'Release history'],
+    ['/provider/workspaces/organization-profile', 'Profile readiness'],
+    ['/provider/workspaces/organization-profile/readiness', 'Profile readiness'],
+    ['/provider/workspaces/team', 'Setup required'],
+    ['/provider/workspaces/team/setup', 'Setup required'],
+    ['/provider/workspaces/team/active', 'Active staff accounts'],
+    ['/provider/workspaces/team/suspended', 'Suspended staff accounts'],
+    ['/provider/workspaces/support', 'Needs response'],
+    ['/provider/workspaces/support/needs-response', 'Needs response'],
+    ['/provider/workspaces/support/waiting', 'Waiting for platform'],
+    ['/provider/workspaces/support/platform', 'Platform reports'],
+    ['/provider/workspaces/support/resolved', 'Resolved cases'],
+    ['/provider/workspaces/billing', 'Requests needing action'],
+    ['/provider/workspaces/billing/action', 'Requests needing action'],
+    ['/provider/workspaces/billing/active', 'Services in progress'],
+    ['/provider/workspaces/billing/waiting', 'Waiting to start'],
+    ['/provider/workspaces/billing/completed', 'Completed requests'],
+    ['/provider/workspaces/billing/services', 'Optional support services', 'Loading support services...'],
     ['/provider/profile/details', 'Provider details', 'Loading provider profile...'],
     ['/provider/applications', 'Applicant workflow', 'Loading applicants...'],
     ['/provider/programs', 'Programs', 'Loading scholarship programs...'],
     ['/provider/monitoring', 'Recipient monitoring', 'Loading programs...'],
 ];
+const workspaceScope = process.env.PROVIDER_SMOKE_SCOPE ?? 'operations';
+const workspacePathFilter = process.env.PROVIDER_SMOKE_PATH ?? '';
+const scopedWorkspaces = workspaceScope === 'governance'
+    ? governanceWorkspaces
+    : (workspaceScope === 'all' ? [...governanceWorkspaces, ...operationalWorkspaces] : operationalWorkspaces);
+const workspaces = workspacePathFilter
+    ? scopedWorkspaces.filter(([workspacePath]) => workspacePath.startsWith(workspacePathFilter))
+    : scopedWorkspaces;
 
 function fail(message) {
     throw new Error(message);
@@ -171,6 +226,7 @@ async function main() {
         '--disable-gpu',
         '--no-first-run',
         '--no-default-browser-check',
+        '--window-size=1440,1000',
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${profileDir}`,
         'about:blank',
@@ -237,10 +293,12 @@ async function main() {
         for (const [workspacePath, heading, loadingText = null] of workspaces) {
             runtimeErrors.length = 0;
             requestErrors.length = 0;
-            await client.send('Page.navigate', { url: new URL(workspacePath, baseUrl).href });
+            const workspaceUrl = new URL(workspacePath, baseUrl);
+            await client.send('Page.navigate', { url: workspaceUrl.href });
             await waitFor(
                 () => client.evaluate(`document.readyState === 'complete'
-                    && location.pathname === ${JSON.stringify(workspacePath)}
+                    && location.pathname === ${JSON.stringify(workspaceUrl.pathname)}
+                    && location.search === ${JSON.stringify(workspaceUrl.search)}
                     && document.body.innerText.includes(${JSON.stringify(heading)})
                     && (${JSON.stringify(loadingText)} === null
                         || !document.body.innerText.includes(${JSON.stringify(loadingText)}))`),
@@ -257,6 +315,124 @@ async function main() {
             }
             if (runtimeErrors.length) {
                 fail(`${heading} raised a browser exception: ${runtimeErrors[0]}`);
+            }
+
+            const visualAudit = await client.evaluate(`(() => {
+                const visible = (element) => {
+                    const style = getComputedStyle(element);
+                    const rect = element.getBoundingClientRect();
+                    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+                };
+                const parseColor = (value) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 1;
+                    canvas.height = 1;
+                    const context = canvas.getContext('2d', { willReadFrequently: true });
+                    context.clearRect(0, 0, 1, 1);
+                    context.fillStyle = value;
+                    context.fillRect(0, 0, 1, 1);
+                    return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
+                };
+                const luminance = (rgb) => {
+                    const channels = rgb.map((channel) => {
+                        const value = channel / 255;
+                        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+                    });
+                    return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2]);
+                };
+                const contrast = (foreground, background) => {
+                    const lighter = Math.max(luminance(foreground), luminance(background));
+                    const darker = Math.min(luminance(foreground), luminance(background));
+                    return (lighter + 0.05) / (darker + 0.05);
+                };
+                const backgroundFor = (element) => {
+                    let current = element;
+                    while (current) {
+                        const color = getComputedStyle(current).backgroundColor;
+                        if (color && !color.endsWith(', 0)') && color !== 'transparent') return parseColor(color);
+                        current = current.parentElement;
+                    }
+                    return [255, 255, 255];
+                };
+                const ignoredTypes = new Set(['checkbox', 'radio', 'hidden', 'file', 'color', 'range']);
+                const lowContrastControls = [...document.querySelectorAll('input, select, textarea')]
+                    .filter((control) => visible(control) && !control.disabled && !ignoredTypes.has(control.type))
+                    .filter((control) => {
+                        const foreground = parseColor(getComputedStyle(control).color);
+                        const background = backgroundFor(control);
+                        return foreground && background && contrast(foreground, background) < 3;
+                    })
+                    .map((control) => control.getAttribute('aria-label') || control.name || control.placeholder || control.tagName.toLowerCase())
+                    .slice(0, 5);
+                const duplicateActiveNavigations = [...document.querySelectorAll('nav')]
+                    .filter(visible)
+                    .map((navigation) => ({
+                        label: navigation.getAttribute('aria-label') || 'navigation',
+                        active: navigation.querySelectorAll('[aria-current="page"]').length,
+                    }))
+                    .filter((navigation) => navigation.active > 1);
+
+                return {
+                    horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
+                    objectLeak: document.body.innerText.includes('[object Object]'),
+                    lowContrastControls,
+                    duplicateActiveNavigations,
+                };
+            })()`);
+
+            if (visualAudit.horizontalOverflow) {
+                fail(`${heading} causes page-level horizontal overflow at desktop width.`);
+            }
+            if (visualAudit.objectLeak) {
+                fail(`${heading} renders [object Object] in visible content.`);
+            }
+            if (visualAudit.lowContrastControls.length) {
+                fail(`${heading} has low-contrast controls: ${visualAudit.lowContrastControls.join(', ')}`);
+            }
+            if (visualAudit.duplicateActiveNavigations.length) {
+                fail(`${heading} has conflicting active navigation items.`);
+            }
+
+            if (workspaceUrl.pathname === '/provider/workspaces/support') {
+                await client.evaluate(`[...document.querySelectorAll('button')]
+                    .find((button) => button.innerText.includes('Contact platform'))?.click()`);
+                await waitFor(
+                    () => client.evaluate("Boolean(document.querySelector('[role=\"dialog\"] select'))"),
+                    'the platform support dialog',
+                );
+                const dialogContrast = await client.evaluate(`(() => {
+                    const control = document.querySelector('[role="dialog"] select');
+                    const colorToRgb = (value) => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 1;
+                        canvas.height = 1;
+                        const context = canvas.getContext('2d', { willReadFrequently: true });
+                        context.clearRect(0, 0, 1, 1);
+                        context.fillStyle = value;
+                        context.fillRect(0, 0, 1, 1);
+                        return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
+                    };
+                    const luminance = (rgb) => {
+                        const channels = rgb.map((channel) => {
+                            const normalized = channel / 255;
+                            return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+                        });
+                        return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2]);
+                    };
+                    const foreground = colorToRgb(getComputedStyle(control).color);
+                    const background = colorToRgb(getComputedStyle(control).backgroundColor);
+                    const lighter = Math.max(luminance(foreground), luminance(background));
+                    const darker = Math.min(luminance(foreground), luminance(background));
+                    return {
+                        color: getComputedStyle(control).color,
+                        background: getComputedStyle(control).backgroundColor,
+                        ratio: (lighter + 0.05) / (darker + 0.05),
+                    };
+                })()`);
+                if (dialogContrast.ratio < 4.5) {
+                    fail(`Support modal controls are not using readable light-theme colors: ${JSON.stringify(dialogContrast)}.`);
+                }
+                await client.evaluate(`document.querySelector('[role="dialog"] [aria-label="Close form"]')?.click()`);
             }
 
             console.log(`PASS ${heading}`);

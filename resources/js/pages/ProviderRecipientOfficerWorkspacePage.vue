@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import ProviderApplicantPhoto from '../components/ProviderApplicantPhoto.vue';
 import ProviderPagination from '../components/ProviderPagination.vue';
 import ProviderPageHeader from '../components/ProviderPageHeader.vue';
-import ProviderQueueTabs from '../components/ProviderQueueTabs.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import ProviderWorkspaceState from '../components/ProviderWorkspaceState.vue';
 
@@ -11,43 +11,28 @@ const isRefreshing = ref(false);
 const errorMessage = ref('');
 const workspace = ref(null);
 const summary = ref({ awaiting: 0, active: 0, declined: 0, closed: 0 });
-const nextRecipient = ref(null);
 const programs = ref([]);
 const recipients = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: 0, to: 0 });
-const allowedQueues = ['awaiting', 'active', 'declined', 'closed'];
-const pageUrl = new URL(window.location.href);
-const requestedQueue = pageUrl.searchParams.get('queue');
-const activeQueue = ref(allowedQueues.includes(requestedQueue) ? requestedQueue : 'awaiting');
-const selectedProgram = ref(pageUrl.searchParams.get('program_id') ?? '');
+const url = new URL(window.location.href);
+const pathSection = url.pathname.split('/').filter(Boolean).at(-1);
+const pathQueueMap = { agreements: 'awaiting', active: 'active', declined: 'declined', closed: 'closed' };
+const queueOptions = ['awaiting', 'active', 'declined', 'closed'];
+const requestedQueue = pathQueueMap[pathSection] ?? url.searchParams.get('queue');
+const activeQueue = ref(queueOptions.includes(requestedQueue) ? requestedQueue : 'awaiting');
+const selectedProgram = ref(url.searchParams.get('program_id') ?? '');
 const searchQuery = ref('');
 let searchTimer = null;
 
-const accessLabel = computed(() => workspace.value?.program_access_mode === 'selected'
-    ? 'Assigned programs only'
-    : 'All organization programs');
-const queueTabs = computed(() => [
-    { key: 'awaiting', label: 'Awaiting agreement', count: Number(summary.value.awaiting ?? 0) },
-    { key: 'active', label: 'Active recipients', count: Number(summary.value.active ?? 0) },
-    { key: 'declined', label: 'Declined', count: Number(summary.value.declined ?? 0) },
-    { key: 'closed', label: 'Closed records', count: Number(summary.value.closed ?? 0) },
+const queueSections = computed(() => [
+    { key: 'awaiting', label: 'Agreement responses', shortLabel: 'Agreements', description: 'Follow up on selected applicants who have not responded.', count: Number(summary.value.awaiting ?? 0), href: '/provider/workspaces/recipients/agreements', icon: 'fa-file-signature' },
+    { key: 'active', label: 'Active recipients', shortLabel: 'Active', description: 'Open recipients who accepted their scholarship terms.', count: Number(summary.value.active ?? 0), href: '/provider/workspaces/recipients/active', icon: 'fa-user-check' },
+    { key: 'declined', label: 'Declined responses', shortLabel: 'Declined', description: 'Review applicants who declined the recipient agreement.', count: Number(summary.value.declined ?? 0), href: '/provider/workspaces/recipients/declined', icon: 'fa-user-xmark' },
+    { key: 'closed', label: 'Closed recipient records', shortLabel: 'Closed', description: 'View completed or ended scholarship support records.', count: Number(summary.value.closed ?? 0), href: '/provider/workspaces/recipients/closed', icon: 'fa-box-archive' },
 ]);
-const activeQueueTab = computed(() => queueTabs.value.find((tab) => tab.key === activeQueue.value) ?? queueTabs.value[0]);
-const queueHeading = computed(() => ({
-    awaiting: 'Recipients waiting for agreement',
-    active: 'Recipients ready for support',
-    declined: 'Declined agreement responses',
-    closed: 'Completed support records',
-}[activeQueue.value]));
-
-function applicantInitials(name) {
-    return String(name ?? 'Recipient')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part.charAt(0).toUpperCase())
-        .join('');
-}
+const activeSection = computed(() => queueSections.value.find((section) => section.key === activeQueue.value) ?? queueSections.value[0]);
+const leadRecipient = computed(() => ['awaiting', 'declined'].includes(activeQueue.value) ? recipients.value[0] ?? null : null);
+const isClosed = computed(() => activeQueue.value === 'closed');
 
 function onboardingClass(state) {
     return {
@@ -58,10 +43,31 @@ function onboardingClass(state) {
     }[state] ?? 'bg-slate-100 text-slate-700';
 }
 
+function onboardingIcon(state) {
+    return {
+        awaiting: 'fa-solid fa-clock',
+        active: 'fa-solid fa-circle-check',
+        declined: 'fa-solid fa-circle-xmark',
+        closed: 'fa-solid fa-box-archive',
+    }[state] ?? 'fa-solid fa-file-signature';
+}
+
+function recipientActionUrl(path) {
+    const actionUrl = new URL(path, window.location.origin);
+
+    if (actionUrl.pathname.startsWith('/provider/applications/')) {
+        actionUrl.searchParams.set('section', 'decision');
+        actionUrl.searchParams.set('return_to', `${window.location.pathname}${window.location.search}`);
+    }
+
+    return `${actionUrl.pathname}${actionUrl.search}`;
+}
+
 function syncUrl() {
     const nextUrl = new URL(window.location.href);
+    const usesQueuePath = Object.prototype.hasOwnProperty.call(pathQueueMap, pathSection);
 
-    if (activeQueue.value === 'awaiting') nextUrl.searchParams.delete('queue');
+    if (usesQueuePath || activeQueue.value === 'awaiting') nextUrl.searchParams.delete('queue');
     else nextUrl.searchParams.set('queue', activeQueue.value);
 
     if (selectedProgram.value) nextUrl.searchParams.set('program_id', selectedProgram.value);
@@ -86,7 +92,6 @@ async function loadWorkspace(page = 1, initial = false) {
         });
         workspace.value = response.data.workspace;
         summary.value = response.data.summary ?? summary.value;
-        nextRecipient.value = response.data.next_recipient;
         programs.value = response.data.programs ?? [];
         recipients.value = response.data.recipients ?? [];
         pagination.value = response.data.pagination ?? pagination.value;
@@ -97,11 +102,6 @@ async function loadWorkspace(page = 1, initial = false) {
         isLoading.value = false;
         isRefreshing.value = false;
     }
-}
-
-function selectQueue(queue) {
-    activeQueue.value = queue;
-    loadWorkspace(1);
 }
 
 watch(selectedProgram, () => loadWorkspace(1));
@@ -120,117 +120,67 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
         <section class="provider-page">
             <div class="provider-container">
-                <ProviderWorkspaceState v-if="isLoading" title="Loading recipient onboarding" message="Preparing agreement responses and support records." />
-
+                <ProviderWorkspaceState v-if="isLoading" title="Loading recipient onboarding" message="Preparing agreement and support records." />
                 <ProviderWorkspaceState v-else-if="errorMessage && !workspace" tone="error" title="Recipient onboarding is unavailable" :message="errorMessage" />
 
                 <template v-else>
-                    <ProviderPageHeader role-key="recipients" title="Recipient onboarding" description="Complete agreements and prepare selected recipients for ongoing support." icon="fa-solid fa-user-shield">
-                        <template #meta>
-                            <span><i class="fa-solid fa-building mr-2 text-slate-400"></i>{{ workspace.organization_name }}</span>
-                            <span><i class="fa-solid fa-lock mr-2 text-slate-400"></i>{{ accessLabel }}</span>
-                        </template>
-                    </ProviderPageHeader>
+                    <ProviderPageHeader role-key="recipients" :title="activeSection.label" :description="activeSection.description" icon="fa-solid fa-user-shield" :show-role-guide="false" />
 
-                    <section v-if="nextRecipient" class="mt-3 overflow-hidden rounded border border-amber-300 bg-white shadow-sm">
-                        <div class="flex items-center gap-3 px-4 py-3 sm:px-5">
-                            <span class="grid h-9 w-9 shrink-0 place-items-center bg-amber-300 text-slate-950">
-                                <i :class="['fa-solid text-sm', nextRecipient.onboarding.state === 'declined' ? 'fa-message' : 'fa-file-signature']"></i>
-                            </span>
-                            <div class="flex min-w-0 flex-1 items-center gap-3">
-                                <img v-if="nextRecipient.applicant.profile_photo_url" :src="nextRecipient.applicant.profile_photo_url" :alt="nextRecipient.applicant.name" class="h-9 w-9 shrink-0 object-cover">
-                                <span v-else class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-xs font-black text-slate-600">{{ applicantInitials(nextRecipient.applicant.name) }}</span>
-                                <div class="min-w-0">
-                                    <p class="text-[0.62rem] font-black uppercase tracking-[0.16em] text-amber-700">Needs attention</p>
-                                    <h2 class="mt-0.5 truncate text-sm font-bold text-slate-950">{{ nextRecipient.applicant.name }}</h2>
-                                    <p class="mt-0.5 truncate text-xs text-slate-500">{{ nextRecipient.program.title }}</p>
-                                </div>
+                    <nav class="mt-4 grid grid-cols-4 border border-slate-300 bg-white" aria-label="Recipient onboarding pages">
+                        <a v-for="section in queueSections" :key="section.key" :href="section.href" :aria-current="section.key === activeQueue ? 'page' : undefined" :class="['flex min-h-14 items-center gap-3 border-r border-slate-200 px-4 last:border-r-0', section.key === activeQueue ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950']">
+                            <i :class="['fa-solid', section.icon, section.key === activeQueue ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
+                            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-bold">{{ section.shortLabel }}</span><span :class="['mt-0.5 block truncate text-[0.68rem]', section.key === activeQueue ? 'text-slate-300' : 'text-slate-500']">{{ section.count }} recipient{{ section.count === 1 ? '' : 's' }}</span></span>
+                        </a>
+                    </nav>
+
+                    <section v-if="leadRecipient" class="mt-3 border border-slate-300 border-l-4 border-l-amber-500 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                        <div class="flex items-center gap-4 px-5 py-4">
+                            <ProviderApplicantPhoto :src="leadRecipient.applicant.profile_photo_url" :name="leadRecipient.applicant.name" />
+                            <div class="min-w-0 flex-1">
+                                <p class="text-[0.64rem] font-black uppercase tracking-[0.16em] text-amber-700">Needs attention</p>
+                                <h2 class="mt-0.5 truncate text-base font-bold text-slate-950">{{ leadRecipient.applicant.name }}</h2>
+                                <p class="mt-0.5 truncate text-sm text-slate-500">{{ leadRecipient.program.title }} / {{ leadRecipient.onboarding.next_step }}</p>
                             </div>
-                            <div class="shrink-0 border-l border-slate-200 pl-4">
-                                <span :class="['inline-flex px-2 py-1 text-[0.62rem] font-black uppercase tracking-wide', onboardingClass(nextRecipient.onboarding.state)]">{{ nextRecipient.onboarding.label }}</span>
-                                <p class="mt-1 text-xs font-semibold text-slate-600">{{ nextRecipient.onboarding.next_step }}</p>
-                                <p v-if="nextRecipient.onboarding.response_note" class="mt-0.5 max-w-xs truncate text-xs text-rose-700">“{{ nextRecipient.onboarding.response_note }}”</p>
-                            </div>
-                            <a :href="nextRecipient.action_url" class="shrink-0 bg-slate-950 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-slate-800">
-                                {{ nextRecipient.onboarding.action_label }}<i class="fa-solid fa-arrow-right ml-2 text-[0.65rem] text-amber-300"></i>
-                            </a>
+                            <a :href="recipientActionUrl(leadRecipient.action_url)" class="shrink-0 bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">{{ leadRecipient.onboarding.action_label }}<i class="fa-solid fa-arrow-right ml-2 text-xs text-amber-300" aria-hidden="true"></i></a>
                         </div>
                     </section>
 
-                    <section v-else class="mt-3 flex items-center gap-3 rounded border border-slate-200 bg-white px-4 py-3 sm:px-5">
-                        <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-check"></i></span>
-                        <div>
-                            <h2 class="text-sm font-bold text-slate-950">Recipient responses are up to date</h2>
-                            <p class="mt-0.5 text-xs text-slate-500">No unanswered or declined agreement needs attention.</p>
-                        </div>
-                    </section>
-
-                    <section class="mt-3 overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
-                        <header class="flex items-center justify-between gap-4 border-b border-slate-200 px-5 py-3.5">
+                    <section class="mt-3 border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                        <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-5 py-4">
                             <div>
-                                <p class="text-[0.65rem] font-black uppercase tracking-[0.16em] text-amber-700">Recipient register</p>
-                                <h2 class="mt-0.5 text-base font-bold text-slate-950">{{ queueHeading }}</h2>
+                                <h2 class="text-base font-bold text-slate-950">{{ pagination.total }} recipient{{ pagination.total === 1 ? '' : 's' }}</h2>
+                                <p class="mt-0.5 text-xs text-slate-500">{{ isClosed ? 'Most recently closed records appear first.' : 'Only records from this onboarding page are shown.' }}</p>
                             </div>
-                            <p class="shrink-0 text-xs font-semibold text-slate-500">{{ activeQueueTab.count }} {{ activeQueueTab.count === 1 ? 'recipient' : 'recipients' }}</p>
+                            <span v-if="isRefreshing" class="text-xs font-semibold text-slate-500"><i class="fa-solid fa-circle-notch mr-1.5 animate-spin" aria-hidden="true"></i>Updating</span>
                         </header>
 
-                        <ProviderQueueTabs :tabs="queueTabs" :active-key="activeQueue" :busy="isRefreshing" aria-label="Recipient onboarding states" @select="selectQueue" />
-
-                        <div class="grid gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3 xl:grid-cols-[minmax(18rem,1fr)_minmax(14rem,.45fr)]">
-                            <label class="relative block">
-                                <span class="sr-only">Search recipients</span>
-                                <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
-                                <input v-model="searchQuery" type="search" placeholder="Search recipient or program" class="w-full rounded border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
-                            </label>
-                            <label>
-                                <span class="sr-only">Filter by program</span>
-                                <select v-model="selectedProgram" class="w-full rounded border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
-                                    <option value="">All assigned programs</option>
-                                    <option v-for="program in programs" :key="program.id" :value="String(program.id)">{{ program.title }}</option>
-                                </select>
-                            </label>
+                        <div class="grid grid-cols-[minmax(18rem,1fr)_minmax(15rem,.55fr)] gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3">
+                            <label class="relative block"><span class="sr-only">Search recipients</span><i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="searchQuery" type="search" placeholder="Search recipient or program" class="w-full border border-slate-300 bg-white py-2.5 pl-10 pr-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100"></label>
+                            <label><span class="sr-only">Filter by program</span><select v-model="selectedProgram" class="w-full border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100"><option value="">All assigned programs</option><option v-for="program in programs" :key="program.id" :value="String(program.id)">{{ program.title }}</option></select></label>
                         </div>
 
-                        <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800 sm:px-6">{{ errorMessage }}</div>
+                        <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
-                        <div v-if="recipients.length" class="divide-y divide-slate-200">
-                            <div class="hidden grid-cols-[minmax(16rem,1.05fr)_minmax(22rem,1.35fr)_minmax(15rem,.8fr)_10rem] gap-4 bg-slate-50 px-5 py-2.5 text-[0.65rem] font-black uppercase tracking-[0.15em] text-slate-500 xl:grid">
-                                <span>Recipient</span>
-                                <span>Program and support</span>
-                                <span>Agreement status</span>
-                                <span class="text-right">Action</span>
-                            </div>
-
-                            <article v-for="recipient in recipients" :key="recipient.id" class="grid gap-4 px-5 py-3.5 transition hover:bg-slate-50 xl:grid-cols-[minmax(16rem,1.05fr)_minmax(22rem,1.35fr)_minmax(15rem,.8fr)_10rem] xl:items-center">
-                                <div class="flex min-w-0 items-center gap-3">
-                                    <img v-if="recipient.applicant.profile_photo_url" :src="recipient.applicant.profile_photo_url" :alt="recipient.applicant.name" class="h-10 w-10 shrink-0 object-cover">
-                                    <span v-else class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-xs font-black text-slate-600">{{ applicantInitials(recipient.applicant.name) }}</span>
-                                    <div class="min-w-0">
-                                        <h3 class="truncate text-sm font-bold text-slate-950">{{ recipient.applicant.name }}</h3>
-                                        <p class="mt-0.5 truncate text-xs text-slate-500">{{ recipient.applicant.education || 'Selected recipient' }}</p>
-                                    </div>
-                                </div>
-
-                                <div class="min-w-0">
-                                    <p class="truncate text-sm font-bold text-slate-800">{{ recipient.program.title }}</p>
-                                    <p class="mt-1 truncate text-xs text-slate-500">{{ recipient.award.amount_label }}<span class="mx-2 text-slate-300">|</span>{{ recipient.program.support_period || 'Support dates not specified' }}</p>
-                                </div>
-
-                                <div>
-                                    <span :class="['inline-flex px-2.5 py-1.5 text-[0.67rem] font-black uppercase tracking-wide', onboardingClass(recipient.onboarding.state)]">{{ recipient.onboarding.label }}</span>
-                                    <p class="mt-1.5 text-xs text-slate-500">{{ recipient.onboarding.responded_at || `${recipient.waiting_days} days waiting` }}<span class="mx-1 text-slate-300">|</span>{{ recipient.onboarding.next_step }}</p>
-                                </div>
-
-                                <a :href="recipient.action_url" class="bg-slate-950 px-3.5 py-2.5 text-center text-xs font-bold text-white transition hover:bg-slate-800">
-                                    {{ recipient.onboarding.action_label }}<i class="fa-solid fa-arrow-right ml-2 text-[0.65rem] text-amber-300"></i>
-                                </a>
-                            </article>
+                        <div v-if="recipients.length" class="portal-table-scroll">
+                            <table class="portal-data-table min-w-[70rem] table-fixed">
+                                <caption class="sr-only">{{ activeSection.label }}</caption>
+                                <colgroup><col class="w-[32%]"><col class="w-[25%]"><col class="w-[27%]"><col class="w-[16%]"></colgroup>
+                                <thead><tr><th scope="col">Recipient and program</th><th scope="col">Scholarship support</th><th scope="col">Recipient status</th><th scope="col">Action</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="recipient in recipients" :key="recipient.id">
+                                        <td><div class="flex min-w-0 items-start gap-3"><ProviderApplicantPhoto :src="recipient.applicant.profile_photo_url" :name="recipient.applicant.name" /><div class="min-w-0"><p class="truncate font-bold text-slate-950">{{ recipient.applicant.name }}</p><p class="mt-0.5 truncate text-xs text-slate-500">{{ recipient.program.title }}</p><p v-if="recipient.applicant.education" class="mt-1 truncate text-xs text-slate-500">{{ recipient.applicant.education }}</p></div></div></td>
+                                        <td><p class="font-semibold text-slate-800"><i class="fa-solid fa-award mr-1.5 text-xs text-slate-400" aria-hidden="true"></i>{{ recipient.award.amount_label }}</p><p class="mt-1 text-xs text-slate-500"><i class="fa-regular fa-calendar mr-1.5 text-slate-400" aria-hidden="true"></i>{{ recipient.program.support_period || 'Support period not specified' }}</p></td>
+                                        <td><span :class="['inline-flex items-center gap-1.5 px-2 py-1 text-[0.65rem] font-black uppercase tracking-wide', onboardingClass(recipient.onboarding.state)]"><i :class="onboardingIcon(recipient.onboarding.state)" aria-hidden="true"></i>{{ recipient.onboarding.label }}</span><p class="mt-1.5 text-xs text-slate-500">{{ recipient.onboarding.responded_at || `${recipient.waiting_days} day${recipient.waiting_days === 1 ? '' : 's'} waiting` }}</p><p v-if="recipient.onboarding.response_note" class="mt-1 line-clamp-1 text-xs text-rose-700">{{ recipient.onboarding.response_note }}</p></td>
+                                        <td><a :href="recipientActionUrl(recipient.action_url)" class="inline-flex items-center border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">{{ recipient.onboarding.action_label }}<i class="fa-solid fa-arrow-right ml-2 text-[9px]" aria-hidden="true"></i></a></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
 
                         <div v-else class="px-6 py-12 text-center">
-                            <span class="mx-auto grid h-11 w-11 place-items-center bg-slate-100 text-slate-400"><i class="fa-solid fa-address-book"></i></span>
-                            <h3 class="mt-3 text-sm font-bold text-slate-900">No recipients in this view</h3>
-                            <p class="mt-1 text-sm text-slate-500">Try another onboarding state, program, or search.</p>
+                            <i class="fa-solid fa-address-book text-2xl text-slate-300" aria-hidden="true"></i>
+                            <h3 class="mt-3 text-sm font-bold text-slate-900">No recipients on this page</h3>
+                            <p class="mt-1 text-sm text-slate-500">{{ searchQuery || selectedProgram ? 'Clear the filters to check the full list.' : 'Recipient records will appear here when they reach this state.' }}</p>
                         </div>
 
                         <ProviderPagination :pagination="pagination" :busy="isRefreshing" item-label="recipients" @change="loadWorkspace" />

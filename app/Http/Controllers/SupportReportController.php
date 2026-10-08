@@ -185,11 +185,10 @@ class SupportReportController extends Controller
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'needs_action';
         $search = trim((string) ($validated['search'] ?? ''));
-        $perPage = (int) ($validated['per_page'] ?? 10);
+        $perPage = 5;
         $owner = $staff->providerOrganizationOwner()->loadMissing('providerProfile');
         $programs = $this->providerSupportProgramsQuery($staff)
             ->orderBy('title')
@@ -286,6 +285,7 @@ class SupportReportController extends Controller
 
         $query->with([
             'applicant:id,role,first_name,last_name,email',
+            'applicant.studentProfile:id,user_id,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
             'scholarship:id,title',
             'providerResolver:id,role,username,email',
             'adminResolver:id,role,username,email',
@@ -466,6 +466,22 @@ class SupportReportController extends Controller
             $report->attachment_path,
             $report->attachment_original_name ?: 'support-attachment',
             ['Content-Type' => $report->attachment_mime_type ?: 'application/octet-stream'],
+        );
+    }
+
+    public function viewApplicantPhoto(Request $request, SupportReport $report)
+    {
+        $staff = $request->user();
+        abort_unless($staff?->isProvider(), 403);
+        abort_unless($this->canAccessProviderSupportReport($staff, $report), 403);
+
+        $profile = $report->applicant?->studentProfile;
+        abort_if(blank($profile?->profile_photo_path) || ! Storage::disk('local')->exists($profile->profile_photo_path), 404);
+
+        return Storage::disk('local')->response(
+            $profile->profile_photo_path,
+            $profile->profile_photo_original_name ?: 'applicant-photo',
+            ['Content-Type' => $profile->profile_photo_mime_type ?: 'image/jpeg'],
         );
     }
 
@@ -651,7 +667,11 @@ class SupportReportController extends Controller
                 ? 'Your part is complete. The report remains open for the other support team.'
                 : ($validated['status'] === 'resolved' ? 'Report resolved.' : 'Report reopened for your team.'),
             'report' => $this->reportPayload(
-                $report->fresh()->load(['applicant:id,role,first_name,last_name,email', 'scholarship:id,title']),
+                $report->fresh()->load([
+                    'applicant:id,role,first_name,last_name,email',
+                    'applicant.studentProfile:id,user_id,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
+                    'scholarship:id,title',
+                ]),
                 true,
                 $viewerRole,
             ),
@@ -862,6 +882,11 @@ class SupportReportController extends Controller
                 'name' => $report->applicant?->name,
                 'email' => $report->applicant?->email,
                 'role' => $report->applicant?->role,
+                'profile_photo_url' => $viewerRole === 'provider'
+                    && $report->applicant?->isApplicant()
+                    && filled($report->applicant?->studentProfile?->profile_photo_path)
+                        ? route('provider.reports.applicant-photo', $report, false)
+                        : null,
             ];
         }
 

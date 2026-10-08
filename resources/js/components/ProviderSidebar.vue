@@ -68,7 +68,10 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-magnifying-glass-chart',
             activePathPatterns: ['^/provider/(?:workspaces/reviews|applications)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Review queue', exact: true },
+                { href: providerWorkspaceUrl, label: 'Assigned reviews', activePaths: ['/provider/workspaces/reviews/assigned'] },
+                { href: '/provider/workspaces/reviews/unassigned', label: 'Unassigned', exact: true },
+                { href: '/provider/workspaces/reviews/returned', label: 'Returned corrections', exact: true },
+                { href: '/provider/workspaces/reviews/history', label: 'Review history', exact: true },
             ],
         }];
     }
@@ -80,7 +83,9 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-calendar-check',
             activePathPatterns: ['^/provider/(?:workspaces/selection|applications)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Activity pipeline', exact: true },
+                { href: providerWorkspaceUrl, label: 'Activity setup', activePaths: ['/provider/workspaces/selection/setup'] },
+                { href: '/provider/workspaces/selection/results', label: 'Results to record', exact: true },
+                { href: '/provider/workspaces/selection/active', label: 'Active pipeline', exact: true },
             ],
         }];
     }
@@ -92,7 +97,9 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-gavel',
             activePathPatterns: ['^/provider/(?:workspaces/decisions|applications)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Decision docket', exact: true },
+                { href: providerWorkspaceUrl, label: 'Pending decisions', activePaths: ['/provider/workspaces/decisions/pending'] },
+                { href: '/provider/workspaces/decisions/waitlist', label: 'Waitlist', exact: true },
+                { href: '/provider/workspaces/decisions/recorded', label: 'Decision history', exact: true },
             ],
         }];
     }
@@ -104,7 +111,10 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-user-shield',
             activePathPatterns: ['^/provider/(?:workspaces/recipients|applications|monitoring)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Recipient register', exact: true },
+                { href: providerWorkspaceUrl, label: 'Agreement responses', activePaths: ['/provider/workspaces/recipients/agreements'] },
+                { href: '/provider/workspaces/recipients/active', label: 'Active recipients', exact: true },
+                { href: '/provider/workspaces/recipients/declined', label: 'Declined responses', exact: true },
+                { href: '/provider/workspaces/recipients/closed', label: 'Closed records', exact: true },
             ],
         }];
     }
@@ -116,7 +126,10 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-heart-pulse',
             activePathPatterns: ['^/provider/(?:workspaces/monitoring|monitoring)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Monitoring desk', exact: true },
+                { href: providerWorkspaceUrl, label: 'Review queue', activePaths: ['/provider/workspaces/monitoring/review'] },
+                { href: '/provider/workspaces/monitoring/follow-ups', label: 'Follow-ups', exact: true },
+                { href: '/provider/workspaces/monitoring/awaiting', label: 'Awaiting uploads', exact: true },
+                { href: '/provider/workspaces/monitoring/history', label: 'Check-in history', exact: true },
             ],
         }];
     }
@@ -128,7 +141,10 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-hand-holding-dollar',
             activePathPatterns: ['^/provider/(?:workspaces/releases|monitoring/\\d+/releases)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Release desk', exact: true },
+                { href: providerWorkspaceUrl, label: 'Reported issues', activePaths: ['/provider/workspaces/releases/issues'] },
+                { href: '/provider/workspaces/releases/record', label: 'Record distribution', exact: true },
+                { href: '/provider/workspaces/releases/upcoming', label: 'Upcoming releases', exact: true },
+                { href: '/provider/workspaces/releases/history', label: 'Release history', exact: true },
             ],
         }];
     }
@@ -140,9 +156,10 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-building-circle-check',
             activePathPatterns: ['^/provider/(?:workspaces/organization-profile|profile)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Profile desk', exact: true },
-                { href: '/provider/profile/details', label: 'Provider details', exact: true },
+                { href: providerWorkspaceUrl, label: 'Readiness', activePaths: ['/provider/workspaces/organization-profile/readiness'] },
+                { href: '/provider/profile/details', label: 'Public details', exact: true },
                 { href: '/provider/profile/verification', label: 'Verification proof', exact: true },
+                { href: '/provider/profile/representative', label: 'Representative', exact: true },
             ],
         }];
     }
@@ -154,7 +171,9 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-users-gear',
             activePathPatterns: ['^/provider/(?:workspaces/team|team)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Access desk', exact: true },
+                { href: providerWorkspaceUrl, label: 'Setup required', activePaths: ['/provider/workspaces/team/setup'] },
+                { href: '/provider/workspaces/team/active', label: 'Active accounts', exact: true },
+                { href: '/provider/workspaces/team/suspended', label: 'Suspended accounts', exact: true },
                 { href: '/provider/team/accounts/create', label: 'Add team member', exact: true },
             ],
         }];
@@ -167,7 +186,10 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-headset',
             activePathPatterns: ['^/provider/(?:workspaces/support|reports)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Case desk', exact: true },
+                { href: providerWorkspaceUrl, label: 'Needs response', activePaths: ['/provider/workspaces/support/needs-response'] },
+                { href: '/provider/workspaces/support/waiting', label: 'Waiting for platform', exact: true },
+                { href: '/provider/workspaces/support/platform', label: 'Platform reports', exact: true },
+                { href: '/provider/workspaces/support/resolved', label: 'Resolved cases', exact: true },
             ],
         }];
     }
@@ -179,18 +201,27 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-receipt',
             activePathPatterns: ['^/provider/(?:workspaces/billing|billing)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Request desk', exact: true },
+                { href: providerWorkspaceUrl, label: 'Needs action', activePaths: ['/provider/workspaces/billing/action'] },
+                { href: '/provider/workspaces/billing/active', label: 'In progress', exact: true },
+                { href: '/provider/workspaces/billing/waiting', label: 'Waiting to start', exact: true },
+                { href: '/provider/workspaces/billing/completed', label: 'Completed requests', exact: true },
                 { href: '/provider/workspaces/billing/services', label: 'Browse services', exact: true },
             ],
         }];
     }
 
     return [{
-        href: '/provider',
+        href: isOrganizationOwner ? '/provider/governance' : '/provider',
         label: isOrganizationOwner ? 'Governance' : 'Dashboard',
         icon: isOrganizationOwner ? 'fa-solid fa-shield-halved' : 'fa-solid fa-gauge-high',
         exact: true,
         activePaths: isOrganizationOwner ? ['/provider/governance'] : [],
+        children: isOrganizationOwner ? [
+            { href: '/provider', label: 'Overview', exact: true, queryless: true },
+            { href: '/provider?view=responsibilities', label: 'Responsibilities', exact: true },
+            { href: '/provider?view=access', label: 'Access model', exact: true },
+            { href: '/provider?view=activity', label: 'Activity', exact: true },
+        ] : undefined,
     }, ...(canAccessPrograms ? [{
         href: '/provider/programs',
         label: 'Programs',
@@ -274,5 +305,7 @@ const navLinks = computed(() => usesDedicatedWorkspace
         logout-message="You will need to sign in again to continue using the provider portal."
         mobile-collapsible
         neutral-accent
+        sharp
+        navigation-label="Provider workspace"
     />
 </template>

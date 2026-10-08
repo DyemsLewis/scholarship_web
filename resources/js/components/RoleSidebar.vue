@@ -42,6 +42,14 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    sharp: {
+        type: Boolean,
+        default: false,
+    },
+    navigationLabel: {
+        type: String,
+        default: '',
+    },
 });
 
 const currentUrl = new URL(window.location.href);
@@ -191,8 +199,8 @@ async function requestLogout() {
 
         <div :class="['relative flex flex-col px-4 lg:h-full lg:min-h-0', mobileCollapsible ? 'min-h-0 py-3 lg:pb-4 lg:pt-5' : 'min-h-64 pb-4 pt-5']">
             <header :class="['flex shrink-0 items-center justify-between gap-3', mobileCollapsible && !mobileMenuOpen ? 'pb-0 lg:pb-4' : 'pb-4']">
-                <a :href="homeHref" class="group flex min-w-0 items-center gap-3 rounded-md px-1 py-1">
-                    <span :class="['flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-sm font-black transition', neutralAccent ? 'border border-white/15 bg-white/[0.08] text-white group-hover:bg-white/[0.13]' : 'bg-amber-300 text-slate-950 group-hover:bg-amber-200']">
+                <a :href="homeHref" :class="['group flex min-w-0 items-center gap-3 px-1 py-1', sharp ? 'rounded-sm' : 'rounded-md']">
+                    <span :class="['flex h-9 w-9 shrink-0 items-center justify-center text-sm font-black transition', sharp ? 'rounded-sm' : 'rounded-md', neutralAccent ? 'border border-white/15 bg-white/[0.08] text-white group-hover:bg-white/[0.13]' : 'bg-amber-300 text-slate-950 group-hover:bg-amber-200']">
                         <i :class="icon" aria-hidden="true"></i>
                     </span>
                     <span class="min-w-0">
@@ -207,7 +215,7 @@ async function requestLogout() {
                 <button
                     v-if="mobileCollapsible"
                     type="button"
-                    class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.1] hover:text-white lg:hidden"
+                    :class="['inline-flex h-10 shrink-0 items-center justify-center gap-2 border border-white/10 bg-white/[0.06] px-3 text-sm font-semibold text-slate-200 transition hover:bg-white/[0.1] hover:text-white lg:hidden', sharp ? 'rounded-sm' : 'rounded-md']"
                     :aria-expanded="mobileMenuOpen"
                     aria-controls="portal-mobile-navigation"
                     @click="mobileMenuOpen = !mobileMenuOpen"
@@ -225,6 +233,9 @@ async function requestLogout() {
                 ]"
                 aria-label="Portal navigation"
             >
+                <p v-if="navigationLabel" class="px-3 pb-2 pt-0.5 text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 sm:col-span-2 lg:col-span-1">
+                    {{ navigationLabel }}
+                </p>
                 <div
                     v-for="link in navLinks"
                     :key="link.href"
@@ -233,7 +244,8 @@ async function requestLogout() {
                         v-if="link.children?.length"
                         type="button"
                         :class="[
-                            'group relative flex min-h-10 w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-semibold transition',
+                            'group relative flex min-h-10 w-full items-center gap-3 px-3 py-2 text-left text-sm font-semibold transition',
+                            sharp ? 'rounded-sm' : 'rounded-md',
                             isGroupActive(link)
                                 ? 'bg-white/[0.09] text-white'
                                 : 'text-slate-400 hover:bg-white/[0.05] hover:text-white',
@@ -256,7 +268,8 @@ async function requestLogout() {
                             :href="child.href"
                             :aria-current="isActive(child) ? 'page' : undefined"
                             :class="[
-                                'rounded-md px-3 py-2 text-xs font-semibold transition',
+                                'px-3 py-2 text-xs font-semibold transition',
+                                sharp ? 'rounded-sm' : 'rounded-md',
                                 isActive(child)
                                     ? (neutralAccent ? 'bg-white/[0.12] text-white' : 'bg-amber-300 text-slate-950')
                                     : 'text-slate-500 hover:bg-white/[0.05] hover:text-white',
@@ -271,7 +284,8 @@ async function requestLogout() {
                         :href="link.href"
                         :aria-current="isActive(link) ? 'page' : undefined"
                         :class="[
-                            'group relative flex min-h-10 items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold transition',
+                            'group relative flex min-h-10 items-center gap-3 px-3 py-2 text-sm font-semibold transition',
+                            sharp ? 'rounded-sm' : 'rounded-md',
                             isActive(link)
                                 ? 'bg-white/[0.09] text-white'
                                 : 'text-slate-400 hover:bg-white/[0.05] hover:text-white',
@@ -288,7 +302,7 @@ async function requestLogout() {
 
             <div :class="['mt-4 shrink-0 border-t border-white/10 pt-3 lg:block', mobileCollapsible && !mobileMenuOpen ? 'hidden' : 'block']">
                 <div class="flex min-w-0 items-center gap-2.5 px-2 py-1.5">
-                    <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/[0.08] text-[11px] font-black', neutralAccent ? 'text-slate-200' : 'text-amber-200']">
+                    <span :class="['grid h-8 w-8 shrink-0 place-items-center bg-white/[0.08] text-[11px] font-black', sharp ? 'rounded-sm' : 'rounded-md', neutralAccent ? 'text-slate-200' : 'text-amber-200']">
                         {{ accountInitials }}
                     </span>
                     <span class="min-w-0">
@@ -302,7 +316,7 @@ async function requestLogout() {
                     <slot name="account-actions"></slot>
                     <button
                         type="button"
-                        class="group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300"
+                        :class="['group flex w-full items-center gap-3 px-3 py-2 text-sm font-semibold text-rose-400 transition hover:bg-rose-500/10 hover:text-rose-300', sharp ? 'rounded-sm' : 'rounded-md']"
                         @click="requestLogout"
                     >
                         <span class="grid h-6 w-6 shrink-0 place-items-center text-xs text-rose-400 transition group-hover:text-rose-300">

@@ -22,6 +22,16 @@ const responseMessage = ref('');
 const completionForm = ref({ rating: '', feedback: '' });
 const reopenReason = ref('');
 const meetingForm = ref({ meeting_scheduled_for: '', meeting_mode: 'online' });
+const serviceSectionOptions = [
+    { value: 'overview', label: 'Work plan', icon: 'fa-solid fa-list-check' },
+    { value: 'meeting', label: 'Meeting', icon: 'fa-regular fa-calendar' },
+    { value: 'files', label: 'Files', icon: 'fa-regular fa-folder-open' },
+    { value: 'messages', label: 'Messages', icon: 'fa-regular fa-message' },
+];
+const requestedServiceSection = new URLSearchParams(window.location.search).get('section');
+const activeServiceSection = ref(serviceSectionOptions.some((section) => section.value === requestedServiceSection)
+    ? requestedServiceSection
+    : 'overview');
 
 const supportingFiles = computed(() => purchase.value?.files?.filter((file) => file.category === 'supporting') ?? []);
 const deliverables = computed(() => purchase.value?.files?.filter((file) => file.category === 'deliverable') ?? []);
@@ -79,6 +89,13 @@ function applyPurchase(payload) {
         meeting_scheduled_for: dateTimeInput(payload?.meeting_scheduled_for),
         meeting_mode: payload?.meeting_mode ?? 'online',
     };
+}
+
+function changeServiceSection(section) {
+    activeServiceSection.value = section;
+    const url = new URL(window.location.href);
+    url.searchParams.set('section', section);
+    window.history.replaceState({}, '', url);
 }
 
 async function loadWorkspace() {
@@ -231,12 +248,29 @@ onMounted(loadWorkspace);
                         Payment must be confirmed before this workspace can be updated. Return to Services to continue or check the payment status.
                     </div>
 
+                    <nav class="mt-4 grid overflow-hidden border border-slate-300 bg-white sm:grid-cols-4" aria-label="Service record sections">
+                        <button
+                            v-for="section in serviceSectionOptions"
+                            :key="section.value"
+                            type="button"
+                            :aria-current="activeServiceSection === section.value ? 'page' : undefined"
+                            :class="[
+                                'flex min-h-12 items-center justify-center gap-2 border-b border-slate-200 px-3 py-2.5 text-sm font-bold transition last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0',
+                                activeServiceSection === section.value ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                            ]"
+                            @click="changeServiceSection(section.value)"
+                        >
+                            <i :class="[section.icon, activeServiceSection === section.value ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
+                            {{ section.label }}
+                        </button>
+                    </nav>
+
                     <div class="mt-4 space-y-4">
                         <div class="flex flex-col gap-4">
 
-                            <component :is="serviceWorkspaceComponent" class="order-1" :purchase="purchase" />
+                            <component :is="serviceWorkspaceComponent" v-show="activeServiceSection === 'overview'" class="order-1" :purchase="purchase" />
 
-                            <section class="provider-panel order-2 overflow-hidden">
+                            <section v-show="activeServiceSection === 'meeting'" class="provider-panel order-2 overflow-hidden">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
                                     <div>
                                         <h2 class="font-bold text-slate-950">{{ workspace.meetingTitle }}</h2>
@@ -289,12 +323,12 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section class="provider-panel order-3 overflow-hidden">
+                            <section v-show="activeServiceSection === 'files'" class="provider-panel order-3 overflow-hidden">
                                 <div class="border-b border-slate-200 p-4 sm:px-5">
                                     <h2 class="font-bold text-slate-950">{{ workspace.filesTitle }}</h2>
                                     <p class="mt-1 text-sm text-slate-500">{{ workspace.filesDescription }}</p>
                                 </div>
-                                <div class="grid gap-4 p-4 sm:p-5 lg:grid-cols-2">
+                                <div class="grid gap-5 p-4 sm:p-5">
                                     <div class="min-w-0">
                                         <h3 class="text-sm font-bold text-slate-950">{{ workspace.providerFilesLabel }}</h3>
                                         <div class="mt-3 divide-y divide-slate-200 rounded-md border border-slate-200">
@@ -325,7 +359,7 @@ onMounted(loadWorkspace);
                                 </div>
                             </section>
 
-                            <section class="provider-panel order-4 overflow-hidden">
+                            <section v-show="activeServiceSection === 'messages'" class="provider-panel order-4 overflow-hidden">
                                 <div class="border-b border-slate-200 p-4 sm:px-5">
                                     <h2 class="font-bold text-slate-950">Messages and history</h2>
                                     <p class="mt-1 text-sm text-slate-500">Keep service-related questions and responses in one record.</p>
@@ -350,7 +384,7 @@ onMounted(loadWorkspace);
                             </section>
                         </div>
 
-                        <div class="space-y-4">
+                        <div v-show="activeServiceSection === 'overview'" class="space-y-4">
                             <section v-if="purchase.fulfillment_status === 'provider_review'" class="rounded-lg border border-sky-200 bg-sky-50 p-5 shadow-sm">
                                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">Your decision</p>
                                 <h2 class="mt-1 text-lg font-bold text-slate-950">Review the completed work</h2>

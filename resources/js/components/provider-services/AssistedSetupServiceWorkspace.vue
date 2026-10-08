@@ -9,7 +9,7 @@ const steps = computed(() => props.purchase.milestones ?? []);
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <section class="overflow-hidden rounded border border-slate-300 bg-white shadow-sm">
         <header class="flex items-start gap-3 border-b border-slate-200 p-4 sm:px-5">
             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
                 <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>

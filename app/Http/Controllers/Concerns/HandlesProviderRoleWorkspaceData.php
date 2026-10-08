@@ -30,12 +30,11 @@ trait HandlesProviderRoleWorkspaceData
             'section' => ['sometimes', Rule::in(['overview', 'drafts', 'review', 'published', 'closed'])],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $section = $validated['section'] ?? 'overview';
         $search = Str::lower(trim((string) ($validated['search'] ?? '')));
         $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 10);
+        $perPage = 5;
 
         $owner = $coordinator->providerOrganizationOwner()->loadMissing('providerProfile');
         $today = CarbonImmutable::today();
@@ -225,15 +224,14 @@ trait HandlesProviderRoleWorkspaceData
         abort_unless($reviewer->hasPortalPermission('verify_applications'), 403);
 
         $validated = $request->validate([
-            'queue' => ['sometimes', Rule::in(['mine', 'unassigned', 'all'])],
+            'queue' => ['sometimes', Rule::in(['mine', 'unassigned', 'returned', 'history', 'all'])],
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'mine';
         $search = trim((string) ($validated['search'] ?? ''));
-        $perPage = (int) ($validated['per_page'] ?? 12);
+        $perPage = 5;
         $owner = $reviewer->providerOrganizationOwner()->loadMissing('providerProfile');
         $programs = $this->providerScholarshipsQuery($reviewer)
             ->orderBy('title')
@@ -246,13 +244,23 @@ trait HandlesProviderRoleWorkspaceData
         $reviewable = $this->providerApplicationsQuery($reviewer);
         $this->applyProviderApplicationFilter($reviewable, 'needs_review');
 
+        $history = $this->providerApplicationsQuery($reviewer)
+            ->where('reviewed_by', $reviewer->id)
+            ->whereNotNull('reviewed_at');
+
         if (! empty($validated['program_id'])) {
             $reviewable->where('scholarship_id', (int) $validated['program_id']);
+            $history->where('scholarship_id', (int) $validated['program_id']);
         }
 
         $mineCount = (clone $reviewable)->where('assigned_reviewer_id', $reviewer->id)->count();
         $unassignedCount = (clone $reviewable)->whereNull('assigned_reviewer_id')->count();
         $teamCount = (clone $reviewable)->count();
+        $returnedQuery = (clone $reviewable)
+            ->where('correction_status', 'submitted')
+            ->where(fn (Builder $query) => $query
+                ->where('assigned_reviewer_id', $reviewer->id)
+                ->orWhereNull('assigned_reviewer_id'));
         $oldestSubmittedAt = (clone $reviewable)->min('submitted_at');
 
         $nextReview = (clone $reviewable)
@@ -271,7 +279,7 @@ trait HandlesProviderRoleWorkspaceData
             ->orderBy('id')
             ->first();
 
-        $queueQuery = (clone $reviewable)
+        $queueQuery = (clone ($queue === 'history' ? $history : $reviewable))
             ->with([
                 'applicant.studentProfile',
                 'documents',
@@ -283,14 +291,24 @@ trait HandlesProviderRoleWorkspaceData
             $queueQuery->where('assigned_reviewer_id', $reviewer->id);
         } elseif ($queue === 'unassigned') {
             $queueQuery->whereNull('assigned_reviewer_id');
+        } elseif ($queue === 'returned') {
+            $queueQuery
+                ->where('correction_status', 'submitted')
+                ->where(fn (Builder $query) => $query
+                    ->where('assigned_reviewer_id', $reviewer->id)
+                    ->orWhereNull('assigned_reviewer_id'));
         }
 
         $this->applyProviderApplicationSearch($queueQuery, $search);
-        $queueQuery
-            ->orderByRaw("CASE WHEN correction_status = 'submitted' THEN 0 ELSE 1 END")
-            ->orderByRaw('CASE WHEN assigned_reviewer_id = ? THEN 0 WHEN assigned_reviewer_id IS NULL THEN 1 ELSE 2 END', [$reviewer->id])
-            ->orderBy('submitted_at')
-            ->orderBy('id');
+        if ($queue === 'history') {
+            $queueQuery->latest('reviewed_at')->latest('id');
+        } else {
+            $queueQuery
+                ->orderByRaw("CASE WHEN correction_status = 'submitted' THEN 0 ELSE 1 END")
+                ->orderByRaw('CASE WHEN assigned_reviewer_id = ? THEN 0 WHEN assigned_reviewer_id IS NULL THEN 1 ELSE 2 END', [$reviewer->id])
+                ->orderBy('submitted_at')
+                ->orderBy('id');
+        }
 
         $applications = $queueQuery->paginate($perPage);
         $applications->setCollection($applications->getCollection()
@@ -308,6 +326,8 @@ trait HandlesProviderRoleWorkspaceData
                 'unassigned' => $unassignedCount,
                 'team' => $teamCount,
                 'assigned_elsewhere' => max(0, $teamCount - $mineCount - $unassignedCount),
+                'returned' => $returnedQuery->count(),
+                'history' => (clone $history)->count(),
                 'oldest_wait_days' => $oldestSubmittedAt
                     ? max(0, (int) CarbonImmutable::parse($oldestSubmittedAt)->startOfDay()->diffInDays(CarbonImmutable::today()))
                     : 0,
@@ -344,11 +364,10 @@ trait HandlesProviderRoleWorkspaceData
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'setup';
         $search = trim((string) ($validated['search'] ?? ''));
-        $perPage = (int) ($validated['per_page'] ?? 12);
+        $perPage = 5;
         $owner = $officer->providerOrganizationOwner()->loadMissing('providerProfile');
         $programs = $this->providerScholarshipsQuery($officer)
             ->orderBy('title')
@@ -458,11 +477,10 @@ trait HandlesProviderRoleWorkspaceData
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'pending';
         $search = trim((string) ($validated['search'] ?? ''));
-        $perPage = (int) ($validated['per_page'] ?? 12);
+        $perPage = 5;
         $owner = $officer->providerOrganizationOwner()->loadMissing('providerProfile');
         $programs = $this->providerScholarshipsQuery($officer)
             ->withCount($this->providerProgramCountRelations())
@@ -574,11 +592,10 @@ trait HandlesProviderRoleWorkspaceData
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'awaiting';
         $search = trim((string) ($validated['search'] ?? ''));
-        $perPage = (int) ($validated['per_page'] ?? 12);
+        $perPage = 5;
         $owner = $officer->providerOrganizationOwner()->loadMissing('providerProfile');
         $programs = $this->providerScholarshipsQuery($officer)
             ->orderBy('title')
@@ -695,12 +712,11 @@ trait HandlesProviderRoleWorkspaceData
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'review';
         $search = Str::lower(trim((string) ($validated['search'] ?? '')));
         $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 12);
+        $perPage = 5;
         $owner = $officer->providerOrganizationOwner()->loadMissing('providerProfile');
         $programs = $this->providerScholarshipsQuery($officer)
             ->with(['monitoringPlan.requirements'])
@@ -848,12 +864,11 @@ trait HandlesProviderRoleWorkspaceData
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'issues';
         $search = Str::lower(trim((string) ($validated['search'] ?? '')));
         $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 12);
+        $perPage = 5;
         $owner = $officer->providerOrganizationOwner()->loadMissing('providerProfile');
         $programs = $this->providerScholarshipsQuery($officer)
             ->orderBy('title')
@@ -1192,13 +1207,12 @@ trait HandlesProviderRoleWorkspaceData
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'role' => ['sometimes', 'nullable', 'string', 'max:60'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:5', 'max:30'],
         ]);
         $queue = $validated['queue'] ?? 'attention';
         $search = Str::lower(trim((string) ($validated['search'] ?? '')));
         $role = trim((string) ($validated['role'] ?? ''));
         $page = (int) ($validated['page'] ?? 1);
-        $perPage = (int) ($validated['per_page'] ?? 12);
+        $perPage = 5;
         $owner = $administrator->providerOrganizationOwner()->loadMissing('providerProfile');
         $administratorPermissions = $administrator->effectivePortalPermissions();
         $administratorProgramIds = $administrator->assignedProviderProgramIds();

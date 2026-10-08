@@ -34,7 +34,7 @@ function changePage(page) {
         <div class="grid grid-cols-2 gap-2 sm:flex">
             <button
                 type="button"
-                class="min-h-10 rounded border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                class="min-h-10 rounded-sm border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                 :disabled="Number(pagination.current_page ?? 1) <= 1 || busy"
                 @click="changePage(Number(pagination.current_page) - 1)"
             >
@@ -42,7 +42,7 @@ function changePage(page) {
             </button>
             <button
                 type="button"
-                class="min-h-10 rounded border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                class="min-h-10 rounded-sm border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                 :disabled="Number(pagination.current_page ?? 1) >= Number(pagination.last_page ?? 1) || busy"
                 @click="changePage(Number(pagination.current_page) + 1)"
             >

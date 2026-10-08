@@ -20,6 +20,18 @@ class DemoProviderServiceSeeder extends Seeder
             ->where('email', env('TULAY_ARAL_EMAIL', 'tulayaral@scholarship.test'))
             ->first();
 
+        if (! $provider && app()->environment(['local', 'testing'])) {
+            $provider = User::query()
+                ->where('role', 'provider')
+                ->whereNull('parent_account_id')
+                ->where(function ($query): void {
+                    $query
+                        ->where('username', 'tulayaral')
+                        ->orWhere('email', 'programs@tulayaral.test');
+                })
+                ->first();
+        }
+
         if (! $admin || ! $provider) {
             $this->command?->warn('Demo admin or Tulay Aral provider account is missing. Provider services were not seeded.');
 
@@ -291,7 +303,7 @@ class DemoProviderServiceSeeder extends Seeder
             '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
             '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
             '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-            "<< /Length ".strlen($stream)." >>\nstream\n{$stream}endstream",
+            '<< /Length '.strlen($stream)." >>\nstream\n{$stream}endstream",
         ];
         $pdf = "%PDF-1.4\n";
         $offsets = [0];

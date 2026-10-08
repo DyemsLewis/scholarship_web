@@ -5,10 +5,12 @@ import ApplicantProfileProofModal from '../components/ApplicantProfileProofModal
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import ProviderDocumentReviewModal from '../components/ProviderDocumentReviewModal.vue';
+import ProviderPageHeader from '../components/ProviderPageHeader.vue';
+import ProviderPagination from '../components/ProviderPagination.vue';
 import ProviderProfileEvidencePanel from '../components/ProviderProfileEvidencePanel.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
+import ProviderWorkspaceState from '../components/ProviderWorkspaceState.vue';
 import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
-import TaskPageHeader from '../components/TaskPageHeader.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { decisionReasonOptions } from '../support/applicationDecisionReasons';
 import { formatFileSize, labelFromKey as formatKeyLabel } from '../support/display';
@@ -32,6 +34,45 @@ const application = ref(null);
 const pageSearchParams = new URLSearchParams(window.location.search);
 const requestedSection = pageSearchParams.get('section');
 const requestedReturnTo = pageSearchParams.get('return_to');
+const providerWorkspaceUrl = safeProviderUrl(window.portalUser?.provider_workspace_url);
+const requestedWorkspaceUrl = safeProviderUrl(requestedReturnTo);
+const detailWorkspacePath = requestedWorkspaceUrl.split('?')[0] || providerWorkspaceUrl;
+const detailContext = {
+    '/provider/workspaces/reviews': {
+        eyebrow: 'Application reviewer workspace',
+        title: 'Application verification record',
+        description: 'Check applicant eligibility and supporting evidence before recording the screening result.',
+        icon: 'fa-solid fa-magnifying-glass-chart',
+        defaultSection: 'eligibility',
+    },
+    '/provider/workspaces/selection': {
+        eyebrow: 'Selection officer workspace',
+        title: 'Selection activity record',
+        description: 'Review the completed selection stage and record the appropriate result.',
+        icon: 'fa-solid fa-calendar-check',
+        defaultSection: 'decision',
+    },
+    '/provider/workspaces/decisions': {
+        eyebrow: 'Decision officer workspace',
+        title: 'Final decision record',
+        description: 'Review the completed application evidence and record the final scholarship outcome.',
+        icon: 'fa-solid fa-gavel',
+        defaultSection: 'decision',
+    },
+    '/provider/workspaces/recipients': {
+        eyebrow: 'Recipient officer workspace',
+        title: 'Recipient onboarding record',
+        description: 'Review the selected applicant, agreement response, and current support status.',
+        icon: 'fa-solid fa-user-shield',
+        defaultSection: 'decision',
+    },
+}[detailWorkspacePath] ?? {
+    eyebrow: 'Applicant workflow',
+    title: 'Applicant record',
+    description: 'Review one part of the applicant record at a time and continue through the appropriate workflow.',
+    icon: 'fa-solid fa-user-check',
+    defaultSection: 'applicant',
+};
 const normalizedRequestedSection = requestedSection === 'review'
     ? 'eligibility'
     : requestedSection === 'schedule'
@@ -40,8 +81,13 @@ const normalizedRequestedSection = requestedSection === 'review'
 const validSections = ['applicant', 'eligibility', 'documents', 'decision', 'history'];
 const activeSection = ref(validSections.includes(normalizedRequestedSection)
     ? normalizedRequestedSection
-    : 'applicant');
+    : detailContext.defaultSection);
 const activeApplicantView = ref('profile');
+const eligibilityPage = ref(1);
+const rubricPage = ref(1);
+const documentPage = ref(1);
+const historyPage = ref(1);
+const detailPageSize = 5;
 const showDssDetails = ref(false);
 const reviewForm = ref(emptyReviewForm());
 const selectedDocument = ref(null);
@@ -81,7 +127,8 @@ const primaryDetailSections = [
     { key: 'documents', label: 'Documents', icon: 'fa-solid fa-file-circle-check' },
     { key: 'decision', label: 'Decision', icon: 'fa-solid fa-gavel' },
 ];
-const secondaryDetailSections = [
+const detailSections = [
+    ...primaryDetailSections,
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ];
 const applicantDetailViews = [
@@ -133,12 +180,8 @@ function safeProviderUrl(value) {
 }
 
 const applicationListUrl = computed(() => safeProviderUrl(requestedReturnTo)
-    || (application.value?.scholarship?.id
-        ? `/provider/programs/${application.value.scholarship.id}/applications/review`
-        : '/provider/applications/review'));
-const programApplicantUrl = computed(() => application.value?.scholarship?.id
-    ? `/provider/programs/${application.value.scholarship.id}/applications/review`
-    : '/provider/applications/review');
+    || providerWorkspaceUrl
+    || '/provider/workspaces/reviews');
 
 function applicationNavigationUrl(item) {
     if (!item?.url) {
@@ -189,6 +232,11 @@ const customStatusLabels = {
 };
 
 const eligibilityCriteria = computed(() => application.value?.eligibility_breakdown?.criteria ?? []);
+const paginatedEligibilityCriteria = computed(() => eligibilityCriteria.value.slice(
+    (eligibilityPage.value - 1) * detailPageSize,
+    eligibilityPage.value * detailPageSize,
+));
+const eligibilityPagination = computed(() => clientPagination(eligibilityCriteria.value.length, eligibilityPage.value));
 const eligibilityConditionResults = computed(() => application.value?.eligibility_breakdown?.condition_results ?? []);
 const dssCriteria = computed(() => application.value?.dss_breakdown?.criteria ?? []);
 const dssComparison = computed(() => application.value?.dss_explanation?.comparison ?? {
@@ -202,6 +250,11 @@ const dssComparison = computed(() => application.value?.dss_explanation?.compari
     not_applicable: 0,
 });
 const rubricReview = computed(() => application.value?.rubric_review ?? { criteria: [], completed: 0, total_criteria: 0 });
+const paginatedRubricCriteria = computed(() => (rubricReview.value.criteria ?? []).slice(
+    (rubricPage.value - 1) * detailPageSize,
+    rubricPage.value * detailPageSize,
+));
+const rubricPagination = computed(() => clientPagination((rubricReview.value.criteria ?? []).length, rubricPage.value));
 const rubricDraftSummary = computed(() => {
     const criteria = rubricReview.value.criteria ?? [];
     let completed = 0;
@@ -425,15 +478,6 @@ const hasGuardianDetails = computed(() => {
         || applicant?.guardian_is_account_owner,
     );
 });
-const activePrimarySectionIndex = computed(() => primaryDetailSections.findIndex((section) => section.key === activeSection.value));
-const previousPrimarySection = computed(() => (
-    activePrimarySectionIndex.value > 0 ? primaryDetailSections[activePrimarySectionIndex.value - 1] : null
-));
-const nextPrimarySection = computed(() => (
-    activePrimarySectionIndex.value >= 0 && activePrimarySectionIndex.value < primaryDetailSections.length - 1
-        ? primaryDetailSections[activePrimarySectionIndex.value + 1]
-        : null
-));
 const documentReviewComplete = computed(() => {
     const readiness = application.value?.document_readiness;
     const required = Number(readiness?.required ?? 0);
@@ -676,6 +720,36 @@ const applicationFileRows = computed(() => {
 
     return rows;
 });
+const paginatedApplicationFileRows = computed(() => (
+    applicationFileRows.value.slice(
+        (documentPage.value - 1) * detailPageSize,
+        documentPage.value * detailPageSize,
+    )
+));
+const documentPagination = computed(() => clientPagination(applicationFileRows.value.length, documentPage.value));
+const paginatedTimeline = computed(() => (
+    timeline.value.slice(
+        (historyPage.value - 1) * detailPageSize,
+        historyPage.value * detailPageSize,
+    )
+));
+const historyPagination = computed(() => clientPagination(timeline.value.length, historyPage.value));
+
+function clientPagination(total, requestedPage) {
+    const lastPage = Math.max(1, Math.ceil(total / detailPageSize));
+    const currentPage = Math.min(Math.max(Number(requestedPage) || 1, 1), lastPage);
+    const from = total ? ((currentPage - 1) * detailPageSize) + 1 : 0;
+
+    return {
+        current_page: currentPage,
+        last_page: lastPage,
+        per_page: detailPageSize,
+        total,
+        from,
+        to: total ? Math.min(from + detailPageSize - 1, total) : 0,
+    };
+}
+
 function emptyReviewForm() {
     return {
         status: 'submitted',
@@ -730,28 +804,6 @@ function eligibilityStatusLabel(criterion) {
     }
 
     return 'No restriction';
-}
-
-function sectionSummary(sectionKey) {
-    if (sectionKey === 'applicant') {
-        return profileVerificationLabel(application.value?.applicant?.profile_verification_status);
-    }
-
-    if (sectionKey === 'eligibility') {
-        return `${application.value?.eligibility_breakdown?.score ?? application.value?.dss_score ?? 0}% match`;
-    }
-
-    if (sectionKey === 'documents') {
-        const readiness = application.value?.document_readiness;
-
-        return `${readiness?.accepted ?? 0}/${readiness?.required ?? applicationRequirements.value.length} accepted`;
-    }
-
-    if (sectionKey === 'decision') {
-        return statusLabel(application.value?.status);
-    }
-
-    return `${timeline.value.length} ${timeline.value.length === 1 ? 'event' : 'events'}`;
 }
 
 function scheduleTypeLabel(type) {
@@ -851,6 +903,10 @@ function applicantAcademicLabel(applicant) {
 
 function applyApplication(payload) {
     application.value = payload;
+    eligibilityPage.value = 1;
+    rubricPage.value = 1;
+    documentPage.value = 1;
+    historyPage.value = 1;
     reviewedAcademicScale.value = payload?.applicant?.grading_scale ?? '';
     reviewedAcademicResult.value = payload?.applicant?.gwa ?? '';
     selectedReviewActionKey.value = '';
@@ -1315,113 +1371,80 @@ onMounted(loadApplication);
         <section class="provider-page">
             <div class="provider-container">
                 <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
-                    <a href="/provider/programs" class="font-bold text-slate-600 transition hover:text-slate-950">Programs</a>
+                    <a :href="applicationListUrl" class="font-bold text-slate-600 transition hover:text-slate-950"><i class="fa-solid fa-arrow-left mr-2 text-xs" aria-hidden="true"></i>Back to workspace</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <a :href="programApplicantUrl" class="max-w-72 truncate font-bold text-slate-600 transition hover:text-slate-950">
-                        {{ application?.scholarship?.title || 'Program applicants' }}
-                    </a>
-                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="truncate font-semibold text-slate-950">Review application</span>
+                    <span class="max-w-72 truncate font-semibold text-slate-950">{{ application?.applicant?.name || 'Applicant record' }}</span>
                 </nav>
 
-                <TaskPageHeader
-                    theme="provider"
-                    eyebrow="Applications"
-                    title="Review record"
-                    description="Check the applicant, eligibility, and supporting files before recording the next result."
-                    icon="fa-solid fa-user-check"
+                <ProviderPageHeader
+                    :eyebrow="detailContext.eyebrow"
+                    :title="detailContext.title"
+                    :description="detailContext.description"
+                    :icon="detailContext.icon"
+                    :show-role-guide="false"
                 >
+                    <template v-if="application" #meta>
+                        <span><i class="fa-solid fa-user mr-2 text-slate-400" aria-hidden="true"></i>{{ application.applicant?.name || 'Applicant record' }}</span>
+                        <span><i class="fa-solid fa-graduation-cap mr-2 text-slate-400" aria-hidden="true"></i>{{ application.scholarship?.title || 'Scholarship program' }}</span>
+                        <span><i class="fa-regular fa-clock mr-2 text-slate-400" aria-hidden="true"></i>{{ application.submitted_at || 'Submission date unavailable' }}</span>
+                    </template>
                     <template v-if="application" #actions>
                         <div class="flex flex-wrap items-center gap-2">
-                            <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
-                                {{ workflow.application_state_label || statusLabel(application.status) }}
+                            <span :class="['inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
+                                <i class="fa-solid fa-circle-dot" aria-hidden="true"></i>{{ workflow.application_state_label || statusLabel(application.status) }}
                             </span>
                             <button
                                 v-if="activeSection !== 'decision'"
                                 type="button"
-                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                class="inline-flex items-center justify-center gap-2 bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                                 @click="activeSection = 'decision'"
                             >
-                                Record decision
+                                Open current action
                                 <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </button>
                         </div>
                     </template>
-                </TaskPageHeader>
+                </ProviderPageHeader>
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-                    Loading applicant review...
-                </div>
+                <ProviderWorkspaceState v-if="isLoading" class="mt-4" title="Loading applicant record" message="Preparing the requested workflow record and supporting evidence." />
 
-                <div v-else-if="errorMessage && !application" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
-                    {{ errorMessage }}
-                </div>
+                <ProviderWorkspaceState v-else-if="errorMessage && !application" class="mt-4" tone="error" title="Applicant record is unavailable" :message="errorMessage" />
 
                 <div v-else-if="application" class="mt-4 space-y-4">
-                    <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
+                    <p v-if="errorMessage" class="border border-rose-300 border-l-4 bg-rose-50 p-4 text-sm font-semibold text-rose-800 shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
                         {{ errorMessage }}
                     </p>
-                    <section class="provider-panel overflow-hidden">
+                    <section class="overflow-hidden border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
                         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Review steps</p>
+                            <p class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-folder-open text-slate-400" aria-hidden="true"></i>Applicant record menu</p>
                             <div v-if="applicationNavigation.total > 1" class="flex items-center gap-1 text-xs font-bold text-slate-600">
-                                <a v-if="applicationNavigation.previous_application" :href="applicationNavigationUrl(applicationNavigation.previous_application)" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 bg-white hover:bg-slate-100" aria-label="Previous applicant"><i class="fa-solid fa-chevron-left text-[10px]" aria-hidden="true"></i></a>
-                                <span class="px-2">{{ applicationNavigation.position }} of {{ applicationNavigation.total }}</span>
-                                <a v-if="applicationNavigation.next_application" :href="applicationNavigationUrl(applicationNavigation.next_application)" class="grid h-8 w-8 place-items-center rounded-md border border-slate-200 bg-white hover:bg-slate-100" aria-label="Next applicant"><i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i></a>
+                                <a v-if="applicationNavigation.previous_application" :href="applicationNavigationUrl(applicationNavigation.previous_application)" class="grid h-8 w-8 place-items-center border border-slate-300 bg-white hover:bg-slate-100" aria-label="Previous applicant"><i class="fa-solid fa-chevron-left text-[10px]" aria-hidden="true"></i></a>
+                                <span class="px-2">Record {{ applicationNavigation.position }} of {{ applicationNavigation.total }}</span>
+                                <a v-if="applicationNavigation.next_application" :href="applicationNavigationUrl(applicationNavigation.next_application)" class="grid h-8 w-8 place-items-center border border-slate-300 bg-white hover:bg-slate-100" aria-label="Next applicant"><i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i></a>
                             </div>
                         </div>
-                        <nav class="flex gap-1 overflow-x-auto p-1" aria-label="Applicant review steps">
+                        <nav class="flex overflow-x-auto" aria-label="Applicant record sections">
                             <button
-                                v-for="(section, index) in primaryDetailSections"
+                                v-for="section in detailSections"
                                 :key="section.key"
                                 type="button"
-                                :aria-current="activeSection === section.key ? 'step' : undefined"
+                                :aria-current="activeSection === section.key ? 'page' : undefined"
                                 :class="[
-                                    'flex min-w-40 flex-1 items-center gap-2.5 rounded-md px-3 py-2.5 text-left transition',
+                                    'inline-flex min-w-32 flex-1 items-center justify-center gap-2 border-r border-slate-200 px-3 py-3 text-sm font-bold transition last:border-r-0',
                                     activeSection === section.key
                                         ? 'bg-slate-950 text-white'
                                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
                                 ]"
                                 @click="activeSection = section.key"
                             >
-                                <span
-                                    :class="[
-                                        'grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs font-bold',
-                                        activeSection === section.key ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-600',
-                                    ]"
-                                >
-                                    <i :class="section.icon" aria-hidden="true"></i>
-                                </span>
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate text-sm font-bold">{{ index + 1 }}. {{ section.label }}</span>
-                                </span>
-                            </button>
-                        </nav>
-
-                        <nav class="flex flex-wrap items-center gap-1 border-t border-slate-200 bg-slate-50 px-3 py-2" aria-label="Applicant follow-up sections">
-                            <span class="mr-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Record</span>
-                            <button
-                                v-for="section in secondaryDetailSections"
-                                :key="section.key"
-                                type="button"
-                                :aria-current="activeSection === section.key ? 'page' : undefined"
-                                :class="[
-                                    'inline-flex items-center gap-2 rounded-md px-3 py-2 text-xs font-bold transition',
-                                    activeSection === section.key
-                                        ? 'bg-white text-slate-950 shadow-sm ring-1 ring-slate-200'
-                                        : 'text-slate-600 hover:bg-white hover:text-slate-950',
-                                ]"
-                                @click="activeSection = section.key"
-                            >
-                                <i :class="section.icon" aria-hidden="true"></i>
-                                {{ section.label }}
+                                <i :class="section.icon" aria-hidden="true"></i>{{ section.label }}
                             </button>
                         </nav>
                     </section>
 
                     <div class="block">
                         <div v-if="activeSection !== 'applicant'" class="flex flex-col gap-5">
-                            <section v-if="activeSection === 'eligibility'" class="provider-panel order-2 overflow-hidden">
+                            <section v-if="activeSection === 'eligibility'" class="order-2 overflow-hidden border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
                                 <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">Eligibility check</p>
@@ -1447,42 +1470,22 @@ onMounted(loadApplication);
                                     <EligibilityConditionList class="mt-3" :conditions="eligibilityConditionResults" audience="reviewer" />
                                 </div>
 
-                                <div v-if="eligibilityCriteria.length" class="grid gap-px bg-slate-200 md:grid-cols-2">
-                                    <article v-for="criterion in eligibilityCriteria" :key="criterion.key" class="bg-white p-4">
-                                        <div class="flex items-start justify-between gap-3">
-                                            <div class="flex min-w-0 items-center gap-2">
-                                                <i :class="[eligibilityStatusIcon(criterion.status), eligibilityStatusTextClass(criterion.status)]" aria-hidden="true"></i>
-                                                <p class="font-bold text-slate-950">{{ criterion.label }}</p>
-                                            </div>
-                                            <span :class="['shrink-0 rounded px-2 py-1 text-[10px] font-bold uppercase', eligibilityStatusClass(criterion.status)]">
-                                                {{ eligibilityStatusLabel(criterion) }}
-                                            </span>
-                                        </div>
-                                        <p class="mt-2 text-xs leading-5 text-slate-600">{{ criterion.note }}</p>
-                                        <dl class="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                                            <div class="rounded-md bg-slate-50 p-2.5">
-                                                <dt class="font-semibold text-slate-500">Applicant</dt>
-                                                <dd class="mt-1 break-words font-bold text-slate-800">{{ eligibilityValueLabel(criterion.student_value, 'Not provided') }}</dd>
-                                            </div>
-                                            <div class="rounded-md bg-slate-50 p-2.5">
-                                                <dt class="font-semibold text-slate-500">Program rule</dt>
-                                                <dd class="mt-1 break-words font-bold text-slate-800">{{ eligibilityValueLabel(criterion.requirement, 'Open to all') }}</dd>
-                                            </div>
-                                        </dl>
-                                        <div v-if="criterion.equivalence" class="mt-3 border-l-2 border-amber-400 bg-amber-50 px-3 py-2.5 text-xs">
-                                            <p class="font-bold text-slate-900">Reference equivalents</p>
-                                            <div class="mt-1.5 grid gap-1 text-slate-700 sm:grid-cols-2">
-                                                <p v-if="criterion.equivalence.applicant">
-                                                    <span class="font-semibold">Applicant:</span> {{ criterion.equivalence.applicant }}
-                                                </p>
-                                                <p v-if="criterion.equivalence.requirement">
-                                                    <span class="font-semibold">Required grade:</span> {{ criterion.equivalence.requirement }}
-                                                </p>
-                                            </div>
-                                            <p class="mt-1.5 leading-5 text-slate-600">{{ criterion.equivalence.notice }}</p>
-                                        </div>
-                                    </article>
+                                <div v-if="eligibilityCriteria.length" class="portal-table-scroll">
+                                    <table class="portal-data-table min-w-[68rem] table-fixed">
+                                        <caption class="sr-only">Published eligibility criteria comparison</caption>
+                                        <colgroup><col class="w-[29%]"><col class="w-[23%]"><col class="w-[28%]"><col class="w-[20%]"></colgroup>
+                                        <thead><tr><th scope="col">Criterion</th><th scope="col">Applicant value</th><th scope="col">Program rule</th><th scope="col">Result</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="criterion in paginatedEligibilityCriteria" :key="criterion.key">
+                                                <td><p class="font-semibold text-slate-950"><i :class="[eligibilityStatusIcon(criterion.status), eligibilityStatusTextClass(criterion.status), 'mr-2 w-4 text-center']" aria-hidden="true"></i>{{ criterion.label }}</p><p class="mt-0.5 text-xs text-slate-500">{{ criterion.note }}</p></td>
+                                                <td><p class="font-semibold text-slate-800">{{ eligibilityValueLabel(criterion.student_value, 'Not provided') }}</p><p v-if="criterion.equivalence?.applicant" class="mt-0.5 text-xs text-slate-500">Equivalent: {{ criterion.equivalence.applicant }}</p></td>
+                                                <td><p class="font-semibold text-slate-800">{{ eligibilityValueLabel(criterion.requirement, 'Open to all') }}</p><p v-if="criterion.equivalence?.requirement" class="mt-0.5 text-xs text-slate-500">Equivalent: {{ criterion.equivalence.requirement }}</p></td>
+                                                <td><span :class="['inline-flex items-center gap-1.5 px-2 py-1 text-[0.65rem] font-black uppercase tracking-wide', eligibilityStatusClass(criterion.status)]"><i :class="eligibilityStatusIcon(criterion.status)" aria-hidden="true"></i>{{ eligibilityStatusLabel(criterion) }}</span><p v-if="criterion.equivalence?.notice" class="mt-1 text-xs text-slate-500">{{ criterion.equivalence.notice }}</p></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
+                                <ProviderPagination v-if="eligibilityCriteria.length" :pagination="eligibilityPagination" item-label="criteria" @change="eligibilityPage = $event" />
                                 <p v-else class="p-5 text-sm leading-6 text-slate-600">This program does not have structured eligibility rules to compare.</p>
 
                                 <div class="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1491,7 +1494,7 @@ onMounted(loadApplication);
                                     </p>
                                     <button
                                         type="button"
-                                        class="inline-flex w-fit shrink-0 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-100"
+                                        class="inline-flex w-fit shrink-0 items-center gap-2 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-100"
                                         @click="showDssDetails = true"
                                     >
                                         View calculation
@@ -1516,7 +1519,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'decision'" class="order-5 rounded-lg border border-slate-300 bg-white p-5 shadow-sm">
+                            <section v-if="activeSection === 'decision'" class="order-5 border border-slate-300 bg-white p-5 shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
@@ -1897,22 +1900,13 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'decision' && !postDecisionSummary && rubricReview.criteria?.length" class="provider-panel order-4 p-5">
-                                <div>
-                                    <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                            Review Rubric
-                                        </p>
-                                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                            Consistent applicant scoring
-                                        </h3>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            Score every provider criterion from 0 to 100 before saving the review or decision.
-                                        </p>
-                                    </div>
+                            <section v-if="activeSection === 'decision' && !postDecisionSummary && rubricReview.criteria?.length" class="order-4 border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                                <div class="border-b border-slate-200 px-5 py-4">
+                                    <h3 class="flex items-center gap-2 text-lg font-bold text-slate-950"><i class="fa-solid fa-chart-simple text-sm text-slate-500" aria-hidden="true"></i>Consistent applicant scoring</h3>
+                                    <p class="mt-1 text-sm text-slate-500">Score every provider criterion from 0 to 100 before saving the review or decision.</p>
                                 </div>
 
-                                <div class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                <div class="border-b border-slate-200 bg-slate-50 px-5 py-3">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                                         <div>
                                             <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Rubric progress</p>
@@ -1935,127 +1929,58 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div class="mt-4 grid gap-3">
-                                    <div
-                                        v-for="criterion in rubricReview.criteria"
-                                        :key="criterion.key"
-                                        class="grid gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-center"
-                                    >
-                                        <div>
-                                            <div class="flex flex-wrap items-center gap-2">
-                                                <p class="font-bold text-slate-950">{{ criterion.label }}</p>
-                                                <span class="text-xs font-bold text-rose-600">Required</span>
-                                                <span class="rounded bg-white px-2 py-1 text-xs font-bold text-slate-500 ring-1 ring-slate-200">
-                                                    {{ criterion.weight }}%
-                                                </span>
-                                            </div>
-                                            <p v-if="criterion.guidance" class="mt-1 text-xs leading-5 text-slate-500">
-                                                {{ criterion.guidance }}
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <label :for="`rubric-score-${criterion.key}`" class="sr-only">
-                                                {{ criterion.label }} score
-                                            </label>
-                                            <input
-                                                :id="`rubric-score-${criterion.key}`"
-                                                v-model.number="rubricScores[criterion.key]"
-                                                type="number"
-                                                min="0"
-                                                max="100"
-                                                step="1"
-                                                placeholder="0-100"
-                                                required
-                                                :class="inputClass"
-                                            >
-                                        </div>
-                                    </div>
+                                <div class="portal-table-scroll">
+                                    <table class="portal-data-table min-w-[48rem] table-fixed">
+                                        <caption class="sr-only">Provider review rubric</caption>
+                                        <colgroup><col class="w-[58%]"><col class="w-[17%]"><col class="w-[25%]"></colgroup>
+                                        <thead><tr><th scope="col">Criterion</th><th scope="col">Weight</th><th scope="col">Score</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="criterion in paginatedRubricCriteria" :key="criterion.key">
+                                                <td><p class="font-semibold text-slate-950"><i class="fa-solid fa-asterisk mr-2 text-[0.55rem] text-rose-600" aria-hidden="true"></i>{{ criterion.label }}</p><p v-if="criterion.guidance" class="mt-0.5 text-xs text-slate-500">{{ criterion.guidance }}</p></td>
+                                                <td class="font-bold text-slate-800">{{ criterion.weight }}%</td>
+                                                <td><label :for="`rubric-score-${criterion.key}`" class="sr-only">{{ criterion.label }} score</label><input :id="`rubric-score-${criterion.key}`" v-model.number="rubricScores[criterion.key]" type="number" min="0" max="100" step="1" placeholder="0–100" required class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-amber-500 focus:ring-3 focus:ring-amber-100"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
+                                <ProviderPagination :pagination="rubricPagination" item-label="criteria" @change="rubricPage = $event" />
 
-                                <p class="mt-3 text-xs leading-5 text-slate-500">
+                                <p class="border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs leading-5 text-slate-500">
                                     {{ rubricReview.decision_notice }} Use the final decision section below to save these scores.
                                 </p>
                             </section>
 
-                            <section v-if="activeSection === 'documents'" class="provider-panel p-5">
-                                <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <section v-if="activeSection === 'documents'" class="border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                                <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
-                                        <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                            Documents
-                                        </p>
-                                        <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                            Document checklist
-                                        </h3>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">
-                                            Open an uploaded file to review it and record your decision.
-                                        </p>
+                                        <h3 class="flex items-center gap-2 text-lg font-bold text-slate-950"><i class="fa-solid fa-file-circle-check text-sm text-slate-500" aria-hidden="true"></i>Document checklist</h3>
+                                        <p class="mt-1 text-sm text-slate-500">Open an uploaded file to review it and record your decision.</p>
                                     </div>
-                                    <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                    <span class="bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         {{ application.document_readiness?.uploaded ?? 0 }} of {{ application.document_readiness?.required ?? applicationRequirements.length }} uploaded
                                     </span>
                                 </div>
 
-                                <div v-if="applicationFileRows.length" class="mt-4 overflow-hidden rounded-md border border-slate-200 bg-white">
-                                    <div
-                                        v-for="row in applicationFileRows"
-                                        :key="row.name"
-                                        class="flex flex-col gap-3 border-b border-slate-200 p-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-                                    >
-                                        <div class="flex min-w-0 items-start gap-3">
-                                            <span
-                                                :class="[
-                                                    'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
-                                                    row.document
-                                                        ? 'bg-slate-100 text-slate-700'
-                                                        : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500',
-                                                ]"
-                                            >
-                                                <i :class="row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file'"></i>
-                                            </span>
-
-                                            <div class="min-w-0">
-                                                <div class="flex flex-wrap items-center gap-2">
-                                                    <p class="font-bold text-slate-950">{{ row.name }}</p>
-                                                    <span v-if="!row.required" class="rounded bg-slate-100 px-2 py-0.5 text-[0.65rem] font-bold uppercase text-slate-500">
-                                                        Supporting file
-                                                    </span>
-                                                </div>
-                                                <p v-if="row.document" class="mt-1 truncate text-xs text-slate-500">
-                                                    {{ row.document.original_name }} - {{ formatFileSize(row.document.size) }} - {{ row.document.uploaded_at }}
-                                                </p>
-                                                <p v-else :class="['mt-1 text-xs font-semibold', row.required ? 'text-amber-700' : 'text-slate-500']">
-                                                    {{ row.required ? 'Applicant has not uploaded this file' : 'Optional file not provided' }}
-                                                </p>
-                                                <p v-if="row.document?.review_notes" class="mt-1 line-clamp-1 text-xs text-slate-600">
-                                                    Review note: {{ row.document.review_notes }}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                                            <span
-                                                :class="[
-                                                    'h-fit rounded-md px-2.5 py-2 text-xs font-bold uppercase',
-                                                    row.document
-                                                        ? documentStatusClass(row.document.status)
-                                                        : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500',
-                                                ]"
-                                            >
-                                                {{ row.document ? labelFromKey(row.document.status || 'pending') : row.required ? 'Not uploaded' : 'Optional' }}
-                                            </span>
-                                            <button
-                                                v-if="row.document"
-                                                type="button"
-                                                class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-slate-800"
-                                                @click="openDocumentReview(row.document)"
-                                            >
-                                                <i class="fa-regular fa-eye"></i>
-                                                View
-                                            </button>
-                                        </div>
-                                    </div>
+                                <div v-if="applicationFileRows.length" class="portal-table-scroll">
+                                    <table class="portal-data-table min-w-[64rem] table-fixed">
+                                        <caption class="sr-only">Application document checklist</caption>
+                                        <colgroup><col class="w-[31%]"><col class="w-[29%]"><col class="w-[15%]"><col class="w-[15%]"><col class="w-[10%]"></colgroup>
+                                        <thead><tr><th scope="col">Requirement</th><th scope="col">Submitted file</th><th scope="col">Uploaded</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="row in paginatedApplicationFileRows" :key="row.name">
+                                                <td><p class="font-semibold text-slate-950"><i :class="[row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file', 'mr-2 w-4 text-center text-slate-400']" aria-hidden="true"></i>{{ row.name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ row.required ? 'Required document' : 'Supporting file' }}</p></td>
+                                                <td><p v-if="row.document" class="truncate font-semibold text-slate-800">{{ row.document.original_name }}</p><p v-if="row.document" class="mt-0.5 text-xs text-slate-500">{{ formatFileSize(row.document.size) }}</p><p v-else :class="['font-semibold', row.required ? 'text-amber-700' : 'text-slate-500']">{{ row.required ? 'Not uploaded' : 'Not provided' }}</p></td>
+                                                <td class="text-slate-600">{{ row.document?.uploaded_at || '—' }}</td>
+                                                <td><span :class="['inline-flex items-center gap-1.5 px-2 py-1 text-[0.65rem] font-black uppercase tracking-wide', row.document ? documentStatusClass(row.document.status) : row.required ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500']"><i :class="row.document ? 'fa-solid fa-circle-dot' : 'fa-solid fa-minus'" aria-hidden="true"></i>{{ row.document ? labelFromKey(row.document.status || 'pending') : row.required ? 'Missing' : 'Optional' }}</span></td>
+                                                <td><button v-if="row.document" type="button" class="inline-flex items-center border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" @click="openDocumentReview(row.document)"><i class="fa-regular fa-eye mr-2" aria-hidden="true"></i>Open</button><span v-else class="text-xs text-slate-400">No file</span></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
-                                <div v-else class="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                                <ProviderPagination v-if="applicationFileRows.length" :pagination="documentPagination" item-label="documents" @change="documentPage = $event" />
+                                <div v-else class="px-6 py-10 text-center text-sm text-slate-600">
+                                    <i class="fa-regular fa-folder-open text-2xl text-slate-300" aria-hidden="true"></i>
+                                    <p class="mt-3 font-semibold text-slate-900">No document requirements</p>
                                     This application does not have any document requirements yet.
                                 </div>
                             </section>
@@ -2079,31 +2004,34 @@ onMounted(loadApplication);
                                 @open="openProfileProof"
                             />
 
-                            <section v-if="activeSection === 'history' && timeline.length" class="provider-panel p-5">
-                                <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                    Timeline
-                                </p>
-                                <h3 class="mt-2 text-xl font-bold text-slate-950">
-                                    Review history
-                                </h3>
-                                <div class="mt-4 grid gap-2">
-                                    <div v-for="event in timeline" :key="event.id" class="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                                        <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                                            <p class="font-bold text-slate-950">{{ statusLabel(event.to_status) }}</p>
-                                            <p class="text-xs text-slate-500">{{ event.changed_at || 'Recently' }}</p>
-                                        </div>
-                                        <p class="mt-1 text-xs text-slate-500">
-                                            By {{ event.actor || 'System' }}
-                                            <span v-if="event.decision_reason"> - {{ labelFromKey(event.decision_reason) }}</span>
-                                        </p>
-                                        <p v-if="event.review_notes" class="mt-2 leading-6 text-slate-600">
-                                            {{ event.review_notes }}
-                                        </p>
-                                    </div>
+                            <section v-if="activeSection === 'history' && timeline.length" class="border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                                <header class="border-b border-slate-200 px-5 py-4">
+                                    <h3 class="flex items-center gap-2 text-lg font-bold text-slate-950"><i class="fa-solid fa-clock-rotate-left text-sm text-slate-500" aria-hidden="true"></i>Review history</h3>
+                                    <p class="mt-1 text-sm text-slate-500">Showing five recorded changes per page.</p>
+                                </header>
+                                <div class="portal-table-scroll">
+                                    <table class="portal-data-table min-w-[58rem] table-fixed">
+                                        <caption class="sr-only">Applicant review history</caption>
+                                        <colgroup><col class="w-[20%]"><col class="w-[18%]"><col class="w-[20%]"><col class="w-[42%]"></colgroup>
+                                        <thead><tr><th scope="col">Status</th><th scope="col">Changed</th><th scope="col">Recorded by</th><th scope="col">Reason and note</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="event in paginatedTimeline" :key="event.id">
+                                                <td><span :class="['inline-flex items-center gap-1.5 px-2 py-1 text-[0.65rem] font-black uppercase tracking-wide', statusClass(event.to_status)]"><i class="fa-solid fa-circle-dot" aria-hidden="true"></i>{{ statusLabel(event.to_status) }}</span></td>
+                                                <td class="text-slate-600"><i class="fa-regular fa-clock mr-1.5 text-xs text-slate-400" aria-hidden="true"></i>{{ event.changed_at || 'Recently' }}</td>
+                                                <td class="font-semibold text-slate-800">{{ event.actor || 'System' }}</td>
+                                                <td><p v-if="event.decision_reason" class="font-semibold text-slate-800">{{ labelFromKey(event.decision_reason) }}</p><p :class="['text-sm text-slate-600', event.decision_reason ? 'mt-0.5' : '']">{{ event.review_notes || 'No additional note recorded.' }}</p></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
                                 </div>
+                                <ProviderPagination :pagination="historyPagination" item-label="history entries" @change="historyPage = $event" />
                             </section>
 
-                            <section v-if="activeSection === 'history' && application.status_progress" class="provider-panel p-5">
+                            <section v-if="activeSection === 'history' && !timeline.length" class="border border-slate-300 bg-white px-6 py-10 text-center shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                                <i class="fa-solid fa-clock-rotate-left text-2xl text-slate-300" aria-hidden="true"></i><h3 class="mt-3 text-sm font-bold text-slate-900">No recorded history yet</h3><p class="mt-1 text-sm text-slate-500">Changes will appear here as the application moves through review.</p>
+                            </section>
+
+                            <section v-if="activeSection === 'history' && application.status_progress" class="border border-slate-300 bg-white p-5 shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
                                 <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
                                     Progress
                                 </p>
@@ -2119,18 +2047,18 @@ onMounted(loadApplication);
                             </section>
                         </div>
 
-                        <aside
+                        <div
                             v-if="activeSection === 'applicant'"
                             class="space-y-5"
                         >
-                            <nav class="provider-panel flex gap-1 overflow-x-auto p-1" aria-label="Applicant record sections">
+                            <nav class="flex overflow-x-auto border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]" aria-label="Applicant record sections">
                                 <button
                                     v-for="view in applicantDetailViews"
                                     :key="view.key"
                                     type="button"
                                     :aria-current="activeApplicantView === view.key ? 'page' : undefined"
                                     :class="[
-                                        'inline-flex min-w-36 flex-1 items-center justify-center gap-2 rounded-md px-3 py-2.5 text-sm font-bold transition',
+                                        'inline-flex min-w-36 flex-1 items-center justify-center gap-2 border-r border-slate-200 px-3 py-3 text-sm font-bold transition last:border-r-0',
                                         activeApplicantView === view.key
                                             ? 'bg-slate-950 text-white'
                                             : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
@@ -2342,46 +2270,8 @@ onMounted(loadApplication);
                                     </dl>
                                 </div>
                             </section>
-                        </aside>
+                        </div>
                     </div>
-
-                    <nav
-                        v-if="activePrimarySectionIndex >= 0"
-                        class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                        aria-label="Review step navigation"
-                    >
-                        <button
-                            type="button"
-                            :disabled="!previousPrimarySection"
-                            class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:invisible"
-                            @click="previousPrimarySection && (activeSection = previousPrimarySection.key)"
-                        >
-                            <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                            {{ previousPrimarySection ? previousPrimarySection.label : 'Previous' }}
-                        </button>
-
-                        <p class="text-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                            Step {{ activePrimarySectionIndex + 1 }} of {{ primaryDetailSections.length }}
-                        </p>
-
-                        <button
-                            v-if="nextPrimarySection"
-                            type="button"
-                            class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-3 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                            @click="activeSection = nextPrimarySection.key"
-                        >
-                            Next: {{ nextPrimarySection.label }}
-                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                        </button>
-                        <a
-                            v-else
-                            :href="applicationListUrl"
-                            class="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
-                        >
-                            Back to applicants
-                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                        </a>
-                    </nav>
                 </div>
 
             </div>
