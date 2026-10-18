@@ -1,5 +1,12 @@
 <?php
 
+use App\Http\Controllers\Admin\AccountManagerWorkspaceController;
+use App\Http\Controllers\Admin\BillingOfficerWorkspaceController;
+use App\Http\Controllers\Admin\FinanceOfficerWorkspaceController;
+use App\Http\Controllers\Admin\RecordsOfficerWorkspaceController;
+use App\Http\Controllers\Admin\ReviewOfficerWorkspaceController;
+use App\Http\Controllers\Admin\SuperAdminWorkspaceController;
+use App\Http\Controllers\Admin\SupportOfficerWorkspaceController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ApplicantDashboardController;
 use App\Http\Controllers\ApplicationDocumentController;
@@ -9,6 +16,12 @@ use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PortalManagerController;
+use App\Http\Controllers\Provider\ApplicationStageOperationController;
+use App\Http\Controllers\Provider\Programs\ProgramCoordinatorDashboardController;
+use App\Http\Controllers\Provider\Programs\ProgramDirectoryController;
+use App\Http\Controllers\Provider\Programs\ProgramRecordController;
+use App\Http\Controllers\Provider\RoleDashboardController;
+use App\Http\Controllers\Provider\SelectionSessionWorkspaceController;
 use App\Http\Controllers\ProviderApplicationPageController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\ProviderProgramPageController;
@@ -58,6 +71,7 @@ Route::post('/dashboard/profile/verification-documents/{document}/scan', [Applic
 Route::get('/dashboard/profile/verification-documents/{document}/view', [ApplicantDashboardController::class, 'viewApplicantVerificationDocument'])->middleware('auth')->name('dashboard.applicant-verification-documents.view');
 Route::delete('/dashboard/profile/verification-documents/{document}', [ApplicantDashboardController::class, 'deleteApplicantVerificationDocument'])->middleware('auth')->name('dashboard.applicant-verification-documents.destroy');
 Route::get('/dashboard/data', [ApplicantDashboardController::class, 'data'])->middleware('auth')->name('dashboard.data');
+Route::get('/dashboard/overview-data', [ApplicantDashboardController::class, 'overviewData'])->middleware('auth')->name('dashboard.overview.data');
 Route::get('/dashboard/applications/data', [ApplicantDashboardController::class, 'applicationsData'])->middleware('auth')->name('dashboard.applications.data');
 Route::get('/dashboard/applications/{application}', [ApplicantDashboardController::class, 'applicationDetail'])->middleware('auth')->name('dashboard.applications.show');
 Route::get('/dashboard/applications/{application}/data', [ApplicantDashboardController::class, 'applicationDetailData'])->middleware('auth')->name('dashboard.applications.show.data');
@@ -83,6 +97,7 @@ Route::get('/dashboard/support-decisions/{decision}/files/{kind}', [ApplicantDas
 Route::patch('/dashboard/applications/{application}/withdraw', [ApplicantDashboardController::class, 'withdrawApplication'])->middleware(['auth', 'throttle:6,1'])->name('dashboard.applications.withdraw');
 Route::patch('/dashboard/applications/{application}/correction-response', [ApplicantDashboardController::class, 'respondToCorrection'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applications.correction-response');
 Route::patch('/dashboard/applications/{application}/schedules/{schedule}/acknowledge', [ApplicantDashboardController::class, 'acknowledgeApplicationSchedule'])->middleware('auth')->name('dashboard.applications.schedules.acknowledge');
+Route::patch('/dashboard/applications/{application}/stage-activities/{assignment}/acknowledge', [ApplicantDashboardController::class, 'acknowledgeStageActivity'])->middleware(['auth', 'throttle:10,1'])->whereNumber(['application', 'assignment'])->name('dashboard.applications.stage-activities.acknowledge');
 Route::post('/dashboard/applications/{application}/documents', [ApplicantDashboardController::class, 'uploadDocument'])->middleware(['auth', 'throttle:20,1'])->name('dashboard.applications.documents.store');
 Route::delete('/dashboard/documents/{document}', [ApplicantDashboardController::class, 'deleteDocument'])->middleware('auth')->name('dashboard.documents.destroy');
 Route::post('/dashboard/scholarships/{scholarship}/save', [ApplicantDashboardController::class, 'saveScholarship'])->middleware('auth')->name('dashboard.scholarships.save');
@@ -98,27 +113,108 @@ Route::middleware(['auth', 'admin'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function (): void {
-        Route::get('/', [AdminController::class, 'index'])->name('index');
-        Route::get('/dashboard/data', [AdminController::class, 'dashboardData'])->name('dashboard.data');
-        Route::get('/workspaces/accounts', [AdminController::class, 'accountManagerWorkspace'])->middleware('permission:manage_accounts')->name('workspaces.accounts');
-        Route::get('/workspaces/accounts/data', [AdminController::class, 'accountManagerWorkspaceData'])->middleware('permission:manage_accounts')->name('workspaces.accounts.data');
-        Route::get('/workspaces/reviews', [AdminController::class, 'reviewOfficerWorkspace'])->middleware('permission:manage_reviews')->name('workspaces.reviews');
-        Route::get('/workspaces/reviews/data', [AdminController::class, 'reviewOfficerWorkspaceData'])->middleware('permission:manage_reviews')->name('workspaces.reviews.data');
-        Route::get('/workspaces/reviews/providers/{provider}', [AdminController::class, 'reviewOfficerProviderReview'])->middleware('permission:manage_reviews')->whereNumber('provider')->name('workspaces.reviews.providers.show');
-        Route::get('/workspaces/reviews/programs/{scholarship}', [AdminController::class, 'reviewOfficerProgramReview'])->middleware('permission:manage_reviews')->whereNumber('scholarship')->name('workspaces.reviews.programs.show');
-        Route::get('/workspaces/reviews/applicants/{applicant}', [AdminController::class, 'reviewOfficerApplicantReview'])->middleware('permission:manage_reviews')->whereNumber('applicant')->name('workspaces.reviews.applicants.show');
-        Route::get('/workspaces/reviews/monitoring/{application}', [AdminController::class, 'reviewOfficerMonitoringReview'])->middleware('permission:manage_reviews')->whereNumber('application')->name('workspaces.reviews.monitoring.show');
-        Route::get('/workspaces/support', [SupportReportController::class, 'supportOfficerWorkspace'])->middleware('permission:manage_reports')->name('workspaces.support');
-        Route::get('/workspaces/support/data', [SupportReportController::class, 'supportOfficerWorkspaceData'])->middleware('permission:manage_reports')->name('workspaces.support.data');
-        Route::get('/workspaces/billing', [BillingController::class, 'billingOfficerWorkspace'])->middleware('permission:manage_billing')->name('workspaces.billing');
+        Route::get('/', [SuperAdminWorkspaceController::class, 'index'])->name('index');
+        Route::get('/dashboard/data', [SuperAdminWorkspaceController::class, 'data'])->name('dashboard.data');
+        Route::get('/governance/team', [SuperAdminWorkspaceController::class, 'team'])->name('governance.team');
+        Route::get('/governance/team/data', [SuperAdminWorkspaceController::class, 'teamData'])->name('governance.team.data');
+        Route::get('/governance/platform', [SuperAdminWorkspaceController::class, 'platform'])->name('governance.platform');
+        Route::get('/governance/platform/data', [SuperAdminWorkspaceController::class, 'platformData'])->name('governance.platform.data');
+        Route::middleware('permission:manage_accounts')
+            ->prefix('workspaces/accounts')
+            ->group(function (): void {
+                Route::get('/', [AccountManagerWorkspaceController::class, 'dashboard'])->name('workspaces.accounts');
+                Route::get('/dashboard/data', [AccountManagerWorkspaceController::class, 'dashboardData'])->name('workspaces.accounts.dashboard.data');
+                Route::get('/directory', [AccountManagerWorkspaceController::class, 'directory'])->name('workspaces.accounts.directory');
+                Route::get('/data', [AccountManagerWorkspaceController::class, 'data'])->name('workspaces.accounts.data');
+                Route::get('/attention', [AccountManagerWorkspaceController::class, 'attention'])->name('workspaces.accounts.attention');
+                Route::get('/create', [AccountManagerWorkspaceController::class, 'create'])->name('workspaces.accounts.create');
+                Route::get('/{user}/photo', [AccountManagerWorkspaceController::class, 'photo'])->whereNumber('user')->name('workspaces.accounts.photo');
+                Route::get('/{user}', [AccountManagerWorkspaceController::class, 'show'])->whereNumber('user')->name('workspaces.accounts.show');
+                Route::get('/{user}/data', [AccountManagerWorkspaceController::class, 'showData'])->whereNumber('user')->name('workspaces.accounts.show.data');
+            });
+        Route::middleware('permission:manage_reviews')
+            ->prefix('workspaces/reviews')
+            ->group(function (): void {
+                Route::get('/', [ReviewOfficerWorkspaceController::class, 'index'])->name('workspaces.reviews');
+                Route::get('/dashboard/data', [ReviewOfficerWorkspaceController::class, 'dashboardData'])->name('workspaces.reviews.dashboard.data');
+                Route::get('/summary', [ReviewOfficerWorkspaceController::class, 'summary'])->name('workspaces.reviews.summary');
+                Route::get('/providers', [ReviewOfficerWorkspaceController::class, 'providers'])->name('workspaces.reviews.providers');
+                Route::get('/providers/data', [ReviewOfficerWorkspaceController::class, 'providerData'])->name('workspaces.reviews.providers.data');
+                Route::get('/providers/{provider}', [ReviewOfficerWorkspaceController::class, 'providerReview'])->whereNumber('provider')->name('workspaces.reviews.providers.show');
+                Route::get('/programs', [ReviewOfficerWorkspaceController::class, 'programs'])->name('workspaces.reviews.programs');
+                Route::get('/programs/data', [ReviewOfficerWorkspaceController::class, 'programData'])->name('workspaces.reviews.programs.data');
+                Route::get('/programs/{scholarship}', [ReviewOfficerWorkspaceController::class, 'programReview'])->whereNumber('scholarship')->name('workspaces.reviews.programs.show');
+                Route::get('/applicants', [ReviewOfficerWorkspaceController::class, 'applicants'])->name('workspaces.reviews.applicants');
+                Route::get('/applicants/data', [ReviewOfficerWorkspaceController::class, 'applicantData'])->name('workspaces.reviews.applicants.data');
+                Route::get('/applicants/{applicant}', [ReviewOfficerWorkspaceController::class, 'applicantReview'])->whereNumber('applicant')->name('workspaces.reviews.applicants.show');
+                Route::get('/benefits', [ReviewOfficerWorkspaceController::class, 'benefits'])->name('workspaces.reviews.benefits');
+                Route::get('/benefits/data', [ReviewOfficerWorkspaceController::class, 'benefitData'])->name('workspaces.reviews.benefits.data');
+                Route::get('/monitoring', [ReviewOfficerWorkspaceController::class, 'monitoring'])->name('workspaces.reviews.monitoring');
+                Route::get('/monitoring/data', [ReviewOfficerWorkspaceController::class, 'monitoringData'])->name('workspaces.reviews.monitoring.data');
+                Route::get('/monitoring/{application}', [ReviewOfficerWorkspaceController::class, 'monitoringReview'])->whereNumber('application')->name('workspaces.reviews.monitoring.show');
+                Route::get('/selection-activities', [ReviewOfficerWorkspaceController::class, 'selectionActivities'])->name('workspaces.reviews.selection-activities');
+                Route::get('/selection-activities/data', [ReviewOfficerWorkspaceController::class, 'selectionActivityData'])->name('workspaces.reviews.selection-activities.data');
+                Route::get('/selection-activities/evidence/{evidence}/view', [ReviewOfficerWorkspaceController::class, 'selectionActivityEvidence'])->whereNumber('evidence')->name('workspaces.reviews.selection-activities.evidence.view');
+                Route::get('/selection-activities/{session}', [ReviewOfficerWorkspaceController::class, 'selectionActivity'])->whereNumber('session')->name('workspaces.reviews.selection-activities.show');
+                Route::get('/selection-activities/{session}/data', [ReviewOfficerWorkspaceController::class, 'selectionActivityRecordData'])->whereNumber('session')->name('workspaces.reviews.selection-activities.show.data');
+            });
+        Route::middleware('permission:manage_reports')
+            ->prefix('workspaces/support')
+            ->group(function (): void {
+                Route::get('/', [SupportOfficerWorkspaceController::class, 'index'])->name('workspaces.support');
+                Route::get('/dashboard/data', [SupportOfficerWorkspaceController::class, 'dashboardData'])->name('workspaces.support.dashboard.data');
+                Route::get('/summary', [SupportOfficerWorkspaceController::class, 'summary'])->name('workspaces.support.summary');
+                Route::get('/data', [SupportOfficerWorkspaceController::class, 'data'])->name('workspaces.support.data');
+                Route::get('/cases/{report}', [SupportOfficerWorkspaceController::class, 'show'])->whereNumber('report')->name('workspaces.support.cases.show');
+                Route::get('/cases/{report}/data', [SupportOfficerWorkspaceController::class, 'showData'])->whereNumber('report')->name('workspaces.support.cases.data');
+                Route::get('/reporters/{reporter}/photo', [SupportOfficerWorkspaceController::class, 'reporterPhoto'])->whereNumber('reporter')->name('workspaces.support.reporters.photo');
+                Route::get('/{queue}', [SupportOfficerWorkspaceController::class, 'queue'])
+                    ->whereIn('queue', ['needs-response', 'waiting', 'resolved'])
+                    ->name('workspaces.support.queue');
+            });
+        Route::middleware('permission:manage_billing')
+            ->prefix('workspaces/billing')
+            ->group(function (): void {
+                Route::get('/', [BillingOfficerWorkspaceController::class, 'index'])->name('workspaces.billing');
+                Route::get('/dashboard/data', [BillingOfficerWorkspaceController::class, 'dashboardData'])->name('workspaces.billing.dashboard.data');
+                Route::get('/summary', [BillingOfficerWorkspaceController::class, 'summary'])->name('workspaces.billing.summary');
+                Route::get('/queue-data', [BillingOfficerWorkspaceController::class, 'data'])->name('workspaces.billing.queue-data');
+                Route::get('/queues/{queue}', [BillingOfficerWorkspaceController::class, 'queue'])
+                    ->whereIn('queue', ['ready', 'active', 'waiting', 'completed'])
+                    ->name('workspaces.billing.queue');
+                Route::get('/requests/{purchase}', [BillingOfficerWorkspaceController::class, 'show'])->whereNumber('purchase')->name('workspaces.billing.requests.show');
+                Route::get('/requests/{purchase}/{section}', [BillingOfficerWorkspaceController::class, 'show'])
+                    ->whereNumber('purchase')
+                    ->whereIn('section', ['delivery', 'files', 'updates', 'meeting'])
+                    ->name('workspaces.billing.requests.section');
+            });
         Route::get('/workspaces/billing/data', [BillingController::class, 'billingOfficerWorkspaceData'])->middleware('permission:manage_billing')->name('workspaces.billing.data');
-        Route::get('/workspaces/billing/requests/{purchase}', [BillingController::class, 'billingOfficerRequest'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('workspaces.billing.requests.show');
-        Route::get('/workspaces/finance', [FinanceController::class, 'financeOfficerOverview'])->middleware('permission:view_finance')->name('workspaces.finance');
-        Route::get('/workspaces/finance/receipts', [FinanceController::class, 'financeOfficerReceipts'])->middleware('permission:view_finance')->name('workspaces.finance.receipts');
+        Route::middleware('permission:view_finance')
+            ->prefix('workspaces/finance')
+            ->group(function (): void {
+                Route::get('/', [FinanceOfficerWorkspaceController::class, 'index'])->name('workspaces.finance');
+                Route::get('/dashboard/data', [FinanceOfficerWorkspaceController::class, 'dashboardData'])->name('workspaces.finance.dashboard.data');
+                Route::get('/summary', [FinanceOfficerWorkspaceController::class, 'summary'])->name('workspaces.finance.summary');
+                Route::get('/payments', [FinanceOfficerWorkspaceController::class, 'payments'])->name('workspaces.finance.payments');
+                Route::get('/payments/data', [FinanceOfficerWorkspaceController::class, 'paymentData'])->name('workspaces.finance.payments.data');
+                Route::get('/exceptions', [FinanceOfficerWorkspaceController::class, 'exceptions'])->name('workspaces.finance.exceptions');
+                Route::get('/exceptions/data', [FinanceOfficerWorkspaceController::class, 'exceptionData'])->name('workspaces.finance.exceptions.data');
+                Route::get('/receipts', [FinanceOfficerWorkspaceController::class, 'legacyReceipts'])->name('workspaces.finance.receipts');
+                Route::get('/receipts/{purchase}', [FinanceOfficerWorkspaceController::class, 'receipt'])->whereNumber('purchase')->name('workspaces.finance.receipts.show');
+                Route::get('/receipts/{purchase}/data', [FinanceOfficerWorkspaceController::class, 'receiptData'])->whereNumber('purchase')->name('workspaces.finance.receipts.data');
+            });
         Route::get('/workspaces/finance/data', [FinanceController::class, 'financeOfficerData'])->middleware('permission:view_finance')->name('workspaces.finance.data');
-        Route::get('/workspaces/records/activity', [AdminController::class, 'recordsOfficerActivity'])->middleware('permission:view_logs')->name('workspaces.records.activity');
-        Route::get('/workspaces/records/activity/data', [AdminController::class, 'recordsOfficerActivityData'])->middleware('permission:view_logs')->name('workspaces.records.activity.data');
-        Route::get('/workspaces/records/exports', [AdminController::class, 'recordsOfficerExports'])->middleware('permission:export_data')->name('workspaces.records.exports');
+        Route::prefix('workspaces/records')
+            ->group(function (): void {
+                Route::get('/', [RecordsOfficerWorkspaceController::class, 'dashboard'])->middleware('permission:view_logs')->name('workspaces.records');
+                Route::get('/dashboard/data', [RecordsOfficerWorkspaceController::class, 'dashboardData'])->middleware('permission:view_logs')->name('workspaces.records.dashboard.data');
+                Route::get('/activity', [RecordsOfficerWorkspaceController::class, 'activity'])->middleware('permission:view_logs')->name('workspaces.records.activity');
+                Route::get('/activity/data', [RecordsOfficerWorkspaceController::class, 'activityData'])->middleware('permission:view_logs')->name('workspaces.records.activity.data');
+                Route::get('/activity/{activityLog}', [RecordsOfficerWorkspaceController::class, 'show'])->middleware('permission:view_logs')->whereNumber('activityLog')->name('workspaces.records.activity.show');
+                Route::get('/activity/{activityLog}/data', [RecordsOfficerWorkspaceController::class, 'showData'])->middleware('permission:view_logs')->whereNumber('activityLog')->name('workspaces.records.activity.show.data');
+                Route::get('/exports', [RecordsOfficerWorkspaceController::class, 'exports'])->middleware('permission:export_data')->name('workspaces.records.exports');
+                Route::get('/exports/data', [RecordsOfficerWorkspaceController::class, 'exportData'])->middleware('permission:export_data')->name('workspaces.records.exports.data');
+            });
         Route::middleware('portal.manager')
             ->prefix('workspaces/portal')
             ->name('workspaces.portal.')
@@ -126,17 +222,22 @@ Route::middleware(['auth', 'admin'])
                 Route::get('/', [PortalManagerController::class, 'index'])->name('index');
                 Route::get('/data', [PortalManagerController::class, 'data'])->name('data');
                 Route::get('/accounts', [PortalManagerController::class, 'accounts'])->name('accounts');
+                Route::get('/accounts/data', [PortalManagerController::class, 'accountData'])->name('accounts.data');
                 Route::get('/reviews', [PortalManagerController::class, 'reviews'])->name('reviews');
+                Route::get('/reviews/data', [PortalManagerController::class, 'reviewData'])->name('reviews.data');
                 Route::get('/reviews/providers/{provider}', [PortalManagerController::class, 'providerReview'])->whereNumber('provider')->name('reviews.providers.show');
                 Route::get('/reviews/programs/{scholarship}', [PortalManagerController::class, 'programReview'])->whereNumber('scholarship')->name('reviews.programs.show');
                 Route::get('/reviews/applicants/{applicant}', [PortalManagerController::class, 'applicantReview'])->whereNumber('applicant')->name('reviews.applicants.show');
                 Route::get('/reviews/monitoring/{application}', [PortalManagerController::class, 'monitoringReview'])->whereNumber('application')->name('reviews.monitoring.show');
                 Route::get('/support', [PortalManagerController::class, 'support'])->name('support');
+                Route::get('/support/data', [PortalManagerController::class, 'supportData'])->name('support.data');
                 Route::get('/billing', [PortalManagerController::class, 'billing'])->name('billing');
-                Route::get('/billing/requests/{purchase}', [PortalManagerController::class, 'billingRequest'])->whereNumber('purchase')->name('billing.requests.show');
+                Route::get('/billing/data', [PortalManagerController::class, 'billingData'])->name('billing.data');
                 Route::get('/finance', [PortalManagerController::class, 'finance'])->name('finance');
+                Route::get('/finance/data', [PortalManagerController::class, 'financeData'])->name('finance.data');
                 Route::get('/finance/receipts', [PortalManagerController::class, 'finance'])->name('finance.receipts');
                 Route::get('/records/activity', [PortalManagerController::class, 'records'])->name('records.activity');
+                Route::get('/records/data', [PortalManagerController::class, 'recordsData'])->name('records.data');
                 Route::get('/records/exports', [PortalManagerController::class, 'records'])->name('records.exports');
             });
         Route::get('/manage-users', [AdminController::class, 'manageUsers'])->middleware('permission:manage_accounts')->name('manage-users');
@@ -208,27 +309,35 @@ Route::middleware(['auth', 'provider'])
         Route::patch('/governance/operating-mode', [ProviderController::class, 'updateOperatingMode'])
             ->middleware('throttle:5,1')
             ->name('governance.operating-mode');
-        Route::get('/workspaces/programs', [ProviderWorkspacePageController::class, 'programs'])
+        Route::get('/workspaces/programs', [ProgramDirectoryController::class, 'redirectLegacy'])
+            ->defaults('programFilter', 'all')
             ->middleware('permission:manage_programs')
             ->name('workspaces.programs');
         Route::get('/workspaces/programs/data', [ProviderController::class, 'programCoordinatorWorkspaceData'])
             ->middleware('permission:manage_programs')
             ->name('workspaces.programs.data');
-        Route::get('/workspaces/programs/drafts', [ProviderWorkspacePageController::class, 'programs'])
+        Route::get('/workspaces/programs/drafts', [ProgramDirectoryController::class, 'redirectLegacy'])
+            ->defaults('programFilter', 'drafts')
             ->middleware('permission:manage_programs')
             ->name('workspaces.programs.drafts');
-        Route::get('/workspaces/programs/review', [ProviderWorkspacePageController::class, 'programs'])
+        Route::get('/workspaces/programs/review', [ProgramDirectoryController::class, 'redirectLegacy'])
+            ->defaults('programFilter', 'review')
             ->middleware('permission:manage_programs')
             ->name('workspaces.programs.review');
-        Route::get('/workspaces/programs/published', [ProviderWorkspacePageController::class, 'programs'])
+        Route::get('/workspaces/programs/published', [ProgramDirectoryController::class, 'redirectLegacy'])
+            ->defaults('programFilter', 'published')
             ->middleware('permission:manage_programs')
             ->name('workspaces.programs.published');
-        Route::get('/workspaces/programs/closed', [ProviderWorkspacePageController::class, 'programs'])
+        Route::get('/workspaces/programs/closed', [ProgramDirectoryController::class, 'redirectLegacy'])
+            ->defaults('programFilter', 'closed')
             ->middleware('permission:manage_programs')
             ->name('workspaces.programs.closed');
-        Route::get('/workspaces/reviews', [ProviderWorkspacePageController::class, 'reviews'])
+        Route::get('/workspaces/reviews', [ProviderWorkspacePageController::class, 'reviewDashboard'])
             ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('workspaces.reviews');
+        Route::get('/workspaces/reviews/dashboard/data', [RoleDashboardController::class, 'reviewer'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->name('workspaces.reviews.dashboard.data');
         Route::get('/workspaces/reviews/assigned', [ProviderWorkspacePageController::class, 'reviews'])
             ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('workspaces.reviews.assigned');
@@ -244,9 +353,12 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/reviews/data', [ProviderController::class, 'applicationReviewerWorkspaceData'])
             ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('workspaces.reviews.data');
-        Route::get('/workspaces/selection', [ProviderWorkspacePageController::class, 'selection'])
+        Route::get('/workspaces/selection', [ProviderWorkspacePageController::class, 'selectionDashboard'])
             ->middleware(['permission:manage_selection_activities', 'provider.approved'])
             ->name('workspaces.selection');
+        Route::get('/workspaces/selection/dashboard/data', [RoleDashboardController::class, 'selection'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.dashboard.data');
         Route::get('/workspaces/selection/setup', [ProviderWorkspacePageController::class, 'selection'])
             ->middleware(['permission:manage_selection_activities', 'provider.approved'])
             ->name('workspaces.selection.setup');
@@ -256,12 +368,42 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/selection/active', [ProviderWorkspacePageController::class, 'selection'])
             ->middleware(['permission:manage_selection_activities', 'provider.approved'])
             ->name('workspaces.selection.active');
+        Route::get('/workspaces/selection/unassigned', [ProviderWorkspacePageController::class, 'selection'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.unassigned');
+        Route::get('/workspaces/selection/history', [ProviderWorkspacePageController::class, 'selection'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.history');
+        Route::get('/workspaces/selection/sessions/create', [ProviderWorkspacePageController::class, 'selectionSessionCreate'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.sessions.create');
+        Route::get('/workspaces/selection/sessions/{session}/edit', [ProviderWorkspacePageController::class, 'selectionSessionEdit'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->whereNumber('session')
+            ->name('workspaces.selection.sessions.edit');
+        Route::get('/workspaces/selection/sessions/{session}', [ProviderWorkspacePageController::class, 'selectionSessionRecord'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->whereNumber('session')
+            ->name('workspaces.selection.sessions.show');
         Route::get('/workspaces/selection/data', [ProviderController::class, 'selectionOfficerWorkspaceData'])
             ->middleware(['permission:manage_selection_activities', 'provider.approved'])
             ->name('workspaces.selection.data');
-        Route::get('/workspaces/decisions', [ProviderWorkspacePageController::class, 'decisions'])
+        Route::get('/workspaces/selection/sessions/data', [SelectionSessionWorkspaceController::class, 'directoryData'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.sessions.data');
+        Route::get('/workspaces/selection/sessions/create/data', [SelectionSessionWorkspaceController::class, 'formData'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->name('workspaces.selection.sessions.create.data');
+        Route::get('/workspaces/selection/sessions/{session}/edit/data', [SelectionSessionWorkspaceController::class, 'formData'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->whereNumber('session')
+            ->name('workspaces.selection.sessions.edit.data');
+        Route::get('/workspaces/decisions', [ProviderWorkspacePageController::class, 'decisionDashboard'])
             ->middleware(['permission:record_final_decisions', 'provider.approved'])
             ->name('workspaces.decisions');
+        Route::get('/workspaces/decisions/dashboard/data', [RoleDashboardController::class, 'decisions'])
+            ->middleware(['permission:record_final_decisions', 'provider.approved'])
+            ->name('workspaces.decisions.dashboard.data');
         Route::get('/workspaces/decisions/pending', [ProviderWorkspacePageController::class, 'decisions'])
             ->middleware(['permission:record_final_decisions', 'provider.approved'])
             ->name('workspaces.decisions.pending');
@@ -274,9 +416,12 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/decisions/data', [ProviderController::class, 'decisionOfficerWorkspaceData'])
             ->middleware(['permission:record_final_decisions', 'provider.approved'])
             ->name('workspaces.decisions.data');
-        Route::get('/workspaces/recipients', [ProviderWorkspacePageController::class, 'recipients'])
+        Route::get('/workspaces/recipients', [ProviderWorkspacePageController::class, 'recipientDashboard'])
             ->middleware(['permission:manage_recipients', 'provider.approved'])
             ->name('workspaces.recipients');
+        Route::get('/workspaces/recipients/dashboard/data', [RoleDashboardController::class, 'recipients'])
+            ->middleware(['permission:manage_recipients', 'provider.approved'])
+            ->name('workspaces.recipients.dashboard.data');
         Route::get('/workspaces/recipients/agreements', [ProviderWorkspacePageController::class, 'recipients'])
             ->middleware(['permission:manage_recipients', 'provider.approved'])
             ->name('workspaces.recipients.agreements');
@@ -292,9 +437,12 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/recipients/data', [ProviderController::class, 'recipientOfficerWorkspaceData'])
             ->middleware(['permission:manage_recipients', 'provider.approved'])
             ->name('workspaces.recipients.data');
-        Route::get('/workspaces/monitoring', [ProviderWorkspacePageController::class, 'monitoring'])
+        Route::get('/workspaces/monitoring', [ProviderWorkspacePageController::class, 'monitoringDashboard'])
             ->middleware(['permission:manage_monitoring', 'provider.approved'])
             ->name('workspaces.monitoring');
+        Route::get('/workspaces/monitoring/dashboard/data', [RoleDashboardController::class, 'monitoring'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->name('workspaces.monitoring.dashboard.data');
         Route::get('/workspaces/monitoring/review', [ProviderWorkspacePageController::class, 'monitoring'])
             ->middleware(['permission:manage_monitoring', 'provider.approved'])
             ->name('workspaces.monitoring.review');
@@ -310,9 +458,20 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/monitoring/data', [ProviderController::class, 'monitoringOfficerWorkspaceData'])
             ->middleware(['permission:manage_monitoring', 'provider.approved'])
             ->name('workspaces.monitoring.data');
-        Route::get('/workspaces/releases', [ProviderWorkspacePageController::class, 'releases'])
+        Route::get('/workspaces/monitoring/check-ins/{cycle}', [ProviderRecipientPageController::class, 'monitoringCheckInRecord'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->whereNumber('cycle')
+            ->name('workspaces.monitoring.check-ins.show');
+        Route::get('/workspaces/monitoring/check-ins/{cycle}/data', [ProviderController::class, 'recipientMonitoringCycleRecord'])
+            ->middleware(['permission:manage_monitoring', 'provider.approved'])
+            ->whereNumber('cycle')
+            ->name('workspaces.monitoring.check-ins.data');
+        Route::get('/workspaces/releases', [ProviderWorkspacePageController::class, 'releaseDashboard'])
             ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
             ->name('workspaces.releases');
+        Route::get('/workspaces/releases/dashboard/data', [RoleDashboardController::class, 'releases'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases.dashboard.data');
         Route::get('/workspaces/releases/issues', [ProviderWorkspacePageController::class, 'releases'])
             ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
             ->name('workspaces.releases.issues');
@@ -328,18 +487,51 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/releases/data', [ProviderController::class, 'benefitReleaseOfficerWorkspaceData'])
             ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
             ->name('workspaces.releases.data');
-        Route::get('/workspaces/organization-profile', [ProviderWorkspacePageController::class, 'organizationProfile'])
+        Route::get('/workspaces/releases/schedule', [ProviderWorkspacePageController::class, 'releaseSchedule'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases.schedule');
+        Route::get('/workspaces/releases/schedule/data', [ProviderController::class, 'benefitReleaseScheduleData'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->name('workspaces.releases.schedule.data');
+        Route::get('/workspaces/releases/distributions/{release}', [ProviderRecipientPageController::class, 'benefitReleaseRecord'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->whereNumber('release')
+            ->name('workspaces.releases.distributions.show');
+        Route::get('/workspaces/releases/distributions/{release}/data', [ProviderController::class, 'recipientBenefitReleaseRecord'])
+            ->middleware(['permission:manage_benefit_releases', 'provider.approved'])
+            ->whereNumber('release')
+            ->name('workspaces.releases.distributions.data');
+        Route::get('/workspaces/organization-profile', [ProviderWorkspacePageController::class, 'organizationProfileDashboard'])
             ->middleware('permission:manage_profile')
             ->name('workspaces.organization-profile');
+        Route::get('/workspaces/organization-profile/dashboard/data', [RoleDashboardController::class, 'organizationProfile'])
+            ->middleware('permission:manage_profile')
+            ->name('workspaces.organization-profile.dashboard.data');
         Route::get('/workspaces/organization-profile/readiness', [ProviderWorkspacePageController::class, 'organizationProfile'])
             ->middleware('permission:manage_profile')
             ->name('workspaces.organization-profile.readiness');
+        Route::get('/workspaces/organization-profile/public', [ProviderWorkspacePageController::class, 'organizationProfilePublic'])
+            ->middleware('permission:manage_profile')
+            ->name('workspaces.organization-profile.public');
+        Route::get('/workspaces/organization-profile/contact', [ProviderWorkspacePageController::class, 'organizationProfileContact'])
+            ->middleware('permission:manage_profile')
+            ->name('workspaces.organization-profile.contact');
+        Route::get('/workspaces/organization-profile/verification', [ProviderWorkspacePageController::class, 'organizationProfileVerification'])
+            ->middleware('permission:manage_profile')
+            ->name('workspaces.organization-profile.verification');
         Route::get('/workspaces/organization-profile/data', [ProviderController::class, 'organizationProfileManagerWorkspaceData'])
             ->middleware('permission:manage_profile')
             ->name('workspaces.organization-profile.data');
-        Route::get('/workspaces/team', [ProviderWorkspacePageController::class, 'team'])
+        Route::patch('/workspaces/organization-profile/{section}', [ProviderController::class, 'updateOrganizationProfileSection'])
+            ->middleware('permission:manage_profile')
+            ->whereIn('section', ['public', 'contact', 'legal'])
+            ->name('workspaces.organization-profile.section.update');
+        Route::get('/workspaces/team', [ProviderWorkspacePageController::class, 'teamDashboard'])
             ->middleware('permission:manage_team')
             ->name('workspaces.team');
+        Route::get('/workspaces/team/dashboard/data', [RoleDashboardController::class, 'team'])
+            ->middleware('permission:manage_team')
+            ->name('workspaces.team.dashboard.data');
         Route::get('/workspaces/team/setup', [ProviderWorkspacePageController::class, 'team'])
             ->middleware('permission:manage_team')
             ->name('workspaces.team.setup');
@@ -352,9 +544,12 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/team/data', [ProviderController::class, 'teamAdministratorWorkspaceData'])
             ->middleware('permission:manage_team')
             ->name('workspaces.team.data');
-        Route::get('/workspaces/support', [SupportReportController::class, 'providerSupportWorkspace'])
+        Route::get('/workspaces/support', [ProviderWorkspacePageController::class, 'supportDashboard'])
             ->middleware(['permission:manage_reports', 'provider.approved'])
             ->name('workspaces.support');
+        Route::get('/workspaces/support/dashboard/data', [RoleDashboardController::class, 'support'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support.dashboard.data');
         Route::get('/workspaces/support/needs-response', [SupportReportController::class, 'providerSupportWorkspace'])
             ->middleware(['permission:manage_reports', 'provider.approved'])
             ->name('workspaces.support.needs-response');
@@ -367,12 +562,29 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/support/resolved', [SupportReportController::class, 'providerSupportWorkspace'])
             ->middleware(['permission:manage_reports', 'provider.approved'])
             ->name('workspaces.support.resolved');
+        Route::get('/workspaces/support/report-platform-issue', [SupportReportController::class, 'providerSupportPlatformReport'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support.platform-report');
+        Route::get('/workspaces/support/report-platform-issue/data', [SupportReportController::class, 'providerSupportPlatformReportData'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->name('workspaces.support.platform-report.data');
+        Route::get('/workspaces/support/cases/{report}', [SupportReportController::class, 'providerSupportCase'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->whereNumber('report')
+            ->name('workspaces.support.cases.show');
+        Route::get('/workspaces/support/cases/{report}/data', [SupportReportController::class, 'providerSupportCaseData'])
+            ->middleware(['permission:manage_reports', 'provider.approved'])
+            ->whereNumber('report')
+            ->name('workspaces.support.cases.data');
         Route::get('/workspaces/support/data', [SupportReportController::class, 'providerSupportWorkspaceData'])
             ->middleware(['permission:manage_reports', 'provider.approved'])
             ->name('workspaces.support.data');
-        Route::get('/workspaces/billing', [BillingController::class, 'providerBillingStaffWorkspace'])
+        Route::get('/workspaces/billing', [ProviderWorkspacePageController::class, 'billingDashboard'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing');
+        Route::get('/workspaces/billing/dashboard/data', [RoleDashboardController::class, 'billing'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.dashboard.data');
         Route::get('/workspaces/billing/action', [BillingController::class, 'providerBillingStaffWorkspace'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing.action');
@@ -391,13 +603,44 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/billing/services', [BillingController::class, 'providerPage'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing.services');
+        Route::get('/workspaces/billing/services/{plan}', [BillingController::class, 'providerPage'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->whereIn('plan', array_keys(config('billing.plans', [])))
+            ->name('workspaces.billing.services.show');
         Route::get('/dashboard/data', [ProviderController::class, 'dashboardData'])->name('dashboard.data');
-        Route::get('/programs', [ProviderProgramPageController::class, 'programs'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->name('programs');
+        Route::get('/programs', [ProgramDirectoryController::class, 'index'])
+            ->defaults('programFilter', 'all')
+            ->middleware('permission:manage_programs')
+            ->name('programs');
+        Route::get('/programs/data', [ProgramDirectoryController::class, 'data'])
+            ->defaults('programFilter', 'all')
+            ->middleware('permission:manage_programs')
+            ->name('programs.data');
+        Route::get('/programs/dashboard/data', [ProgramCoordinatorDashboardController::class, 'data'])
+            ->middleware('permission:manage_programs')
+            ->name('programs.dashboard.data');
+        Route::get('/programs/drafts', [ProgramDirectoryController::class, 'index'])
+            ->defaults('programFilter', 'drafts')
+            ->middleware('permission:manage_programs')
+            ->name('programs.drafts');
+        Route::get('/programs/review', [ProgramDirectoryController::class, 'index'])
+            ->defaults('programFilter', 'review')
+            ->middleware('permission:manage_programs')
+            ->name('programs.review');
+        Route::get('/programs/published', [ProgramDirectoryController::class, 'index'])
+            ->defaults('programFilter', 'published')
+            ->middleware('permission:manage_programs')
+            ->name('programs.published');
+        Route::get('/programs/closed', [ProgramDirectoryController::class, 'index'])
+            ->defaults('programFilter', 'closed')
+            ->middleware('permission:manage_programs')
+            ->name('programs.closed');
         Route::redirect('/exams', '/provider/programs')->name('exams');
         Route::get('/programs/create', [ProviderProgramPageController::class, 'programForm'])->middleware('permission:manage_programs')->name('programs.create');
         Route::redirect('/programs/edit', '/provider/programs')->middleware('permission:manage_programs')->name('programs.edit-directory');
         Route::redirect('/programs/manage', '/provider/programs')->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->name('programs.manage-directory');
-        Route::get('/programs/{scholarship}', [ProviderProgramPageController::class, 'programWorkspace'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->whereNumber('scholarship')->name('programs.show');
+        Route::get('/programs/{scholarship}/data', [ProgramRecordController::class, 'data'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->whereNumber('scholarship')->name('programs.show.data');
+        Route::get('/programs/{scholarship}', [ProgramRecordController::class, 'index'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->whereNumber('scholarship')->name('programs.show');
         Route::get('/programs/{scholarship}/updates', [ProviderProgramPageController::class, 'programWorkspace'])->middleware('permission:manage_programs,verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases')->whereNumber('scholarship')->name('programs.updates');
         Route::get('/programs/{scholarship}/monitoring', [ProviderRecipientPageController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'summary')->middleware(['permission:manage_monitoring,manage_benefit_releases,manage_recipients', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring');
         Route::get('/programs/{scholarship}/monitoring/plan', [ProviderRecipientPageController::class, 'redirectLegacyProgramMonitoring'])->defaults('monitoringView', 'plan')->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('programs.monitoring.plan');
@@ -448,6 +691,9 @@ Route::middleware(['auth', 'provider'])
         Route::post('/billing/checkout', [BillingController::class, 'checkout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:5,1'])->name('billing.checkout');
         Route::post('/billing/sync', [BillingController::class, 'syncCheckout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:10,1'])->name('billing.sync');
         Route::get('/billing/{purchase}', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace');
+        Route::get('/billing/{purchase}/meeting', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.meeting');
+        Route::get('/billing/{purchase}/files', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.files');
+        Route::get('/billing/{purchase}/updates', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.updates');
         Route::get('/billing/{purchase}/data', [BillingController::class, 'providerWorkspaceData'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.data');
         Route::patch('/billing/{purchase}/request', [BillingController::class, 'updateProviderRequest'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.request.update');
         Route::post('/billing/{purchase}/meeting', [BillingController::class, 'requestProviderMeeting'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.meeting.request');
@@ -478,14 +724,15 @@ Route::middleware(['auth', 'provider'])
         Route::get('/applications/{application}/data', [ProviderController::class, 'applicationDetailData'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions,manage_recipients', 'provider.approved'])->whereNumber('application')->name('applications.show.data');
         Route::patch('/scholarships/{scholarship}/applications/bulk-advance', [ProviderController::class, 'bulkAdvanceApplications'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('applications.bulk-advance');
         Route::patch('/applications/{application}/reviewer', [ProviderController::class, 'assignApplicationReviewer'])->middleware(['permission:verify_applications', 'provider.approved'])->whereNumber('application')->name('applications.reviewer');
+        Route::patch('/applications/{application}/review-claim', [ProviderController::class, 'claimApplicationReview'])->middleware(['permission:verify_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('application')->name('applications.review-claim');
         Route::get('/applications/{application}/profile-proofs/{document}/view', [ProviderController::class, 'viewApplicantProfileProof'])
             ->whereNumber('application')
             ->whereNumber('document')
-            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->middleware(['permission:verify_applications,record_final_decisions', 'provider.approved'])
             ->name('applications.profile-proofs.view');
         Route::get('/applications/{application}/profile-photo', [ProviderController::class, 'viewApplicantProfilePhoto'])
             ->whereNumber('application')
-            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions,manage_recipients,manage_monitoring,manage_benefit_releases', 'provider.approved'])
             ->name('applications.profile-photo.view');
         Route::patch('/applications/{application}/profile-photo-review', [ProviderController::class, 'reviewApplicantProfilePhoto'])
             ->whereNumber('application')
@@ -499,7 +746,68 @@ Route::middleware(['auth', 'provider'])
         Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->name('applications.schedules.tracking');
         Route::patch('/applications/{application}/decision', [ProviderController::class, 'decideApplication'])->middleware(['permission:verify_applications,manage_selection_activities', 'provider.approved'])->name('applications.decision');
         Route::patch('/applications/{application}/stages/{stage}/result', [ProviderController::class, 'recordApplicationStageResult'])->middleware(['permission:verify_applications,manage_selection_activities', 'provider.approved'])->name('applications.stages.result');
+        Route::get('/applications/{application}/stage-readiness', [ApplicationStageOperationController::class, 'applicationReadiness'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->whereNumber('application')
+            ->name('applications.stage-readiness');
+        Route::get('/scholarships/{scholarship}/stage-sessions', [ApplicationStageOperationController::class, 'index'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->whereNumber('scholarship')
+            ->name('stage-sessions.index');
+        Route::post('/scholarships/{scholarship}/stage-sessions', [ApplicationStageOperationController::class, 'store'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:30,1'])
+            ->whereNumber('scholarship')
+            ->name('stage-sessions.store');
+        Route::get('/scholarships/{scholarship}/stage-sessions/{session}', [ApplicationStageOperationController::class, 'show'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->whereNumber(['scholarship', 'session'])
+            ->name('stage-sessions.show');
+        Route::get('/scholarships/{scholarship}/stage-sessions/{session}/candidates', [ApplicationStageOperationController::class, 'candidates'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->whereNumber(['scholarship', 'session'])
+            ->name('stage-sessions.candidates');
+        Route::patch('/scholarships/{scholarship}/stage-sessions/{session}', [ApplicationStageOperationController::class, 'update'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:30,1'])
+            ->whereNumber(['scholarship', 'session'])
+            ->name('stage-sessions.update');
+        Route::post('/scholarships/{scholarship}/stage-sessions/{session}/publish', [ApplicationStageOperationController::class, 'publish'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:20,1'])
+            ->whereNumber(['scholarship', 'session'])
+            ->name('stage-sessions.publish');
+        Route::post('/scholarships/{scholarship}/stage-sessions/{session}/assignments', [ApplicationStageOperationController::class, 'assign'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:30,1'])
+            ->whereNumber(['scholarship', 'session'])
+            ->name('stage-sessions.assignments.store');
+        Route::patch('/scholarships/{scholarship}/stage-sessions/{session}/assignments/{assignment}/reschedule', [ApplicationStageOperationController::class, 'reschedule'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:30,1'])
+            ->whereNumber(['scholarship', 'session', 'assignment'])
+            ->name('stage-sessions.assignments.reschedule');
+        Route::patch('/scholarships/{scholarship}/stage-sessions/{session}/assignments/{assignment}/attendance', [ApplicationStageOperationController::class, 'attendance'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:60,1'])
+            ->whereNumber(['scholarship', 'session', 'assignment'])
+            ->name('stage-sessions.assignments.attendance');
+        Route::post('/scholarships/{scholarship}/stage-sessions/{session}/evidence', [ApplicationStageOperationController::class, 'storeSessionEvidence'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:20,1'])
+            ->whereNumber(['scholarship', 'session'])
+            ->name('stage-sessions.evidence.store');
+        Route::post('/scholarships/{scholarship}/stage-sessions/{session}/assignments/{assignment}/evidence', [ApplicationStageOperationController::class, 'storeAssignmentEvidence'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:20,1'])
+            ->whereNumber(['scholarship', 'session', 'assignment'])
+            ->name('stage-sessions.assignments.evidence.store');
+        Route::post('/scholarships/{scholarship}/stage-sessions/{session}/complete', [ApplicationStageOperationController::class, 'complete'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:20,1'])
+            ->whereNumber(['scholarship', 'session'])
+            ->name('stage-sessions.complete');
+        Route::post('/scholarships/{scholarship}/stage-sessions/{session}/cancel', [ApplicationStageOperationController::class, 'cancel'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:20,1'])
+            ->whereNumber(['scholarship', 'session'])
+            ->name('stage-sessions.cancel');
+        Route::get('/stage-evidence/{evidence}/view', [ApplicationStageOperationController::class, 'viewEvidence'])
+            ->middleware(['permission:manage_selection_activities', 'provider.approved'])
+            ->whereNumber('evidence')
+            ->name('stage-evidence.view');
         Route::patch('/applications/{application}/final-outcome', [ProviderController::class, 'recordApplicationFinalOutcome'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.final-outcome');
+        Route::patch('/applications/{application}/decision/reopen', [ProviderController::class, 'reopenApplicationDecision'])->middleware(['permission:verify_applications,manage_selection_activities,record_final_decisions', 'provider.approved', 'throttle:10,1'])->whereNumber('application')->name('applications.decision.reopen');
         Route::patch('/applications/{application}/correction', [ProviderController::class, 'handleApplicationCorrection'])->middleware(['permission:verify_applications', 'provider.approved'])->name('applications.correction');
         Route::patch('/applications/{application}/waitlist', [ProviderController::class, 'handleApplicationWaitlist'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.waitlist');
         Route::patch('/applications/{application}/status', [ProviderController::class, 'updateApplicationStatus'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.status');
@@ -520,6 +828,9 @@ Route::middleware(['auth', 'provider'])
         Route::get('/monitoring-adjustment-requests/{adjustment}/attachment', [ProviderController::class, 'viewRecipientMonitoringAdjustmentAttachment'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('adjustment')->name('monitoring-adjustment-requests.attachment');
         Route::post('/monitoring-requirements/{requirement}/applications/{application}/interventions', [ProviderController::class, 'storeRecipientMonitoringIntervention'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber(['requirement', 'application'])->name('monitoring-interventions.store');
         Route::patch('/monitoring-interventions/{intervention}/complete', [ProviderController::class, 'completeRecipientMonitoringIntervention'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('intervention')->name('monitoring-interventions.complete');
+        Route::patch('/monitoring-cases/{case}/close', [ProviderController::class, 'closeRecipientMonitoringCase'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('case')->name('monitoring-cases.close');
+        Route::patch('/monitoring-cases/{case}/waive', [ProviderController::class, 'waiveRecipientMonitoringCase'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('case')->name('monitoring-cases.waive');
+        Route::patch('/monitoring-cases/{case}/reopen', [ProviderController::class, 'reopenRecipientMonitoringCase'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('case')->name('monitoring-cases.reopen');
         Route::patch('/monitoring-submissions/{submission}/review', [ProviderController::class, 'reviewRecipientMonitoringSubmission'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('submission')->name('monitoring-submissions.review');
         Route::get('/monitoring-submissions/{submission}/view', [ProviderController::class, 'viewRecipientMonitoringSubmission'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('submission')->name('monitoring-submissions.view');
         Route::post('/scholarships/{scholarship}/benefit-releases', [ProviderController::class, 'storeRecipientBenefitRelease'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.benefit-releases.store');

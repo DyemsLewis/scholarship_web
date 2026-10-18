@@ -1,13 +1,13 @@
 # Complete Demo Accounts
 
-The complete demo uses fictional identities and synthetic applicant portraits. Every account uses `password123` unless `DEMO_PASSWORD` is set before seeding.
+The complete demo uses fictional identities and synthetic applicant portraits. Local tests use the fallback password only when no demo credential is configured. Hosted demonstrations require strong `DEMO_ADMIN_PASSWORD` and `DEMO_PASSWORD` values supplied only for the seed command.
 
 ## Main Accounts
 
 | Role | Username | Email |
 | --- | --- | --- |
-| Super admin | `superadmin` | `admin@findscholarship.test` |
-| Provider owner | `tulayaral` | `programs@tulayaral.test` |
+| Super admin | `superadmin` | `superadmin@findscholarship.test` |
+| Provider owner | `harborlight` | `programs@harborlight.test` |
 
 ## Provider Verification Accounts
 
@@ -20,20 +20,20 @@ The complete demo uses fictional identities and synthetic applicant portraits. E
 
 | Workspace | Username | Email |
 | --- | --- | --- |
-| Full-access manager | `tulay.manager` | `tulay.manager@scholarship.test` |
-| Program coordinator | `tulay.programs` | `tulay.programs@scholarship.test` |
-| Application reviewer | `tulay.reviewer` | `tulay.reviewer@scholarship.test` |
-| Selection officer | `tulay.selection` | `tulay.selection@scholarship.test` |
-| Decision officer | `tulay.decisions` | `tulay.decisions@scholarship.test` |
-| Recipient officer | `tulay.recipients` | `tulay.recipients@scholarship.test` |
-| Monitoring officer | `tulay.monitoring` | `tulay.monitoring@scholarship.test` |
-| Benefit release officer | `tulay.releases` | `tulay.releases@scholarship.test` |
-| Organization profile manager | `tulay.profile` | `tulay.profile@scholarship.test` |
-| Team administrator | `tulay.team` | `tulay.team@scholarship.test` |
-| Support staff | `tulay.support` | `tulay.support@scholarship.test` |
-| Billing staff | `tulay.billing` | `tulay.billing@scholarship.test` |
+| Full-access manager | `harborlight.manager` | `harborlight.manager@scholarship.test` |
+| Program coordinator | `harborlight.programs` | `harborlight.programs@scholarship.test` |
+| Application reviewer | `harborlight.reviewer` | `harborlight.reviewer@scholarship.test` |
+| Selection officer | `harborlight.selection` | `harborlight.selection@scholarship.test` |
+| Decision officer | `harborlight.decisions` | `harborlight.decisions@scholarship.test` |
+| Recipient officer | `harborlight.recipients` | `harborlight.recipients@scholarship.test` |
+| Monitoring officer | `harborlight.monitoring` | `harborlight.monitoring@scholarship.test` |
+| Benefit release officer | `harborlight.releases` | `harborlight.releases@scholarship.test` |
+| Organization profile manager | `harborlight.profile` | `harborlight.profile@scholarship.test` |
+| Team administrator | `harborlight.team` | `harborlight.team@scholarship.test` |
+| Support staff | `harborlight.support` | `harborlight.support@scholarship.test` |
+| Billing staff | `harborlight.billing` | `harborlight.billing@scholarship.test` |
 
-Program-scoped staff are assigned to the Complete Path Scholarship. The reviewer has two pre-screening records assigned, while the selection, decision, recipient, monitoring, release, support, and billing workspaces contain records for their respective demonstrations.
+Program-scoped staff are assigned to the Harborlight Senior Scholars Program. The reviewer has two pre-screening records assigned, while the selection, decision, recipient, monitoring, release, support, and billing workspaces contain records for their respective demonstrations.
 
 ## Admin Team Accounts
 
@@ -80,19 +80,19 @@ Program-scoped staff are assigned to the Complete Path Scholarship. The reviewer
 
 | Program | State |
 | --- | --- |
-| Tulay Aral Complete Path Scholarship | Published with the complete application and recipient lifecycle |
-| Tulay Aral Transportation Starter Grant | Draft |
-| Tulay Aral Community Technology Access Grant | Waiting for administrator review |
-| Tulay Aral School Essentials Grant 2025-2026 | Closed prior cycle |
-| Tulay Aral Weekend Learning Hub Grant | Returned for revision |
-| Tulay Aral One-Time College Readiness Award | Published and at its one-recipient capacity |
+| Harborlight Senior Scholars Program | Published with the complete application and recipient lifecycle |
+| Commute Forward Student Grant | Draft |
+| Connected Classrooms Access Grant | Waiting for administrator review |
+| Ready-to-Learn Essentials Fund 2025-2026 | Closed prior cycle |
+| Saturday Learning Support Award | Returned for revision |
+| College Launch One-Time Grant | Published and at its one-recipient capacity |
 
 ## Reset Command
 
-Run only against a disposable local database:
+Run only against a database intentionally prepared for the demonstration:
 
 ```bash
 php artisan migrate:fresh --seeder=CompleteDemoSeeder --force
 ```
 
-The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, the complete-path scholarship as ID `1`, and applications as IDs `1` through `24`.
+The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, the Harborlight Senior Scholars Program as ID `1`, and applications as IDs `1` through `24`.

@@ -1,6 +1,7 @@
 import './bootstrap';
 import { createApp } from 'vue';
 import GlobalToastHost from './components/GlobalToastHost.vue';
+import StaffFilePreviewHost from './components/StaffFilePreviewHost.vue';
 
 function loadIconCdn() {
     if (document.querySelector('link[data-icon-cdn="fontawesome"]')) {
@@ -20,7 +21,12 @@ const appElement = document.getElementById('app');
 const pages = {
     accountSetup: () => import('./pages/AccountSetupPage.vue'),
     admin: () => import('./pages/AdminPage.vue'),
+    adminAccountManagerDashboard: () => import('./pages/admin/accounts/AccountManagerDashboardPage.vue'),
     adminAccountManagerWorkspace: () => import('./pages/AdminAccountManagerWorkspacePage.vue'),
+    adminAccountDirectory: () => import('./pages/admin/accounts/AccountDirectoryPage.vue'),
+    adminAccountAttention: () => import('./pages/admin/accounts/AccountAttentionPage.vue'),
+    adminAccountCreate: () => import('./pages/admin/accounts/AccountCreatePage.vue'),
+    adminAccountRecord: () => import('./pages/admin/accounts/AccountRecordPage.vue'),
     adminAccountForm: () => import('./pages/AdminAccountFormPage.vue'),
     adminApplicantReview: () => import('./pages/AdminApplicantReviewPage.vue'),
     adminBilling: () => import('./pages/AdminBillingPage.vue'),
@@ -32,11 +38,40 @@ const pages = {
     adminProgramReview: () => import('./pages/AdminProgramReviewPage.vue'),
     adminProviderReview: () => import('./pages/AdminProviderReviewPage.vue'),
     adminReviewOfficerWorkspace: () => import('./pages/AdminReviewOfficerWorkspacePage.vue'),
+    adminReviewOverview: () => import('./pages/admin/reviews/ReviewOverviewPage.vue'),
+    adminReviewProviderQueue: () => import('./pages/admin/reviews/ReviewQueuePage.vue'),
+    adminReviewProgramQueue: () => import('./pages/admin/reviews/ReviewQueuePage.vue'),
+    adminReviewApplicantQueue: () => import('./pages/admin/reviews/ReviewQueuePage.vue'),
+    adminReviewSelectionActivityQueue: () => import('./pages/admin/reviews/ReviewQueuePage.vue'),
+    adminReviewSelectionActivityRecord: () => import('./pages/admin/reviews/SelectionActivityRecordPage.vue'),
+    adminReviewBenefitQueue: () => import('./pages/admin/reviews/ReviewQueuePage.vue'),
+    adminReviewMonitoringQueue: () => import('./pages/admin/reviews/ReviewQueuePage.vue'),
+    adminReviewProviderRecord: () => import('./pages/admin/reviews/ProviderReviewRecordPage.vue'),
+    adminReviewProgramRecord: () => import('./pages/admin/reviews/ProgramReviewRecordPage.vue'),
+    adminReviewApplicantRecord: () => import('./pages/admin/reviews/ApplicantReviewRecordPage.vue'),
+    adminReviewMonitoringRecord: () => import('./pages/admin/reviews/MonitoringReviewRecordPage.vue'),
     adminSupportOfficerWorkspace: () => import('./pages/AdminSupportOfficerWorkspacePage.vue'),
+    adminSupportOverview: () => import('./pages/admin/support/SupportOverviewPage.vue'),
+    adminSupportCaseDirectory: () => import('./pages/admin/support/SupportCaseDirectoryPage.vue'),
+    adminSupportCaseRecord: () => import('./pages/admin/support/SupportCaseRecordPage.vue'),
     adminBillingOfficerWorkspace: () => import('./pages/AdminBillingOfficerWorkspacePage.vue'),
+    adminBillingOverview: () => import('./pages/admin/billing/BillingOverviewPage.vue'),
+    adminBillingRequestDirectory: () => import('./pages/admin/billing/BillingRequestDirectoryPage.vue'),
+    adminBillingRequestRecord: () => import('./pages/admin/billing/BillingRequestRecordPage.vue'),
     adminFinanceOfficerWorkspace: () => import('./pages/AdminFinanceOfficerWorkspacePage.vue'),
+    adminFinanceOverview: () => import('./pages/admin/finance/FinanceOverviewPage.vue'),
+    adminFinancePayments: () => import('./pages/admin/finance/FinancePaymentsPage.vue'),
+    adminFinanceExceptions: () => import('./pages/admin/finance/FinanceExceptionsPage.vue'),
+    adminFinanceReceipt: () => import('./pages/admin/finance/FinanceReceiptPage.vue'),
     adminRecordsOfficerWorkspace: () => import('./pages/AdminRecordsOfficerWorkspacePage.vue'),
+    adminRecordsOfficerDashboard: () => import('./pages/admin/records/RecordsOfficerDashboardPage.vue'),
+    adminRecordsActivity: () => import('./pages/admin/records/RecordsActivityPage.vue'),
+    adminRecordsActivityRecord: () => import('./pages/admin/records/RecordsActivityRecordPage.vue'),
+    adminRecordsExports: () => import('./pages/admin/records/RecordsExportsPage.vue'),
     adminPortalManagerWorkspace: () => import('./pages/AdminPortalManagerWorkspacePage.vue'),
+    adminPortalManagerArea: () => import('./pages/admin/portal/PortalManagerAreaPage.vue'),
+    adminSuperAdminWorkspace: () => import('./pages/admin/governance/SuperAdminWorkspacePage.vue'),
+    adminSuperAdminArea: () => import('./pages/admin/governance/SuperAdminAreaPage.vue'),
     adminReviews: () => import('./pages/AdminReviewsPage.vue'),
     adminUsers: () => import('./pages/AdminUsersPage.vue'),
     dashboard: () => import('./pages/UserDashboardPage.vue'),
@@ -52,33 +87,49 @@ const pages = {
     forgotPassword: () => import('./pages/ForgotPasswordPage.vue'),
     landing: () => import('./pages/LandingPage.vue'),
     login: () => import('./pages/LoginPage.vue'),
-    provider: () => import('./pages/ProviderPage.vue'),
-    providerGovernance: () => import('./pages/ProviderGovernancePage.vue'),
-    providerProgramCoordinatorWorkspace: () => import('./pages/ProviderProgramCoordinatorWorkspacePage.vue'),
-    providerApplicationReviewerWorkspace: () => import('./pages/ProviderApplicationReviewerWorkspacePage.vue'),
-    providerSelectionOfficerWorkspace: () => import('./pages/ProviderSelectionOfficerWorkspacePage.vue'),
-    providerDecisionOfficerWorkspace: () => import('./pages/ProviderDecisionOfficerWorkspacePage.vue'),
-    providerRecipientOfficerWorkspace: () => import('./pages/ProviderRecipientOfficerWorkspacePage.vue'),
-    providerMonitoringOfficerWorkspace: () => import('./pages/ProviderMonitoringOfficerWorkspacePage.vue'),
-    providerBenefitReleaseOfficerWorkspace: () => import('./pages/ProviderBenefitReleaseOfficerWorkspacePage.vue'),
-    providerOrganizationProfileManagerWorkspace: () => import('./pages/ProviderOrganizationProfileManagerWorkspacePage.vue'),
-    providerTeamAdministratorWorkspace: () => import('./pages/ProviderTeamAdministratorWorkspacePage.vue'),
-    providerSupportStaffWorkspace: () => import('./pages/ProviderSupportStaffWorkspacePage.vue'),
-    providerBillingStaffWorkspace: () => import('./pages/ProviderBillingStaffWorkspacePage.vue'),
-    providerApplicationDetail: () => import('./pages/ProviderApplicationDetailPage.vue'),
-    providerApplications: () => import('./pages/ProviderApplicationsPage.vue'),
-    providerBilling: () => import('./pages/ProviderBillingPage.vue'),
-    providerServiceWorkspace: () => import('./pages/ProviderServiceWorkspacePage.vue'),
-    providerInsights: () => import('./pages/ProviderInsightsPage.vue'),
-    providerProgramForm: () => import('./pages/ProviderProgramFormPage.vue'),
-    providerProgramWorkspace: () => import('./pages/ProviderProgramWorkspacePage.vue'),
-    providerMonitoringPlan: () => import('./pages/ProviderMonitoringPlanPage.vue'),
-    providerMonitoringWorkspace: () => import('./pages/ProviderMonitoringWorkspacePage.vue'),
-    providerRecipientMonitoringDirectory: () => import('./pages/ProviderRecipientMonitoringDirectoryPage.vue'),
-    providerProfile: () => import('./pages/ProviderProfilePage.vue'),
-    providerPrograms: () => import('./pages/ProviderProgramsPage.vue'),
-    providerTeam: () => import('./pages/ProviderTeamPage.vue'),
-    providerTeamAccountForm: () => import('./pages/ProviderTeamAccountFormPage.vue'),
+    provider: () => import('./pages/provider/ProviderManagerDashboardPage.vue'),
+    providerApplicationReviewerDashboard: () => import('./pages/provider/reviews/ApplicationReviewerDashboardPage.vue'),
+    providerApplicationReviewerWorkspace: () => import('./pages/provider/reviews/ApplicationReviewDirectoryPage.vue'),
+    providerApplicationReviewRecord: () => import('./pages/provider/reviews/ApplicationReviewRecordPage.vue'),
+    providerSelectionOfficerDashboard: () => import('./pages/provider/selection/SelectionOfficerDashboardPage.vue'),
+    providerSelectionOfficerWorkspace: () => import('./pages/provider/selection/SelectionActivityDirectoryPage.vue'),
+    providerSelectionSessionForm: () => import('./pages/provider/selection/SelectionSessionFormPage.vue'),
+    providerSelectionSessionRecord: () => import('./pages/provider/selection/SelectionSessionRecordPage.vue'),
+    providerSelectionActivityRecord: () => import('./pages/provider/selection/SelectionActivityRecordPage.vue'),
+    providerDecisionOfficerDashboard: () => import('./pages/provider/decisions/DecisionOfficerDashboardPage.vue'),
+    providerDecisionOfficerWorkspace: () => import('./pages/provider/decisions/FinalDecisionDirectoryPage.vue'),
+    providerFinalDecisionRecord: () => import('./pages/provider/decisions/FinalDecisionRecordPage.vue'),
+    providerRecipientOfficerDashboard: () => import('./pages/provider/recipients/RecipientOfficerDashboardPage.vue'),
+    providerRecipientOfficerWorkspace: () => import('./pages/provider/recipients/RecipientDirectoryPage.vue'),
+    providerRecipientRecord: () => import('./pages/provider/recipients/RecipientRecordPage.vue'),
+    providerMonitoringOfficerDashboard: () => import('./pages/provider/monitoring/MonitoringOfficerDashboardPage.vue'),
+    providerMonitoringOfficerWorkspace: () => import('./pages/provider/monitoring/MonitoringDirectoryPage.vue'),
+    providerMonitoringCheckInRecord: () => import('./pages/provider/monitoring/MonitoringCheckInRecordPage.vue'),
+    providerBenefitReleaseOfficerDashboard: () => import('./pages/provider/releases/BenefitReleaseOfficerDashboardPage.vue'),
+    providerBenefitReleaseOfficerWorkspace: () => import('./pages/provider/releases/BenefitReleaseDirectoryPage.vue'),
+    providerBenefitReleaseSchedule: () => import('./pages/provider/releases/BenefitReleaseSchedulePage.vue'),
+    providerBenefitReleaseRecord: () => import('./pages/provider/releases/BenefitReleaseRecordPage.vue'),
+    providerOrganizationProfileManagerDashboard: () => import('./pages/provider/organization/OrganizationProfileDashboardPage.vue'),
+    providerOrganizationProfileManagerWorkspace: () => import('./pages/provider/organization/OrganizationProfileReadinessPage.vue'),
+    providerOrganizationProfilePublic: () => import('./pages/provider/organization/OrganizationPublicProfilePage.vue'),
+    providerOrganizationProfileContact: () => import('./pages/provider/organization/OrganizationContactPage.vue'),
+    providerOrganizationProfileVerification: () => import('./pages/provider/organization/OrganizationVerificationPage.vue'),
+    providerTeamAdministratorDashboard: () => import('./pages/provider/team/TeamAdministratorDashboardPage.vue'),
+    providerTeamAdministratorWorkspace: () => import('./pages/provider/team/TeamDirectoryPage.vue'),
+    providerSupportStaffDashboard: () => import('./pages/provider/support/SupportStaffDashboardPage.vue'),
+    providerSupportStaffWorkspace: () => import('./pages/provider/support/SupportCaseDirectoryPage.vue'),
+    providerSupportCase: () => import('./pages/provider/support/SupportCaseRecordPage.vue'),
+    providerSupportPlatformReport: () => import('./pages/provider/support/SupportPlatformReportPage.vue'),
+    providerBillingStaffDashboard: () => import('./pages/provider/billing/BillingStaffDashboardPage.vue'),
+    providerBillingStaffWorkspace: () => import('./pages/provider/billing/BillingRequestDirectoryPage.vue'),
+    providerBilling: () => import('./pages/provider/billing/BillingServicesPage.vue'),
+    providerServiceWorkspace: () => import('./pages/provider/billing/BillingRequestRecordPage.vue'),
+    providerProgramForm: () => import('./pages/provider/programs/ProgramFormPage.vue'),
+    providerMonitoringPlan: () => import('./pages/provider/monitoring/MonitoringPlanPage.vue'),
+    providerProgramCoordinatorDashboard: () => import('./pages/provider/programs/ProgramCoordinatorDashboardPage.vue'),
+    providerProgramDirectory: () => import('./pages/provider/programs/ProgramDirectoryPage.vue'),
+    providerProgramRecord: () => import('./pages/provider/programs/ProgramRecordPage.vue'),
+    providerTeamAccountForm: () => import('./pages/provider/team/TeamAccountFormPage.vue'),
     register: () => import('./pages/RegisterPage.vue'),
     resetPassword: () => import('./pages/ResetPasswordPage.vue'),
     supportReportQueue: () => import('./pages/SupportReportQueuePage.vue'),
@@ -95,9 +146,25 @@ function mountGlobalToastHost() {
     createApp(GlobalToastHost).mount(toastHost);
 }
 
+function mountStaffFilePreviewHost() {
+    if (!/^\/(?:provider|admin)(?:\/|$)/.test(window.location.pathname)) {
+        return;
+    }
+
+    if (document.getElementById('staff-file-preview-host')) {
+        return;
+    }
+
+    const previewHost = document.createElement('div');
+    previewHost.id = 'staff-file-preview-host';
+    document.body.appendChild(previewHost);
+    createApp(StaffFilePreviewHost).mount(previewHost);
+}
+
 if (appElement) {
     loadIconCdn();
     mountGlobalToastHost();
+    mountStaffFilePreviewHost();
 
     const page = appElement.dataset.page ?? 'landing';
     const loadPage = pages[page] ?? pages.landing;

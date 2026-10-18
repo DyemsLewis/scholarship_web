@@ -86,7 +86,7 @@ class ProviderBillingTest extends TestCase
         $this->assertSame('PHP', $purchase->currency);
         $this->assertSame('cs_test_checkout', $purchase->checkout_session_id);
         $this->assertNotNull($purchase->service_terms_accepted_at);
-        $this->assertSame('ready', $purchase->fulfillment_status);
+        $this->assertSame('queued', $purchase->fulfillment_status);
         $this->assertNull($purchase->request_summary);
         $this->assertNull($purchase->requested_outcome);
         $this->assertCount(3, $purchase->milestones);

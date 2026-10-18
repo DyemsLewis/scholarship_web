@@ -68,7 +68,8 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-magnifying-glass-chart',
             activePathPatterns: ['^/provider/(?:workspaces/reviews|applications)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Assigned reviews', activePaths: ['/provider/workspaces/reviews/assigned'] },
+                { href: providerWorkspaceUrl, label: 'Dashboard', exact: true },
+                { href: '/provider/workspaces/reviews/assigned', label: 'Assigned reviews', exact: true },
                 { href: '/provider/workspaces/reviews/unassigned', label: 'Unassigned', exact: true },
                 { href: '/provider/workspaces/reviews/returned', label: 'Returned corrections', exact: true },
                 { href: '/provider/workspaces/reviews/history', label: 'Review history', exact: true },
@@ -83,9 +84,11 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-calendar-check',
             activePathPatterns: ['^/provider/(?:workspaces/selection|applications)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Activity setup', activePaths: ['/provider/workspaces/selection/setup'] },
+                { href: providerWorkspaceUrl, label: 'Dashboard', exact: true },
+                { href: '/provider/workspaces/selection/active', label: 'Sessions', exact: true },
+                { href: '/provider/workspaces/selection/unassigned', label: 'Unassigned applicants', exact: true },
                 { href: '/provider/workspaces/selection/results', label: 'Results to record', exact: true },
-                { href: '/provider/workspaces/selection/active', label: 'Active pipeline', exact: true },
+                { href: '/provider/workspaces/selection/history', label: 'History', exact: true },
             ],
         }];
     }
@@ -97,7 +100,8 @@ const entryLinks = computed(() => {
             icon: 'fa-solid fa-gavel',
             activePathPatterns: ['^/provider/(?:workspaces/decisions|applications)(?:/|$)'],
             children: [
-                { href: providerWorkspaceUrl, label: 'Pending decisions', activePaths: ['/provider/workspaces/decisions/pending'] },
+                { href: providerWorkspaceUrl, label: 'Dashboard', exact: true },
+                { href: '/provider/workspaces/decisions/pending', label: 'Pending decisions', exact: true },
                 { href: '/provider/workspaces/decisions/waitlist', label: 'Waitlist', exact: true },
                 { href: '/provider/workspaces/decisions/recorded', label: 'Decision history', exact: true },
             ],

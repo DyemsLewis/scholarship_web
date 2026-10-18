@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
+  <title id="title">Saturday Learning Support Award</title>
+  <rect width="240" height="240" rx="24" fill="#07142d"/>
+  <rect x="45" y="56" width="150" height="140" rx="16" fill="#fff"/>
+  <path d="M45 89h150" stroke="#f5b700" stroke-width="16"/>
+  <path d="M79 42v31M161 42v31" stroke="#fff" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="120" cy="142" r="27" fill="#f5b700"/>
+  <path d="M120 122v22l16 10" fill="none" stroke="#07142d" stroke-width="8" stroke-linecap="round"/>
+</svg>

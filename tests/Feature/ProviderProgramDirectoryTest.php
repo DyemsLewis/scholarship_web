@@ -11,263 +11,244 @@ class ProviderProgramDirectoryTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_legacy_program_directories_redirect_to_the_single_program_list(): void
+    public function test_program_coordinator_can_open_the_new_directory_and_legacy_pages_redirect_to_it(): void
     {
-        $provider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
+        $owner = User::factory()->create(['role' => 'provider']);
+        $coordinator = $this->coordinator($owner);
 
-        $this->actingAs($provider)
-            ->get('/provider/programs/edit')
-            ->assertRedirect('/provider/programs');
-
-        $this->actingAs($provider)
-            ->get('/provider/programs/manage')
-            ->assertRedirect('/provider/programs');
-    }
-
-    public function test_program_application_tasks_have_dedicated_pages(): void
-    {
-        $provider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $provider->providerProfile()->update(['verification_status' => 'approved']);
-
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Focused Program Workflow',
-            'description' => 'A scholarship used to verify focused provider workflow pages.',
-            'status' => 'published',
-        ]);
-
-        foreach (['review', 'activities', 'results', 'decisions', 'recipients', 'waitlist'] as $workspace) {
-            $this->actingAs($provider)
-                ->get("/provider/programs/{$scholarship->id}/applications/{$workspace}")
-                ->assertOk()
-                ->assertViewIs('provider-applications')
-                ->assertViewHas('scholarship', fn (Scholarship $viewScholarship): bool => (
-                    $viewScholarship->is($scholarship)
-                ));
-        }
-    }
-
-    public function test_program_overview_and_updates_have_dedicated_pages(): void
-    {
-        $provider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $provider->providerProfile()->update(['verification_status' => 'approved']);
-
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Focused Program Workspace',
-            'description' => 'A scholarship used to verify the overview and updates pages.',
-            'status' => 'published',
-        ]);
-
-        foreach (['', '/updates'] as $workspace) {
-            $this->actingAs($provider)
-                ->get("/provider/programs/{$scholarship->id}{$workspace}")
-                ->assertOk()
-                ->assertViewIs('provider-program-workspace')
-                ->assertViewHas('scholarship', fn (Scholarship $viewScholarship): bool => (
-                    $viewScholarship->is($scholarship)
-                ));
-        }
-    }
-
-    public function test_legacy_program_application_entries_redirect_to_a_focused_page(): void
-    {
-        $provider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $provider->providerProfile()->update(['verification_status' => 'approved']);
-
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Legacy Application Workspace',
-            'description' => 'A scholarship used to verify legacy workspace redirects.',
-            'status' => 'published',
-        ]);
-
-        $this->actingAs($provider)
-            ->get("/provider/programs/{$scholarship->id}/applications")
-            ->assertRedirect("/provider/programs/{$scholarship->id}/applications/review");
-
-        $this->actingAs($provider)
-            ->get("/provider/applications?scholarship_id={$scholarship->id}&filter=ready_result")
-            ->assertRedirect("/provider/programs/{$scholarship->id}/applications/results");
-    }
-
-    public function test_legacy_program_application_entry_rejects_another_provider_program(): void
-    {
-        $provider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $provider->providerProfile()->update(['verification_status' => 'approved']);
-
-        $otherProvider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $scholarship = Scholarship::create([
-            'provider_id' => $otherProvider->id,
-            'title' => 'Restricted Program',
-            'description' => 'A scholarship owned by another provider.',
-            'status' => 'published',
-        ]);
-
-        $this->actingAs($provider)
-            ->get("/provider/applications?scholarship_id={$scholarship->id}")
-            ->assertForbidden();
-    }
-
-    public function test_recipient_monitoring_tasks_have_dedicated_pages(): void
-    {
-        $provider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $provider->providerProfile()->update(['verification_status' => 'approved']);
-
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Focused Recipient Monitoring',
-            'description' => 'A scholarship used to verify focused recipient monitoring pages.',
-            'status' => 'published',
-        ]);
-
-        foreach (['', '/academic', '/releases', '/outcomes'] as $workspace) {
-            $this->actingAs($provider)
-                ->get("/provider/monitoring/{$scholarship->id}{$workspace}")
-                ->assertOk()
-                ->assertViewIs('provider-monitoring-workspace')
-                ->assertViewHas('scholarship', fn (Scholarship $viewScholarship): bool => (
-                    $viewScholarship->is($scholarship)
-                ));
-        }
-
-        $this->actingAs($provider)
-            ->get("/provider/monitoring/{$scholarship->id}/plan")
+        $this->actingAs($coordinator)
+            ->get('/provider')
             ->assertOk()
-            ->assertViewIs('provider-monitoring-plan')
-            ->assertViewHas('scholarship', fn (Scholarship $viewScholarship): bool => (
-                $viewScholarship->is($scholarship)
-            ));
+            ->assertViewIs('provider-program-coordinator-dashboard');
 
-        $this->actingAs($provider)
-            ->get("/provider/programs/{$scholarship->id}/monitoring")
-            ->assertRedirect("/provider/monitoring/{$scholarship->id}");
+        $this->actingAs($coordinator)
+            ->get('/provider/programs')
+            ->assertOk()
+            ->assertViewIs('provider-program-directory');
 
-        $this->actingAs($provider)
-            ->get("/provider/programs/{$scholarship->id}/monitoring/plan")
-            ->assertRedirect("/provider/monitoring/{$scholarship->id}/plan");
-    }
-
-    public function test_program_editor_uses_dedicated_step_urls(): void
-    {
-        $provider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $provider->providerProfile()->update(['verification_status' => 'approved']);
-
-        $scholarship = Scholarship::create([
-            'provider_id' => $provider->id,
-            'title' => 'Guided Program Draft',
-            'description' => '',
-            'status' => 'draft',
-        ]);
-
-        $this->actingAs($provider)
-            ->get("/provider/programs/{$scholarship->id}/edit")
-            ->assertRedirect("/provider/programs/{$scholarship->id}/edit/basics");
-
-        foreach (['basics', 'support', 'dates-location', 'eligibility', 'application', 'selection', 'review'] as $step) {
-            $this->actingAs($provider)
-                ->get("/provider/programs/{$scholarship->id}/edit/{$step}")
+        foreach (['drafts', 'review', 'published', 'closed'] as $section) {
+            $this->actingAs($coordinator)
+                ->get("/provider/programs/{$section}")
                 ->assertOk()
-                ->assertViewIs('provider-program-form');
+                ->assertViewIs('provider-program-directory');
+
+            $this->actingAs($coordinator)
+                ->get("/provider/workspaces/programs/{$section}")
+                ->assertRedirect("/provider/programs/{$section}");
         }
 
-        $this->actingAs($provider)
-            ->get("/provider/programs/{$scholarship->id}/edit/not-a-step")
-            ->assertNotFound();
+        $this->actingAs($coordinator)
+            ->get('/provider/workspaces/programs')
+            ->assertRedirect('/provider/programs');
+
+        $this->assertSame('/provider/programs', $coordinator->fresh()->publicPayload()['provider_workspace_url']);
     }
 
-    public function test_provider_cannot_open_another_organization_program_editor(): void
+    public function test_directory_data_is_scoped_to_the_organization_and_assigned_programs(): void
     {
-        $provider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $owner = User::factory()->create(['role' => 'provider']);
+        $assignedDraft = $this->program($owner, 'Assigned draft', 'draft');
+        $assignedPublished = $this->program($owner, 'Assigned published', 'published');
+        $this->program($owner, 'Unassigned program', 'published');
+        $outsideOwner = User::factory()->create(['role' => 'provider']);
+        $this->program($outsideOwner, 'Outside organization', 'draft');
+        $coordinator = $this->coordinator($owner, [$assignedDraft->id, $assignedPublished->id]);
 
-        $otherProvider = User::factory()->create([
-            'role' => 'provider',
-            'account_status' => 'active',
-        ]);
-        $scholarship = Scholarship::create([
-            'provider_id' => $otherProvider->id,
-            'title' => 'Private Program Draft',
-            'description' => '',
-            'status' => 'draft',
-        ]);
+        $response = $this->actingAs($coordinator)
+            ->getJson('/provider/programs/data')
+            ->assertOk()
+            ->assertJsonPath('context.access_scope', 'assigned')
+            ->assertJsonPath('summary.total', 2)
+            ->assertJsonPath('summary.needs_action', 1)
+            ->assertJsonPath('summary.published', 1)
+            ->assertJsonPath('pagination.total', 2)
+            ->assertJsonCount(2, 'programs');
 
-        $this->actingAs($provider)
-            ->get("/provider/programs/{$scholarship->id}/edit/basics")
+        $this->assertEqualsCanonicalizing(
+            [$assignedDraft->id, $assignedPublished->id],
+            collect($response->json('programs'))->pluck('id')->all(),
+        );
+    }
+
+    public function test_coordinator_dashboard_is_scoped_and_orders_priority_work_and_deadlines(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $revision = $this->program($owner, 'Revision required', 'rejected');
+        $draft = $this->program($owner, 'Incomplete draft', 'draft');
+        $waiting = $this->program($owner, 'Waiting for review', 'pending_review');
+        $urgent = $this->program($owner, 'Deadline approaching', 'published', [
+            'deadline' => now()->addDays(3)->toDateString(),
+        ]);
+        $this->program($owner, 'Unassigned draft', 'draft');
+        $outsideOwner = User::factory()->create(['role' => 'provider']);
+        $this->program($outsideOwner, 'Outside deadline', 'published');
+        $coordinator = $this->coordinator($owner, [$revision->id, $draft->id, $waiting->id, $urgent->id]);
+
+        $response = $this->actingAs($coordinator)
+            ->getJson('/provider/programs/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('context.access_scope', 'assigned')
+            ->assertJsonPath('summary.total', 4)
+            ->assertJsonPath('summary.needs_action', 2)
+            ->assertJsonPath('summary.under_review', 1)
+            ->assertJsonPath('summary.published', 1)
+            ->assertJsonPath('priorities.0.id', $revision->id)
+            ->assertJsonPath('priorities.0.priority_label', 'Address requested changes')
+            ->assertJsonPath('deadlines.0.id', $urgent->id)
+            ->assertJsonCount(2, 'priorities')
+            ->assertJsonCount(1, 'deadlines')
+            ->assertJsonCount(4, 'recent');
+
+        $this->assertEqualsCanonicalizing(
+            [$revision->id, $draft->id, $waiting->id, $urgent->id],
+            collect($response->json('recent'))->pluck('id')->all(),
+        );
+    }
+
+    public function test_directory_supports_lifecycle_filters_search_sorting_and_pagination(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $alpha = $this->program($owner, 'Alpha access grant', 'draft');
+        $revision = $this->program($owner, 'Revision award', 'rejected');
+        $this->program($owner, 'Published award', 'published');
+        $coordinator = $this->coordinator($owner);
+
+        $this->actingAs($coordinator)
+            ->getJson('/provider/programs/data?filter=drafts&sort=title')
+            ->assertOk()
+            ->assertJsonPath('filter', 'drafts')
+            ->assertJsonPath('programs.0.id', $alpha->id)
+            ->assertJsonPath('programs.1.id', $revision->id)
+            ->assertJsonCount(2, 'programs');
+
+        $this->actingAs($coordinator)
+            ->getJson('/provider/programs/data?search=Alpha')
+            ->assertOk()
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('programs.0.id', $alpha->id);
+
+        foreach (range(1, 9) as $number) {
+            $this->program($owner, "Additional program {$number}", 'closed');
+        }
+
+        $this->actingAs($coordinator)
+            ->getJson('/provider/programs/data?page=2')
+            ->assertOk()
+            ->assertJsonPath('pagination.per_page', 10)
+            ->assertJsonPath('pagination.total', 12)
+            ->assertJsonPath('pagination.current_page', 2)
+            ->assertJsonCount(2, 'programs');
+    }
+
+    public function test_program_record_uses_organization_and_assignment_boundaries(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $assigned = $this->program($owner, 'Accessible program', 'published');
+        $unassigned = $this->program($owner, 'Restricted program', 'draft');
+        $outsideOwner = User::factory()->create(['role' => 'provider']);
+        $outside = $this->program($outsideOwner, 'Outside program', 'published');
+        $coordinator = $this->coordinator($owner, [$assigned->id]);
+
+        $this->actingAs($coordinator)
+            ->get("/provider/programs/{$assigned->id}")
+            ->assertOk()
+            ->assertViewIs('provider-program-record');
+
+        $this->actingAs($coordinator)
+            ->getJson("/provider/programs/{$assigned->id}/data")
+            ->assertOk()
+            ->assertJsonPath('program.id', $assigned->id)
+            ->assertJsonPath('program.title', 'Accessible program')
+            ->assertJsonPath('program.status.label', 'Published');
+
+        $this->actingAs($coordinator)->get("/provider/programs/{$unassigned->id}")->assertForbidden();
+        $this->actingAs($coordinator)->get("/provider/programs/{$outside->id}")->assertForbidden();
+    }
+
+    public function test_program_coordinator_can_open_the_guided_builder_for_create_and_assigned_editing(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $draft = $this->program($owner, 'Builder draft', 'draft');
+        $unassigned = $this->program($owner, 'Other draft', 'draft');
+        $coordinator = $this->coordinator($owner, [$draft->id]);
+
+        $this->actingAs($coordinator)
+            ->get('/provider/programs/create')
+            ->assertOk()
+            ->assertViewIs('provider-program-form')
+            ->assertSee('providerProgramForm', false);
+
+        $this->actingAs($coordinator)
+            ->get("/provider/programs/{$draft->id}/edit")
+            ->assertRedirect("/provider/programs/{$draft->id}/edit/basics");
+
+        $this->actingAs($coordinator)
+            ->get("/provider/programs/{$draft->id}/edit/support")
+            ->assertOk()
+            ->assertViewIs('provider-program-form');
+
+        $this->actingAs($coordinator)
+            ->get("/provider/programs/{$unassigned->id}/edit/basics")
             ->assertForbidden();
     }
 
-    public function test_provider_cannot_open_another_organization_program_workspace(): void
+    public function test_program_record_only_exposes_edit_action_outside_admin_review(): void
     {
-        $provider = User::factory()->create([
+        $owner = User::factory()->create(['role' => 'provider']);
+        $draft = $this->program($owner, 'Editable draft', 'draft');
+        $review = $this->program($owner, 'Reviewing program', 'pending_review');
+        $coordinator = $this->coordinator($owner);
+
+        $this->actingAs($coordinator)
+            ->getJson("/provider/programs/{$draft->id}/data")
+            ->assertOk()
+            ->assertJsonPath('program.actions.edit_url', "/provider/programs/{$draft->id}/edit/basics");
+
+        $this->actingAs($coordinator)
+            ->getJson("/provider/programs/{$review->id}/data")
+            ->assertOk()
+            ->assertJsonPath('program.actions.edit_url', null);
+    }
+
+    public function test_provider_without_program_permission_cannot_open_the_directory(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $reviewer = User::factory()->create([
             'role' => 'provider',
-            'account_status' => 'active',
+            'parent_account_id' => $owner->id,
+            'permissions' => ['verify_applications'],
         ]);
-        $provider->providerProfile()->update(['verification_status' => 'approved']);
 
-        $otherProvider = User::factory()->create([
+        $this->actingAs($reviewer)->get('/provider/programs')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/programs/data')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/programs/dashboard/data')->assertForbidden();
+    }
+
+    private function coordinator(User $owner, ?array $programIds = null): User
+    {
+        return User::factory()->create([
             'role' => 'provider',
-            'account_status' => 'active',
+            'parent_account_id' => $owner->id,
+            'account_title' => 'program_coordinator',
+            'permissions' => ['manage_programs'],
+            'assigned_program_ids' => $programIds,
         ]);
-        $scholarship = Scholarship::create([
-            'provider_id' => $otherProvider->id,
-            'title' => 'Private Program Workspace',
-            'description' => 'A scholarship owned by a different provider organization.',
-            'status' => 'published',
+    }
+
+    private function program(User $owner, string $title, string $status, array $attributes = []): Scholarship
+    {
+        return Scholarship::query()->create([
+            'provider_id' => $owner->id,
+            'title' => $title,
+            'description' => 'A focused scholarship program record for provider testing.',
+            'category' => 'Academic scholarship',
+            'program_cycle' => 'School year 2026-2027',
+            'slots_available' => 10,
+            'application_limit' => 100,
+            'selection_stages' => ['screening', 'final_decision'],
+            'status' => $status,
+            'deadline' => now()->addMonth()->toDateString(),
+            ...$attributes,
         ]);
-
-        $workspaces = [
-            '',
-            '/updates',
-            '/applications/review',
-            '/applications/activities',
-            '/applications/results',
-            '/applications/decisions',
-            '/applications/recipients',
-            '/applications/waitlist',
-        ];
-
-        foreach ($workspaces as $workspace) {
-            $this->actingAs($provider)
-                ->get("/provider/programs/{$scholarship->id}{$workspace}")
-                ->assertForbidden();
-        }
-
-        foreach (['', '/academic', '/releases', '/outcomes'] as $workspace) {
-            $this->actingAs($provider)
-                ->get("/provider/monitoring/{$scholarship->id}{$workspace}")
-                ->assertForbidden();
-        }
-
-        $this->actingAs($provider)
-            ->get("/provider/programs/{$scholarship->id}/monitoring")
-            ->assertForbidden();
     }
 }

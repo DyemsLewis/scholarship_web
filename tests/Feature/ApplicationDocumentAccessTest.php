@@ -61,6 +61,32 @@ class ApplicationDocumentAccessTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_final_decision_officer_has_read_only_document_access_but_selection_officer_does_not(): void
+    {
+        Storage::fake('local');
+        [$provider, , $document] = $this->applicationDocument();
+        $decisionOfficer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'decision_officer',
+            'permissions' => ['record_final_decisions'],
+        ]);
+        $selectionOfficer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'account_title' => 'selection_officer',
+            'permissions' => ['manage_selection_activities'],
+        ]);
+
+        $this->actingAs($decisionOfficer)
+            ->get("/documents/{$document->id}/view")
+            ->assertOk();
+
+        $this->actingAs($selectionOfficer)
+            ->get("/documents/{$document->id}/view")
+            ->assertForbidden();
+    }
+
     public function test_another_applicant_cannot_open_or_download_private_application_documents(): void
     {
         Storage::fake('local');

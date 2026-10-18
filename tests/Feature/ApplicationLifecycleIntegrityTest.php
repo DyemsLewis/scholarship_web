@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicationDocument;
+use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
+use App\Models\RecipientSupportDecision;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -247,6 +249,160 @@ class ApplicationLifecycleIntegrityTest extends TestCase
             'application_state' => 'awaiting_decision',
             'workflow_stage' => 'decision',
             'final_outcome' => null,
+        ]);
+    }
+
+    public function test_provider_can_reopen_the_latest_stage_result_with_an_audit_reason(): void
+    {
+        $provider = $this->provider();
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($this->application($this->program($provider), $applicant));
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
+        $schedule = ApplicationSchedule::create([
+            'scholarship_application_id' => $application->id,
+            'type' => 'formal_application',
+            'title' => 'Formal application handoff',
+            'scheduled_at' => now()->addDay(),
+            'mode' => 'provider_managed',
+            'instructions' => 'Follow the provider instructions.',
+            'status' => 'scheduled',
+            'attendance_status' => 'not_required',
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
+
+        $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/data?workspace=review")
+            ->assertOk()
+            ->assertJsonPath('application.decision_reopen.can_reopen', true)
+            ->assertJsonPath('application.decision_reopen.stage', 'screening');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision/reopen", [
+                'reason' => 'The reviewer selected the wrong screening result.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'under_review')
+            ->assertJsonPath('application.workflow.current_stage', 'screening')
+            ->assertJsonPath('application.decision_reopen.can_reopen', false);
+
+        $this->assertDatabaseHas('application_stage_progresses', [
+            'scholarship_application_id' => $application->id,
+            'stage_key' => 'screening',
+            'status' => 'current',
+            'result' => null,
+        ]);
+        $this->assertDatabaseHas('application_stage_progresses', [
+            'scholarship_application_id' => $application->id,
+            'stage_key' => 'formal_application',
+            'status' => 'pending',
+        ]);
+        $this->assertSame('cancelled', $schedule->fresh()->status);
+        $this->assertDatabaseHas('application_status_histories', [
+            'scholarship_application_id' => $application->id,
+            'decision_reason' => 'decision_reopened',
+            'review_notes' => 'Pre-screening review reopened: The reviewer selected the wrong screening result.',
+        ]);
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $applicant->id,
+            'type' => 'application_status',
+            'title' => 'Application review reopened',
+        ]);
+    }
+
+    public function test_provider_can_reopen_a_failed_selection_stage(): void
+    {
+        $provider = $this->provider();
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($this->application($this->program($provider), $applicant));
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $provider);
+        $application = $workflow->recordStageResult(
+            $application,
+            'formal_application',
+            'not_passed',
+            $provider,
+            'The original completion record was incorrect.',
+            'formal_application_not_completed',
+        );
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision/reopen", [
+                'reason' => 'New provider records show the handoff was completed.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'approved')
+            ->assertJsonPath('application.application_state', 'in_provider_process')
+            ->assertJsonPath('application.workflow.current_stage', 'formal_application')
+            ->assertJsonPath('application.final_outcome', null);
+
+        $this->assertDatabaseHas('application_stage_progresses', [
+            'scholarship_application_id' => $application->id,
+            'stage_key' => 'formal_application',
+            'status' => 'current',
+            'result' => null,
+        ]);
+    }
+
+    public function test_provider_can_reopen_a_final_outcome_before_recipient_onboarding(): void
+    {
+        $provider = $this->provider();
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $this->applicationAtDecision($this->program($provider), $applicant, $provider);
+        $application = $workflow->recordFinalOutcome($application, 'selected', $provider);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision/reopen", [
+                'reason' => 'The final selection was recorded for the wrong applicant.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.status', 'approved')
+            ->assertJsonPath('application.application_state', 'awaiting_decision')
+            ->assertJsonPath('application.workflow.current_stage', 'decision')
+            ->assertJsonPath('application.final_outcome', null)
+            ->assertJsonPath('redirect_url', "/provider/applications/{$application->id}?workspace=decision");
+
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $application->id,
+            'provider_contract_terms_snapshot' => null,
+            'awarded_amount' => null,
+        ]);
+    }
+
+    public function test_selected_outcome_cannot_be_reopened_after_recipient_activity_begins(): void
+    {
+        $provider = $this->provider();
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $this->applicationAtDecision($this->program($provider), $applicant, $provider);
+        $application = $workflow->recordFinalOutcome($application, 'selected', $provider);
+        RecipientSupportDecision::create([
+            'scholarship_application_id' => $application->id,
+            'applicant_id' => $applicant->id,
+            'decision' => 'renewed',
+            'effective_on' => now()->toDateString(),
+            'next_period_terms' => 'Continue support under the existing recipient agreement.',
+            'decided_by' => $provider->id,
+            'decided_at' => now(),
+        ]);
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/applications/{$application->id}/decision/reopen", [
+                'reason' => 'Attempt to reopen after recipient support started.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('reason');
+
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $application->id,
+            'status' => 'awarded',
+            'final_outcome' => 'selected',
+        ]);
+        $this->assertDatabaseMissing('application_status_histories', [
+            'scholarship_application_id' => $application->id,
+            'decision_reason' => 'decision_reopened',
         ]);
     }
 

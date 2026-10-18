@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
+  <title id="title">Commute Forward Student Grant</title>
+  <rect width="240" height="240" rx="24" fill="#f8fafc"/>
+  <rect x="51" y="50" width="138" height="126" rx="22" fill="#07142d"/>
+  <path d="M72 72h96v46H72z" fill="#fff"/>
+  <path d="M75 139h90" stroke="#f5b700" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="82" cy="181" r="17" fill="#f5b700"/>
+  <circle cx="158" cy="181" r="17" fill="#f5b700"/>
+</svg>

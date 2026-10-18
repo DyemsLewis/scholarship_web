@@ -31,13 +31,20 @@ const updatingId = ref(null);
 const documentUpdatingId = ref(null);
 const errorMessage = ref('');
 const application = ref(null);
+const applicationWorkspace = ref(null);
 const pageSearchParams = new URLSearchParams(window.location.search);
 const requestedSection = pageSearchParams.get('section');
 const requestedReturnTo = pageSearchParams.get('return_to');
 const providerWorkspaceUrl = safeProviderUrl(window.portalUser?.provider_workspace_url);
 const requestedWorkspaceUrl = safeProviderUrl(requestedReturnTo);
 const detailWorkspacePath = requestedWorkspaceUrl.split('?')[0] || providerWorkspaceUrl;
-const detailContext = {
+const requestedWorkspaceMode = {
+    '/provider/workspaces/reviews': 'review',
+    '/provider/workspaces/selection': 'selection',
+    '/provider/workspaces/decisions': 'decision',
+    '/provider/workspaces/recipients': 'recipient',
+}[detailWorkspacePath] ?? '';
+const fallbackDetailContext = {
     '/provider/workspaces/reviews': {
         eyebrow: 'Application reviewer workspace',
         title: 'Application verification record',
@@ -73,6 +80,7 @@ const detailContext = {
     icon: 'fa-solid fa-user-check',
     defaultSection: 'applicant',
 };
+const detailContext = computed(() => applicationWorkspace.value ?? fallbackDetailContext);
 const normalizedRequestedSection = requestedSection === 'review'
     ? 'eligibility'
     : requestedSection === 'schedule'
@@ -81,7 +89,7 @@ const normalizedRequestedSection = requestedSection === 'review'
 const validSections = ['applicant', 'eligibility', 'documents', 'decision', 'history'];
 const activeSection = ref(validSections.includes(normalizedRequestedSection)
     ? normalizedRequestedSection
-    : detailContext.defaultSection);
+    : fallbackDetailContext.defaultSection);
 const activeApplicantView = ref('profile');
 const eligibilityPage = ref(1);
 const rubricPage = ref(1);
@@ -121,21 +129,44 @@ const {
     cancelConfirmation,
 } = useConfirmationDialog();
 
-const primaryDetailSections = [
+const sectionCatalog = [
     { key: 'applicant', label: 'Applicant', icon: 'fa-solid fa-user' },
     { key: 'eligibility', label: 'Eligibility', icon: 'fa-solid fa-scale-balanced' },
     { key: 'documents', label: 'Documents', icon: 'fa-solid fa-file-circle-check' },
     { key: 'decision', label: 'Decision', icon: 'fa-solid fa-gavel' },
-];
-const detailSections = [
-    ...primaryDetailSections,
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
 ];
-const applicantDetailViews = [
+const detailSections = computed(() => applicationWorkspace.value?.sections?.length
+    ? applicationWorkspace.value.sections
+    : sectionCatalog);
+const primaryDetailSections = computed(() => detailSections.value.slice(0, 4));
+const secondaryDetailSections = computed(() => detailSections.value.slice(4));
+const applicantDetailViewCatalog = [
     { key: 'profile', label: 'Profile', icon: 'fa-solid fa-graduation-cap' },
     { key: 'background', label: 'Background', icon: 'fa-solid fa-house-user' },
     { key: 'responses', label: 'Responses', icon: 'fa-solid fa-message' },
 ];
+const applicantDetailViews = computed(() => {
+    const visibleViews = applicationWorkspace.value?.applicant_views;
+
+    return Array.isArray(visibleViews)
+        ? applicantDetailViewCatalog.filter((view) => visibleViews.includes(view.key))
+        : applicantDetailViewCatalog;
+});
+const workspaceCapabilities = computed(() => applicationWorkspace.value?.capabilities ?? {});
+const canReviewProfile = computed(() => Boolean(workspaceCapabilities.value.review_profile));
+const canViewProfileEvidence = computed(() => Boolean(workspaceCapabilities.value.view_profile_evidence));
+const canReviewDocuments = computed(() => Boolean(workspaceCapabilities.value.review_documents));
+const canViewDocuments = computed(() => Boolean(workspaceCapabilities.value.view_documents));
+const canRecordCurrentStage = computed(() => currentWorkflowStage.value === 'screening'
+    ? Boolean(workspaceCapabilities.value.record_screening_result)
+    : ['formal_application', 'exam', 'interview'].includes(currentWorkflowStage.value)
+        && Boolean(workspaceCapabilities.value.record_selection_result));
+const canActOnApplication = computed(() => Boolean(
+    currentWorkflowStage.value === 'decision'
+        ? workspaceCapabilities.value.record_final_outcome
+        : canRecordCurrentStage.value,
+));
 const scheduleTypeCatalog = [
     { value: 'exam', label: 'Exam', icon: 'fa-solid fa-clipboard-question' },
     { value: 'interview', label: 'Interview', icon: 'fa-solid fa-comments' },
@@ -462,7 +493,8 @@ const profileEvidenceRows = computed(() => {
     return rows;
 });
 const canVerifyAcademicRecord = computed(() => (
-    application.value?.applicant?.profile_verification_status === 'pending'
+    canReviewProfile.value
+        && application.value?.applicant?.profile_verification_status === 'pending'
         && Boolean(academicProfileProof.value)
         && Boolean(recentSchoolIdProfileProof.value)
         && (academicScanReady.value || reviewedAcademicResultReady.value)
@@ -506,6 +538,10 @@ const suggestedReviewActions = computed(() => {
     }
 
     if (currentWorkflowStage.value === 'decision') {
+        if (!workspaceCapabilities.value.record_final_outcome) {
+            return [];
+        }
+
         return [
             {
                 key: 'selected',
@@ -547,6 +583,10 @@ const suggestedReviewActions = computed(() => {
                 requiresReason: true,
             },
         ];
+    }
+
+    if (!canRecordCurrentStage.value) {
+        return [];
     }
 
     const stageLabel = workflow.value.current_stage_label ?? 'Current stage';
@@ -620,6 +660,10 @@ const completedStageMessage = computed(() => workflow.value.final_outcome_label
         : `Final outcome: ${workflow.value.final_outcome_label}. No further selection decision is required.`
     : 'This application has no pending provider action.');
 const decisionPanelTitle = computed(() => {
+    if (applicationWorkspace.value?.mode === 'recipient') {
+        return 'Recipient agreement and support';
+    }
+
     if (workflow.value.application_state === 'withdrawn') {
         return 'Application withdrawn';
     }
@@ -631,6 +675,10 @@ const decisionPanelTitle = computed(() => {
     return `Record the ${String(workflow.value.current_stage_label ?? 'current stage').toLowerCase()} result`;
 });
 const decisionPanelDescription = computed(() => {
+    if (applicationWorkspace.value?.mode === 'recipient') {
+        return 'Review the applicant response and confirm the handoff is ready for support delivery.';
+    }
+
     if (workflow.value.application_state === 'withdrawn') {
         return 'Keep the withdrawal reason for your records. This application no longer needs review.';
     }
@@ -642,9 +690,11 @@ const decisionPanelDescription = computed(() => {
     return 'Use one result to move the applicant forward or close the application at this stage.';
 });
 const canRequestCorrection = computed(() => application.value
+    && workspaceCapabilities.value.request_correction
     && !workflow.value.is_closed
     && !['requested', 'submitted'].includes(application.value.correction_status));
 const canStopBenefits = computed(() => application.value
+    && workspaceCapabilities.value.stop_benefits
     && workflow.value.final_outcome === 'selected'
     && ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'].includes(application.value.status));
 const confirmedDocuments = computed(() => application.value?.document_checklist ?? []);
@@ -931,6 +981,10 @@ function decisionReasonLabel(reason) {
 }
 
 function openDocumentReview(document) {
+    if (!canViewDocuments.value) {
+        return;
+    }
+
     selectedDocument.value = document;
     documentReviewError.value = '';
 }
@@ -941,6 +995,10 @@ function closeDocumentReview() {
 }
 
 function openProfileProof(proof) {
+    if (!canViewProfileEvidence.value) {
+        return;
+    }
+
     selectedProfileProof.value = proof;
 }
 
@@ -998,7 +1056,7 @@ async function verifyApplicantAcademicRecord() {
 }
 
 async function updatePhotoReview(action, reason = '') {
-    if (!application.value || isReviewingPhoto.value) {
+    if (!application.value || !canReviewProfile.value || isReviewingPhoto.value) {
         return;
     }
 
@@ -1075,10 +1133,21 @@ async function loadApplication() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get(`/provider/applications/${applicationId}/data`);
+        const response = await window.axios.get(`/provider/applications/${applicationId}/data`, {
+            params: requestedWorkspaceMode ? { workspace: requestedWorkspaceMode } : {},
+        });
 
+        applicationWorkspace.value = response.data.workspace ?? null;
         applyApplication(response.data.application);
         applicationNavigation.value = response.data.application_navigation ?? applicationNavigation.value;
+
+        if (!normalizedRequestedSection || !detailSections.value.some((section) => section.key === normalizedRequestedSection)) {
+            activeSection.value = applicationWorkspace.value?.default_section ?? fallbackDetailContext.defaultSection;
+        }
+
+        if (!applicantDetailViews.value.some((view) => view.key === activeApplicantView.value)) {
+            activeApplicantView.value = applicantDetailViews.value[0]?.key ?? 'profile';
+        }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load application details.';
     } finally {
@@ -1089,7 +1158,7 @@ async function loadApplication() {
 async function requestApplicationCorrection() {
     const message = correctionMessage.value.trim();
 
-    if (!application.value || !correctionTargets.value.length || message.length < 5) {
+    if (!application.value || !canRequestCorrection.value || !correctionTargets.value.length || message.length < 5) {
         errorMessage.value = !correctionTargets.value.length
             ? 'Choose what the applicant needs to update.'
             : 'Tell the applicant what needs to be corrected.';
@@ -1124,7 +1193,7 @@ async function requestApplicationCorrection() {
 }
 
 async function resolveApplicationCorrection() {
-    if (!application.value || isHandlingCorrection.value) {
+    if (!application.value || !workspaceCapabilities.value.request_correction || isHandlingCorrection.value) {
         return;
     }
 
@@ -1161,7 +1230,7 @@ async function resolveApplicationCorrection() {
 }
 
 async function updateStatus() {
-    if (!application.value) {
+    if (!application.value || !canActOnApplication.value) {
         return;
     }
 
@@ -1310,7 +1379,7 @@ async function stopBenefits() {
 async function updateDocumentStatus(review) {
     const document = review?.document ?? selectedDocument.value;
 
-    if (!application.value || !document) {
+    if (!application.value || !document || !canReviewDocuments.value) {
         return;
     }
 
@@ -1372,8 +1441,6 @@ onMounted(loadApplication);
             <div class="provider-container">
                 <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
                     <a :href="applicationListUrl" class="font-bold text-slate-600 transition hover:text-slate-950"><i class="fa-solid fa-arrow-left mr-2 text-xs" aria-hidden="true"></i>Back to workspace</a>
-                    <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
-                    <span class="max-w-72 truncate font-semibold text-slate-950">{{ application?.applicant?.name || 'Applicant record' }}</span>
                 </nav>
 
                 <ProviderPageHeader
@@ -1383,23 +1450,18 @@ onMounted(loadApplication);
                     :icon="detailContext.icon"
                     :show-role-guide="false"
                 >
-                    <template v-if="application" #meta>
-                        <span><i class="fa-solid fa-user mr-2 text-slate-400" aria-hidden="true"></i>{{ application.applicant?.name || 'Applicant record' }}</span>
-                        <span><i class="fa-solid fa-graduation-cap mr-2 text-slate-400" aria-hidden="true"></i>{{ application.scholarship?.title || 'Scholarship program' }}</span>
-                        <span><i class="fa-regular fa-clock mr-2 text-slate-400" aria-hidden="true"></i>{{ application.submitted_at || 'Submission date unavailable' }}</span>
-                    </template>
                     <template v-if="application" #actions>
                         <div class="flex flex-wrap items-center gap-2">
                             <span :class="['inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold uppercase', statusClass(application.status)]">
                                 <i class="fa-solid fa-circle-dot" aria-hidden="true"></i>{{ workflow.application_state_label || statusLabel(application.status) }}
                             </span>
                             <button
-                                v-if="activeSection !== 'decision'"
+                                v-if="activeSection !== detailContext.default_section"
                                 type="button"
                                 class="inline-flex items-center justify-center gap-2 bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                @click="activeSection = 'decision'"
+                                @click="activeSection = detailContext.default_section"
                             >
-                                Open current action
+                                Open current task
                                 <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </button>
                         </div>
@@ -1415,25 +1477,48 @@ onMounted(loadApplication);
                         {{ errorMessage }}
                     </p>
                     <section class="overflow-hidden border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
-                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-                            <p class="flex items-center gap-2 text-sm font-bold text-slate-950"><i class="fa-solid fa-folder-open text-slate-400" aria-hidden="true"></i>Applicant record menu</p>
+                        <div class="flex min-h-16 items-center justify-between gap-4 border-b border-slate-200 px-4 py-3">
+                            <div class="flex min-w-0 items-center gap-3">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-950 text-sm font-bold text-white">
+                                    <i class="fa-solid fa-user" aria-hidden="true"></i>
+                                </span>
+                                <div class="min-w-0">
+                                    <p class="truncate text-sm font-bold text-slate-950">{{ application.applicant?.name || 'Applicant record' }}</p>
+                                    <p class="mt-0.5 truncate text-xs text-slate-500">{{ application.scholarship?.title || 'Scholarship program' }}<span v-if="application.submitted_at"> · Submitted {{ application.submitted_at }}</span></p>
+                                </div>
+                            </div>
                             <div v-if="applicationNavigation.total > 1" class="flex items-center gap-1 text-xs font-bold text-slate-600">
                                 <a v-if="applicationNavigation.previous_application" :href="applicationNavigationUrl(applicationNavigation.previous_application)" class="grid h-8 w-8 place-items-center border border-slate-300 bg-white hover:bg-slate-100" aria-label="Previous applicant"><i class="fa-solid fa-chevron-left text-[10px]" aria-hidden="true"></i></a>
                                 <span class="px-2">Record {{ applicationNavigation.position }} of {{ applicationNavigation.total }}</span>
                                 <a v-if="applicationNavigation.next_application" :href="applicationNavigationUrl(applicationNavigation.next_application)" class="grid h-8 w-8 place-items-center border border-slate-300 bg-white hover:bg-slate-100" aria-label="Next applicant"><i class="fa-solid fa-chevron-right text-[10px]" aria-hidden="true"></i></a>
                             </div>
                         </div>
-                        <nav class="flex overflow-x-auto" aria-label="Applicant record sections">
+                        <nav class="flex min-w-0 overflow-x-auto" aria-label="Applicant record sections">
                             <button
-                                v-for="section in detailSections"
+                                v-for="section in primaryDetailSections"
                                 :key="section.key"
                                 type="button"
                                 :aria-current="activeSection === section.key ? 'page' : undefined"
                                 :class="[
-                                    'inline-flex min-w-32 flex-1 items-center justify-center gap-2 border-r border-slate-200 px-3 py-3 text-sm font-bold transition last:border-r-0',
+                                    'inline-flex min-w-36 flex-1 items-center justify-center gap-2 border-r border-slate-200 px-3 py-3 text-sm font-bold transition',
                                     activeSection === section.key
                                         ? 'bg-slate-950 text-white'
                                         : 'text-slate-700 hover:bg-slate-50 hover:text-slate-950',
+                                ]"
+                                @click="activeSection = section.key"
+                            >
+                                <i :class="section.icon" aria-hidden="true"></i>{{ section.label }}
+                            </button>
+                            <button
+                                v-for="section in secondaryDetailSections"
+                                :key="section.key"
+                                type="button"
+                                :aria-current="activeSection === section.key ? 'page' : undefined"
+                                :class="[
+                                    'inline-flex min-w-28 shrink-0 items-center justify-center gap-2 px-4 py-3 text-sm font-bold transition',
+                                    activeSection === section.key
+                                        ? 'bg-slate-950 text-white'
+                                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-950',
                                 ]"
                                 @click="activeSection = section.key"
                             >
@@ -1523,7 +1608,7 @@ onMounted(loadApplication);
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <p class="text-sm font-semibold uppercase tracking-[0.18em] text-amber-700">
-                                            Decision
+                                            {{ applicationWorkspace?.mode === 'selection' ? 'Activity result' : applicationWorkspace?.mode === 'recipient' ? 'Recipient handoff' : 'Decision' }}
                                         </p>
                                         <h3 class="mt-2 text-xl font-bold text-slate-950">
                                             {{ decisionPanelTitle }}
@@ -1541,7 +1626,7 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div
-                                    v-if="currentActivityType && !postDecisionSummary"
+                                    v-if="applicationWorkspace?.mode === 'selection' && currentActivityType && !postDecisionSummary"
                                     class="mt-5 flex flex-col gap-3 rounded-md border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
                                 >
                                     <div class="flex min-w-0 items-start gap-3">
@@ -1613,7 +1698,7 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div
-                                    v-if="application.correction_status"
+                                    v-if="application.correction_status && workspaceCapabilities.request_correction"
                                     :class="[
                                         'mt-5 rounded-md border p-4',
                                         application.correction_status === 'submitted'
@@ -1642,7 +1727,7 @@ onMounted(loadApplication);
                                             </p>
                                         </div>
                                         <button
-                                            v-if="application.correction_status === 'submitted'"
+                                            v-if="application.correction_status === 'submitted' && workspaceCapabilities.request_correction"
                                             type="button"
                                             :disabled="isHandlingCorrection"
                                             class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
@@ -1653,7 +1738,7 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div v-if="!postDecisionSummary" class="mt-5">
+                                <div v-if="!postDecisionSummary && (canActOnApplication || canRequestCorrection)" class="mt-5">
                                     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Available actions</p>
                                         <button
@@ -1743,7 +1828,7 @@ onMounted(loadApplication);
                                     </div>
                                 </div>
 
-                                <div v-if="application.recipient_agreement" class="mt-5">
+                                <div v-if="application.recipient_agreement && ['decision', 'recipient'].includes(applicationWorkspace?.mode)" class="mt-5">
                                     <RecipientAgreementSummary :agreement="application.recipient_agreement" compact />
                                     <div
                                         v-if="application.recipient_agreement.response_note"
@@ -1754,7 +1839,7 @@ onMounted(loadApplication);
                                 </div>
 
                                 <div
-                                    v-if="canStopBenefits || application.status === 'benefits_terminated'"
+                                    v-if="['decision', 'recipient'].includes(applicationWorkspace?.mode) && (canStopBenefits || application.status === 'benefits_terminated')"
                                     class="mt-5 overflow-hidden rounded-md border border-slate-200 bg-white"
                                 >
                                     <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -1803,7 +1888,7 @@ onMounted(loadApplication);
 
                                 </div>
 
-                                <div class="mt-5 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
+                                <div v-if="canActOnApplication || postDecisionSummary" class="mt-5 grid gap-4 border-t border-slate-200 pt-5 md:grid-cols-2">
                                     <div v-if="selectedReviewAction?.requiresReason">
                                         <label :class="labelClass">
                                             Why was this decision made? <span class="text-rose-600">*</span>
@@ -1900,7 +1985,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeSection === 'decision' && !postDecisionSummary && rubricReview.criteria?.length" class="order-4 border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+                            <section v-if="activeSection === 'decision' && canActOnApplication && !postDecisionSummary && rubricReview.criteria?.length" class="order-4 border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
                                 <div class="border-b border-slate-200 px-5 py-4">
                                     <h3 class="flex items-center gap-2 text-lg font-bold text-slate-950"><i class="fa-solid fa-chart-simple text-sm text-slate-500" aria-hidden="true"></i>Consistent applicant scoring</h3>
                                     <p class="mt-1 text-sm text-slate-500">Score every provider criterion from 0 to 100 before saving the review or decision.</p>
@@ -1954,7 +2039,7 @@ onMounted(loadApplication);
                                 <div class="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between">
                                     <div>
                                         <h3 class="flex items-center gap-2 text-lg font-bold text-slate-950"><i class="fa-solid fa-file-circle-check text-sm text-slate-500" aria-hidden="true"></i>Document checklist</h3>
-                                        <p class="mt-1 text-sm text-slate-500">Open an uploaded file to review it and record your decision.</p>
+                                        <p class="mt-1 text-sm text-slate-500">{{ canReviewDocuments ? 'Open a file and record its review result.' : 'Open a file to confirm the recorded review.' }}</p>
                                     </div>
                                     <span class="bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                         {{ application.document_readiness?.uploaded ?? 0 }} of {{ application.document_readiness?.required ?? applicationRequirements.length }} uploaded
@@ -1986,7 +2071,7 @@ onMounted(loadApplication);
                             </section>
 
                             <ProviderProfileEvidencePanel
-                                v-if="activeSection === 'documents'"
+                                v-if="activeSection === 'documents' && canViewProfileEvidence"
                                 :proofs="applicantProfileProofs"
                                 :academic-proof="academicProfileProof"
                                 :school-id-proof="recentSchoolIdProfileProof"
@@ -2051,7 +2136,7 @@ onMounted(loadApplication);
                             v-if="activeSection === 'applicant'"
                             class="space-y-5"
                         >
-                            <nav class="flex overflow-x-auto border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]" aria-label="Applicant record sections">
+                            <nav v-if="applicantDetailViews.length > 1" class="flex overflow-x-auto border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]" aria-label="Applicant record sections">
                                 <button
                                     v-for="view in applicantDetailViews"
                                     :key="view.key"
@@ -2076,13 +2161,14 @@ onMounted(loadApplication);
                                 :status-label="profileVerificationLabel(application.applicant?.profile_verification_status)"
                                 :status-class="profileVerificationClass(application.applicant?.profile_verification_status)"
                                 :facts="applicantIdentityFacts"
+                                :can-review-photo="canReviewProfile"
                                 :busy="isReviewingPhoto"
                                 :error="photoReviewError"
                                 @approve-photo="updatePhotoReview('approve')"
                                 @request-photo-replacement="updatePhotoReview('request_replacement', $event)"
                             />
 
-                            <section v-if="activeApplicantView === 'profile'" class="provider-panel overflow-hidden">
+                            <section v-if="activeApplicantView === 'profile' && canViewProfileEvidence" class="provider-panel overflow-hidden">
                                 <header class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                         <h3 class="font-bold text-slate-950">Supporting evidence</h3>
@@ -2119,7 +2205,7 @@ onMounted(loadApplication);
                                 </div>
                             </section>
 
-                            <section v-if="activeApplicantView === 'profile'" class="provider-panel overflow-hidden">
+                            <section v-if="activeApplicantView === 'profile' && ['review', 'decision'].includes(applicationWorkspace?.mode)" class="provider-panel overflow-hidden">
                                 <div class="border-b border-slate-200">
                                     <div class="flex items-center gap-3 bg-slate-50/70 px-5 py-4">
                                         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
@@ -2485,6 +2571,7 @@ onMounted(loadApplication);
             :context="[application?.applicant?.name, application?.scholarship?.title].filter(Boolean).join(' - ')"
             :saving="documentUpdatingId === selectedDocument?.id"
             :error="documentReviewError"
+            :read-only="!canReviewDocuments"
             @close="closeDocumentReview"
             @save="updateDocumentStatus"
             @clear-error="documentReviewError = ''"

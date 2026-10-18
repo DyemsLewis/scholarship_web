@@ -14,6 +14,7 @@ const errorMessage = ref('');
 const actionError = ref('');
 const selectedStatus = ref('open');
 const selectedReport = ref(null);
+const providerResponseText = ref('');
 const previewAttachment = ref(null);
 const reports = ref([]);
 const providerCategories = ref([]);
@@ -206,6 +207,7 @@ function changeFilter(status) {
 
 function openReport(report) {
     actionError.value = '';
+    providerResponseText.value = report.provider_response || '';
     selectedReport.value = report;
 }
 
@@ -215,6 +217,7 @@ function closeReport() {
     }
 
     selectedReport.value = null;
+    providerResponseText.value = '';
     actionError.value = '';
 }
 
@@ -225,12 +228,20 @@ function openReportAttachment(report) {
 async function updateStatus(report) {
     const nextStatus = report.status === 'resolved' ? 'open' : 'resolved';
 
+    if (!isAdmin && nextStatus === 'resolved' && providerResponseText.value.trim().length < 10) {
+        actionError.value = 'Add a clear provider response of at least 10 characters.';
+        return;
+    }
+
     updatingId.value = report.id;
     actionError.value = '';
 
     try {
-        const response = await window.axios.patch(`${basePath}/${report.id}/status`, { status: nextStatus });
+        const payload = { status: nextStatus };
+        if (!isAdmin && nextStatus === 'resolved') payload.provider_response = providerResponseText.value.trim();
+        const response = await window.axios.patch(`${basePath}/${report.id}/status`, payload);
         selectedReport.value = response.data.report;
+        providerResponseText.value = response.data.report.provider_response || '';
         await loadReports(pagination.value.current_page);
     } catch (error) {
         actionError.value = error.response?.data?.message ?? 'Unable to update this report.';
@@ -569,6 +580,12 @@ onMounted(() => loadReports());
                             <i class="fa-solid fa-paperclip text-amber-700" aria-hidden="true"></i>
                             View attachment
                         </button>
+                    </section>
+
+                    <section v-if="selectedReport.requires_both_roles" class="mt-4 rounded-md border border-slate-200 bg-white p-4 sm:p-5">
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Provider response</p>
+                        <textarea v-if="!isAdmin && selectedReport.can_update_status && selectedReport.provider_status === 'open'" v-model="providerResponseText" rows="5" maxlength="2000" class="mt-3 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6 outline-none focus:border-amber-500" placeholder="Give the applicant one clear answer or next action."></textarea>
+                        <p v-else class="mt-3 whitespace-pre-line text-sm leading-7 text-slate-700">{{ selectedReport.provider_response || 'No written provider response has been recorded.' }}</p>
                     </section>
 
                     <dl class="mt-4 grid gap-3 sm:grid-cols-2">

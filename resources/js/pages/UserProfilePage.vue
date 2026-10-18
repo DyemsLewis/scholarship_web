@@ -36,8 +36,9 @@ const user = ref(null);
 const form = ref(emptyForm());
 const profileSearchParams = new URLSearchParams(window.location.search);
 const requestedProfileSection = profileSearchParams.get('section');
-const profileView = ref(requestedProfileSection ? 'edit' : 'overview');
-const activeSection = ref(['personal', 'academic', 'background', 'location', 'verification'].includes(requestedProfileSection)
+const editableProfileSectionIds = ['personal', 'academic', 'household', 'location', 'verification'];
+const profileView = ref(editableProfileSectionIds.includes(requestedProfileSection) ? 'edit' : 'overview');
+const activeSection = ref(editableProfileSectionIds.includes(requestedProfileSection)
     ? requestedProfileSection
     : 'personal');
 const showProviderPreview = ref(false);
@@ -205,9 +206,6 @@ const fieldLabels = {
     household_size: 'Household size',
     current_scholarship_status: 'Outside scholarship status',
     current_scholarship_details: 'Outside scholarship details',
-    scholarship_goal: 'Applicant goal',
-    achievements: 'Achievements or strengths',
-    activities_and_responsibilities: 'Activities and responsibilities',
     address: 'Address',
     barangay: 'Barangay',
     city: 'City / municipality',
@@ -250,15 +248,6 @@ const profileSections = [
         required: true,
         fields: ['income_bracket', 'household_size', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
         requiredFields: ['income_bracket', 'household_size', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'],
-    },
-    {
-        id: 'background',
-        label: 'Background',
-        detail: 'Goals and involvement',
-        icon: 'fa-solid fa-star',
-        impact: 'Optional context that helps reviewers understand the applicant beyond grades.',
-        required: false,
-        fields: ['scholarship_goal', 'achievements', 'activities_and_responsibilities'],
     },
     {
         id: 'location',
@@ -381,25 +370,11 @@ const schoolProofOption = computed(() => {
         required: false,
     };
 });
-const achievementEvidenceOption = computed(() => ({
-    value: 'achievement_evidence',
-    label: 'Achievement evidence',
-    description: 'Certificate or record for the achievement you listed.',
-    icon: 'fa-solid fa-award',
-    context: hasValue(form.value.achievements) ? ['Required for the achievement entered'] : [],
-    required: true,
-}));
-const verificationDocumentOptions = computed(() => {
-    const options = [academicProofOption.value, recentSchoolIdOption.value, schoolProofOption.value];
-    const hasAchievementEvidence = verificationDocuments.value
-        .some((document) => document.document_type === 'achievement_evidence');
-
-    if (hasValue(form.value.achievements) || hasAchievementEvidence) {
-        options.push(achievementEvidenceOption.value);
-    }
-
-    return options;
-});
+const verificationDocumentOptions = computed(() => [
+    academicProofOption.value,
+    recentSchoolIdOption.value,
+    schoolProofOption.value,
+]);
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
 const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
 const needsGuardianContext = computed(() => isMinor.value
@@ -435,8 +410,6 @@ const manualAcademicResultComplete = computed(() => Boolean(form.value.grading_s
     && (!requiresNumericGrade.value || hasValue(form.value.gwa)));
 const schoolVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'school_record') ?? null);
-const achievementEvidenceDocument = computed(() => verificationDocuments.value
-    .find((document) => document.document_type === 'achievement_evidence') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
     .filter((document) => !['academic_record', 'recent_school_id', 'school_record', 'achievement_evidence'].includes(document.document_type)));
 const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
@@ -1249,16 +1222,6 @@ const reviewGroups = computed(() => [
         ],
     },
     {
-        id: 'background',
-        title: 'Goals and involvement',
-        icon: 'fa-solid fa-star',
-        items: [
-            ['Applicant goal', form.value.scholarship_goal],
-            ['Achievements or strengths', form.value.achievements],
-            ['Activities and responsibilities', form.value.activities_and_responsibilities],
-        ],
-    },
-    {
         id: 'location',
         title: 'Location',
         icon: 'fa-solid fa-location-dot',
@@ -2056,7 +2019,7 @@ onMounted(async () => {
 
     if (requestedProfileSection === 'verification') {
         openVerificationRecords();
-    } else if (['personal', 'academic', 'household', 'background', 'location'].includes(requestedProfileSection)) {
+    } else if (['personal', 'academic', 'household', 'location'].includes(requestedProfileSection)) {
         openProfileEditor(requestedProfileSection);
     }
 });
@@ -2207,6 +2170,11 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                     </div>
                             </div>
+
+                            <div v-if="profileVerificationStatus !== 'approved'" class="flex items-start gap-3 border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm leading-5 text-amber-950 sm:px-6">
+                                <i class="fa-solid fa-shield-halved mt-0.5 text-amber-700" aria-hidden="true"></i>
+                                <p><strong>Unverified profile.</strong> Providers see these details as self-declared and may give them less weight until the supporting evidence is reviewed.</p>
+                            </div>
                         </section>
 
                         <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-300 bg-white">
@@ -2317,27 +2285,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </dl>
                             </section>
 
-                            <section class="p-4 sm:p-5">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-bullseye text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Goals and involvement</h3></div>
-                                    <span class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Applicant-declared</span>
-                                </div>
-                                <dl class="mt-3 divide-y divide-slate-200 text-sm">
-                                    <div class="py-3 first:pt-0">
-                                        <dt class="font-semibold text-slate-500">Applicant goal</dt>
-                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.scholarship_goal || 'Not provided' }}</dd>
-                                    </div>
-                                    <div class="py-3">
-                                        <dt class="font-semibold text-slate-500">Achievements or strengths</dt>
-                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.achievements || 'Not provided' }}</dd>
-                                    </div>
-                                    <div class="pt-3">
-                                        <dt class="font-semibold text-slate-500">Activities and responsibilities</dt>
-                                        <dd class="mt-1 whitespace-pre-line font-bold leading-6 text-slate-950">{{ form.activities_and_responsibilities || 'Not provided' }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
-
                             <section v-if="needsGuardianContext || hasGuardianDetails" class="p-4 sm:p-5">
                                 <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-people-roof text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Parent or guardian</h3></div>
                                 <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
@@ -2380,11 +2327,11 @@ watch(() => form.value.grading_scale, (scale) => {
             <div class="student-container">
                 <ApplicantPageHeader
                     eyebrow="Applicant Profile"
-                    title="Your scholarship profile"
-                    description="A reusable applicant record for matching, supporting evidence, and scholarship applications."
+                    title="Your applicant profile"
+                    description="Keep your personal, education, household, and location details current."
                     icon="fa-solid fa-id-card"
                     action-href="/dashboard/scholarships"
-                    action-label="See matches"
+                    action-label="Browse scholarships"
                 />
 
                 <PrivacyNoticeCard context="profile" compact />
@@ -2420,6 +2367,18 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <button type="button" class="w-full rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto" @click="openProfileEditor(profileComplete ? 'personal' : profileRecommendedAction.section)"><i class="fa-solid fa-pen mr-2" aria-hidden="true"></i>{{ profileComplete ? 'Edit profile' : 'Continue setup' }}</button>
                             </div>
                         </div>
+
+                        <div v-if="profileVerificationStatus !== 'approved'" class="flex flex-col gap-3 border-t border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                            <div class="flex min-w-0 items-start gap-3">
+                                <i class="fa-solid fa-shield-halved mt-0.5 text-amber-700" aria-hidden="true"></i>
+                                <p class="text-sm leading-5 text-amber-950">
+                                    <strong>Profile not yet verified.</strong> Providers may give self-declared details less weight until your supporting evidence is reviewed.
+                                </p>
+                            </div>
+                            <button type="button" class="w-fit shrink-0 text-xs font-bold text-amber-900 underline decoration-amber-400 underline-offset-4 hover:text-slate-950" @click="openVerificationRecords">
+                                Review supporting evidence
+                            </button>
+                        </div>
                     </section>
 
                     <section :class="['rounded-md border border-l-4 p-4 shadow-sm sm:p-5', overviewProfileAction.actionable ? 'border-amber-200 border-l-amber-400 bg-amber-50' : 'border-emerald-200 border-l-emerald-500 bg-emerald-50/60']">
@@ -2437,13 +2396,13 @@ watch(() => form.value.grading_scale, (scale) => {
                             <div class="flex min-w-0 items-start gap-3">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-eye" aria-hidden="true"></i></span>
                                 <div>
-                                    <p class="student-kicker">Provider view</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">How providers see your profile</h3>
-                                    <p class="mt-1 text-sm text-slate-500">This saved summary is shared only with a provider after you apply.</p>
+                                    <p class="student-kicker">Applicant details</p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">Your saved information</h3>
+                                    <p class="mt-1 text-sm text-slate-500">These details support matching and are shared with a provider only after you apply.</p>
                                 </div>
                             </div>
                             <button type="button" class="inline-flex w-fit items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100" @click="showProviderPreview = true">
-                                Full preview<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                Provider preview<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                             </button>
                         </header>
 
@@ -2455,7 +2414,9 @@ watch(() => form.value.grading_scale, (scale) => {
                                 </div>
                                 <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
                                     <div><dt class="text-xs text-slate-500">Age</dt><dd class="mt-1 font-bold text-slate-950">{{ applicantAge !== null ? `${applicantAge} years old` : 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Gender</dt><dd class="mt-1 font-bold text-slate-950">{{ genderLabel(form.gender) || 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Contact number</dt><dd class="mt-1 font-bold text-slate-950">{{ form.contact_number || 'Not provided' }}</dd></div>
+                                    <div><dt class="text-xs text-slate-500">Email address</dt><dd class="mt-1 break-words font-bold text-slate-950">{{ user?.email || 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Account managed by</dt><dd class="mt-1 font-bold text-slate-950">{{ accountManagerLabel(form.account_managed_by) || 'Not provided' }}</dd></div>
                                     <div><dt class="text-xs text-slate-500">Citizenship</dt><dd class="mt-1 font-bold text-slate-950">{{ citizenshipLabel(form.citizenship_status) || 'Not provided' }}</dd></div>
                                 </dl>
@@ -2495,33 +2456,33 @@ watch(() => form.value.grading_scale, (scale) => {
 
                             <section class="bg-white p-4 sm:p-5">
                                 <div class="flex min-h-9 items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-bullseye w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Goals and involvement</h4></div>
-                                    <div class="flex items-center gap-3">
-                                        <span :class="['rounded-sm px-2 py-1 text-[10px] font-bold uppercase', achievementEvidenceDocument ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">{{ achievementEvidenceDocument ? 'Evidence attached' : 'Applicant-declared' }}</span>
-                                        <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('background')">Edit</button>
-                                    </div>
+                                    <div class="flex items-center gap-2"><i class="fa-solid fa-location-dot w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Location</h4></div>
+                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('location')">Edit</button>
                                 </div>
-                                <dl class="mt-4 grid gap-3 text-sm">
-                                    <div><dt class="text-xs text-slate-500">Scholarship goal</dt><dd class="mt-1 line-clamp-2 font-bold leading-5 text-slate-950">{{ form.scholarship_goal || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Achievements and activities</dt><dd class="mt-1 line-clamp-2 font-bold leading-5 text-slate-950">{{ [form.achievements, form.activities_and_responsibilities].filter(hasValue).join(' - ') || 'Not provided' }}</dd></div>
+                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
+                                    <div><dt>Region</dt><dd class="mt-1 font-bold text-slate-950">{{ form.region || 'Not provided' }}</dd></div>
+                                    <div><dt>Province</dt><dd class="mt-1 font-bold text-slate-950">{{ form.province || 'Not provided' }}</dd></div>
+                                    <div><dt>City / municipality</dt><dd class="mt-1 font-bold text-slate-950">{{ form.city || 'Not provided' }}</dd></div>
+                                    <div><dt>Barangay</dt><dd class="mt-1 font-bold text-slate-950">{{ form.barangay || 'Not provided' }}</dd></div>
+                                    <div v-if="form.address" class="sm:col-span-2 xl:col-span-4"><dt>Street / home address</dt><dd class="mt-1 font-bold leading-5 text-slate-950">{{ form.address }}</dd></div>
                                 </dl>
                             </section>
+
                         </div>
                     </section>
 
-                    <section class="student-card grid overflow-hidden rounded-md border-slate-300 sm:grid-cols-2 lg:grid-cols-4" aria-label="Profile readiness">
-                        <div class="border-b border-slate-200 px-4 py-4 sm:border-r lg:border-b-0"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Required details</p><p class="mt-1 text-xl font-bold text-slate-950">{{ profileCompletion }}%</p><p class="mt-1 text-xs text-slate-500">{{ missingProfileFields.length ? `${missingProfileFields.length} remaining` : 'Complete' }}</p></div>
-                        <div class="border-b border-slate-200 px-4 py-4 lg:border-b-0 lg:border-r"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Supporting evidence</p><p class="mt-1 text-sm font-bold text-slate-950">{{ verificationStatusLabel(profileVerificationStatus) }}</p><p class="mt-1 text-xs text-slate-500">{{ verificationDocuments.length }} file{{ verificationDocuments.length === 1 ? '' : 's' }} saved</p></div>
-                        <div class="border-b border-slate-200 px-4 py-4 sm:border-b-0 sm:border-r"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Eligible matches</p><p class="mt-1 text-xl font-bold text-slate-950">{{ matchSummary.eligible_programs }}</p><a href="/dashboard/scholarships" class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-amber-800">View scholarships<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></div>
-                        <div class="px-4 py-4"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Prepared files</p><p class="mt-1 text-xl font-bold text-slate-950">{{ preparedDocumentsCount }}</p><a href="/dashboard/documents" class="mt-1 inline-flex items-center gap-1 text-xs font-bold text-slate-600">Open documents<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></div>
-                    </section>
-
                     <section class="student-card overflow-hidden rounded-md border-slate-300">
-                        <header class="border-b border-slate-200 bg-slate-50/70 px-4 py-3 sm:px-5"><p class="text-sm font-bold text-slate-950">Profile records</p></header>
+                        <header class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                            <div>
+                                <p class="text-sm font-bold text-slate-950">Records and readiness</p>
+                                <p class="mt-1 text-xs text-slate-500">Required profile details are {{ profileCompletion }}% complete.</p>
+                            </div>
+                            <span class="w-fit rounded-sm bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">{{ missingProfileFields.length ? `${missingProfileFields.length} details remaining` : 'Profile complete' }}</span>
+                        </header>
                         <div class="divide-y divide-slate-200">
                             <button type="button" class="flex w-full items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5" @click="openVerificationRecords">
                                 <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-sm', profileVerificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span>
-                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Supporting evidence</span><span class="mt-1 block text-xs text-slate-500">Academic, enrollment, and achievement records</span></span>
+                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Supporting evidence</span><span class="mt-1 block text-xs text-slate-500">Academic, enrollment, and recent school identification records</span></span>
                                 <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
                                 <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                             </button>
@@ -2529,6 +2490,12 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span>
                                 <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Prepared documents</span><span class="mt-1 block text-xs text-slate-500">Reusable files for future applications</span></span>
                                 <span class="shrink-0 text-xs font-bold text-slate-600">{{ preparedDocumentsCount }} saved</span>
+                                <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
+                            </a>
+                            <a href="/dashboard/scholarships" class="flex items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></span>
+                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Eligible scholarships</span><span class="mt-1 block text-xs text-slate-500">Programs currently matching your saved details</span></span>
+                                <span class="shrink-0 text-xs font-bold text-slate-600">{{ matchSummary.eligible_programs }} match{{ matchSummary.eligible_programs === 1 ? '' : 'es' }}</span>
                                 <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                             </a>
                         </div>
@@ -3081,95 +3048,6 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        </section>
-
-                        <section v-if="activeSection === 'background'" id="profile-background" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">Optional context</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Goals and involvement</h3>
-                                    <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Help reviewers understand the applicant beyond grades. Short answers are enough.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div :class="[sectionBodyClass, 'space-y-4']">
-                                <div :class="formPanelClass">
-                                    <div class="grid gap-5 lg:grid-cols-2">
-                                        <div class="lg:col-span-2">
-                                            <label :class="labelClass" for="profile-scholarship-goal">Applicant goal</label>
-                                            <textarea
-                                                id="profile-scholarship-goal"
-                                                v-model="form.scholarship_goal"
-                                                rows="3"
-                                                maxlength="1500"
-                                                placeholder="What does the learner hope to achieve, and how would scholarship support help?"
-                                                :class="inputClass"
-                                            ></textarea>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">Focus on the learner's education or future goal.</p>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-achievements">Achievements or strengths</label>
-                                            <textarea
-                                                id="profile-achievements"
-                                                v-model="form.achievements"
-                                                rows="4"
-                                                maxlength="1500"
-                                                placeholder="Recognition, skills, projects, improvement, or something the learner is proud of"
-                                                :class="inputClass"
-                                            ></textarea>
-                                            <p v-if="fieldErrors.achievements" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldErrors.achievements[0] }}</p>
-                                            <div
-                                                v-if="hasValue(form.achievements)"
-                                                :class="[
-                                                    'mt-3 flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between',
-                                                    achievementEvidenceDocument
-                                                        ? 'border-emerald-200 bg-emerald-50/70'
-                                                        : 'border-amber-200 bg-amber-50/70',
-                                                ]"
-                                            >
-                                                <div class="flex items-start gap-2.5">
-                                                    <i :class="achievementEvidenceDocument ? 'fa-solid fa-circle-check mt-0.5 text-emerald-700' : 'fa-solid fa-paperclip mt-0.5 text-amber-700'" aria-hidden="true"></i>
-                                                    <div>
-                                                        <p class="text-xs font-bold text-slate-900">
-                                                            {{ achievementEvidenceDocument ? 'Achievement evidence attached' : 'Achievement evidence required' }}
-                                                        </p>
-                                                        <p class="mt-1 text-xs leading-5 text-slate-600">
-                                                            {{ achievementEvidenceDocument
-                                                                ? achievementEvidenceDocument.original_name
-                                                                : 'Add a certificate, award notice, result, or project proof so an authorized reviewer can confirm this entry.' }}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                                    @click="openSection('verification')"
-                                                >
-                                                    <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
-                                                    {{ achievementEvidenceDocument ? 'View evidence' : 'Add evidence' }}
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-activities">Activities and responsibilities</label>
-                                            <textarea
-                                                id="profile-activities"
-                                                v-model="form.activities_and_responsibilities"
-                                                rows="4"
-                                                maxlength="1500"
-                                                placeholder="School activities, community service, leadership, work, caregiving, or household responsibilities"
-                                                :class="inputClass"
-                                            ></textarea>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <p class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
-                                    These answers are applicant-declared and are shown only to authorized reviewers. Do not include document numbers or sensitive records here.
-                                </p>
                             </div>
                         </section>
 

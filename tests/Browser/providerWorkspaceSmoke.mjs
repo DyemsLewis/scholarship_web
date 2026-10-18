@@ -1,85 +1,104 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const baseUrl = new URL(process.env.PROVIDER_SMOKE_BASE_URL ?? 'http://127.0.0.1:8000');
 const login = process.env.PROVIDER_SMOKE_LOGIN;
 const password = process.env.PROVIDER_SMOKE_PASSWORD;
+const sessionCookie = process.env.PROVIDER_SMOKE_SESSION_COOKIE;
+const sessionCookieName = process.env.PROVIDER_SMOKE_SESSION_COOKIE_NAME;
 const timeoutMs = Number(process.env.PROVIDER_SMOKE_TIMEOUT_MS ?? 20_000);
+const verifyFilePreview = process.env.PROVIDER_SMOKE_FILE_PREVIEW === '1';
+const windowSize = process.env.PROVIDER_SMOKE_WINDOW_SIZE ?? '1440,1000';
+const screenshotPath = process.env.PROVIDER_SMOKE_SCREENSHOT;
 
 const governanceWorkspaces = [
-    ['/provider', 'Governance overview'],
-    ['/provider?view=responsibilities', 'Responsibility coverage'],
-    ['/provider?view=access', 'Operating model'],
-    ['/provider?view=activity', 'Governance activity'],
+    ['/provider', 'Provider dashboard', 'Loading organization overview...'],
 ];
 
 const operationalWorkspaces = [
-    ['/provider/workspaces/programs', 'Program coordination'],
-    ['/provider/workspaces/programs/drafts', 'Drafts and requested changes'],
-    ['/provider/workspaces/programs/review', 'Programs in admin review'],
-    ['/provider/workspaces/programs/published', 'Published programs'],
-    ['/provider/workspaces/programs/closed', 'Closed programs'],
-    ['/provider/workspaces/reviews', 'Assigned reviews'],
-    ['/provider/workspaces/reviews/assigned', 'Assigned reviews'],
+    ['/provider/programs', 'Programs', 'Loading programs...'],
+    ['/provider/programs/drafts', 'Drafts & changes', 'Loading programs...'],
+    ['/provider/programs/review', 'Under review', 'Loading programs...'],
+    ['/provider/programs/published', 'Published programs', 'Loading programs...'],
+    ['/provider/programs/closed', 'Closed programs', 'Loading programs...'],
+    ['/provider/workspaces/reviews', 'My review queue'],
+    ['/provider/workspaces/reviews/assigned', 'My review queue'],
     ['/provider/workspaces/reviews/unassigned', 'Unassigned applications'],
-    ['/provider/workspaces/reviews/returned', 'Returned corrections'],
+    ['/provider/workspaces/reviews/returned', 'Returned updates'],
     ['/provider/workspaces/reviews/history', 'Review history'],
-    ['/provider/workspaces/selection', 'Activity setup'],
-    ['/provider/workspaces/selection/setup', 'Activity setup'],
+    ['/provider/workspaces/selection', 'Selection sessions'],
+    ['/provider/workspaces/selection/setup', 'Unassigned applicants'],
+    ['/provider/workspaces/selection/unassigned', 'Unassigned applicants'],
     ['/provider/workspaces/selection/results', 'Results to record'],
-    ['/provider/workspaces/selection/active', 'Active pipeline'],
+    ['/provider/workspaces/selection/active', 'Selection sessions'],
+    ['/provider/workspaces/selection/history', 'Session history'],
     ['/provider/workspaces/decisions', 'Pending decisions'],
     ['/provider/workspaces/decisions/pending', 'Pending decisions'],
     ['/provider/workspaces/decisions/waitlist', 'Waitlist'],
     ['/provider/workspaces/decisions/recorded', 'Decision history'],
-    ['/provider/workspaces/recipients', 'Agreement responses'],
+    ['/provider/workspaces/recipients', 'Recipient dashboard'],
     ['/provider/workspaces/recipients/agreements', 'Agreement responses'],
     ['/provider/workspaces/recipients/active', 'Active recipients'],
     ['/provider/workspaces/recipients/declined', 'Declined responses'],
     ['/provider/workspaces/recipients/closed', 'Closed recipient records'],
-    ['/provider/workspaces/monitoring', 'Monitoring review'],
+    ['/provider/workspaces/monitoring', 'Monitoring dashboard'],
     ['/provider/workspaces/monitoring/review', 'Monitoring review'],
     ['/provider/workspaces/monitoring/follow-ups', 'Recipient follow-ups'],
     ['/provider/workspaces/monitoring/awaiting', 'Awaiting uploads'],
     ['/provider/workspaces/monitoring/history', 'Check-in history'],
-    ['/provider/workspaces/releases', 'Reported release issues'],
+    ['/provider/workspaces/releases', 'Benefit release dashboard'],
     ['/provider/workspaces/releases/issues', 'Reported release issues'],
     ['/provider/workspaces/releases/record', 'Record distribution'],
     ['/provider/workspaces/releases/upcoming', 'Upcoming releases'],
     ['/provider/workspaces/releases/history', 'Release history'],
-    ['/provider/workspaces/organization-profile', 'Profile readiness'],
+    ['/provider/workspaces/organization-profile', 'Profile dashboard'],
     ['/provider/workspaces/organization-profile/readiness', 'Profile readiness'],
-    ['/provider/workspaces/team', 'Setup required'],
+    ['/provider/workspaces/organization-profile/public', 'Public profile'],
+    ['/provider/workspaces/organization-profile/contact', 'Contact and location'],
+    ['/provider/workspaces/organization-profile/verification', 'Legal verification'],
+    ['/provider/workspaces/team', 'Team access dashboard'],
     ['/provider/workspaces/team/setup', 'Setup required'],
-    ['/provider/workspaces/team/active', 'Active staff accounts'],
-    ['/provider/workspaces/team/suspended', 'Suspended staff accounts'],
-    ['/provider/workspaces/support', 'Needs response'],
+    ['/provider/workspaces/team/active', 'Active accounts'],
+    ['/provider/workspaces/team/suspended', 'Suspended accounts'],
+    ['/provider/team/accounts/create', 'Add team member'],
+    ['/provider/workspaces/support', 'Support dashboard'],
     ['/provider/workspaces/support/needs-response', 'Needs response'],
     ['/provider/workspaces/support/waiting', 'Waiting for platform'],
     ['/provider/workspaces/support/platform', 'Platform reports'],
     ['/provider/workspaces/support/resolved', 'Resolved cases'],
-    ['/provider/workspaces/billing', 'Requests needing action'],
+    ['/provider/workspaces/support/report-platform-issue', 'Report a platform issue'],
+    ['/provider/workspaces/billing', 'Service request dashboard'],
     ['/provider/workspaces/billing/action', 'Requests needing action'],
     ['/provider/workspaces/billing/active', 'Services in progress'],
     ['/provider/workspaces/billing/waiting', 'Waiting to start'],
     ['/provider/workspaces/billing/completed', 'Completed requests'],
-    ['/provider/workspaces/billing/services', 'Optional support services', 'Loading support services...'],
-    ['/provider/profile/details', 'Provider details', 'Loading provider profile...'],
-    ['/provider/applications', 'Applicant workflow', 'Loading applicants...'],
-    ['/provider/programs', 'Programs', 'Loading scholarship programs...'],
-    ['/provider/monitoring', 'Recipient monitoring', 'Loading programs...'],
+    ['/provider/workspaces/billing/services', 'Optional support services'],
+    ['/provider/workspaces/billing/services/application_cycle_support', 'Application cycle support'],
 ];
 const workspaceScope = process.env.PROVIDER_SMOKE_SCOPE ?? 'operations';
 const workspacePathFilter = process.env.PROVIDER_SMOKE_PATH ?? '';
+const workspaceHeading = process.env.PROVIDER_SMOKE_HEADING ?? '';
 const scopedWorkspaces = workspaceScope === 'governance'
     ? governanceWorkspaces
     : (workspaceScope === 'all' ? [...governanceWorkspaces, ...operationalWorkspaces] : operationalWorkspaces);
-const workspaces = workspacePathFilter
+const filteredWorkspaces = workspacePathFilter
     ? scopedWorkspaces.filter(([workspacePath]) => workspacePath.startsWith(workspacePathFilter))
     : scopedWorkspaces;
+const exactWorkspaceOverride = workspacePathFilter
+    && workspaceHeading
+    && filteredWorkspaces.length === 1
+    && filteredWorkspaces[0][0] === workspacePathFilter;
+const workspaceOverrides = process.env.PROVIDER_SMOKE_WORKSPACES
+    ? JSON.parse(process.env.PROVIDER_SMOKE_WORKSPACES)
+    : null;
+const workspaces = workspaceOverrides ?? (exactWorkspaceOverride
+    ? [[workspacePathFilter, workspaceHeading]]
+    : (filteredWorkspaces.length || !workspacePathFilter || !workspaceHeading
+        ? filteredWorkspaces
+        : [[workspacePathFilter, workspaceHeading]]));
 
 function fail(message) {
     throw new Error(message);
@@ -210,8 +229,8 @@ class CdpClient {
 }
 
 async function main() {
-    if (!login || !password) {
-        fail('Set PROVIDER_SMOKE_LOGIN and PROVIDER_SMOKE_PASSWORD to a verified provider manager account.');
+    if ((!login || !password) && (!sessionCookie || !sessionCookieName)) {
+        fail('Set login credentials or a browser QA session cookie.');
     }
 
     const executable = browserPath();
@@ -226,7 +245,7 @@ async function main() {
         '--disable-gpu',
         '--no-first-run',
         '--no-default-browser-check',
-        '--window-size=1440,1000',
+        `--window-size=${windowSize}`,
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${profileDir}`,
         'about:blank',
@@ -248,16 +267,37 @@ async function main() {
 
         const runtimeErrors = [];
         const requestErrors = [];
+        const browserLogs = [];
         client.on('Runtime.exceptionThrown', ({ exceptionDetails }) => {
             runtimeErrors.push(exceptionDetails.exception?.description ?? exceptionDetails.text);
+        });
+        client.on('Runtime.consoleAPICalled', ({ type, args }) => {
+            if (['error', 'warning'].includes(type)) {
+                browserLogs.push(args.map((argument) => argument.value ?? argument.description ?? '').join(' '));
+            }
+        });
+        client.on('Log.entryAdded', ({ entry }) => {
+            if (['error', 'warning'].includes(entry.level)) {
+                browserLogs.push(entry.text);
+            }
+        });
+        client.on('Network.loadingFailed', ({ errorText, blockedReason }) => {
+            if (errorText === 'net::ERR_ABORTED') {
+                return;
+            }
+            requestErrors.push(blockedReason ? `${errorText} (${blockedReason})` : errorText);
         });
         client.on('Network.responseReceived', ({ response }) => {
             const responseUrl = new URL(response.url);
             if (responseUrl.origin === baseUrl.origin
                 && (responseUrl.pathname.startsWith('/provider/workspaces/')
+                    || responseUrl.pathname.startsWith('/provider/applications/')
+                    || responseUrl.pathname.startsWith('/admin/workspaces/')
+                    || responseUrl.pathname.startsWith('/admin/governance/')
                     || responseUrl.pathname === '/provider/profile/data'
                     || responseUrl.pathname === '/provider/applications/data'
                     || responseUrl.pathname === '/provider/dashboard/data'
+                    || responseUrl.pathname === '/admin/dashboard/data'
                     || responseUrl.pathname === '/provider/scholarships')
                 && response.status >= 400) {
                 requestErrors.push(`${response.status} ${responseUrl.pathname}`);
@@ -268,42 +308,90 @@ async function main() {
             client.send('Page.enable'),
             client.send('Runtime.enable'),
             client.send('Network.enable'),
+            client.send('Log.enable'),
         ]);
 
-        await client.send('Page.navigate', { url: new URL('/login', baseUrl).href });
-        await waitFor(
-            () => client.evaluate("document.readyState === 'complete' && Boolean(document.querySelector('#login'))"),
-            'the login form',
-        );
-        await client.evaluate(`(() => {
-            const setValue = (selector, value) => {
-                const element = document.querySelector(selector);
-                element.value = value;
-                element.dispatchEvent(new Event('input', { bubbles: true }));
-            };
-            setValue('#login', ${JSON.stringify(login)});
-            setValue('#password', ${JSON.stringify(password)});
-            document.querySelector('form').requestSubmit();
-        })()`);
-        await waitFor(
-            () => client.evaluate("location.pathname !== '/login'"),
-            'provider sign-in',
-        );
+        if (sessionCookie && sessionCookieName) {
+            const cookieResult = await client.send('Network.setCookie', {
+                name: sessionCookieName,
+                value: sessionCookie,
+                url: baseUrl.href,
+                httpOnly: true,
+                sameSite: 'Lax',
+            });
+            if (!cookieResult.success) {
+                fail('The browser QA session cookie could not be set.');
+            }
+        } else {
+            await client.send('Page.navigate', { url: new URL('/login', baseUrl).href });
+            await waitFor(
+                () => client.evaluate("document.readyState === 'complete' && Boolean(document.querySelector('#login'))"),
+                'the login form',
+            );
+            await client.evaluate(`(() => {
+                const setValue = (selector, value) => {
+                    const element = document.querySelector(selector);
+                    element.value = value;
+                    element.dispatchEvent(new Event('input', { bubbles: true }));
+                };
+                setValue('#login', ${JSON.stringify(login)});
+                setValue('#password', ${JSON.stringify(password)});
+                document.querySelector('form').requestSubmit();
+            })()`);
+            try {
+                await waitFor(
+                    () => client.evaluate("location.pathname !== '/login'"),
+                    'role sign-in',
+                );
+            } catch (error) {
+                const loginSnapshot = await client.evaluate(`({
+                    url: location.href,
+                    body: document.body.innerText.slice(0, 800),
+                    runtimeErrors: ${JSON.stringify(runtimeErrors)},
+                    requestErrors: ${JSON.stringify(requestErrors)},
+                    browserLogs: ${JSON.stringify(browserLogs)},
+                })`);
+                fail(`${error.message}: ${JSON.stringify(loginSnapshot)}`);
+            }
+        }
+
+        let filePreviewVerified = false;
 
         for (const [workspacePath, heading, loadingText = null] of workspaces) {
             runtimeErrors.length = 0;
             requestErrors.length = 0;
+            browserLogs.length = 0;
             const workspaceUrl = new URL(workspacePath, baseUrl);
             await client.send('Page.navigate', { url: workspaceUrl.href });
-            await waitFor(
-                () => client.evaluate(`document.readyState === 'complete'
-                    && location.pathname === ${JSON.stringify(workspaceUrl.pathname)}
-                    && location.search === ${JSON.stringify(workspaceUrl.search)}
-                    && document.body.innerText.includes(${JSON.stringify(heading)})
-                    && (${JSON.stringify(loadingText)} === null
-                        || !document.body.innerText.includes(${JSON.stringify(loadingText)}))`),
-                heading,
-            );
+            try {
+                await waitFor(
+                    () => client.evaluate(`document.readyState === 'complete'
+                        && location.pathname === ${JSON.stringify(workspaceUrl.pathname)}
+                        && location.search === ${JSON.stringify(workspaceUrl.search)}
+                        && document.body.innerText.toLowerCase().includes(${JSON.stringify(heading.toLowerCase())})
+                        && (${JSON.stringify(loadingText)} === null
+                            || !document.body.innerText.includes(${JSON.stringify(loadingText)}))`),
+                    heading,
+                );
+            } catch (error) {
+                if (runtimeErrors.length) {
+                    fail(`${heading} raised a browser exception: ${runtimeErrors[0]}`);
+                }
+                if (requestErrors.length) {
+                    fail(`${heading} had failed workspace requests: ${requestErrors.join(', ')}`);
+                }
+                if (browserLogs.length) {
+                    fail(`${heading} logged a browser error: ${browserLogs[0]}`);
+                }
+                const snapshot = await client.evaluate(`({
+                    url: location.href,
+                    title: document.title,
+                    body: document.body.innerText.slice(0, 500),
+                    appPage: document.querySelector('#app')?.dataset.page ?? null,
+                    appHtml: document.querySelector('#app')?.innerHTML.slice(0, 500) ?? null,
+                })`);
+                fail(`${heading} did not render: ${JSON.stringify(snapshot)}`);
+            }
             await delay(250);
 
             const unavailable = await client.evaluate("/is unavailable|unable to load/i.test(document.body.innerText)");
@@ -393,46 +481,62 @@ async function main() {
                 fail(`${heading} has conflicting active navigation items.`);
             }
 
-            if (workspaceUrl.pathname === '/provider/workspaces/support') {
-                await client.evaluate(`[...document.querySelectorAll('button')]
-                    .find((button) => button.innerText.includes('Contact platform'))?.click()`);
-                await waitFor(
-                    () => client.evaluate("Boolean(document.querySelector('[role=\"dialog\"] select'))"),
-                    'the platform support dialog',
-                );
-                const dialogContrast = await client.evaluate(`(() => {
-                    const control = document.querySelector('[role="dialog"] select');
-                    const colorToRgb = (value) => {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = 1;
-                        canvas.height = 1;
-                        const context = canvas.getContext('2d', { willReadFrequently: true });
-                        context.clearRect(0, 0, 1, 1);
-                        context.fillStyle = value;
-                        context.fillRect(0, 0, 1, 1);
-                        return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
-                    };
-                    const luminance = (rgb) => {
-                        const channels = rgb.map((channel) => {
-                            const normalized = channel / 255;
-                            return normalized <= 0.03928 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
-                        });
-                        return (0.2126 * channels[0]) + (0.7152 * channels[1]) + (0.0722 * channels[2]);
-                    };
-                    const foreground = colorToRgb(getComputedStyle(control).color);
-                    const background = colorToRgb(getComputedStyle(control).backgroundColor);
-                    const lighter = Math.max(luminance(foreground), luminance(background));
-                    const darker = Math.min(luminance(foreground), luminance(background));
-                    return {
-                        color: getComputedStyle(control).color,
-                        background: getComputedStyle(control).backgroundColor,
-                        ratio: (lighter + 0.05) / (darker + 0.05),
-                    };
-                })()`);
-                if (dialogContrast.ratio < 4.5) {
-                    fail(`Support modal controls are not using readable light-theme colors: ${JSON.stringify(dialogContrast)}.`);
+            if (screenshotPath) {
+                const screenshot = await client.send('Page.captureScreenshot', {
+                    format: 'png',
+                    captureBeyondViewport: true,
+                });
+                await writeFile(path.resolve(screenshotPath), Buffer.from(screenshot.data, 'base64'));
+            }
+
+            if (verifyFilePreview && !filePreviewVerified) {
+                const locationBeforePreview = await client.evaluate('location.href');
+                const previewHostReady = await client.evaluate("Boolean(document.querySelector('#staff-file-preview-host'))");
+                if (!previewHostReady) {
+                    fail('The global staff file preview host was not mounted.');
                 }
-                await client.evaluate(`document.querySelector('[role="dialog"] [aria-label="Close form"]')?.click()`);
+                await client.evaluate(`(() => {
+                    const link = document.createElement('a');
+                    link.href = '/favicon.ico';
+                    link.dataset.filePreview = 'true';
+                    link.dataset.fileName = 'Test image';
+                    link.textContent = 'Open test image';
+                    document.body.appendChild(link);
+                    link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+                })()`);
+                try {
+                    await waitFor(
+                        () => client.evaluate("Boolean(document.querySelector('[role=\"dialog\"][aria-labelledby=\"staff-file-preview-title\"]'))"),
+                        'the staff file preview modal',
+                    );
+                } catch (error) {
+                    const previewSnapshot = await client.evaluate(`({
+                        hostHtml: document.querySelector('#staff-file-preview-host')?.innerHTML,
+                        bodyLocked: document.body.classList.contains('overflow-hidden'),
+                    })`);
+                    fail(`${error.message}: ${JSON.stringify({ previewSnapshot, runtimeErrors, browserLogs })}`);
+                }
+
+                const previewAudit = await client.evaluate(`({
+                    location: location.href,
+                    title: document.querySelector('#staff-file-preview-title')?.textContent?.trim(),
+                    bodyLocked: document.body.classList.contains('overflow-hidden'),
+                })`);
+
+                if (previewAudit.location !== locationBeforePreview) {
+                    fail('Opening a staff file preview changed the workspace URL.');
+                }
+                if (previewAudit.title !== 'Test image' || !previewAudit.bodyLocked) {
+                    fail(`The staff file preview did not initialize correctly: ${JSON.stringify(previewAudit)}`);
+                }
+
+                await client.evaluate("document.querySelector('[aria-label=\"Close file preview\"]')?.click()");
+                await waitFor(
+                    () => client.evaluate("!document.querySelector('[role=\"dialog\"][aria-labelledby=\"staff-file-preview-title\"]')"),
+                    'the staff file preview modal to close',
+                );
+                filePreviewVerified = true;
+                console.log('PASS Staff file preview modal');
             }
 
             console.log(`PASS ${heading}`);

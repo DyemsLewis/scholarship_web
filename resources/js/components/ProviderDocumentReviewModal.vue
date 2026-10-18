@@ -8,6 +8,7 @@ const props = defineProps({
     context: { type: String, default: '' },
     saving: { type: Boolean, default: false },
     error: { type: String, default: '' },
+    readOnly: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['close', 'save', 'clear-error']);
@@ -131,12 +132,19 @@ function submitReview() {
                     </div>
 
                     <aside class="border-t border-slate-200 bg-white p-4 sm:p-5 lg:overflow-y-auto lg:border-l lg:border-t-0">
-                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Review decision</p>
+                        <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{{ readOnly ? 'Recorded review' : 'Review decision' }}</p>
                         <p class="mt-2 text-sm leading-6 text-slate-600">
-                            Check the file first, then record the result for the applicant.
+                            {{ readOnly ? 'This result was recorded during application verification.' : 'Check the file first, then record the result for the applicant.' }}
                         </p>
 
-                        <div class="mt-4">
+                        <div v-if="readOnly" class="mt-4 border border-slate-200 bg-slate-50 p-4">
+                            <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Status</p>
+                            <p class="mt-1 font-bold text-slate-950">{{ statusOptions.find((option) => option.value === status)?.label || 'Pending' }}</p>
+                            <p v-if="reviewNotes" class="mt-3 text-sm leading-6 text-slate-700">{{ reviewNotes }}</p>
+                            <p v-else class="mt-3 text-sm text-slate-500">No review note was added.</p>
+                        </div>
+
+                        <div v-else class="mt-4">
                             <label :class="labelClass">Status</label>
                             <select v-model="status" :class="inputClass">
                                 <option v-for="option in statusOptions" :key="option.value" :value="option.value">
@@ -145,7 +153,7 @@ function submitReview() {
                             </select>
                         </div>
 
-                        <div class="mt-4">
+                        <div v-if="!readOnly" class="mt-4">
                             <label :class="labelClass">
                                 Review note <span v-if="requiresNote" class="text-rose-600">*</span>
                             </label>
@@ -167,6 +175,7 @@ function submitReview() {
 
                         <div class="mt-5 grid gap-2">
                             <button
+                                v-if="!readOnly"
                                 type="button"
                                 :disabled="saving"
                                 class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"

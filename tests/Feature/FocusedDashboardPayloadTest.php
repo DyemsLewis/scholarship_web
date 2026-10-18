@@ -18,19 +18,23 @@ class FocusedDashboardPayloadTest extends TestCase
             ->getJson('/admin/dashboard/data')
             ->assertOk()
             ->assertJsonStructure([
-                'stats' => [
-                    'pending_providers',
-                    'documents_pending_review',
-                    'documents_needing_replacement',
-                    'upcoming_deadlines',
-                    'expired_published',
-                    'needs_review_applications',
+                'summary' => [
+                    'managed_admins',
+                    'active_admins',
+                    'covered_roles',
+                    'total_roles',
+                    'platform_users',
+                    'operational_attention',
                 ],
-                'recent_users',
-                'recent_scholarships',
+                'role_coverage',
+                'operational_areas',
+                'escalations',
             ])
             ->json();
 
+        $this->assertArrayNotHasKey('stats', $payload);
+        $this->assertArrayNotHasKey('recent_users', $payload);
+        $this->assertArrayNotHasKey('recent_scholarships', $payload);
         $this->assertArrayNotHasKey('monthly_applications', $payload);
         $this->assertArrayNotHasKey('provider_performance', $payload);
         $this->assertArrayNotHasKey('notifications', $payload);
@@ -52,6 +56,12 @@ class FocusedDashboardPayloadTest extends TestCase
                     'ready_result',
                     'final_decision',
                     'all',
+                ],
+                'manager_overview' => [
+                    'organization_name',
+                    'summary' => ['programs', 'published_programs', 'applications', 'attention', 'active_team'],
+                    'priority_action' => ['title', 'description', 'count', 'label', 'href'],
+                    'attention_workspaces',
                 ],
             ])
             ->json();

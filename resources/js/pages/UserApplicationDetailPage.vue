@@ -33,6 +33,7 @@ const isSendingCorrection = ref(false);
 const agreementTermsAccepted = ref(false);
 const agreementResponseNote = ref('');
 const isSubmittingAgreement = ref(false);
+const isAcknowledgingActivity = ref(false);
 const showRecipientAgreementModal = ref(false);
 const showProfileMatchModal = ref(false);
 const formalHandoffOpen = ref(false);
@@ -229,16 +230,20 @@ const applicantNextDescription = computed(() => {
     return applicantNextActionDetails.value.description ?? 'No action is required from you right now. We will show the next instruction here when the application changes.';
 });
 const timeline = computed(() => application.value?.timeline ?? []);
-const schedules = computed(() => application.value?.schedules ?? []);
+const legacySchedules = computed(() => application.value?.schedules ?? []);
+const selectionActivities = computed(() => application.value?.selection_activities ?? []);
+const schedules = computed(() => selectionActivities.value.length
+    ? selectionActivities.value
+    : legacySchedules.value);
 const applicationIsClosed = computed(() => Boolean(workflow.value.is_closed));
 const currentSchedule = computed(() => applicationIsClosed.value
     ? null
     : (schedules.value.find((schedule) => (
-        schedule.status === 'scheduled'
-        && ['exam', 'interview'].includes(schedule.type)
+        ['scheduled', 'ongoing'].includes(schedule.status)
+        && ['formal_application', 'exam', 'interview'].includes(schedule.type)
     )) ?? null));
 const scheduleHistory = computed(() => schedules.value.filter(
-    (schedule) => applicationIsClosed.value || schedule.status !== 'scheduled',
+    (schedule) => applicationIsClosed.value || ! ['scheduled', 'ongoing'].includes(schedule.status),
 ));
 const currentScheduleDate = computed(() => formatScheduleDate(currentSchedule.value));
 const filesNeedingAction = computed(() => applicationFileRows.value.filter((row) => row.required
@@ -470,6 +475,7 @@ function documentStatusClass(status) {
 
 function scheduleTypeLabel(type) {
     return {
+        formal_application: 'Formal application',
         exam: 'Scholarship exam',
         interview: 'Interview',
     }[type] ?? labelFromKey(type);
@@ -505,11 +511,25 @@ function scheduleStatusClass(status) {
         return 'bg-emerald-100 text-emerald-800';
     }
 
-    if (status === 'cancelled') {
+    if (['cancelled', 'rescheduled'].includes(status)) {
         return 'bg-rose-100 text-rose-800';
     }
 
     return 'bg-amber-100 text-amber-800';
+}
+
+function attendanceLabel(status) {
+    return {
+        pending: 'Not recorded yet',
+        present: 'Present',
+        absent: 'Absent',
+        excused: 'Excused',
+        not_required: 'Not required',
+    }[status] ?? 'Not recorded yet';
+}
+
+function activityResult(activity) {
+    return workflow.value.steps?.find((step) => step.key === activity?.type)?.result ?? null;
 }
 
 function formatScheduleDate(schedule) {
@@ -795,6 +815,37 @@ async function loadApplication() {
         errorMessage.value = error.response?.data?.message ?? 'Unable to load application details.';
     } finally {
         isLoading.value = false;
+    }
+}
+
+async function acknowledgeCurrentActivity() {
+    if (!application.value || !currentSchedule.value?.requires_applicant_acknowledgment) {
+        return;
+    }
+
+    isAcknowledgingActivity.value = true;
+
+    try {
+        const response = await window.axios.patch(
+            `/dashboard/applications/${application.value.id}/stage-activities/${currentSchedule.value.id}/acknowledge`,
+        );
+        const index = application.value.selection_activities.findIndex(
+            (activity) => activity.id === response.data.activity.id,
+        );
+
+        if (index >= 0) {
+            application.value.selection_activities[index] = response.data.activity;
+        }
+
+        showPortalToast({
+            type: 'success',
+            title: 'Schedule confirmed',
+            message: response.data.message,
+        });
+    } catch (handledError) {
+        void handledError;
+    } finally {
+        isAcknowledgingActivity.value = false;
     }
 }
 
@@ -1226,16 +1277,28 @@ onMounted(loadApplication);
                     </section>
 
                     <section v-if="activeSection === 'schedule'" id="application-schedules" class="student-card scroll-mt-4 overflow-hidden rounded-md border-slate-300">
-                        <header class="border-b border-slate-200 bg-slate-50/70 p-4 sm:p-5"><p class="student-kicker">Schedule</p><h2 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule ? 'Your next activity' : 'Activity history' }}</h2><p class="mt-1 text-sm text-slate-500">{{ currentSchedule ? (currentSchedule.mode === 'online' ? 'Review the date, meeting link, and instructions before joining.' : 'Review the date, location, and instructions before attending.') : 'There is no upcoming activity.' }}</p></header>
+                        <header class="border-b border-slate-200 bg-slate-50/70 p-4 sm:p-5"><p class="student-kicker">Schedule</p><h2 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule ? 'Your next activity' : 'Activity history' }}</h2><p class="mt-1 text-sm text-slate-500">{{ currentSchedule ? 'Everything you need to attend is shown below.' : 'There is no upcoming activity.' }}</p></header>
                         <div v-if="currentSchedule" class="p-4 sm:p-5">
-                            <div class="grid gap-4 rounded-md border border-slate-300 bg-slate-50 p-4 sm:grid-cols-[auto_minmax(0,1fr)]">
-                                <div class="flex h-16 w-16 flex-col items-center justify-center rounded-md bg-slate-950 text-white"><span class="text-[10px] font-bold uppercase text-amber-300">{{ currentScheduleDate.month }}</span><span class="text-2xl font-bold">{{ currentScheduleDate.day }}</span></div>
-                                <div><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(currentSchedule.type) }}</p><h3 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule.title }}</h3><p class="mt-1 text-sm font-semibold text-slate-600">{{ currentSchedule.scheduled_label }}</p></div>
-                                <dl class="grid gap-3 sm:col-span-2 sm:grid-cols-3"><div class="rounded-md bg-white p-3 ring-1 ring-slate-200"><dt class="text-[10px] font-bold uppercase text-slate-500">Time</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ currentScheduleDate.time }}</dd></div><div class="rounded-md bg-white p-3 ring-1 ring-slate-200"><dt class="text-[10px] font-bold uppercase text-slate-500">Mode</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ scheduleModeLabel(currentSchedule.mode) }}</dd></div><div class="rounded-md bg-white p-3 ring-1 ring-slate-200"><dt class="text-[10px] font-bold uppercase text-slate-500">{{ currentSchedule.mode === 'online' ? 'Meeting' : 'Venue' }}</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ currentSchedule.mode === 'online' ? (currentSchedule.online_url ? 'Meeting link ready' : 'See provider instructions') : (currentSchedule.venue || 'See provider instructions') }}</dd></div></dl>
-                                <div class="sm:col-span-2"><p class="text-sm leading-6 text-slate-700">{{ currentSchedule.instructions }}</p><div class="mt-3 flex flex-wrap gap-2"><a v-if="currentSchedule.online_url" :href="currentSchedule.online_url" target="_blank" rel="noopener" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white">{{ currentSchedule.type === 'interview' ? 'Join interview' : 'Open online access' }}</a><button v-if="['onsite', 'hybrid'].includes(currentSchedule.mode) && (hasCoordinates(currentSchedule.latitude, currentSchedule.longitude) || currentSchedule.location_address || currentSchedule.venue)" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openScheduleMap(currentSchedule)">View map</button></div></div>
+                            <div class="overflow-hidden rounded-md border border-slate-300">
+                                <div class="flex flex-col gap-4 bg-white p-4 sm:flex-row sm:items-center">
+                                    <div class="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-md bg-slate-950 text-white"><span class="text-[10px] font-bold uppercase text-amber-300">{{ currentScheduleDate.month }}</span><span class="text-2xl font-bold">{{ currentScheduleDate.day }}</span></div>
+                                    <div class="min-w-0 flex-1"><p class="text-[10px] font-bold uppercase tracking-[0.12em] text-amber-700">{{ scheduleTypeLabel(currentSchedule.type) }}</p><h3 class="mt-1 text-lg font-bold text-slate-950">{{ currentSchedule.title }}</h3><p class="mt-1 text-sm font-semibold text-slate-600">{{ currentSchedule.scheduled_label }}</p></div>
+                                    <span v-if="currentSchedule.applicant_acknowledged" class="w-fit rounded bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800"><i class="fa-solid fa-check mr-1" aria-hidden="true"></i>Confirmed</span>
+                                </div>
+                                <dl class="divide-y divide-slate-200 border-t border-slate-200 bg-slate-50 text-sm">
+                                    <div class="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)]"><dt class="font-semibold text-slate-500">Time</dt><dd class="font-bold text-slate-900">{{ currentScheduleDate.time }}<span v-if="currentSchedule.ends_label" class="font-medium text-slate-500"> - ends {{ currentSchedule.ends_label }}</span></dd></div>
+                                    <div class="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)]"><dt class="font-semibold text-slate-500">How to attend</dt><dd class="font-bold text-slate-900">{{ scheduleModeLabel(currentSchedule.mode) }}<span v-if="currentSchedule.venue" class="font-medium text-slate-600"> - {{ currentSchedule.venue }}</span></dd></div>
+                                    <div v-if="currentSchedule.attendance_status && currentSchedule.attendance_status !== 'pending'" class="grid gap-1 px-4 py-3 sm:grid-cols-[9rem_minmax(0,1fr)]"><dt class="font-semibold text-slate-500">Attendance</dt><dd class="font-bold text-slate-900">{{ attendanceLabel(currentSchedule.attendance_status) }}</dd></div>
+                                </dl>
+                                <div v-if="currentSchedule.instructions" class="border-t border-slate-200 bg-white px-4 py-3"><p class="text-xs font-bold uppercase tracking-[0.1em] text-slate-500">Before you attend</p><p class="mt-1 whitespace-pre-line text-sm leading-6 text-slate-700">{{ currentSchedule.instructions }}</p></div>
+                                <div class="flex flex-col gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:flex-wrap">
+                                    <a v-if="currentSchedule.online_url" :href="currentSchedule.online_url" target="_blank" rel="noopener" class="inline-flex items-center justify-center rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white">{{ currentSchedule.type === 'interview' ? 'Join interview' : 'Open online access' }}</a>
+                                    <button v-if="['onsite', 'hybrid'].includes(currentSchedule.mode) && (hasCoordinates(currentSchedule.latitude, currentSchedule.longitude) || currentSchedule.location_address || currentSchedule.venue)" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openScheduleMap(currentSchedule)">View map</button>
+                                    <button v-if="currentSchedule.requires_applicant_acknowledgment" type="button" :disabled="isAcknowledgingActivity" class="rounded-md border border-slate-950 bg-white px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-50" @click="acknowledgeCurrentActivity">{{ isAcknowledgingActivity ? 'Confirming...' : 'Confirm I saw this' }}</button>
+                                </div>
                             </div>
                         </div>
-                        <details v-if="scheduleHistory.length" class="group border-t border-slate-200"><summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-bold text-slate-700 sm:px-5 [&::-webkit-details-marker]:hidden"><span>Previous activities ({{ scheduleHistory.length }})</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary><div class="divide-y divide-slate-200 border-t border-slate-200 bg-slate-50"><div v-for="schedule in scheduleHistory" :key="schedule.id" class="flex items-center justify-between gap-3 px-4 py-3 sm:px-5"><div><p class="text-sm font-bold text-slate-900">{{ schedule.title || scheduleTypeLabel(schedule.type) }}</p><p class="mt-1 text-xs text-slate-500">{{ schedule.scheduled_label }}</p></div><span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span></div></div></details>
+                        <details v-if="scheduleHistory.length" class="group border-t border-slate-200"><summary class="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-bold text-slate-700 sm:px-5 [&::-webkit-details-marker]:hidden"><span>Past changes and activities ({{ scheduleHistory.length }})</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary><div class="divide-y divide-slate-200 border-t border-slate-200 bg-slate-50"><div v-for="schedule in scheduleHistory" :key="`${schedule.source || 'legacy'}-${schedule.id}`" class="flex items-center justify-between gap-3 px-4 py-3 sm:px-5"><div><p class="text-sm font-bold text-slate-900">{{ schedule.title || scheduleTypeLabel(schedule.type) }}</p><p class="mt-1 text-xs text-slate-500">{{ schedule.scheduled_label }}</p><p v-if="schedule.attendance_status && schedule.attendance_status !== 'pending'" class="mt-1 text-xs font-semibold text-slate-600">Attendance: {{ attendanceLabel(schedule.attendance_status) }}</p><p v-if="activityResult(schedule)" class="mt-1 text-xs font-semibold text-slate-600">Result: {{ labelFromKey(activityResult(schedule)) }}</p></div><span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', scheduleStatusClass(schedule.status)]">{{ labelFromKey(schedule.status) }}</span></div></div></details>
                     </section>
 
                     <section v-if="activeSection === 'program'" class="student-card overflow-hidden rounded-md border-slate-300">

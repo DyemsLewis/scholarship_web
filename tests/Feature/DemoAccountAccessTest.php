@@ -71,12 +71,12 @@ class DemoAccountAccessTest extends TestCase
 
             $this->assertCount(2, $ownPrograms);
             $this->get('/provider')->assertOk();
-            $this->get('/provider/governance')->assertOk();
+            $this->get('/provider/governance')->assertRedirect('/provider/workspaces/team');
             $this->getJson('/provider/governance/data')
                 ->assertOk()
                 ->assertJsonPath('operating_mode', 'governance');
-            $this->get('/provider/team')->assertOk();
-            $this->get('/provider/profile')->assertOk();
+            $this->get('/provider/team')->assertRedirect('/provider/workspaces/team');
+            $this->get('/provider/profile')->assertRedirect('/provider/workspaces/organization-profile');
             $this->get('/provider/programs')->assertForbidden();
             $this->get('/provider/programs/create')->assertForbidden();
             $this->get('/provider/applications')->assertForbidden();

@@ -16,6 +16,7 @@ use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\PreScreeningHandoffRecord;
+use App\Support\ProviderWorkspace;
 use App\Support\RecipientAgreement;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEventPayload;
@@ -24,6 +25,7 @@ use App\Support\XlsxExport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -455,15 +457,223 @@ trait HandlesProviderApplicationQueries
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
 
+        $validated = $request->validate([
+            'workspace' => ['sometimes', Rule::in(['review', 'selection', 'decision', 'recipient'])],
+        ]);
+
         $application->load(['applicant.studentProfile', 'documents.reviewer', 'assignedReviewer.providerProfile', 'statusHistories.actor', 'scholarship']);
         app(DecisionSupportService::class)->syncApplication($application);
         $application = $application->fresh()->load(['applicant.studentProfile', 'documents.reviewer', 'assignedReviewer.providerProfile', 'statusHistories.actor', 'scholarship']);
+        $workspace = $this->providerApplicationWorkspace(
+            $request->user(),
+            $application,
+            $validated['workspace'] ?? null,
+        );
+        $payload = $this->applicationPayload($application, true);
+        $payload['decision_reopen'] = $this->providerDecisionReopenPayload($application, $request->user());
 
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
-            'application' => $this->applicationPayload($application, true),
+            'application' => $this->applicationDetailPayloadForWorkspace($payload, $workspace),
+            'workspace' => $workspace,
             'application_navigation' => $this->applicationSiblingNavigationPayload($application),
         ]);
+    }
+
+    private function providerApplicationWorkspace(
+        User $actor,
+        ScholarshipApplication $application,
+        ?string $requestedWorkspace = null,
+    ): array {
+        $permissions = [
+            'review' => $actor->hasPortalPermission('verify_applications'),
+            'selection' => $actor->hasPortalPermission('manage_selection_activities'),
+            'decision' => $actor->hasPortalPermission('record_final_decisions'),
+            'recipient' => $actor->hasPortalPermission('manage_recipients'),
+        ];
+        $dedicatedWorkspace = match (true) {
+            ProviderWorkspace::usesApplicationReviewerWorkspace($actor) => 'review',
+            ProviderWorkspace::usesSelectionOfficerWorkspace($actor) => 'selection',
+            ProviderWorkspace::usesDecisionOfficerWorkspace($actor) => 'decision',
+            ProviderWorkspace::usesRecipientOfficerWorkspace($actor) => 'recipient',
+            default => null,
+        };
+        $workflow = $this->workflowService->payload($application);
+        $stageWorkspace = match ($workflow['current_stage'] ?? 'screening') {
+            'formal_application', 'exam', 'interview' => 'selection',
+            'decision' => 'decision',
+            'complete' => 'recipient',
+            default => 'review',
+        };
+        $firstAvailableWorkspace = collect($permissions)->search(true, true);
+        $mode = $dedicatedWorkspace
+            ?? ($requestedWorkspace && ($permissions[$requestedWorkspace] ?? false) ? $requestedWorkspace : null)
+            ?? (($permissions[$stageWorkspace] ?? false) ? $stageWorkspace : null)
+            ?? ($firstAvailableWorkspace !== false ? $firstAvailableWorkspace : 'review');
+        $canRecordCurrentStage = ($workflow['current_stage'] ?? 'screening') === 'screening'
+            ? $permissions['review']
+            : in_array($workflow['current_stage'] ?? null, ['formal_application', 'exam', 'interview'], true)
+                && $permissions['selection'];
+        $definitions = [
+            'review' => [
+                'eyebrow' => 'Application review',
+                'title' => 'Verify application',
+                'description' => 'Check eligibility and evidence, then record the screening result.',
+                'icon' => 'fa-solid fa-magnifying-glass-chart',
+                'default_section' => 'eligibility',
+                'sections' => [
+                    ['key' => 'eligibility', 'label' => 'Eligibility', 'icon' => 'fa-solid fa-scale-balanced'],
+                    ['key' => 'documents', 'label' => 'Files', 'icon' => 'fa-solid fa-file-circle-check'],
+                    ['key' => 'applicant', 'label' => 'Profile', 'icon' => 'fa-solid fa-user'],
+                    ['key' => 'decision', 'label' => 'Result', 'icon' => 'fa-solid fa-gavel'],
+                    ['key' => 'history', 'label' => 'History', 'icon' => 'fa-solid fa-clock-rotate-left'],
+                ],
+                'applicant_views' => ['profile', 'background', 'responses'],
+            ],
+            'selection' => [
+                'eyebrow' => 'Selection activity',
+                'title' => 'Record activity result',
+                'description' => 'Review the scheduled activity and record its result.',
+                'icon' => 'fa-solid fa-calendar-check',
+                'default_section' => 'decision',
+                'sections' => [
+                    ['key' => 'decision', 'label' => 'Current activity', 'icon' => 'fa-solid fa-calendar-check'],
+                    ['key' => 'applicant', 'label' => 'Applicant', 'icon' => 'fa-solid fa-user'],
+                    ['key' => 'history', 'label' => 'History', 'icon' => 'fa-solid fa-clock-rotate-left'],
+                ],
+                'applicant_views' => ['profile', 'responses'],
+            ],
+            'decision' => [
+                'eyebrow' => 'Final decision',
+                'title' => 'Decide scholarship outcome',
+                'description' => 'Review the verified record and record the final outcome.',
+                'icon' => 'fa-solid fa-gavel',
+                'default_section' => 'decision',
+                'sections' => [
+                    ['key' => 'decision', 'label' => 'Decision', 'icon' => 'fa-solid fa-gavel'],
+                    ['key' => 'eligibility', 'label' => 'Eligibility', 'icon' => 'fa-solid fa-scale-balanced'],
+                    ['key' => 'documents', 'label' => 'Evidence', 'icon' => 'fa-solid fa-file-circle-check'],
+                    ['key' => 'applicant', 'label' => 'Applicant', 'icon' => 'fa-solid fa-user'],
+                    ['key' => 'history', 'label' => 'History', 'icon' => 'fa-solid fa-clock-rotate-left'],
+                ],
+                'applicant_views' => ['profile', 'background', 'responses'],
+            ],
+            'recipient' => [
+                'eyebrow' => 'Recipient onboarding',
+                'title' => 'Review recipient handoff',
+                'description' => 'Confirm the agreement and current support status.',
+                'icon' => 'fa-solid fa-user-shield',
+                'default_section' => 'decision',
+                'sections' => [
+                    ['key' => 'decision', 'label' => 'Onboarding', 'icon' => 'fa-solid fa-file-signature'],
+                    ['key' => 'applicant', 'label' => 'Recipient', 'icon' => 'fa-solid fa-user'],
+                    ['key' => 'history', 'label' => 'History', 'icon' => 'fa-solid fa-clock-rotate-left'],
+                ],
+                'applicant_views' => ['profile'],
+            ],
+        ];
+
+        return [
+            'mode' => $mode,
+            ...$definitions[$mode],
+            'capabilities' => [
+                'review_profile' => $permissions['review'],
+                'view_profile_evidence' => $permissions['review'] || $permissions['decision'],
+                'review_documents' => $permissions['review'],
+                'view_documents' => $permissions['review'] || $permissions['decision'],
+                'request_correction' => $permissions['review'],
+                'record_screening_result' => $permissions['review'],
+                'record_selection_result' => $permissions['selection'],
+                'record_current_stage' => $canRecordCurrentStage,
+                'record_final_outcome' => $permissions['decision'],
+                'manage_recipient' => $permissions['recipient'],
+                'stop_benefits' => $permissions['decision'],
+            ],
+        ];
+    }
+
+    private function applicationDetailPayloadForWorkspace(array $payload, array $workspace): array
+    {
+        $mode = $workspace['mode'];
+
+        if ($mode === 'review') {
+            return $payload;
+        }
+
+        $commonApplicantFields = [
+            'name', 'email', 'username', 'contact_number', 'education_level', 'school',
+            'school_type', 'course_or_strand', 'year_level', 'academic_year', 'academic_term',
+            'gwa', 'grading_scale', 'enrollment_status', 'account_managed_by', 'profile_photo_url',
+            'profile_photo_review_status', 'profile_verification_status', 'profile_verified_at',
+        ];
+
+        if ($mode === 'selection') {
+            $payload['applicant'] = Arr::only($payload['applicant'] ?? [], $commonApplicantFields);
+            $payload['documents'] = [];
+            $payload['eligibility_breakdown'] = null;
+            $payload['dss_breakdown'] = null;
+            $payload['dss_explanation'] = null;
+            $payload['recipient_agreement'] = null;
+        }
+
+        if ($mode === 'decision') {
+            $payload['applicant'] = Arr::except($payload['applicant'] ?? [], [
+                'address', 'latitude', 'longitude', 'guardian_contact', 'guardian_email',
+            ]);
+        }
+
+        if ($mode === 'recipient') {
+            $payload['applicant'] = Arr::only($payload['applicant'] ?? [], $commonApplicantFields);
+            $payload['documents'] = [];
+            $payload['application_answers'] = [];
+            $payload['eligibility_breakdown'] = null;
+            $payload['dss_breakdown'] = null;
+            $payload['dss_explanation'] = null;
+            $payload['rubric_review'] = ['criteria' => [], 'completed' => 0, 'total_criteria' => 0];
+            $payload['exam'] = null;
+        }
+
+        return $payload;
+    }
+
+    private function applicationPayloadForProviderActor(
+        ScholarshipApplication $application,
+        User $actor,
+    ): array {
+        $application->loadMissing([
+            'applicant.studentProfile',
+            'applicant.applicantVerificationDocuments',
+            'documents.reviewer',
+            'assignedReviewer.providerProfile',
+            'schedules',
+            'statusHistories.actor',
+            'scholarship',
+        ]);
+        $workspace = $this->providerApplicationWorkspace($actor, $application);
+        $payload = $this->applicationDetailPayloadForWorkspace(
+            $this->applicationPayload($application, true),
+            $workspace,
+        );
+        $payload['decision_reopen'] = $this->providerDecisionReopenPayload($application, $actor);
+
+        return $payload;
+    }
+
+    private function providerDecisionReopenPayload(
+        ScholarshipApplication $application,
+        User $actor,
+    ): array {
+        $availability = $this->workflowService->reopenDecisionAvailability($application);
+        $hasPermission = filled($availability['required_permission'])
+            && $actor->hasPortalPermission($availability['required_permission']);
+
+        return [
+            ...$availability,
+            'can_reopen' => $availability['available'] && $hasPermission,
+            'blocked_reason' => $availability['available'] && ! $hasPermission
+                ? 'Your provider role cannot reopen this decision.'
+                : $availability['blocked_reason'],
+        ];
     }
 
     public function exportApplications(Request $request)
@@ -682,16 +892,20 @@ trait HandlesProviderApplicationQueries
         ];
     }
 
-    private function freshApplicationPayload(ScholarshipApplication $application): array
+    private function freshApplicationPayload(ScholarshipApplication $application, ?User $actor = null): array
     {
-        return $this->applicationPayload($application->fresh()->load([
+        $freshApplication = $application->fresh()->load([
             'applicant.studentProfile',
             'applicant.applicantVerificationDocuments',
             'documents.reviewer',
             'assignedReviewer.providerProfile',
             'statusHistories.actor',
             'scholarship',
-        ]), true);
+        ]);
+
+        return $actor
+            ? $this->applicationPayloadForProviderActor($freshApplication, $actor)
+            : $this->applicationPayload($freshApplication, true);
     }
 
     private function applicantPayload(ScholarshipApplication $application, bool $includeProfileDetails): array
@@ -984,7 +1198,6 @@ trait HandlesProviderApplicationQueries
         ];
     }
 
-
     private function providerApplicationReviewers(int $providerId, ?User $assigner = null)
     {
         return User::query()
@@ -1042,5 +1255,4 @@ trait HandlesProviderApplicationQueries
                 $assigner->assignedProviderProgramIds(),
             ) !== [];
     }
-
 }

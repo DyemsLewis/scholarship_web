@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
+  <title id="title">Connected Classrooms Access Grant</title>
+  <rect width="240" height="240" rx="24" fill="#07142d"/>
+  <rect x="49" y="72" width="142" height="94" rx="10" fill="#fff"/>
+  <path d="M34 178h172l-15 20H49z" fill="#f5b700"/>
+  <path d="M91 117c17-15 41-15 58 0M104 132c9-8 23-8 32 0" fill="none" stroke="#07142d" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="120" cy="148" r="7" fill="#07142d"/>
+</svg>

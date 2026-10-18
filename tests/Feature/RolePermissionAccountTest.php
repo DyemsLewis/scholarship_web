@@ -94,6 +94,71 @@ class RolePermissionAccountTest extends TestCase
         $this->actingAs($staff)
             ->getJson("/admin/users/{$admin->id}")
             ->assertForbidden();
+
+        $this->actingAs($staff)
+            ->patchJson("/admin/users/{$admin->id}/status", [
+                'account_status' => 'suspended',
+                'suspension_reason' => 'This request must remain outside delegated access.',
+            ])
+            ->assertForbidden();
+    }
+
+    public function test_account_manager_can_create_and_manage_applicant_access(): void
+    {
+        Mail::fake();
+        Notification::fake();
+
+        $admin = User::factory()->create(['role' => 'admin']);
+        $accountManager = User::factory()->create([
+            'role' => 'admin',
+            'parent_account_id' => $admin->id,
+            'account_title' => 'Account manager',
+            'permissions' => ['manage_accounts'],
+        ]);
+
+        $response = $this->actingAs($accountManager)->postJson('/admin/users', [
+            'first_name' => 'Demo',
+            'last_name' => 'Applicant',
+            'middle_initial' => 'A',
+            'email' => 'demo.applicant@example.test',
+            'username' => 'demo.applicant',
+            'contact_number' => '09171234570',
+            'role' => 'applicant',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+        ])->assertCreated();
+
+        $applicant = User::query()->findOrFail($response->json('user.id'));
+
+        $this->actingAs($accountManager)
+            ->patchJson("/admin/users/{$applicant->id}/email-verification")
+            ->assertOk()
+            ->assertJsonPath('user.email_verified', true);
+
+        $this->actingAs($accountManager)
+            ->postJson("/admin/users/{$applicant->id}/force-password-reset")
+            ->assertOk();
+
+        $this->actingAs($accountManager)
+            ->patchJson("/admin/users/{$applicant->id}/status", [
+                'account_status' => 'suspended',
+                'suspension_reason' => 'Temporary access review.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.account_status', 'suspended');
+
+        $this->actingAs($accountManager)
+            ->patchJson("/admin/users/{$applicant->id}/status", [
+                'account_status' => 'active',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.account_status', 'active');
+
+        $applicant->refresh();
+
+        $this->assertTrue($applicant->hasVerifiedEmail());
+        $this->assertTrue($applicant->must_reset_password);
+        $this->assertSame('active', $applicant->account_status);
     }
 
     public function test_provider_team_account_uses_organization_programs_and_enforced_permissions(): void
@@ -207,10 +272,13 @@ class RolePermissionAccountTest extends TestCase
 
         $this->actingAs($coordinator)
             ->get('/provider/programs')
-            ->assertRedirect('/provider/workspaces/programs');
+            ->assertOk()
+            ->assertViewIs('provider-program-directory');
         $this->actingAs($coordinator)->get('/provider/applications')->assertForbidden();
         $this->actingAs($reviewer)->get("/provider/programs/{$program->id}")->assertOk();
-        $this->actingAs($reviewer)->get('/provider/applications')->assertOk();
+        $this->actingAs($reviewer)
+            ->get('/provider/applications')
+            ->assertRedirect('/provider/workspaces/reviews/assigned');
 
         $this->actingAs($support)->get('/provider/programs')->assertForbidden();
         $this->actingAs($support)
@@ -287,12 +355,12 @@ class RolePermissionAccountTest extends TestCase
             'password' => 'new-password123',
             'password_confirmation' => 'new-password123',
         ])->assertOk()
-            ->assertJsonPath('redirect', '/provider/workspaces/reviews');
+            ->assertJsonPath('redirect', '/provider');
 
         $staff->refresh();
         $this->assertTrue($staff->hasVerifiedEmail());
         $this->assertFalse($staff->must_reset_password);
-        $this->get('/provider')->assertRedirect('/provider/workspaces/reviews');
+        $this->get('/provider')->assertOk()->assertViewIs('provider-application-reviewer-dashboard');
     }
 
     public function test_provider_staff_can_update_personal_credentials_without_editing_organization_details(): void

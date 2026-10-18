@@ -10,6 +10,7 @@ bash "$app_root/deploy/hostinger-backup.sh" || status=1
 
 cd "$app_root" || exit 1
 /usr/bin/php artisan scholarships:send-reminders || status=1
+/usr/bin/php artisan monitoring:send-reminders || status=1
 /usr/bin/php artisan platform:prune-data || status=1
 
 result="success"

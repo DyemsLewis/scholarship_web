@@ -324,6 +324,130 @@ trait HandlesProviderProfileManagement
         ]);
     }
 
+    public function updateOrganizationProfileSection(Request $request, string $section): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_profile'), 403);
+
+        $rules = match ($section) {
+            'public' => [
+                'provider_name' => ['required', 'string', 'max:255'],
+                'provider_type' => ['required', Rule::in(['school', 'foundation', 'government', 'company', 'non_profit', 'other'])],
+                'provider_website' => ['nullable', 'string', 'max:255'],
+                'provider_description' => ['required', 'string', 'max:1500'],
+                'provider_mission' => ['nullable', 'string', 'max:1000'],
+                'provider_year_established' => ['nullable', 'integer', 'min:1800', 'max:'.now()->year],
+            ],
+            'contact' => [
+                'provider_contact_email' => ['required', 'email', 'max:255'],
+                'provider_contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
+                'provider_contact_department' => ['nullable', 'string', 'max:255'],
+                'provider_office_hours' => ['nullable', 'string', 'max:255'],
+                'provider_address' => ['required', 'string', 'max:500'],
+                'provider_service_area' => ['required', 'string', 'max:500'],
+            ],
+            'legal' => [
+                'legal_name' => ['required', 'string', 'max:255'],
+                'registration_authority' => ['required', 'string', 'max:255'],
+                'registration_number' => ['required', 'string', 'max:255'],
+                'registration_date' => ['nullable', 'date', 'before_or_equal:today'],
+            ],
+            default => abort(404),
+        };
+        $validated = $request->validate($rules);
+        $updates = match ($section) {
+            'public' => [
+                'provider_name' => $validated['provider_name'],
+                'provider_type' => $validated['provider_type'],
+                'provider_website' => $validated['provider_website'] ?? null,
+                'provider_description' => $validated['provider_description'],
+                'mission' => $validated['provider_mission'] ?? null,
+                'year_established' => $validated['provider_year_established'] ?? null,
+            ],
+            'contact' => [
+                'provider_contact_email' => strtolower(trim($validated['provider_contact_email'])),
+                'provider_contact_number' => $validated['provider_contact_number'],
+                'contact_department' => $validated['provider_contact_department'] ?? null,
+                'office_hours' => $validated['provider_office_hours'] ?? null,
+                'provider_address' => $validated['provider_address'],
+                'service_area' => $validated['provider_service_area'],
+            ],
+            'legal' => [
+                'legal_name' => $validated['legal_name'],
+                'registration_authority' => $validated['registration_authority'],
+                'registration_number' => $validated['registration_number'],
+                'registration_date' => $validated['registration_date'] ?? null,
+            ],
+        };
+        $reviewedFields = match ($section) {
+            'public' => ['provider_name', 'provider_type', 'provider_website', 'provider_description'],
+            'contact' => ['provider_address'],
+            'legal' => ['legal_name', 'registration_authority', 'registration_number', 'registration_date'],
+        };
+        $manager = $request->user();
+        $owner = $manager->providerOrganizationOwner();
+        $profile = $owner->providerProfile()->firstOrCreate(['user_id' => $owner->id]);
+        $verificationReset = $profile->verification_status === 'approved'
+            && collect($reviewedFields)->contains(fn (string $field): bool => $this->comparableScholarshipValue($profile->{$field})
+                !== $this->comparableScholarshipValue($updates[$field] ?? null));
+
+        if ($verificationReset) {
+            $updates = [
+                ...$updates,
+                'verification_status' => 'pending',
+                'verification_notes' => null,
+                'verified_by' => null,
+                'verified_at' => null,
+            ];
+        }
+
+        DB::transaction(function () use ($owner, $profile, $updates, $verificationReset): void {
+            $profile->update($updates);
+
+            if ($verificationReset) {
+                $owner->providerVerificationDocuments()->update([
+                    'status' => 'submitted',
+                    'review_notes' => null,
+                ]);
+            }
+        });
+
+        if ($verificationReset) {
+            User::query()
+                ->where('role', 'admin')
+                ->where('account_status', 'active')
+                ->get()
+                ->filter(fn (User $admin) => $admin->hasPortalPermission('manage_reviews'))
+                ->each(fn (User $admin) => PortalNotification::create([
+                    'user_id' => $admin->id,
+                    'type' => 'provider_profile_verification',
+                    'title' => 'Verified provider profile changed',
+                    'message' => ($profile->provider_name ?: $owner->name).' changed verified organization details and needs another review.',
+                    'action_url' => route('admin.providers.review.show', $owner, false),
+                ]));
+        }
+
+        ActivityLog::record(
+            $manager,
+            'provider_profile_section_updated',
+            ($profile->provider_name ?: $owner->name ?: 'Provider').' updated the '.$section.' organization profile section.',
+            $request,
+            ['provider_id' => $owner->id, 'section' => $section, 'verification_reset' => $verificationReset],
+        );
+
+        return response()->json([
+            'message' => $verificationReset
+                ? 'Changes saved. The organization was returned for administrator verification.'
+                : match ($section) {
+                    'public' => 'Public profile saved.',
+                    'contact' => 'Contact and location saved.',
+                    'legal' => 'Legal details saved.',
+                },
+            'profile' => $this->providerStaffPayload($manager->fresh(['providerProfile'])),
+            'verification_reset' => $verificationReset,
+        ]);
+    }
+
     public function uploadVerificationDocument(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -611,5 +735,4 @@ trait HandlesProviderProfileManagement
             'download_url' => route('provider.verification-documents.download', $document),
         ];
     }
-
 }

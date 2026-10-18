@@ -51,8 +51,12 @@ class ApplicationDocumentController extends Controller
             return $user->hasPortalPermission('manage_reviews');
         }
 
-        return $user->isProvider()
-            && $user->hasPortalPermission('verify_applications')
-            && $document->application?->scholarship?->provider_id === $user->providerOrganizationId();
+        $scholarship = $document->application?->scholarship;
+
+        return $scholarship
+            && $user->isProvider()
+            && ($user->hasPortalPermission('verify_applications')
+                || $user->hasPortalPermission('record_final_decisions'))
+            && $user->canAccessProviderProgram($scholarship);
     }
 }

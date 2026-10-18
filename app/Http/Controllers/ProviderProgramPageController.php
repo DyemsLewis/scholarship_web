@@ -18,11 +18,7 @@ class ProviderProgramPageController extends Controller
 
         abort_unless($request->user()->isProvider(), 403);
 
-        if (ProviderWorkspace::usesProgramCoordinatorWorkspace($request->user())) {
-            return redirect()->route(ProviderWorkspace::PROGRAM_COORDINATOR_ROUTE, $request->query());
-        }
-
-        return view('provider-programs');
+        return redirect()->route(ProviderWorkspace::PROGRAM_COORDINATOR_ROUTE, $request->query());
     }
 
     public function programWorkspace(Request $request, Scholarship $scholarship): View|RedirectResponse
@@ -34,9 +30,7 @@ class ProviderProgramPageController extends Controller
         abort_unless($request->user()->isProvider(), 403);
         abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
-        return view('provider-program-workspace', [
-            'scholarship' => $scholarship,
-        ]);
+        return redirect()->route('provider.programs.show', $scholarship);
     }
 
     public function programForm(Request $request, ?Scholarship $scholarship = null): View|RedirectResponse

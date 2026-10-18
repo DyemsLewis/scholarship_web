@@ -8,6 +8,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RecipientMonitoringCycle extends Model
 {
+    public const STATUSES = [
+        'draft',
+        'scheduled',
+        'open',
+        'grace_period',
+        'under_review',
+        'follow_up',
+        'ready_to_close',
+        'closed',
+        'cancelled',
+    ];
+
     protected $fillable = [
         'scholarship_id',
         'recipient_monitoring_plan_id',
@@ -26,6 +38,10 @@ class RecipientMonitoringCycle extends Model
         'instructions',
         'status',
         'published_at',
+        'closed_by',
+        'closed_at',
+        'reopened_by',
+        'reopened_at',
     ];
 
     protected function casts(): array
@@ -38,6 +54,8 @@ class RecipientMonitoringCycle extends Model
             'grace_period_days' => 'integer',
             'allow_exception_requests' => 'boolean',
             'published_at' => 'datetime',
+            'closed_at' => 'datetime',
+            'reopened_at' => 'datetime',
         ];
     }
 
@@ -76,5 +94,20 @@ class RecipientMonitoringCycle extends Model
     public function interventions(): HasMany
     {
         return $this->hasMany(RecipientMonitoringIntervention::class);
+    }
+
+    public function cases(): HasMany
+    {
+        return $this->hasMany(RecipientMonitoringCase::class);
+    }
+
+    public function closer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'closed_by');
+    }
+
+    public function reopener(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reopened_by');
     }
 }

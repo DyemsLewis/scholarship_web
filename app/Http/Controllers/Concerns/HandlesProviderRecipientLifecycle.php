@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Domain\Recipients\RecipientSupportCatalog;
 use App\Models\ActivityLog;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
@@ -9,6 +10,7 @@ use App\Models\RecipientBenefitReceiptResponse;
 use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientBenefitReleaseRecord;
 use App\Models\RecipientMonitoringAdjustmentRequest;
+use App\Models\RecipientMonitoringCase;
 use App\Models\RecipientMonitoringCycle;
 use App\Models\RecipientMonitoringCycleRequirement;
 use App\Models\RecipientMonitoringIntervention;
@@ -19,7 +21,8 @@ use App\Models\RecipientSupportDecision;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Services\AcademicRecordOcrService;
-use App\Services\ScholarshipBenefitService as SB;
+use App\Services\RecipientBenefitEntitlementService;
+use App\Services\RecipientMonitoringCaseService;
 use App\Support\AcademicRequirement;
 use App\Support\CsvExport;
 use App\Support\RecipientAgreement;
@@ -131,7 +134,7 @@ trait HandlesProviderRecipientLifecycle
             ->with('requirements')
             ->first();
         $cyclePayloads = $cycles
-            ->map(fn (RecipientMonitoringCycle $cycle): array => $this->recipientMonitoringCyclePayload($cycle, $applications))
+            ->map(fn (RecipientMonitoringCycle $cycle): array => $this->recipientMonitoringCyclePayload($cycle, $applications, false))
             ->values();
         $releasePayloads = $releases
             ->map(fn (RecipientBenefitRelease $release): array => $this->recipientBenefitReleasePayload($release))
@@ -158,6 +161,49 @@ trait HandlesProviderRecipientLifecycle
                 $releasePayloads,
                 $supportPayloads,
             ),
+        ]);
+    }
+
+    public function recipientMonitoringCycleRecord(
+        Request $request,
+        RecipientMonitoringCycle $cycle,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        $cycle->loadMissing('scholarship');
+        $scholarship = $cycle->scholarship;
+        abort_unless($scholarship && $request->user()->canAccessProviderProgram($scholarship), 403);
+
+        return response()->json([
+            'program' => [
+                'id' => $scholarship->id,
+                'title' => $scholarship->title,
+                'support_period' => collect([
+                    $scholarship->support_starts_at?->format('M d, Y'),
+                    $scholarship->support_ends_at?->format('M d, Y'),
+                ])->filter()->implode(' to '),
+            ],
+            'cycle' => $this->recipientMonitoringCyclePayload(
+                $cycle,
+                $this->selectedRecipientApplications($scholarship),
+            ),
+        ]);
+    }
+
+    public function recipientBenefitReleaseRecord(
+        Request $request,
+        RecipientBenefitRelease $release,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        $release->loadMissing('scholarship');
+        $scholarship = $release->scholarship;
+        abort_unless($scholarship && $request->user()->canAccessProviderProgram($scholarship), 403);
+
+        return response()->json([
+            'program' => [
+                'id' => $scholarship->id,
+                'title' => $scholarship->title,
+            ],
+            'release' => $this->recipientBenefitReleasePayload($release),
         ]);
     }
 
@@ -311,6 +357,13 @@ trait HandlesProviderRecipientLifecycle
             }
 
             $plan->save();
+
+            if ($plan->status === 'active') {
+                $scholarship->forceFill([
+                    'monitoring_policy' => RecipientSupportCatalog::MONITORING_RECURRING,
+                ])->saveQuietly();
+            }
+
             $savedRequirementIds = [];
 
             foreach ($requirements->values() as $index => $values) {
@@ -436,6 +489,8 @@ trait HandlesProviderRecipientLifecycle
                 'status' => 'open',
                 'published_at' => now(),
             ]);
+
+            app(RecipientMonitoringCaseService::class)->seedForCycle($cycle, $applications);
 
             foreach ($applications as $application) {
                 PortalNotification::query()->updateOrCreate([
@@ -577,6 +632,8 @@ trait HandlesProviderRecipientLifecycle
                     'sort_order' => $requirement->sort_order,
                 ]);
             }
+
+            app(RecipientMonitoringCaseService::class)->seedForCycle($cycle, $applications);
 
             $uploadCount = $plan->requirements->where('requires_file', true)->count();
             foreach ($applications as $application) {
@@ -1133,6 +1190,165 @@ trait HandlesProviderRecipientLifecycle
         ]);
     }
 
+    public function closeRecipientMonitoringCase(
+        Request $request,
+        RecipientMonitoringCase $case,
+        RecipientMonitoringCaseService $caseService,
+    ): JsonResponse {
+        [$cycle, $scholarship, $application] = $this->authorizedRecipientMonitoringCaseContext($request, $case);
+        $validated = $request->validate([
+            'outcome' => ['required', Rule::in([
+                RecipientSupportCatalog::OUTCOME_COMPLETED,
+                RecipientSupportCatalog::OUTCOME_COMPLETED_WITH_SUPPORT,
+                RecipientSupportCatalog::OUTCOME_INCOMPLETE,
+            ])],
+            'reason' => [
+                Rule::requiredIf($request->input('outcome') !== RecipientSupportCatalog::OUTCOME_COMPLETED),
+                'nullable',
+                'string',
+                'min:5',
+                'max:1500',
+            ],
+        ]);
+
+        $case = $caseService->sync($cycle, $application);
+        $case->loadMissing(['cycle', 'application']);
+        $case = $caseService->close(
+            $case,
+            $request->user(),
+            $validated['outcome'],
+            $validated['reason'] ?? null,
+        );
+        $outcomeLabel = RecipientSupportCatalog::outcomeLabel($case->outcome) ?? 'Closed';
+
+        PortalNotification::create([
+            'user_id' => $application->applicant_id,
+            'type' => 'recipient_monitoring_case_closed',
+            'title' => 'Monitoring check-in closed',
+            'message' => "{$cycle->title}: the provider recorded {$outcomeLabel}.",
+            'action_url' => route('dashboard.monitoring.show', $application, false),
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            'recipient_monitoring_case_closed',
+            "{$request->user()->name} closed a monitoring check-in for {$application->applicant?->name}.",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'application_id' => $application->id,
+                'monitoring_cycle_id' => $cycle->id,
+                'monitoring_case_id' => $case->id,
+                'outcome' => $case->outcome,
+            ],
+        );
+
+        return response()->json([
+            'message' => "Check-in closed as {$outcomeLabel}.",
+            'cycle' => $this->recipientMonitoringCyclePayload(
+                $cycle->fresh(),
+                $this->selectedRecipientApplications($scholarship),
+            ),
+        ]);
+    }
+
+    public function waiveRecipientMonitoringCase(
+        Request $request,
+        RecipientMonitoringCase $case,
+        RecipientMonitoringCaseService $caseService,
+    ): JsonResponse {
+        [$cycle, $scholarship, $application] = $this->authorizedRecipientMonitoringCaseContext($request, $case);
+        $validated = $request->validate([
+            'outcome' => ['required', Rule::in([
+                RecipientSupportCatalog::OUTCOME_WAIVED,
+                RecipientSupportCatalog::OUTCOME_EXCUSED,
+            ])],
+            'reason' => ['required', 'string', 'min:10', 'max:1500'],
+        ]);
+
+        $case = $caseService->sync($cycle, $application);
+        $case->loadMissing(['cycle', 'application']);
+        $case = $caseService->waive(
+            $case,
+            $request->user(),
+            $validated['outcome'],
+            $validated['reason'],
+        );
+        $outcomeLabel = RecipientSupportCatalog::outcomeLabel($case->outcome) ?? 'Waived';
+
+        PortalNotification::create([
+            'user_id' => $application->applicant_id,
+            'type' => 'recipient_monitoring_case_waived',
+            'title' => 'Monitoring check-in updated',
+            'message' => "{$cycle->title}: the provider recorded {$outcomeLabel}.",
+            'action_url' => route('dashboard.monitoring.show', $application, false),
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            'recipient_monitoring_case_waived',
+            "{$request->user()->name} recorded {$outcomeLabel} for {$application->applicant?->name}.",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'application_id' => $application->id,
+                'monitoring_cycle_id' => $cycle->id,
+                'monitoring_case_id' => $case->id,
+                'outcome' => $case->outcome,
+            ],
+        );
+
+        return response()->json([
+            'message' => "Check-in marked {$outcomeLabel}.",
+            'cycle' => $this->recipientMonitoringCyclePayload(
+                $cycle->fresh(),
+                $this->selectedRecipientApplications($scholarship),
+            ),
+        ]);
+    }
+
+    public function reopenRecipientMonitoringCase(
+        Request $request,
+        RecipientMonitoringCase $case,
+        RecipientMonitoringCaseService $caseService,
+    ): JsonResponse {
+        [$cycle, $scholarship, $application] = $this->authorizedRecipientMonitoringCaseContext($request, $case);
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:1500'],
+        ]);
+
+        $case = $caseService->sync($cycle, $application);
+        $case->loadMissing(['cycle', 'application']);
+        $case = $caseService->reopen($case, $request->user(), $validated['reason']);
+
+        PortalNotification::create([
+            'user_id' => $application->applicant_id,
+            'type' => 'recipient_monitoring_case_reopened',
+            'title' => 'Monitoring check-in reopened',
+            'message' => "{$cycle->title}: the provider reopened this check-in for review.",
+            'action_url' => route('dashboard.monitoring.show', $application, false),
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            'recipient_monitoring_case_reopened',
+            "{$request->user()->name} reopened a monitoring check-in for {$application->applicant?->name}.",
+            $request,
+            [
+                'scholarship_id' => $scholarship->id,
+                'application_id' => $application->id,
+                'monitoring_cycle_id' => $cycle->id,
+                'monitoring_case_id' => $case->id,
+                'reason' => $validated['reason'],
+            ],
+        );
+
+        return response()->json([
+            'message' => 'Check-in reopened and recalculated from the saved records.',
+            'cycle' => $this->recipientMonitoringCyclePayload(
+                $cycle->fresh(),
+                $this->selectedRecipientApplications($scholarship),
+            ),
+        ]);
+    }
+
     public function storeRecipientBenefitRelease(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -1147,6 +1363,8 @@ trait HandlesProviderRecipientLifecycle
             'location' => [Rule::requiredIf($request->input('release_method') === 'in_person'), 'nullable', 'string', 'max:255'],
             'instructions' => ['nullable', 'string', 'max:2000'],
             'requires_original_verification' => ['required', 'boolean'],
+            'benefit_ids' => ['sometimes', 'array', 'max:10'],
+            'benefit_ids.*' => ['required', 'integer', 'distinct'],
             'recipient_ids' => ['required', 'array', 'min:1'],
             'recipient_ids.*' => ['required', 'integer', 'distinct'],
         ]);
@@ -1154,6 +1372,14 @@ trait HandlesProviderRecipientLifecycle
         $releaseAt = CarbonImmutable::parse($validated['release_at']);
         $applications = $this->selectedRecipientApplications($scholarship);
         $selectedApplications = $applications->whereIn('id', $validated['recipient_ids'])->values();
+        $entitlementService = app(RecipientBenefitEntitlementService::class);
+        $selectedBenefits = $entitlementService->resolveBenefitsForRelease(
+            $scholarship,
+            array_map('intval', $validated['benefit_ids'] ?? []),
+            $validated['title'],
+            $validated['benefit_description'],
+            $validated['amount'] ?? null,
+        );
 
         if ($selectedApplications->count() !== count($validated['recipient_ids'])) {
             throw ValidationException::withMessages([
@@ -1165,8 +1391,20 @@ trait HandlesProviderRecipientLifecycle
             ->with('submissions')
             ->get();
         $blocked = $selectedApplications
-            ->map(function (ScholarshipApplication $application) use ($cycles, $releaseAt): ?string {
+            ->map(function (ScholarshipApplication $application) use (
+                $cycles,
+                $releaseAt,
+                $entitlementService,
+                $selectedBenefits,
+            ): ?string {
                 $eligibility = $this->recipientBenefitReleaseEligibility($application, $cycles, $releaseAt);
+
+                if ($eligibility['eligible']) {
+                    $entitlementReason = $entitlementService->releaseBlockReason($application, $selectedBenefits);
+                    if ($entitlementReason) {
+                        return "{$application->applicant?->name}: {$entitlementReason}";
+                    }
+                }
 
                 return $eligibility['eligible']
                     ? null
@@ -1181,7 +1419,14 @@ trait HandlesProviderRecipientLifecycle
             ]);
         }
 
-        $release = DB::transaction(function () use ($request, $scholarship, $validated, $selectedApplications): RecipientBenefitRelease {
+        $release = DB::transaction(function () use (
+            $request,
+            $scholarship,
+            $validated,
+            $selectedApplications,
+            $entitlementService,
+            $selectedBenefits,
+        ): RecipientBenefitRelease {
             $release = $scholarship->benefitReleases()->create([
                 'created_by' => $request->user()->id,
                 'title' => $validated['title'],
@@ -1197,11 +1442,12 @@ trait HandlesProviderRecipientLifecycle
             ]);
 
             foreach ($selectedApplications as $application) {
-                $release->records()->create([
+                $record = $release->records()->create([
                     'scholarship_application_id' => $application->id,
                     'applicant_id' => $application->applicant_id,
                     'status' => 'scheduled',
                 ]);
+                $entitlementService->allocate($record, $selectedBenefits);
                 PortalNotification::query()->updateOrCreate([
                     'deduplication_key' => "recipient-benefit-release:{$release->id}:application:{$application->id}",
                 ], [
@@ -1247,9 +1493,11 @@ trait HandlesProviderRecipientLifecycle
         $scholarship = $release?->scholarship;
         abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
-        if ($record->status === 'released' || $record->receiptResponse) {
+        if (in_array($record->status, ['released', 'missed'], true) || $record->receiptResponse) {
             throw ValidationException::withMessages([
-                'status' => 'A released record is locked. Resolve any recipient issue through the receipt response instead.',
+                'status' => $record->status === 'missed'
+                    ? 'A missed release is closed. Create a new schedule for the replacement pickup.'
+                    : 'A released record is locked. Resolve any recipient issue through the receipt response instead.',
             ]);
         }
 
@@ -1308,6 +1556,7 @@ trait HandlesProviderRecipientLifecycle
                     'recorded_at' => now(),
                     'released_at' => $status === 'released' ? now() : null,
                 ]);
+                app(RecipientBenefitEntitlementService::class)->syncReleaseResult($record);
 
                 $statuses = $record->release->records()->pluck('status');
                 $terminal = ['released', 'missed', 'withheld'];
@@ -1399,17 +1648,20 @@ trait HandlesProviderRecipientLifecycle
         $proofPath = $proof?->store("benefit-receipt-responses/{$record->id}/resolution", 'local');
 
         try {
-            $response->update([
-                'status' => 'resolved',
-                'resolution_outcome' => $validated['resolution_outcome'],
-                'resolution_notes' => $validated['resolution_notes'],
-                'resolution_proof_original_name' => $proof?->getClientOriginalName(),
-                'resolution_proof_path' => $proofPath,
-                'resolution_proof_mime_type' => $proof?->getMimeType(),
-                'resolution_proof_size' => $proof?->getSize() ?: 0,
-                'resolved_by' => $request->user()->id,
-                'resolved_at' => now(),
-            ]);
+            DB::transaction(function () use ($request, $response, $validated, $proof, $proofPath): void {
+                $response->update([
+                    'status' => 'resolved',
+                    'resolution_outcome' => $validated['resolution_outcome'],
+                    'resolution_notes' => $validated['resolution_notes'],
+                    'resolution_proof_original_name' => $proof?->getClientOriginalName(),
+                    'resolution_proof_path' => $proofPath,
+                    'resolution_proof_mime_type' => $proof?->getMimeType(),
+                    'resolution_proof_size' => $proof?->getSize() ?: 0,
+                    'resolved_by' => $request->user()->id,
+                    'resolved_at' => now(),
+                ]);
+                app(RecipientBenefitEntitlementService::class)->syncIssueResolution($response);
+            });
         } catch (Throwable $error) {
             if ($proofPath) {
                 Storage::disk('local')->delete($proofPath);
@@ -1506,9 +1758,10 @@ trait HandlesProviderRecipientLifecycle
             404,
         );
 
-        return response()->json([
-            'record' => $this->recipientSupportRecordPayload($application),
-        ]);
+        $record = $this->recipientSupportRecordPayload($application);
+        $record['decision_reopen'] = $this->providerDecisionReopenPayload($application, $request->user());
+
+        return response()->json(['record' => $record]);
     }
 
     public function recordRecipientSupportDecision(
@@ -2026,6 +2279,24 @@ trait HandlesProviderRecipientLifecycle
                 ['completed', 'terminated'],
                 true,
             ));
+    }
+
+    /** @return array{RecipientMonitoringCycle, Scholarship, ScholarshipApplication} */
+    private function authorizedRecipientMonitoringCaseContext(
+        Request $request,
+        RecipientMonitoringCase $case,
+    ): array {
+        abort_unless($request->user()?->isProvider(), 403);
+        $case->loadMissing(['cycle.scholarship', 'application.applicant']);
+        $cycle = $case->cycle;
+        $scholarship = $cycle?->scholarship;
+        $application = $case->application;
+        abort_unless($cycle && $scholarship && $application, 404);
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+        abort_unless($application->scholarship_id === $scholarship->id, 404);
+        abort_unless($this->selectedRecipientApplications($scholarship)->contains('id', $application->id), 422);
+
+        return [$cycle, $scholarship, $application];
     }
 
     private function supportRecipientApplications(Scholarship $scholarship): EloquentCollection
@@ -2727,6 +2998,7 @@ trait HandlesProviderRecipientLifecycle
     private function recipientMonitoringCyclePayload(
         RecipientMonitoringCycle $cycle,
         EloquentCollection $applications,
+        bool $includeCaseContext = true,
     ): array {
         $cycle->loadMissing([
             'creator',
@@ -2737,6 +3009,7 @@ trait HandlesProviderRecipientLifecycle
             'adjustmentRequests.decider',
             'interventions.creator',
         ]);
+        $caseService = app(RecipientMonitoringCaseService::class);
         $hasOpenPersonalExtension = $applications
             ->flatMap(fn (ScholarshipApplication $application): EloquentCollection => $application->monitoringAdjustmentRequests)
             ->filter(fn (RecipientMonitoringAdjustmentRequest $adjustment): bool => (
@@ -2749,12 +3022,18 @@ trait HandlesProviderRecipientLifecycle
         $isPastDue = ($cycle->due_at?->isBefore(now()->startOfDay()) ?? false)
             && ! $hasOpenPersonalExtension;
         $isPlanCheckIn = $cycle->requirements->isNotEmpty();
-        $recipients = $applications->map(function (ScholarshipApplication $application) use ($cycle): array {
+        $recipients = $applications->map(function (ScholarshipApplication $application) use ($cycle, $caseService, $includeCaseContext): array {
             $cycleSubmissions = $application->monitoringSubmissions
                 ->where('recipient_monitoring_cycle_id', $cycle->id);
             $submission = $cycleSubmissions
                 ->first(fn (RecipientMonitoringSubmission $item): bool => $item->recipient_monitoring_cycle_requirement_id === null);
             $agreement = RecipientAgreement::payload($application);
+            $cycleAdjustments = $application->monitoringAdjustmentRequests
+                ->where('recipient_monitoring_cycle_id', $cycle->id)
+                ->values();
+            $cycleInterventions = $application->monitoringInterventions
+                ->where('recipient_monitoring_cycle_id', $cycle->id)
+                ->values();
             $requirements = $cycle->requirements->map(function (RecipientMonitoringCycleRequirement $requirement) use ($application, $cycleSubmissions, $cycle): array {
                 $requirementSubmission = $cycleSubmissions
                     ->firstWhere('recipient_monitoring_cycle_requirement_id', $requirement->id);
@@ -2785,6 +3064,7 @@ trait HandlesProviderRecipientLifecycle
                 );
             })->values();
             $requiredUploads = $requirements->where('required', true)->where('requires_file', true);
+            $monitoringCase = $caseService->sync($cycle, $application);
 
             return [
                 'application_id' => $application->id,
@@ -2806,6 +3086,13 @@ trait HandlesProviderRecipientLifecycle
                     ->count(),
                 'checklist_complete' => $requiredUploads->isEmpty()
                     || $requiredUploads->whereNotNull('submission')->count() === $requiredUploads->count(),
+                'monitoring_case' => $caseService->payload(
+                    $monitoringCase,
+                    $cycleAdjustments,
+                    $cycleInterventions,
+                    $includeCaseContext,
+                    'provider',
+                ),
                 'submission' => $submission
                     ? $this->recipientMonitoringSubmissionPayload($submission, $cycle)
                     : null,
@@ -2822,6 +3109,12 @@ trait HandlesProviderRecipientLifecycle
             ->filter(fn (array $requirement): bool => data_get($requirement, 'submission.id')
                 && blank(data_get($requirement, 'submission.reviewed_at')))
             ->count();
+        $providerRecordPendingCount = $recipients
+            ->flatMap(fn (array $recipient): Collection => collect($recipient['requirements']))
+            ->filter(fn (array $requirement): bool => ($requirement['required'] ?? false)
+                && ! ($requirement['requires_file'] ?? true)
+                && blank(data_get($requirement, 'submission.id')))
+            ->count();
         $actionNeededItemCount = $recipients
             ->flatMap(fn (array $recipient): Collection => collect($recipient['requirements']))
             ->filter(fn (array $requirement): bool => in_array(
@@ -2830,6 +3123,18 @@ trait HandlesProviderRecipientLifecycle
                 true,
             ))
             ->count();
+        $caseStatusCounts = $recipients
+            ->pluck('monitoring_case.status')
+            ->filter()
+            ->countBy();
+        $dueStatusCounts = $recipients
+            ->pluck('monitoring_case.due_status')
+            ->filter()
+            ->countBy();
+        $nextActionCounts = $recipients
+            ->pluck('monitoring_case.next_action.key')
+            ->filter()
+            ->countBy();
 
         return [
             'id' => $cycle->id,
@@ -2856,7 +3161,7 @@ trait HandlesProviderRecipientLifecycle
                     $this->recipientMonitoringCycleRequirementPayload($requirement)
                 ))
                 ->values(),
-            'status' => $isPastDue ? 'closed' : $cycle->status,
+            'status' => $cycle->status,
             'is_past_due' => $isPastDue,
             'published_at' => $cycle->published_at?->format('M d, Y h:i A'),
             'created_by' => $cycle->creator?->name,
@@ -2876,11 +3181,12 @@ trait HandlesProviderRecipientLifecycle
                     fn (array $recipient): bool => filled(data_get($recipient, 'submission.reviewed_at')),
                 )->count(),
             'pending_review_count' => $isPlanCheckIn
-                ? $pendingReviewItemCount
+                ? $pendingReviewItemCount + $providerRecordPendingCount
                 : $recipients->filter(
                     fn (array $recipient): bool => data_get($recipient, 'submission.id')
                         && blank(data_get($recipient, 'submission.reviewed_at')),
                 )->count(),
+            'provider_record_pending_count' => $providerRecordPendingCount,
             'action_needed_count' => $isPlanCheckIn
                 ? $actionNeededItemCount
                 : $recipients->filter(
@@ -2890,6 +3196,9 @@ trait HandlesProviderRecipientLifecycle
                         true,
                     ),
                 )->count(),
+            'case_status_counts' => $caseStatusCounts,
+            'due_status_counts' => $dueStatusCounts,
+            'next_action_counts' => $nextActionCounts,
             'pending_adjustment_count' => $recipients
                 ->flatMap(fn (array $recipient): Collection => collect($recipient['requirements']))
                 ->where('adjustment_request.status', 'pending')
@@ -3089,6 +3398,9 @@ trait HandlesProviderRecipientLifecycle
                 'applicant_id' => $application->applicant_id,
                 'name' => $application->applicant?->name ?? 'Applicant',
                 'email' => $application->applicant?->email,
+                'profile_photo_url' => $application->applicant?->studentProfile?->profile_photo_path
+                    ? route('provider.applications.profile-photo.view', $application, false)
+                    : null,
                 'eligible' => $eligibility['eligible'],
                 'eligibility_label' => $eligibility['label'],
                 'eligibility_reason' => $eligibility['reason'],
@@ -3195,7 +3507,13 @@ trait HandlesProviderRecipientLifecycle
 
     private function recipientBenefitReleasePayload(RecipientBenefitRelease $release): array
     {
-        $release->loadMissing(['creator', 'records.applicant.studentProfile', 'records.recorder', 'records.receiptResponse.resolver']);
+        $release->loadMissing([
+            'creator',
+            'records.applicant.studentProfile',
+            'records.recorder',
+            'records.receiptResponse.resolver',
+            'records.allocations.entitlement',
+        ]);
         $statusLabels = [
             'scheduled' => 'Scheduled',
             'prepared' => 'Prepared',
@@ -3203,6 +3521,39 @@ trait HandlesProviderRecipientLifecycle
             'missed' => 'Missed',
             'withheld' => 'Withheld',
         ];
+        $benefitItems = $release->records
+            ->flatMap(fn (RecipientBenefitReleaseRecord $record) => $record->allocations)
+            ->pluck('entitlement')
+            ->filter()
+            ->unique('scholarship_benefit_id')
+            ->map(fn ($entitlement): array => [
+                'benefit_id' => $entitlement->scholarship_benefit_id,
+                'type' => $entitlement->benefit_type,
+                'title' => $entitlement->title,
+                'amount' => $entitlement->amount,
+                'frequency' => $entitlement->frequency,
+                'status' => $entitlement->status,
+            ])
+            ->values();
+        $openIssueCount = $release->records->filter(
+            fn (RecipientBenefitReleaseRecord $record): bool => $record->receiptResponse?->status === 'open',
+        )->count();
+        $awaitingConfirmationCount = $release->records->filter(
+            fn (RecipientBenefitReleaseRecord $record): bool => $record->status === 'released'
+                && $record->receiptResponse === null,
+        )->count();
+        $replacementRequiredCount = $release->records
+            ->flatMap(fn (RecipientBenefitReleaseRecord $record) => $record->allocations)
+            ->where('status', 'replacement_required')
+            ->count();
+        $pendingCount = $release->records->whereIn('status', ['scheduled', 'prepared'])->count();
+        $lifecycleStatus = match (true) {
+            $openIssueCount > 0 => 'issue_open',
+            $replacementRequiredCount > 0 => 'replacement_required',
+            $awaitingConfirmationCount > 0 => 'awaiting_confirmation',
+            $pendingCount > 0 => 'active',
+            default => 'completed',
+        };
 
         return [
             'id' => $release->id,
@@ -3225,14 +3576,25 @@ trait HandlesProviderRecipientLifecycle
             'requires_original_verification' => $release->requires_original_verification,
             'status' => $release->status,
             'status_label' => Str::headline($release->status),
+            'lifecycle_status' => $lifecycleStatus,
+            'lifecycle_status_label' => match ($lifecycleStatus) {
+                'issue_open' => 'Recipient issue open',
+                'replacement_required' => 'Replacement required',
+                'awaiting_confirmation' => 'Waiting for confirmation',
+                'active' => 'Release in progress',
+                default => 'Release complete',
+            },
             'published_at' => $release->published_at?->format('M d, Y h:i A'),
             'created_by' => $release->creator?->name,
+            'benefits' => $benefitItems,
             'recipient_count' => $release->records->count(),
             'released_count' => $release->records->where('status', 'released')->count(),
-            'pending_count' => $release->records->whereIn('status', ['scheduled', 'prepared'])->count(),
+            'pending_count' => $pendingCount,
             'exception_count' => $release->records->whereIn('status', ['missed', 'withheld'])->count(),
             'confirmed_count' => $release->records->filter(fn (RecipientBenefitReleaseRecord $record): bool => $record->receiptResponse?->status === 'confirmed')->count(),
-            'open_issue_count' => $release->records->filter(fn (RecipientBenefitReleaseRecord $record): bool => $record->receiptResponse?->status === 'open')->count(),
+            'open_issue_count' => $openIssueCount,
+            'awaiting_confirmation_count' => $awaitingConfirmationCount,
+            'replacement_required_count' => $replacementRequiredCount,
             'records' => $release->records->map(fn (RecipientBenefitReleaseRecord $record): array => [
                 'id' => $record->id,
                 'application_id' => $record->scholarship_application_id,
@@ -3243,12 +3605,33 @@ trait HandlesProviderRecipientLifecycle
                     ? route('provider.applications.profile-photo.view', $record->scholarship_application_id, false)
                     : null,
                 'status' => $record->status,
-                'status_label' => $statusLabels[$record->status] ?? Str::headline($record->status),
+                'status_label' => match (true) {
+                    $record->receiptResponse?->status === 'confirmed' => 'Receipt confirmed',
+                    $record->receiptResponse?->status === 'open' => 'Issue reported',
+                    $record->receiptResponse?->status === 'resolved' => 'Issue resolved',
+                    $record->status === 'released' => 'Waiting for confirmation',
+                    default => $statusLabels[$record->status] ?? Str::headline($record->status),
+                },
+                'lifecycle_status' => match (true) {
+                    $record->receiptResponse?->status === 'confirmed' => 'fulfilled',
+                    $record->receiptResponse?->status === 'open' => 'issue_open',
+                    $record->receiptResponse?->status === 'resolved' => 'resolved',
+                    $record->status === 'released' => 'awaiting_confirmation',
+                    default => $record->status,
+                },
                 'originals_verified' => $record->originals_verified,
                 'notes' => $record->notes,
                 'recorded_by' => $record->recorder?->name,
                 'recorded_at' => $record->recorded_at?->format('M d, Y h:i A'),
                 'released_at' => $record->released_at?->format('M d, Y h:i A'),
+                'benefits' => $record->allocations->map(fn ($allocation): array => [
+                    'entitlement_id' => $allocation->recipient_benefit_entitlement_id,
+                    'benefit_id' => $allocation->entitlement?->scholarship_benefit_id,
+                    'title' => $allocation->entitlement?->title,
+                    'frequency' => $allocation->entitlement?->frequency,
+                    'status' => $allocation->status,
+                    'entitlement_status' => $allocation->entitlement?->status,
+                ])->values(),
                 'receipt_response' => $record->receiptResponse ? $this->providerBenefitReceiptResponsePayload($record->receiptResponse) : null,
                 'application_url' => route('provider.applications.show', $record->scholarship_application_id, false),
                 'receipt' => $record->receipt_path ? [

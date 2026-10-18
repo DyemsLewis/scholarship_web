@@ -7,6 +7,7 @@ use App\Models\RecipientMonitoringCycleRequirement;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Services\RecipientMonitoringCaseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -39,6 +40,7 @@ class MonitoringReportExportTest extends TestCase
             'requires_file' => true,
             'sort_order' => 1,
         ]);
+        $case = app(RecipientMonitoringCaseService::class)->sync($cycle, $application);
 
         $response = $this->actingAs($admin)
             ->get('/admin/export/monitoring?status=attention')
@@ -46,9 +48,14 @@ class MonitoringReportExportTest extends TestCase
             ->assertHeader('content-type', 'text/csv; charset=UTF-8');
 
         $content = $response->streamedContent();
-        $this->assertStringContainsString('Application ID', $content);
+        $this->assertStringContainsString('Case ID', $content);
         $this->assertStringContainsString('Admin Export Recipient', $content);
-        $this->assertStringContainsString('Requirement is overdue', $content);
+        $this->assertStringContainsString('Check-in is past due', $content);
+
+        $this->actingAs($admin)
+            ->get("/admin/export/monitoring?case_id={$case->id}")
+            ->assertOk()
+            ->assertDownload("recipient-monitoring-case-{$case->id}.csv");
 
         $this->actingAs($admin)
             ->get("/admin/export/monitoring?application_id={$application->id}")

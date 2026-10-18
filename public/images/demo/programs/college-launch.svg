@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
+  <title id="title">College Launch One-Time Grant</title>
+  <rect width="240" height="240" rx="24" fill="#f8fafc"/>
+  <path d="m28 91 92-48 92 48-92 48z" fill="#07142d"/>
+  <path d="M70 119v46c26 24 74 24 100 0v-46l-50 26z" fill="#f5b700"/>
+  <path d="M206 95v57" stroke="#07142d" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="206" cy="167" r="12" fill="#f5b700"/>
+</svg>

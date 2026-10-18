@@ -326,7 +326,10 @@ class SupportReportRoutingTest extends TestCase
             ->assertJsonPath('reports.0.id', $report->id);
 
         $this->actingAs($provider)
-            ->patchJson("/provider/reports/{$report->id}/status", ['status' => 'resolved'])
+            ->patchJson("/provider/reports/{$report->id}/status", [
+                'status' => 'resolved',
+                'provider_response' => 'The schedule has been confirmed with the program team.',
+            ])
             ->assertOk()
             ->assertJsonPath('report.status', 'resolved')
             ->assertJsonPath('report.overall_status', 'resolved');
@@ -335,6 +338,7 @@ class SupportReportRoutingTest extends TestCase
             'id' => $report->id,
             'status' => 'resolved',
             'provider_status' => 'resolved',
+            'provider_response' => 'The schedule has been confirmed with the program team.',
             'admin_status' => 'resolved',
             'resolved_by' => $provider->id,
         ]);

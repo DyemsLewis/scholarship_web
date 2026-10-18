@@ -9,7 +9,6 @@ use App\Models\PortalNotification;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\PasswordResetLinkService;
-use App\Support\ProviderWorkspace;
 use App\Support\Terms;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\JsonResponse;
@@ -534,7 +533,7 @@ class AuthController extends Controller
     {
         return match (true) {
             $user->isAdmin() => '/admin',
-            $user->isProvider() => ProviderWorkspace::preferredPath($user) ?? '/provider',
+            $user->isProvider() => '/provider',
             default => '/dashboard',
         };
     }

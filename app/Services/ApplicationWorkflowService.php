@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStageProgress;
+use App\Models\ApplicationStageSession;
 use App\Models\ApplicationStatusHistory;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
@@ -645,6 +646,170 @@ class ApplicationWorkflowService
         });
     }
 
+    public function reopenDecisionAvailability(ScholarshipApplication $application): array
+    {
+        $application->loadMissing(['stageProgresses']);
+        $latestDecision = $application->stageProgresses
+            ->filter(fn (ApplicationStageProgress $progress): bool => filled($progress->result))
+            ->sortByDesc('position')
+            ->first();
+
+        $stage = $latestDecision?->stage_key;
+        $result = $latestDecision?->result;
+        $requiredPermission = match ($stage) {
+            'screening' => 'verify_applications',
+            'decision' => 'record_final_decisions',
+            'formal_application', 'exam', 'interview' => 'manage_selection_activities',
+            default => null,
+        };
+        $blockedReason = null;
+
+        if (! $latestDecision || ! $requiredPermission) {
+            $blockedReason = 'There is no recorded decision to reopen.';
+        } elseif ($application->application_state === 'withdrawn') {
+            $blockedReason = 'A withdrawn application cannot be reopened by the provider.';
+        } elseif (in_array($application->correction_status, self::ACTIVE_CORRECTION_STATUSES, true)) {
+            $blockedReason = 'Resolve the open correction request before reopening a decision.';
+        } elseif ($stage === 'decision' && ! in_array($result, self::FINAL_OUTCOMES, true)) {
+            $blockedReason = 'The final decision record is not eligible to be reopened.';
+        } elseif ($stage !== 'decision' && ! in_array($result, self::RESULTS, true)) {
+            $blockedReason = 'The latest stage result is not eligible to be reopened.';
+        } elseif ($stage === 'decision' && $result === 'selected') {
+            $blockedReason = $this->selectedOutcomeReopenBlockReason($application);
+        }
+
+        if ($blockedReason === null && $stage !== 'decision') {
+            $laterStages = $application->stageProgresses
+                ->where('position', '>', $latestDecision->position)
+                ->pluck('stage_key');
+
+            if ($laterStages->isNotEmpty()
+                && $application->schedules()
+                    ->whereIn('type', $laterStages->all())
+                    ->where('status', 'completed')
+                    ->exists()) {
+                $blockedReason = 'A later selection activity is already complete, so this earlier result cannot be reopened.';
+            }
+        }
+
+        return [
+            'available' => $blockedReason === null,
+            'stage' => $stage,
+            'stage_label' => $stage ? $this->stageLabel($stage) : null,
+            'result' => $result,
+            'result_label' => $result ? ucfirst(str_replace('_', ' ', $result)) : null,
+            'required_permission' => $requiredPermission,
+            'blocked_reason' => $blockedReason,
+        ];
+    }
+
+    public function reopenLatestDecision(
+        ScholarshipApplication $application,
+        User $actor,
+        string $reason,
+    ): ScholarshipApplication {
+        $application = $this->initialize($application);
+
+        return DB::transaction(function () use ($application, $actor, $reason): ScholarshipApplication {
+            $locked = ScholarshipApplication::query()
+                ->with(['scholarship', 'stageProgresses'])
+                ->lockForUpdate()
+                ->findOrFail($application->id);
+            $availability = $this->reopenDecisionAvailability($locked);
+
+            if (! $availability['available']) {
+                throw ValidationException::withMessages([
+                    'reason' => $availability['blocked_reason'],
+                ]);
+            }
+
+            $stage = $availability['stage'];
+            $progress = $locked->stageProgresses->firstWhere('stage_key', $stage);
+            $laterStages = $locked->stageProgresses
+                ->where('position', '>', $progress->position)
+                ->pluck('stage_key')
+                ->values();
+            $previousStatus = $locked->status;
+            $now = now();
+
+            if ($laterStages->isNotEmpty()) {
+                $locked->stageProgresses()
+                    ->where('position', '>', $progress->position)
+                    ->update([
+                        'status' => 'pending',
+                        'result' => null,
+                        'notes' => null,
+                        'started_at' => null,
+                        'completed_at' => null,
+                        'decided_by' => null,
+                        'decided_at' => null,
+                    ]);
+                $locked->schedules()
+                    ->whereIn('type', $laterStages->all())
+                    ->where('status', 'scheduled')
+                    ->update([
+                        'status' => 'cancelled',
+                        'cancelled_at' => $now,
+                        'updated_by' => $actor->id,
+                    ]);
+            }
+
+            $progress->update([
+                'status' => 'current',
+                'result' => null,
+                'notes' => null,
+                'completed_at' => null,
+                'decided_by' => null,
+                'decided_at' => null,
+            ]);
+
+            $nextStatus = $this->legacyStatusForStage($stage);
+            $locked->update([
+                'status' => $nextStatus,
+                'application_state' => match ($stage) {
+                    'screening' => 'under_review',
+                    'decision' => 'awaiting_decision',
+                    default => 'in_provider_process',
+                },
+                'workflow_stage' => $stage,
+                'final_outcome' => null,
+                'decision_reason' => null,
+                'review_notes' => null,
+                'outcome_notes' => null,
+                'outcome_at' => null,
+                'waitlist_position' => null,
+                'waitlisted_at' => null,
+                'awarded_amount' => null,
+                'distribution_scheduled_for' => null,
+                'distribution_instructions' => null,
+                'provider_contract_terms_snapshot' => null,
+                'provider_contract_terms_version' => null,
+                'provider_contract_terms_accepted_at' => null,
+                'provider_contract_acceptance_ip' => null,
+                'provider_contract_acceptance_user_agent' => null,
+                'student_response_status' => null,
+                'student_responded_at' => null,
+                'student_response_terms_accepted_at' => null,
+                'student_response_terms_version' => null,
+                'student_response_note' => null,
+                'reviewed_by' => $actor->id,
+                'reviewed_at' => $now,
+            ]);
+
+            ApplicationStatusHistory::create([
+                'scholarship_application_id' => $locked->id,
+                'changed_by' => $actor->id,
+                'from_status' => $previousStatus,
+                'to_status' => $nextStatus,
+                'decision_reason' => 'decision_reopened',
+                'review_notes' => "{$availability['stage_label']} reopened: ".trim($reason),
+                'changed_at' => $now,
+            ]);
+
+            return $locked->fresh()->load(['scholarship', 'stageProgresses']);
+        });
+    }
+
     public function withdraw(ScholarshipApplication $application, User $actor, ?string $reason): ScholarshipApplication
     {
         $application = $this->initialize($application);
@@ -700,7 +865,7 @@ class ApplicationWorkflowService
 
     public function payload(ScholarshipApplication $application): array
     {
-        $application->loadMissing(['scholarship', 'stageProgresses', 'schedules']);
+        $application->loadMissing(['scholarship', 'stageProgresses', 'schedules', 'stageAssignments.session']);
         $stages = $this->stagesForApplication($application);
 
         if (! $this->hasInitializedWorkflow($application, $stages)) {
@@ -829,6 +994,32 @@ class ApplicationWorkflowService
         }
 
         return ScholarshipSelectionPlan::normalize($application->scholarship?->selection_stages);
+    }
+
+    private function selectedOutcomeReopenBlockReason(ScholarshipApplication $application): ?string
+    {
+        if (filled($application->student_response_status)
+            || $application->student_responded_at
+            || $application->provider_contract_terms_accepted_at) {
+            return 'The applicant has already responded to the recipient agreement. Use the recipient support process instead.';
+        }
+
+        if ($application->distribution_scheduled_for
+            || in_array($application->status, ['distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated'], true)) {
+            return 'A benefit distribution or recipient support outcome has already started.';
+        }
+
+        if ($application->monitoringSubmissions()->exists()
+            || $application->monitoringAdjustmentRequests()->exists()
+            || $application->monitoringInterventions()->exists()
+            || $application->benefitReleaseRecords()->exists()
+            || $application->benefitReceiptResponses()->exists()
+            || $application->supportDecisions()->exists()
+            || $application->monitoringOversightReviews()->exists()) {
+            return 'Recipient monitoring or benefit activity already exists. Use the recipient support process instead.';
+        }
+
+        return null;
     }
 
     private function inferStage(?string $status, array $stages): string
@@ -1012,14 +1203,7 @@ class ApplicationWorkflowService
                 'url' => route('dashboard.applications.show', $application, false),
             ],
             default => match ($application->workflow_stage) {
-                'formal_application' => [
-                    'key' => 'formal_application',
-                    'label' => 'Follow the provider application instructions',
-                    'actor' => 'applicant',
-                    'actor_label' => 'Applicant',
-                    'description' => 'Continue through the provider\'s formal process and keep original documents ready when requested.',
-                    'url' => route('dashboard.applications.show', $application, false),
-                ],
+                'formal_application' => $this->formalApplicationApplicantAction($application),
                 'exam' => $this->applicantActivityAction($application, 'exam'),
                 'interview' => $this->applicantActivityAction($application, 'interview'),
                 default => [
@@ -1058,7 +1242,7 @@ class ApplicationWorkflowService
 
         return match ($application->workflow_stage) {
             'screening' => ['key' => 'screening', 'label' => 'Review eligibility and required files', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Check the applicant profile, DSS guidance, and supporting files before recording the pre-screening result.'],
-            'formal_application' => ['key' => 'formal_application', 'label' => 'Record the formal application result', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Confirm whether the applicant completed the provider-managed formal application requirements.'],
+            'formal_application' => $this->formalApplicationProviderAction($application),
             'exam' => $this->providerActivityAction($application, 'exam'),
             'interview' => $this->providerActivityAction($application, 'interview'),
             'decision' => ['key' => 'decision', 'label' => 'Record the final outcome', 'actor' => 'provider', 'actor_label' => 'Provider reviewer', 'description' => 'Choose selected, waitlisted, or not selected after all configured stages are complete.'],
@@ -1068,7 +1252,7 @@ class ApplicationWorkflowService
 
     private function applicantActivityAction(ScholarshipApplication $application, string $stage): array
     {
-        $label = $stage === 'exam' ? 'exam' : 'interview';
+        $label = $this->activityLabel($stage);
         $schedule = $this->activitySchedule($application, $stage);
         $url = route('dashboard.applications.show', $application, false);
 
@@ -1104,9 +1288,25 @@ class ApplicationWorkflowService
         ];
     }
 
+    private function formalApplicationApplicantAction(ScholarshipApplication $application): array
+    {
+        if ($this->activitySchedule($application, 'formal_application')) {
+            return $this->applicantActivityAction($application, 'formal_application');
+        }
+
+        return [
+            'key' => 'formal_application',
+            'label' => 'Follow the provider application instructions',
+            'actor' => 'applicant',
+            'actor_label' => 'Applicant',
+            'description' => 'Continue through the provider\'s formal process and keep original documents ready when requested.',
+            'url' => route('dashboard.applications.show', $application, false),
+        ];
+    }
+
     private function providerActivityAction(ScholarshipApplication $application, string $stage): array
     {
-        $label = $stage === 'exam' ? 'exam' : 'interview';
+        $label = $this->activityLabel($stage);
         $schedule = $this->activitySchedule($application, $stage);
 
         if (! $schedule || $schedule->status === 'cancelled') {
@@ -1119,13 +1319,13 @@ class ApplicationWorkflowService
             ];
         }
 
-        if ($schedule->status === 'scheduled') {
+        if (in_array($schedule->status, ['scheduled', 'ongoing'], true)) {
             return [
                 'key' => "complete_{$stage}",
                 'label' => 'Complete the '.$label.', then record results',
                 'actor' => 'provider',
                 'actor_label' => 'Provider reviewer',
-                'description' => 'Applicants can see the schedule. Record results after the provider-managed activity takes place.',
+                'description' => 'Applicants can see their assigned session. Record results after the activity takes place.',
             ];
         }
 
@@ -1138,11 +1338,48 @@ class ApplicationWorkflowService
         ];
     }
 
-    private function activitySchedule(ScholarshipApplication $application, string $stage): ?ApplicationSchedule
+    private function formalApplicationProviderAction(ScholarshipApplication $application): array
     {
+        if ($this->activitySchedule($application, 'formal_application')) {
+            return $this->providerActivityAction($application, 'formal_application');
+        }
+
+        return [
+            'key' => 'formal_application',
+            'label' => 'Record the formal application result',
+            'actor' => 'provider',
+            'actor_label' => 'Provider reviewer',
+            'description' => 'Confirm whether the applicant completed the provider-managed formal application requirements.',
+        ];
+    }
+
+    private function activitySchedule(
+        ScholarshipApplication $application,
+        string $stage,
+    ): ApplicationSchedule|ApplicationStageSession|null {
+        $assignment = $application->stageAssignments
+            ->filter(fn ($assignment): bool => $assignment->session?->stage_key === $stage
+                && $assignment->session?->status !== 'draft')
+            ->sortByDesc('id')
+            ->first();
+
+        if ($assignment?->session) {
+            return $assignment->session;
+        }
+
         return $application->schedules
             ->where('type', $stage)
             ->sortByDesc('id')
             ->first();
+    }
+
+    private function activityLabel(string $stage): string
+    {
+        return match ($stage) {
+            'formal_application' => 'formal application activity',
+            'exam' => 'exam',
+            'interview' => 'interview',
+            default => 'activity',
+        };
     }
 }

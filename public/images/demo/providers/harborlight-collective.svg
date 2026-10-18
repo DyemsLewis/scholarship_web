@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
+  <title id="title">Harborlight Education Collective</title>
+  <rect width="240" height="240" rx="24" fill="#f8fafc"/>
+  <path d="M120 28 55 64v78c0 38 27 59 65 73 38-14 65-35 65-73V64z" fill="#07142d"/>
+  <path d="M120 54 79 77v59c0 22 13 37 41 50 28-13 41-28 41-50V77z" fill="#f5b700"/>
+  <path d="M110 82h20v64h-20zM92 146h56v16H92z" fill="#07142d"/>
+  <path d="m120 66 18 18h-36z" fill="#07142d"/>
+</svg>

@@ -50,7 +50,11 @@ export const providerObjectiveOptions = [
 ];
 
 export function providerObjectiveDetails(values) {
-    const selected = new Set(Array.isArray(values) ? values : []);
+    const aliases = {
+        academic_progress: 'academic_excellence',
+    };
+    const selected = new Set((Array.isArray(values) ? values : [])
+        .map((value) => aliases[value] ?? value));
 
     return providerObjectiveOptions.filter((option) => selected.has(option.value));
 }

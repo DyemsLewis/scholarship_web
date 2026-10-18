@@ -58,7 +58,6 @@ const navLinks = [
             { href: '/dashboard/profile?section=personal', label: 'Personal information', exact: true },
             { href: '/dashboard/profile?section=academic', label: 'Education', exact: true },
             { href: '/dashboard/profile?section=household', label: 'Household and guardian', exact: true },
-            { href: '/dashboard/profile?section=background', label: 'Goals and involvement', exact: true },
             { href: '/dashboard/profile?section=location', label: 'Location', exact: true },
             { href: '/dashboard/profile?section=verification', label: 'Supporting evidence', exact: true },
         ],

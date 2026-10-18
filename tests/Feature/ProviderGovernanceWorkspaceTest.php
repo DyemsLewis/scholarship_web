@@ -10,7 +10,7 @@ class ProviderGovernanceWorkspaceTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_provider_owner_enters_governance_while_staff_keep_the_operational_dashboard(): void
+    public function test_provider_owner_and_staff_enter_the_reset_provider_shell(): void
     {
         $owner = $this->governanceOwner();
         $staff = User::factory()->create([
@@ -22,11 +22,12 @@ class ProviderGovernanceWorkspaceTest extends TestCase
         $this->actingAs($owner)
             ->get('/provider')
             ->assertOk()
-            ->assertViewIs('provider-governance');
+            ->assertViewIs('provider');
 
         $this->actingAs($staff)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/programs');
+            ->assertOk()
+            ->assertViewIs('provider-program-coordinator-dashboard');
 
         $this->actingAs($staff)->get('/provider/governance')->assertForbidden();
         $this->actingAs($staff)->getJson('/provider/governance/data')->assertForbidden();
@@ -42,8 +43,12 @@ class ProviderGovernanceWorkspaceTest extends TestCase
         $this->assertFalse($payload['has_full_access']);
         $this->assertTrue($payload['is_organization_owner']);
 
-        $this->actingAs($owner)->get('/provider/team')->assertOk();
-        $this->actingAs($owner)->get('/provider/profile/details')->assertOk();
+        $this->actingAs($owner)
+            ->get('/provider/team')
+            ->assertRedirect('/provider/workspaces/team');
+        $this->actingAs($owner)
+            ->get('/provider/profile/details')
+            ->assertRedirect('/provider/workspaces/organization-profile/public');
         $this->actingAs($owner)->get('/provider/programs')->assertForbidden();
         $this->actingAs($owner)->get('/provider/applications')->assertForbidden();
         $this->actingAs($owner)->get('/provider/monitoring')->assertForbidden();

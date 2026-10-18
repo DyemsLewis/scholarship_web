@@ -6,13 +6,14 @@ use App\Models\ActivityLog;
 use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
+use App\Models\ApplicationStageAssignment;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\RecipientBenefitReceiptResponse;
 use App\Models\RecipientBenefitReleaseRecord;
+use App\Models\RecipientMonitoringAdjustmentRequest;
 use App\Models\RecipientMonitoringCycle;
 use App\Models\RecipientMonitoringCycleRequirement;
-use App\Models\RecipientMonitoringAdjustmentRequest;
 use App\Models\RecipientMonitoringIntervention;
 use App\Models\RecipientMonitoringSubmission;
 use App\Models\RecipientSupportDecision;
@@ -24,12 +25,18 @@ use App\Models\StudentDocument;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\AcademicRecordOcrService;
+use App\Services\ApplicantDashboardService;
 use App\Services\ApplicantDocumentLibraryService;
+use App\Services\ApplicantScholarshipDetailService;
+use App\Services\ApplicationStageOperationsService;
 use App\Services\ApplicationWorkflowService;
 use App\Services\DecisionSupportService;
+use App\Services\RecipientBenefitEntitlementService;
+use App\Services\RecipientMonitoringCaseService;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
+use App\Support\ApplicantStageActivityPayload;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\PreScreeningHandoffRecord;
 use App\Support\RecipientAgreement;
@@ -181,8 +188,11 @@ class ApplicantDashboardController extends Controller
         ]);
     }
 
-    public function scholarshipDetailData(Request $request, Scholarship $scholarship): JsonResponse
-    {
+    public function scholarshipDetailData(
+        Request $request,
+        Scholarship $scholarship,
+        ApplicantScholarshipDetailService $detailService,
+    ): JsonResponse {
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($scholarship->isPubliclyVisible(), 404);
 
@@ -204,6 +214,7 @@ class ApplicantDashboardController extends Controller
             'user' => $this->userPayload($request),
             'profile_readiness' => $request->user()->applicantProfileReadiness(),
             'stats' => $this->statsPayload($request),
+            'detail' => $detailService->build($scholarship, $request->user()),
             'scholarship' => $this->scholarshipPayload($scholarship, $request->user()),
         ]);
     }
@@ -380,6 +391,17 @@ class ApplicantDashboardController extends Controller
         ]);
     }
 
+    public function overviewData(
+        Request $request,
+        ApplicantDashboardService $dashboardService,
+    ): JsonResponse {
+        abort_unless($request->user()?->isApplicant(), 403);
+
+        $this->syncApplicantReminders($request->user());
+
+        return response()->json($dashboardService->build($request->user()));
+    }
+
     public function applicationsData(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isApplicant(), 403);
@@ -416,9 +438,9 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($application->applicant_id === $request->user()->id, 403);
 
-        $application->load(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile', 'scholarship.events']);
+        $application->load(['documents', 'schedules', 'stageAssignments.session', 'stageAssignments.attendance', 'statusHistories.actor', 'scholarship.provider.providerProfile', 'scholarship.events']);
         app(DecisionSupportService::class)->syncApplication($application);
-        $application = $application->fresh()->load(['documents', 'schedules', 'statusHistories.actor', 'scholarship.provider.providerProfile', 'scholarship.events']);
+        $application = $application->fresh()->load(['documents', 'schedules', 'stageAssignments.session', 'stageAssignments.attendance', 'statusHistories.actor', 'scholarship.provider.providerProfile', 'scholarship.events']);
 
         return response()->json([
             'user' => $this->userPayload($request),
@@ -1784,6 +1806,11 @@ class ApplicantDashboardController extends Controller
                 : null,
         ]);
 
+        if ($response === 'accepted') {
+            app(RecipientBenefitEntitlementService::class)->activateForAcceptedApplication($application);
+            app(RecipientMonitoringCaseService::class)->activateForAcceptedApplication($application);
+        }
+
         ApplicationStatusHistory::create([
             'scholarship_application_id' => $application->id,
             'changed_by' => $request->user()->id,
@@ -2294,7 +2321,9 @@ class ApplicantDashboardController extends Controller
                 'status' => 'pending',
             ]);
         } catch (Throwable $error) {
-            if ($path) Storage::disk('local')->delete($path);
+            if ($path) {
+                Storage::disk('local')->delete($path);
+            }
             throw $error;
         }
 
@@ -2443,22 +2472,27 @@ class ApplicantDashboardController extends Controller
         $evidencePath = $evidence?->store("benefit-receipt-responses/{$record->id}/recipient", 'local');
 
         try {
-            $response = RecipientBenefitReceiptResponse::create([
-                'recipient_benefit_release_record_id' => $record->id,
-                'scholarship_application_id' => $record->scholarship_application_id,
-                'applicant_id' => $request->user()->id,
-                'response_type' => $validated['response_type'],
-                'received_on' => $validated['response_type'] === 'confirmed' ? $validated['received_on'] : null,
-                'recipient_note' => trim((string) ($validated['recipient_note'] ?? '')) ?: null,
-                'issue_type' => $validated['response_type'] === 'issue' ? $validated['issue_type'] : null,
-                'issue_details' => $validated['response_type'] === 'issue' ? $validated['issue_details'] : null,
-                'evidence_original_name' => $evidence?->getClientOriginalName(),
-                'evidence_path' => $evidencePath,
-                'evidence_mime_type' => $evidence?->getMimeType(),
-                'evidence_size' => $evidence?->getSize() ?: 0,
-                'status' => $validated['response_type'] === 'confirmed' ? 'confirmed' : 'open',
-                'responded_at' => now(),
-            ]);
+            $response = DB::transaction(function () use ($request, $record, $validated, $evidence, $evidencePath): RecipientBenefitReceiptResponse {
+                $response = RecipientBenefitReceiptResponse::create([
+                    'recipient_benefit_release_record_id' => $record->id,
+                    'scholarship_application_id' => $record->scholarship_application_id,
+                    'applicant_id' => $request->user()->id,
+                    'response_type' => $validated['response_type'],
+                    'received_on' => $validated['response_type'] === 'confirmed' ? $validated['received_on'] : null,
+                    'recipient_note' => trim((string) ($validated['recipient_note'] ?? '')) ?: null,
+                    'issue_type' => $validated['response_type'] === 'issue' ? $validated['issue_type'] : null,
+                    'issue_details' => $validated['response_type'] === 'issue' ? $validated['issue_details'] : null,
+                    'evidence_original_name' => $evidence?->getClientOriginalName(),
+                    'evidence_path' => $evidencePath,
+                    'evidence_mime_type' => $evidence?->getMimeType(),
+                    'evidence_size' => $evidence?->getSize() ?: 0,
+                    'status' => $validated['response_type'] === 'confirmed' ? 'confirmed' : 'open',
+                    'responded_at' => now(),
+                ]);
+                app(RecipientBenefitEntitlementService::class)->syncRecipientResponse($response);
+
+                return $response;
+            });
         } catch (Throwable $error) {
             if ($evidencePath) {
                 Storage::disk('local')->delete($evidencePath);
@@ -2836,6 +2870,24 @@ class ApplicantDashboardController extends Controller
         ]);
     }
 
+    public function acknowledgeStageActivity(
+        Request $request,
+        ScholarshipApplication $application,
+        ApplicationStageAssignment $assignment,
+        ApplicationStageOperationsService $operations,
+    ): JsonResponse {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+        abort_unless($assignment->scholarship_application_id === $application->id, 404);
+
+        $assignment = $operations->acknowledgeAssignment($assignment, $request->user());
+
+        return response()->json([
+            'message' => 'Activity acknowledged. The provider can now see your confirmation.',
+            'activity' => ApplicantStageActivityPayload::make($assignment),
+        ]);
+    }
+
     private function ensureApplicant(Request $request): ?RedirectResponse
     {
         if (! $request->user()) {
@@ -3140,7 +3192,7 @@ class ApplicantDashboardController extends Controller
             $application->review_rubric_snapshot ?: ($application->scholarship?->review_rubric ?? []),
             $application->rubric_scores ?? [],
         );
-        $application->loadMissing('schedules');
+        $application->loadMissing(['schedules', 'stageAssignments.session', 'stageAssignments.attendance']);
         $application->scholarship?->loadMissing('events');
         $examStatuses = ['exam_qualified', 'exam_scheduled', 'exam_taken', 'exam_passed', 'exam_failed'];
         $exam = in_array($application->status, $examStatuses, true)
@@ -3199,6 +3251,11 @@ class ApplicantDashboardController extends Controller
             'schedules' => $application->schedules
                 ->sortBy('scheduled_at')
                 ->map(fn (ApplicationSchedule $schedule) => ApplicationSchedulePayload::make($schedule))
+                ->values(),
+            'selection_activities' => $application->stageAssignments
+                ->sortBy(fn (ApplicationStageAssignment $assignment) => $assignment->session?->starts_at?->getTimestamp() ?? PHP_INT_MAX)
+                ->map(fn (ApplicationStageAssignment $assignment) => ApplicantStageActivityPayload::make($assignment))
+                ->filter()
                 ->values(),
             'dss_score' => $dss['score'],
             'dss_recommendation' => $dss['recommendation'],
@@ -3758,7 +3815,21 @@ class ApplicantDashboardController extends Controller
         bool $agreementAccepted,
         bool $benefitsActive,
     ): array {
-        $isPastDue = $cycle->due_at?->isBefore(now()->startOfDay()) ?? false;
+        $caseService = app(RecipientMonitoringCaseService::class);
+        $monitoringCase = $caseService->sync($cycle, $application);
+        $cycleAdjustments = $application->monitoringAdjustmentRequests
+            ->where('recipient_monitoring_cycle_id', $cycle->id)
+            ->values();
+        $cycleInterventions = $application->monitoringInterventions
+            ->where('recipient_monitoring_cycle_id', $cycle->id)
+            ->values();
+        $monitoringCasePayload = $caseService->payload(
+            $monitoringCase,
+            $cycleAdjustments,
+            $cycleInterventions,
+            true,
+            'applicant',
+        );
         $isNotOpenYet = $cycle->opens_at?->isAfter(now()->startOfDay()) ?? false;
         $definitions = RecipientMonitoringRequirementType::definitions();
         $cycleSubmissions = $application->monitoringSubmissions
@@ -3771,7 +3842,6 @@ class ApplicantDashboardController extends Controller
             $cycleSubmissions,
             $agreementAccepted,
             $benefitsActive,
-            $isPastDue,
             $isNotOpenYet,
             $definitions,
         ): array {
@@ -3790,6 +3860,10 @@ class ApplicantDashboardController extends Controller
                 ->first();
             $effectiveDueAt = $approvedExtension?->approved_due_at ?? $cycle->due_at;
             $isRequirementPastDue = $effectiveDueAt?->isBefore(now()->startOfDay()) ?? false;
+            $isWithinGracePeriod = $isRequirementPastDue
+                && ! now()->startOfDay()->isAfter(
+                    $effectiveDueAt->copy()->addDays($cycle->grace_period_days),
+                );
             $correctionRequested = $submission?->review_status === 'needs_correction';
             $canSubmit = $requirement->requires_file
                 && $agreementAccepted
@@ -3806,6 +3880,7 @@ class ApplicantDashboardController extends Controller
                 $approvedExtension !== null => 'extension_approved',
                 ! $requirement->requires_file => 'provider_recorded',
                 $isNotOpenYet => 'upcoming',
+                $isWithinGracePeriod && $cycle->allow_exception_requests => 'grace_period',
                 $isRequirementPastDue => 'closed',
                 default => 'open',
             };
@@ -3839,6 +3914,7 @@ class ApplicantDashboardController extends Controller
                     'extension_approved' => 'Extension approved',
                     'provider_recorded' => 'Provider records this',
                     'upcoming' => 'Opens later',
+                    'grace_period' => 'Request window open',
                     'closed' => 'Submission closed',
                     default => 'To submit',
                 },
@@ -3859,7 +3935,9 @@ class ApplicantDashboardController extends Controller
                         : (! $requirement->requires_file
                             ? 'The provider records this item.'
                             : ($isRequirementPastDue
-                                ? 'The submission deadline has passed.'
+                                ? ($isWithinGracePeriod && $cycle->allow_exception_requests
+                                    ? 'The deadline passed. You can request an extension or exception.'
+                                    : 'The submission deadline has passed.')
                                 : ($isNotOpenYet ? 'This check-in is not open yet.' : null))))
                     : 'Accept the recipient agreement before submitting a record.',
                 'adjustment_request' => $latestAdjustment
@@ -3879,12 +3957,6 @@ class ApplicantDashboardController extends Controller
             ];
         })->values();
         $requiredUploads = $requirements->where('required', true)->where('requires_file', true);
-        $hasOpenPersonalExtension = $requirements->contains(fn (array $requirement): bool => (
-            data_get($requirement, 'adjustment_request.request_type') === 'extension'
-            && data_get($requirement, 'adjustment_request.status') === 'approved'
-            && filled($requirement['effective_due_at'])
-            && CarbonImmutable::parse($requirement['effective_due_at'])->greaterThanOrEqualTo(now()->startOfDay())
-        ));
 
         return [
             'id' => $cycle->id,
@@ -3899,9 +3971,21 @@ class ApplicantDashboardController extends Controller
             'monitoring_plan_version' => $cycle->monitoring_plan_version,
             'allow_exception_requests' => $cycle->allow_exception_requests,
             'grace_period_days' => $cycle->grace_period_days,
-            'status' => $isPastDue && ! $hasOpenPersonalExtension
-                ? 'closed'
-                : ($isNotOpenYet ? 'upcoming' : $cycle->status),
+            'monitoring_case' => $monitoringCasePayload,
+            'case_status' => $monitoringCasePayload['status'],
+            'due_status' => $monitoringCasePayload['due_status'],
+            'effective_due_at' => $monitoringCasePayload['effective_due_at'],
+            'effective_due_label' => $monitoringCasePayload['effective_due_label'],
+            'next_action' => $monitoringCasePayload['next_action'],
+            'status' => match ($monitoringCasePayload['due_status']) {
+                'upcoming' => 'upcoming',
+                'grace_period' => 'grace_period',
+                'overdue' => 'closed',
+                'closed' => in_array($cycle->status, ['closed', 'cancelled'], true)
+                    ? $cycle->status
+                    : 'closed',
+                default => $cycle->status,
+            },
             'requirements' => $requirements,
             'required_count' => $requiredUploads->count(),
             'submitted_count' => $requiredUploads->whereNotNull('submission')->count(),
@@ -3972,8 +4056,16 @@ class ApplicantDashboardController extends Controller
 
     private function applicantBenefitReleasePayload(RecipientBenefitReleaseRecord $record): array
     {
+        $record->loadMissing(['allocations.entitlement', 'receiptResponse.resolver']);
         $release = $record->release;
         $response = $record->receiptResponse;
+        $lifecycleStatus = match (true) {
+            $response?->status === 'confirmed' => 'fulfilled',
+            $response?->status === 'open' => 'issue_open',
+            $response?->status === 'resolved' => 'resolved',
+            $record->status === 'released' => 'confirmation_needed',
+            default => $record->status,
+        };
 
         return [
             'id' => $release?->id,
@@ -3995,9 +4087,13 @@ class ApplicantDashboardController extends Controller
             'instructions' => $release?->instructions,
             'requires_original_verification' => (bool) $release?->requires_original_verification,
             'status' => $record->status,
-            'status_label' => match ($record->status) {
+            'lifecycle_status' => $lifecycleStatus,
+            'status_label' => match ($lifecycleStatus) {
+                'fulfilled' => 'Receipt confirmed',
+                'issue_open' => 'Provider review needed',
+                'resolved' => 'Issue resolved',
+                'confirmation_needed' => 'Confirm receipt',
                 'prepared' => 'Prepared for release',
-                'released' => 'Received',
                 'missed' => 'Appointment missed',
                 'withheld' => 'Release withheld',
                 default => 'Scheduled',
@@ -4008,6 +4104,13 @@ class ApplicantDashboardController extends Controller
             'recorded_at' => $record->recorded_at?->format('M d, Y h:i A'),
             'released_at' => $record->released_at?->format('M d, Y h:i A'),
             'can_respond' => $record->status === 'released' && $response === null,
+            'benefits' => $record->allocations->map(fn ($allocation): array => [
+                'benefit_id' => $allocation->entitlement?->scholarship_benefit_id,
+                'title' => $allocation->entitlement?->title,
+                'frequency' => $allocation->entitlement?->frequency,
+                'status' => $allocation->status,
+                'entitlement_status' => $allocation->entitlement?->status,
+            ])->values(),
             'receipt_response' => $response ? [
                 'id' => $response->id,
                 'response_type' => $response->response_type,

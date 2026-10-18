@@ -9,7 +9,9 @@ use App\Models\ProviderServicePurchase;
 use App\Models\ProviderServiceUpdate;
 use App\Models\User;
 use App\Services\PayMongoCheckoutService;
+use App\Services\ProviderServiceLifecycleService;
 use App\Support\AdminWorkspace;
+use DomainException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,11 +25,18 @@ use Throwable;
 
 class BillingController extends Controller
 {
-    public function __construct(private readonly PayMongoCheckoutService $payMongo) {}
+    public function __construct(
+        private readonly PayMongoCheckoutService $payMongo,
+        private readonly ProviderServiceLifecycleService $serviceLifecycle,
+    ) {}
 
-    public function providerPage(Request $request): View
+    public function providerPage(Request $request): View|RedirectResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
+
+        if ($request->routeIs('provider.billing.requests')) {
+            return redirect()->route('provider.workspaces.billing.action');
+        }
 
         return view('provider-billing');
     }
@@ -185,16 +194,19 @@ class BillingController extends Controller
             'requested_outcome' => ['required', 'string', 'min:10', 'max:1200'],
         ]);
 
-        $purchase->update([
-            'request_summary' => trim($validated['request_summary']),
-            'requested_outcome' => trim($validated['requested_outcome']),
-            'fulfillment_status' => $purchase->fulfillment_status === 'needs_information'
-                ? 'ready'
-                : $purchase->fulfillment_status,
-            'fulfillment_notes' => $purchase->fulfillment_status === 'needs_information'
-                ? 'The provider supplied additional information. The request is ready for support review.'
-                : $purchase->fulfillment_notes,
-        ]);
+        $purchase = $this->transitionServiceDelivery(
+            $purchase,
+            $purchase->fulfillment_status === 'needs_information' ? 'ready' : $purchase->fulfillment_status,
+            $request->user(),
+            [
+                'request_summary' => trim($validated['request_summary']),
+                'requested_outcome' => trim($validated['requested_outcome']),
+                'fulfillment_notes' => $purchase->fulfillment_status === 'needs_information'
+                    ? 'The provider supplied additional information. The request is ready for support review.'
+                    : $purchase->fulfillment_notes,
+            ],
+            'provider_information_supplied',
+        );
 
         $update = $purchase->updates()->create([
             'actor_id' => $request->user()->id,
@@ -249,7 +261,7 @@ class BillingController extends Controller
             'meeting_decided_at' => null,
             'meeting_decided_by' => null,
         ]);
-        $purchase->refresh();
+        $purchase = $this->serviceLifecycle->syncCurrentAction($purchase);
 
         $meetingDate = $this->meetingDateLabel($purchase);
         $meetingMode = $purchase->meeting_mode === 'online' ? 'Online' : 'On-site';
@@ -303,10 +315,13 @@ class BillingController extends Controller
         ]);
 
         if ($purchase->fulfillment_status === 'needs_information') {
-            $purchase->update([
-                'fulfillment_status' => 'ready',
-                'fulfillment_notes' => 'The provider responded. The request is ready for support review.',
-            ]);
+            $purchase = $this->transitionServiceDelivery(
+                $purchase,
+                'ready',
+                $request->user(),
+                ['fulfillment_notes' => 'The provider responded. The request is ready for support review.'],
+                'provider_information_supplied',
+            );
         }
 
         ActivityLog::record(
@@ -404,14 +419,19 @@ class BillingController extends Controller
             'feedback' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        $purchase->update([
-            'fulfillment_status' => 'completed',
-            'provider_confirmed_at' => now(),
-            'provider_feedback' => filled($validated['feedback'] ?? null) ? trim($validated['feedback']) : null,
-            'provider_rating' => $validated['rating'] ?? null,
-            'fulfilled_at' => now(),
-            'reopened_at' => null,
-        ]);
+        $purchase = $this->transitionServiceDelivery(
+            $purchase,
+            'completed',
+            $request->user(),
+            [
+                'provider_confirmed_at' => now(),
+                'provider_feedback' => filled($validated['feedback'] ?? null) ? trim($validated['feedback']) : null,
+                'provider_rating' => $validated['rating'] ?? null,
+                'fulfilled_at' => now(),
+                'reopened_at' => null,
+            ],
+            'provider_completion_confirmed',
+        );
         $update = $purchase->updates()->create([
             'actor_id' => $request->user()->id,
             'kind' => 'completion_confirmed',
@@ -459,12 +479,16 @@ class BillingController extends Controller
             'message' => trim($validated['reason']),
             'visible_to_provider' => true,
         ]);
-        $purchase->update([
-            'fulfillment_status' => 'in_progress',
-            'provider_confirmed_at' => null,
-            'fulfilled_at' => null,
-            'reopened_at' => now(),
-        ]);
+        $purchase = $this->transitionServiceDelivery(
+            $purchase,
+            'in_progress',
+            $request->user(),
+            [
+                'provider_confirmed_at' => null,
+                'fulfilled_at' => null,
+            ],
+            'provider_revision_requested',
+        );
 
         ActivityLog::record(
             $request->user(),
@@ -534,7 +558,7 @@ class BillingController extends Controller
             'amount' => (int) $plan['amount'],
             'currency' => config('billing.currency', 'PHP'),
             'status' => 'pending',
-            'fulfillment_status' => 'ready',
+            'fulfillment_status' => 'queued',
             'reference_number' => $this->uniqueReferenceNumber(),
             'service_terms_accepted_at' => now(),
             'request_summary' => $requestSummary,
@@ -542,18 +566,24 @@ class BillingController extends Controller
                 ? 'A clear, organized application cycle and action plan for the selected support areas.'
                 : null,
             'priority' => 'normal',
-            'fulfillment_notes' => 'Payment confirmed. Schedule a meeting to discuss the service details with platform support.',
+            'fulfillment_notes' => 'Work enters the platform queue after payment is confirmed.',
             'milestones' => $this->defaultMilestones($plan),
         ]);
+        $purchase = $this->serviceLifecycle->initialize($purchase);
 
         try {
             $checkout = $this->payMongo->createCheckout($purchase);
         } catch (Throwable $error) {
-            $purchase->update([
-                'status' => 'failed',
-                'failed_at' => now(),
-                'failure_message' => 'Checkout could not be started.',
-            ]);
+            $purchase = $this->serviceLifecycle->transitionPayment(
+                $purchase,
+                'failed',
+                $actor,
+                [
+                    'failed_at' => now(),
+                    'failure_message' => 'Checkout could not be started.',
+                ],
+                'checkout_start_failed',
+            );
 
             ActivityLog::record(
                 $actor,
@@ -728,28 +758,12 @@ class BillingController extends Controller
         return view('admin-billing');
     }
 
-    public function billingOfficerWorkspace(Request $request): View
-    {
-        abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($request->user()->hasPortalPermission('manage_billing'), 403);
-
-        return view('admin-billing-officer-workspace');
-    }
-
     public function billingOfficerWorkspaceData(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
         abort_unless($request->user()->hasPortalPermission('manage_billing'), 403);
 
         return $this->adminData($request);
-    }
-
-    public function billingOfficerRequest(Request $request, ProviderServicePurchase $purchase): View
-    {
-        abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($request->user()->hasPortalPermission('manage_billing'), 403);
-
-        return view('admin-service-workspace', ['purchase' => $purchase]);
     }
 
     public function adminWorkspacePage(Request $request, ProviderServicePurchase $purchase): View|RedirectResponse
@@ -826,7 +840,7 @@ class BillingController extends Controller
             'meeting_decided_at' => now(),
             'meeting_decided_by' => $request->user()->id,
         ]);
-        $purchase->refresh();
+        $purchase = $this->serviceLifecycle->syncCurrentAction($purchase);
 
         $meetingDate = $this->meetingDateLabel($purchase);
         $isConfirmed = $purchase->meeting_status === 'confirmed';
@@ -884,10 +898,13 @@ class BillingController extends Controller
         ]);
 
         if ($validated['kind'] === 'clarification_request') {
-            $purchase->update([
-                'fulfillment_status' => 'needs_information',
-                'fulfillment_notes' => trim($validated['message']),
-            ]);
+            $purchase = $this->transitionServiceDelivery(
+                $purchase,
+                'needs_information',
+                $request->user(),
+                ['fulfillment_notes' => trim($validated['message'])],
+                'platform_information_requested',
+            );
         }
 
         ActivityLog::record(
@@ -1134,19 +1151,24 @@ class BillingController extends Controller
         }
 
         $previousStatus = $purchase->fulfillment_status;
-        $purchase->update([
-            'fulfillment_status' => $validated['fulfillment_status'],
-            'fulfillment_notes' => filled($validated['fulfillment_notes'] ?? null)
-                ? trim($validated['fulfillment_notes'])
-                : null,
-            'assigned_to' => $validated['assigned_to'] ?? null,
-            'priority' => $validated['priority'] ?? $purchase->priority,
-            'target_due_at' => $validated['target_due_at'] ?? null,
-            'milestones' => $milestones,
-            'fulfilled_by' => $request->user()->id,
-            'fulfilled_at' => null,
-            'provider_confirmed_at' => null,
-        ]);
+        $purchase = $this->transitionServiceDelivery(
+            $purchase,
+            $validated['fulfillment_status'],
+            $request->user(),
+            [
+                'fulfillment_notes' => filled($validated['fulfillment_notes'] ?? null)
+                    ? trim($validated['fulfillment_notes'])
+                    : null,
+                'assigned_to' => $validated['assigned_to'] ?? null,
+                'priority' => $validated['priority'] ?? $purchase->priority,
+                'target_due_at' => $validated['target_due_at'] ?? null,
+                'milestones' => $milestones,
+                'fulfilled_by' => $request->user()->id,
+                'fulfilled_at' => null,
+                'provider_confirmed_at' => null,
+            ],
+            'platform_delivery_status_changed',
+        );
 
         if ($providerUpdate) {
             $purchase->updates()->create([
@@ -1279,26 +1301,31 @@ class BillingController extends Controller
                 return false;
             }
 
-            $lockedPurchase->update([
-                'status' => 'paid',
-                'checkout_session_id' => $sessionId ?: $lockedPurchase->checkout_session_id,
-                'checkout_url' => null,
-                'payment_id' => data_get($payment, 'id'),
-                'payment_intent_id' => data_get($paymentAttributes, 'payment_intent.id')
-                    ?? data_get($paymentAttributes, 'payment_intent_id'),
-                'payment_method' => data_get($paymentAttributes, 'source.type')
-                    ?? data_get($paymentAttributes, 'payment_method_used')
-                    ?? data_get($paymentAttributes, 'payment_method.type'),
-                'livemode' => $livemode,
-                'paid_at' => now(),
-                'failed_at' => null,
-                'failure_message' => null,
-                'gateway_metadata' => [
-                    'event_id' => $eventId,
-                    'verified_amount' => (int) $amount,
-                    'verified_currency' => $currency,
+            $this->serviceLifecycle->transitionPayment(
+                $lockedPurchase,
+                'paid',
+                null,
+                [
+                    'checkout_session_id' => $sessionId ?: $lockedPurchase->checkout_session_id,
+                    'checkout_url' => null,
+                    'payment_id' => data_get($payment, 'id'),
+                    'payment_intent_id' => data_get($paymentAttributes, 'payment_intent.id')
+                        ?? data_get($paymentAttributes, 'payment_intent_id'),
+                    'payment_method' => data_get($paymentAttributes, 'source.type')
+                        ?? data_get($paymentAttributes, 'payment_method_used')
+                        ?? data_get($paymentAttributes, 'payment_method.type'),
+                    'livemode' => $livemode,
+                    'paid_at' => now(),
+                    'failed_at' => null,
+                    'failure_message' => null,
+                    'gateway_metadata' => [
+                        'event_id' => $eventId,
+                        'verified_amount' => (int) $amount,
+                        'verified_currency' => $currency,
+                    ],
                 ],
-            ]);
+                'payment_confirmed',
+            );
 
             return true;
         });
@@ -1543,7 +1570,11 @@ class BillingController extends Controller
             'amount' => $purchase->amount,
             'currency' => $purchase->currency,
             'status' => $purchase->status,
+            'payment_status' => $purchase->status,
             'fulfillment_status' => $purchase->fulfillment_status,
+            'current_action_owner' => $purchase->current_action_owner,
+            'current_action' => $purchase->current_action,
+            'action_due_at' => $purchase->action_due_at?->toISOString(),
             'priority' => $purchase->priority ?? 'normal',
             'request_summary' => $purchase->request_summary,
             'requested_outcome' => $purchase->requested_outcome,
@@ -1565,11 +1596,14 @@ class BillingController extends Controller
             'created_by' => $purchase->creator?->name,
             'created_at' => $purchase->created_at?->toISOString(),
             'paid_at' => $purchase->paid_at?->toISOString(),
+            'started_at' => $purchase->started_at?->toISOString(),
             'fulfilled_at' => $purchase->fulfilled_at?->toISOString(),
+            'closed_at' => $purchase->closed_at?->toISOString(),
             'provider_confirmed_at' => $purchase->provider_confirmed_at?->toISOString(),
             'provider_feedback' => $purchase->provider_feedback,
             'provider_rating' => $purchase->provider_rating,
             'reopened_at' => $purchase->reopened_at?->toISOString(),
+            'revision_count' => (int) $purchase->revision_count,
             'fulfillment_notes' => $purchase->fulfillment_notes,
             'fulfilled_by' => $purchase->fulfiller?->name,
             'workspace_url' => $includeProvider
@@ -1637,6 +1671,25 @@ class BillingController extends Controller
                 'download_url' => route('service-files.download', $file),
             ])
             ->values();
+        $lifecycleEvents = $includeInternal
+            ? $purchase->lifecycleEvents()
+                ->with(['actor.adminProfile', 'actor.providerProfile'])
+                ->oldest()
+                ->get()
+                ->map(fn ($event) => [
+                    'id' => $event->id,
+                    'event_type' => $event->event_type,
+                    'payment_from' => $event->payment_from,
+                    'payment_to' => $event->payment_to,
+                    'delivery_from' => $event->delivery_from,
+                    'delivery_to' => $event->delivery_to,
+                    'action_owner' => $event->action_owner,
+                    'actor_name' => $event->actor?->name ?: 'System',
+                    'metadata' => $event->metadata ?? [],
+                    'created_at' => $event->created_at?->toISOString(),
+                ])
+                ->values()
+            : collect();
 
         return [
             ...$this->purchasePayload($purchase, $includeInternal),
@@ -1645,6 +1698,7 @@ class BillingController extends Controller
             'plan_features' => array_values($plan['features'] ?? []),
             'updates' => $updates,
             'files' => $files,
+            'lifecycle_events' => $lifecycleEvents,
         ];
     }
 
@@ -1665,6 +1719,31 @@ class BillingController extends Controller
                 'completed' => false,
             ])
             ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function transitionServiceDelivery(
+        ProviderServicePurchase $purchase,
+        string $toStatus,
+        ?User $actor,
+        array $attributes = [],
+        string $eventType = 'delivery_status_changed',
+    ): ProviderServicePurchase {
+        try {
+            return $this->serviceLifecycle->transitionDelivery(
+                $purchase,
+                $toStatus,
+                $actor,
+                $attributes,
+                $eventType,
+            );
+        } catch (DomainException $error) {
+            throw ValidationException::withMessages([
+                'fulfillment_status' => $error->getMessage(),
+            ]);
+        }
     }
 
     private function authorizeProviderPurchase(Request $request, ProviderServicePurchase $purchase): void

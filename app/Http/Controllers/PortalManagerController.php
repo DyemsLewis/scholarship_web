@@ -2,17 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ActivityLog;
-use App\Models\ProviderServicePurchase;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
-use App\Models\SupportReport;
 use App\Models\User;
+use App\Queries\Admin\PortalManagerWorkspaceQuery;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class PortalManagerController extends Controller
 {
+    public function __construct(private readonly PortalManagerWorkspaceQuery $workspace) {}
+
     public function index(): View
     {
         return view('admin-portal-manager-workspace');
@@ -20,97 +21,95 @@ class PortalManagerController extends Controller
 
     public function data(): JsonResponse
     {
-        $today = now();
-        $accountAttention = User::query()
-            ->where(function ($query): void {
-                $query
-                    ->whereNull('email_verified_at')
-                    ->orWhere('must_reset_password', true)
-                    ->orWhere('account_status', 'suspended');
-            })
-            ->count();
-        $providerReviews = User::query()
-            ->where('role', 'provider')
-            ->whereNull('parent_account_id')
-            ->whereHas('providerProfile', fn ($query) => $query->where('verification_status', 'pending'))
-            ->count();
-        $programReviews = Scholarship::query()->where('status', 'pending_review')->count();
-        $paid = ProviderServicePurchase::query()->where('status', 'paid')->whereNotNull('paid_at');
-
-        return response()->json([
-            'summary' => [
-                'account_attention' => $accountAttention,
-                'pending_reviews' => $providerReviews + $programReviews,
-                'open_reports' => SupportReport::query()->where('admin_status', 'open')->count(),
-                'active_services' => (clone $paid)->where('fulfillment_status', '!=', 'completed')->count(),
-                'month_revenue' => (int) (clone $paid)->whereBetween('paid_at', [
-                    $today->copy()->startOfMonth(),
-                    $today->copy()->endOfMonth(),
-                ])->sum('amount'),
-                'activity_today' => ActivityLog::query()->whereBetween('created_at', [
-                    $today->copy()->startOfDay(),
-                    $today->copy()->endOfDay(),
-                ])->count(),
-            ],
-        ]);
+        return response()->json($this->workspace->overview());
     }
 
     public function accounts(): View
     {
-        return view('admin-account-manager-workspace');
+        return $this->area('accounts', 'Account oversight');
+    }
+
+    public function accountData(): JsonResponse
+    {
+        return response()->json($this->workspace->accounts());
     }
 
     public function reviews(): View
     {
-        return view('admin-review-officer-workspace');
+        return $this->area('reviews', 'Review oversight');
     }
 
-    public function providerReview(User $provider): View
+    public function reviewData(): JsonResponse
+    {
+        return response()->json($this->workspace->reviews());
+    }
+
+    public function providerReview(User $provider): RedirectResponse
     {
         abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
 
-        return view('admin-provider-review', ['provider' => $provider]);
+        return redirect()->route('admin.workspaces.portal.reviews', ['focus' => 'providers']);
     }
 
-    public function programReview(Scholarship $scholarship): View
+    public function programReview(Scholarship $scholarship): RedirectResponse
     {
-        return view('admin-program-review', ['scholarship' => $scholarship]);
+        return redirect()->route('admin.workspaces.portal.reviews', ['focus' => 'programs']);
     }
 
-    public function applicantReview(User $applicant): View
+    public function applicantReview(User $applicant): RedirectResponse
     {
         abort_unless($applicant->isApplicant(), 404);
 
-        return view('admin-applicant-review', ['applicant' => $applicant]);
+        return redirect()->route('admin.workspaces.portal.reviews', ['focus' => 'applicants']);
     }
 
-    public function monitoringReview(ScholarshipApplication $application): View
+    public function monitoringReview(ScholarshipApplication $application): RedirectResponse
     {
-        return view('admin-monitoring-review', ['application' => $application]);
+        return redirect()->route('admin.workspaces.portal.reviews', ['focus' => 'monitoring']);
     }
 
     public function support(): View
     {
-        return view('admin-support-officer-workspace');
+        return $this->area('support', 'Support oversight');
+    }
+
+    public function supportData(): JsonResponse
+    {
+        return response()->json($this->workspace->support());
     }
 
     public function billing(): View
     {
-        return view('admin-billing-officer-workspace');
+        return $this->area('services', 'Service delivery oversight');
     }
 
-    public function billingRequest(ProviderServicePurchase $purchase): View
+    public function billingData(): JsonResponse
     {
-        return view('admin-service-workspace', ['purchase' => $purchase]);
+        return response()->json($this->workspace->services());
     }
 
     public function finance(): View
     {
-        return view('admin-finance-officer-workspace');
+        return $this->area('finance', 'Finance oversight');
+    }
+
+    public function financeData(): JsonResponse
+    {
+        return response()->json($this->workspace->finance());
     }
 
     public function records(): View
     {
-        return view('admin-records-officer-workspace');
+        return $this->area('records', 'Records oversight');
+    }
+
+    public function recordsData(): JsonResponse
+    {
+        return response()->json($this->workspace->records());
+    }
+
+    private function area(string $area, string $title): View
+    {
+        return view('admin-portal-manager-area', compact('area', 'title'));
     }
 }

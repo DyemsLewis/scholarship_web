@@ -2,6 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApplicationStageAssignment;
+use App\Models\ApplicationStageAttendance;
+use App\Models\ApplicationStageAuditEvent;
+use App\Models\ApplicationStageEvidence;
+use App\Models\ApplicationStageSession;
 use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientMonitoringCycle;
 use App\Models\RecipientMonitoringPlan;
@@ -28,8 +33,8 @@ class CompleteDemoSeederTest extends TestCase
         $this->assertSame(3, User::query()->where('role', 'provider')->whereNull('parent_account_id')->count());
         $this->assertSame(12, User::query()->where('role', 'provider')->whereNotNull('parent_account_id')->count());
         $this->assertSame(24, User::query()->where('role', 'applicant')->count());
-        $this->assertSame('admin@findscholarship.test', User::query()->findOrFail(1)->email);
-        $this->assertSame('programs@tulayaral.test', User::query()->findOrFail(2)->email);
+        $this->assertSame('superadmin@findscholarship.test', User::query()->findOrFail(1)->email);
+        $this->assertSame('programs@harborlight.test', User::query()->findOrFail(2)->email);
 
         $this->assertSame(6, Scholarship::query()->count());
         $this->assertSame(24, ScholarshipApplication::query()->count());
@@ -38,9 +43,10 @@ class CompleteDemoSeederTest extends TestCase
         }
         $this->assertSame(2, Scholarship::query()->where('status', 'published')->count());
         $this->assertDatabaseHas('scholarships', [
-            'title' => 'Tulay Aral One-Time College Readiness Award',
+            'title' => 'College Launch One-Time Grant',
             'slots_available' => 1,
         ]);
+        $this->assertSame(6, Scholarship::query()->distinct()->count('image_path'));
         $this->assertDatabaseHas('scholarship_applications', [
             'workflow_stage' => 'screening',
             'application_state' => 'needs_correction',
@@ -68,6 +74,29 @@ class CompleteDemoSeederTest extends TestCase
         $this->assertSame(1, ScholarshipApplication::query()->where('final_outcome', 'waitlisted')->count());
         $this->assertSame(10, ScholarshipApplication::query()->where('final_outcome', 'selected')->count());
         $this->assertSame(7, ScholarshipApplication::query()->where('student_response_status', 'accepted')->count());
+
+        $this->assertSame(5, ApplicationStageSession::query()->count());
+        $this->assertSame(2, ApplicationStageSession::query()->where('status', 'scheduled')->count());
+        $this->assertSame(3, ApplicationStageSession::query()->where('status', 'completed')->count());
+        $this->assertSame(5, ApplicationStageAssignment::query()->where('status', 'acknowledged')->count());
+        $this->assertSame(5, ApplicationStageAttendance::query()->count());
+        $this->assertSame(2, ApplicationStageEvidence::query()->where('is_current', true)->count());
+        $this->assertGreaterThanOrEqual(28, ApplicationStageAuditEvent::query()->count());
+        $this->assertDatabaseHas('application_stage_progresses', [
+            'stage_key' => 'formal_application',
+            'status' => 'current',
+            'operational_status' => 'waiting_for_schedule',
+        ]);
+        $this->assertDatabaseHas('application_stage_progresses', [
+            'stage_key' => 'exam',
+            'status' => 'current',
+            'operational_status' => 'ready_for_review',
+        ]);
+        $this->assertDatabaseHas('application_stage_progresses', [
+            'stage_key' => 'interview',
+            'status' => 'current',
+            'operational_status' => 'ready_for_review',
+        ]);
 
         $this->assertSame(1, RecipientMonitoringPlan::query()->where('status', 'active')->count());
         $this->assertSame(2, RecipientMonitoringCycle::query()->where('status', 'open')->count());
@@ -103,10 +132,12 @@ class CompleteDemoSeederTest extends TestCase
         $this->assertSame(2, $this->app['db']->table('provider_service_purchases')->count());
         $this->assertDatabaseHas('scholarship_applications', [
             'id' => 1,
-            'assigned_reviewer_id' => User::query()->where('username', 'tulay.reviewer')->value('id'),
+            'assigned_reviewer_id' => User::query()->where('username', 'harborlight.reviewer')->value('id'),
         ]);
 
         Storage::disk('local')->assertExists('demo-showcase/profile-photos/3/applicant-01.jpg');
+        Storage::disk('local')->assertExists('demo-showcase/application-stage-evidence/3/score_sheet.svg');
+        Storage::disk('local')->assertExists('demo-showcase/application-stage-evidence/4/evaluation.svg');
 
         $this->actingAs(User::query()->findOrFail(1))
             ->get(route('admin.index'))
@@ -117,6 +148,48 @@ class CompleteDemoSeederTest extends TestCase
             ->assertOk();
         $this->get(route('provider.applications.data'))
             ->assertOk();
+
+        $selectionOfficer = User::query()->where('username', 'harborlight.selection')->firstOrFail();
+        $this->actingAs($selectionOfficer)
+            ->getJson('/provider/workspaces/selection/sessions/data?queue=active')
+            ->assertOk()
+            ->assertJsonPath('summary.active', 2)
+            ->assertJsonPath('summary.unassigned', 1)
+            ->assertJsonPath('summary.results', 2)
+            ->assertJsonPath('summary.history', 3)
+            ->assertJsonCount(2, 'sessions');
+        $this->getJson('/provider/workspaces/selection/sessions/data?queue=unassigned')
+            ->assertOk()
+            ->assertJsonCount(1, 'applications')
+            ->assertJsonPath('applications.0.stage.key', 'formal_application');
+        $this->getJson('/provider/workspaces/selection/sessions/data?queue=results')
+            ->assertOk()
+            ->assertJsonCount(2, 'applications');
+        $this->getJson('/provider/workspaces/selection/sessions/data?queue=history')
+            ->assertOk()
+            ->assertJsonCount(3, 'sessions');
+
+        $reviewOfficer = User::query()->where('username', 'admin.reviews')->firstOrFail();
+        $attentionSession = ApplicationStageSession::query()
+            ->where('title', 'Qualifying exam - Proof follow-up')
+            ->firstOrFail();
+        $this->actingAs($reviewOfficer)
+            ->getJson('/admin/workspaces/reviews/selection-activities/data?status=attention')
+            ->assertOk()
+            ->assertJsonCount(1, 'items')
+            ->assertJsonPath('items.0.id', $attentionSession->id)
+            ->assertJsonPath('items.0.primary_flag', 'Required session proof is missing.');
+
+        $scheduledAssignment = ApplicationStageAssignment::query()
+            ->whereHas('session', fn ($query) => $query->where('title', 'Qualifying exam - Morning group'))
+            ->with('application.applicant')
+            ->firstOrFail();
+        $this->actingAs($scheduledAssignment->application->applicant)
+            ->getJson(route('dashboard.applications.show.data', $scheduledAssignment->application))
+            ->assertOk()
+            ->assertJsonPath('application.selection_activities.0.id', $scheduledAssignment->id)
+            ->assertJsonPath('application.selection_activities.0.type', 'exam')
+            ->assertJsonPath('application.selection_activities.0.applicant_acknowledged', true);
 
         $monitoringApplication = ScholarshipApplication::query()
             ->where('student_response_status', 'accepted')

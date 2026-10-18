@@ -294,6 +294,7 @@ class AuditPlatformReadiness extends Command
         $consoleRoutes = file_get_contents(base_path('routes/console.php')) ?: '';
         $configured = collect([
             'scholarships:send-reminders',
+            'monitoring:send-reminders',
             'platform:backup',
             'platform:prune-data',
         ])->every(fn (string $command): bool => str_contains($consoleRoutes, $command));
@@ -302,7 +303,7 @@ class AuditPlatformReadiness extends Command
             'Scheduled operations',
             $configured ? 'pass' : 'warn',
             $configured
-                ? 'Reminders, backups, and retention cleanup are scheduled; configure one server cron entry for schedule:run.'
+                ? 'Scholarship and monitoring reminders, backups, and retention cleanup are scheduled; configure one server cron entry for schedule:run.'
                 : 'Configure reminder, backup, and retention schedules before hosting.',
         );
     }

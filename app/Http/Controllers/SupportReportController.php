@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -326,6 +327,73 @@ class SupportReportController extends Controller
         ]);
     }
 
+    public function providerSupportCase(Request $request, SupportReport $report): View
+    {
+        $staff = $request->user();
+        abort_unless($staff?->isProvider(), 403);
+        abort_unless($staff->hasPortalPermission('manage_reports'), 403);
+        abort_unless($this->canAccessProviderSupportReport($staff, $report), 403);
+
+        return view('provider-support-case');
+    }
+
+    public function providerSupportCaseData(Request $request, SupportReport $report): JsonResponse
+    {
+        $staff = $request->user();
+        abort_unless($staff?->isProvider(), 403);
+        abort_unless($staff->hasPortalPermission('manage_reports'), 403);
+        abort_unless($this->canAccessProviderSupportReport($staff, $report), 403);
+
+        $owner = $staff->providerOrganizationOwner()->loadMissing('providerProfile');
+        $report->load([
+            'applicant:id,role,first_name,last_name,email,contact_number',
+            'applicant.studentProfile:id,user_id,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
+            'scholarship:id,title',
+            'providerResolver:id,role,first_name,last_name,username,email',
+            'adminResolver:id,role,first_name,last_name,username,email',
+        ]);
+
+        return response()->json([
+            'workspace' => [
+                'role' => 'Support staff',
+                'staff_name' => $staff->name,
+                'organization_name' => $owner->providerProfile?->provider_name ?: $owner->name,
+            ],
+            'report' => $this->providerSupportWorkspaceItem($report),
+        ]);
+    }
+
+    public function providerSupportPlatformReport(Request $request): View
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_reports'), 403);
+
+        return view('provider-support-platform-report');
+    }
+
+    public function providerSupportPlatformReportData(Request $request): JsonResponse
+    {
+        $staff = $request->user();
+        abort_unless($staff?->isProvider(), 403);
+        abort_unless($staff->hasPortalPermission('manage_reports'), 403);
+
+        $owner = $staff->providerOrganizationOwner()->loadMissing('providerProfile');
+
+        return response()->json([
+            'workspace' => [
+                'role' => 'Support staff',
+                'staff_name' => $staff->name,
+                'organization_name' => $owner->providerProfile?->provider_name ?: $owner->name,
+            ],
+            'categories' => collect(SupportReport::PROVIDER_CATEGORIES)
+                ->map(fn (string $label, string $value): array => compact('value', 'label'))
+                ->values(),
+            'programs' => $this->providerSupportProgramsQuery($staff)
+                ->orderBy('title')
+                ->get(['id', 'title']),
+        ]);
+    }
+
     public function providerPage(Request $request): View|RedirectResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -490,7 +558,12 @@ class SupportReportController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
 
         if (AdminWorkspace::usesSupportOfficerWorkspace($request->user())) {
-            return redirect()->route(AdminWorkspace::SUPPORT_OFFICER_ROUTE, $request->query());
+            $route = $request->query('status') === 'resolved'
+                ? 'admin.workspaces.support.queue'
+                : AdminWorkspace::SUPPORT_OFFICER_ROUTE;
+            $parameters = $request->query('status') === 'resolved' ? ['queue' => 'resolved'] : [];
+
+            return redirect()->route($route, $parameters);
         }
 
         if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
@@ -498,66 +571,6 @@ class SupportReportController extends Controller
         }
 
         return view('admin-reports');
-    }
-
-    public function supportOfficerWorkspace(Request $request): View
-    {
-        abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($request->user()->hasPortalPermission('manage_reports'), 403);
-
-        return view('admin-support-officer-workspace');
-    }
-
-    public function supportOfficerWorkspaceData(Request $request): JsonResponse
-    {
-        abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($request->user()->hasPortalPermission('manage_reports'), 403);
-
-        $validated = $request->validate([
-            'category' => ['sometimes', 'nullable', Rule::in(['all', ...array_keys(SupportReport::CATEGORIES), ...array_keys(SupportReport::PROVIDER_CATEGORIES)])],
-            'search' => ['sometimes', 'nullable', 'string', 'max:120'],
-        ]);
-        $category = $validated['category'] ?? 'all';
-        $search = trim((string) ($validated['search'] ?? ''));
-        $summaryQuery = SupportReport::query();
-        $query = SupportReport::query();
-
-        if ($category !== 'all') {
-            $query->where('category', $category);
-        }
-
-        if ($search !== '') {
-            $likeSearch = '%'.$search.'%';
-            $query->where(function ($searchQuery) use ($likeSearch): void {
-                $searchQuery
-                    ->where('subject', 'like', $likeSearch)
-                    ->orWhere('description', 'like', $likeSearch)
-                    ->orWhere('context', 'like', $likeSearch)
-                    ->orWhereHas('applicant', fn ($applicantQuery) => $applicantQuery
-                        ->where('email', 'like', $likeSearch)
-                        ->orWhere('first_name', 'like', $likeSearch)
-                        ->orWhere('last_name', 'like', $likeSearch))
-                    ->orWhereHas('scholarship', fn ($programQuery) => $programQuery
-                        ->where('title', 'like', $likeSearch));
-            });
-        }
-
-        return $this->queueResponse($request, $query, 'admin', [
-            'categories' => collect(SupportReport::CATEGORIES)
-                ->merge(SupportReport::PROVIDER_CATEGORIES)
-                ->map(fn (string $label, string $value): array => compact('value', 'label'))
-                ->values(),
-            'summary' => [
-                'needs_action' => (clone $summaryQuery)->where('admin_status', 'open')->count(),
-                'privacy_open' => (clone $summaryQuery)->where('admin_status', 'open')->where('category', 'privacy')->count(),
-                'shared_open' => (clone $summaryQuery)->where('admin_status', 'open')->where('assigned_role', 'provider')->count(),
-                'provider_submitted_open' => (clone $summaryQuery)
-                    ->where('admin_status', 'open')
-                    ->where('assigned_role', 'admin')
-                    ->whereHas('applicant', fn ($applicantQuery) => $applicantQuery->where('role', 'provider'))
-                    ->count(),
-            ],
-        ]);
     }
 
     public function adminData(Request $request): JsonResponse
@@ -586,6 +599,19 @@ class SupportReportController extends Controller
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['open', 'resolved'])],
+            'admin_response' => [
+                'nullable',
+                'string',
+                'min:10',
+                'max:2000',
+            ],
+            'provider_response' => [
+                'nullable',
+                Rule::requiredIf(fn (): bool => $user->isProvider() && $request->input('status') === 'resolved'),
+                'string',
+                'min:10',
+                'max:2000',
+            ],
         ]);
 
         $viewerRole = $user->isAdmin() ? 'admin' : 'provider';
@@ -600,6 +626,7 @@ class SupportReportController extends Controller
             $roleStatusColumn,
             $roleResolverColumn,
             $roleResolvedAtColumn,
+            $viewerRole,
         ): array {
             $lockedReport = SupportReport::query()
                 ->whereKey($report->id)
@@ -611,6 +638,16 @@ class SupportReportController extends Controller
             $lockedReport->{$roleStatusColumn} = $validated['status'];
             $lockedReport->{$roleResolverColumn} = $validated['status'] === 'resolved' ? $user->id : null;
             $lockedReport->{$roleResolvedAtColumn} = $validated['status'] === 'resolved' ? now() : null;
+
+            if ($viewerRole === 'provider') {
+                $lockedReport->provider_response = $validated['status'] === 'resolved'
+                    ? trim((string) $validated['provider_response'])
+                    : null;
+            } else {
+                $lockedReport->admin_response = $validated['status'] === 'resolved'
+                    ? (filled($validated['admin_response'] ?? null) ? trim((string) $validated['admin_response']) : null)
+                    : null;
+            }
 
             $providerComplete = $lockedReport->assigned_role !== 'provider'
                 || $lockedReport->provider_status === 'resolved';
@@ -645,6 +682,16 @@ class SupportReportController extends Controller
             ]);
         }
 
+        if ($roleStatusChanged && $viewerRole === 'provider' && $validated['status'] === 'resolved' && ! $overallStatusChanged) {
+            PortalNotification::create([
+                'user_id' => $report->applicant_id,
+                'type' => 'support_report_response',
+                'title' => 'Provider response recorded',
+                'message' => 'Provider response: '.Str::limit((string) $report->provider_response, 180),
+                'action_url' => '/dashboard/reports',
+            ]);
+        }
+
         if ($roleStatusChanged) {
             ActivityLog::record(
                 $user,
@@ -661,20 +708,21 @@ class SupportReportController extends Controller
         }
 
         $waitingForOtherRole = $validated['status'] === 'resolved' && $report->status !== 'resolved';
+        $freshReport = $report->fresh()->load([
+            'applicant:id,role,first_name,last_name,email,contact_number',
+            'applicant.studentProfile:id,user_id,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
+            'scholarship:id,title',
+            'providerResolver:id,role,first_name,last_name,username,email',
+            'adminResolver:id,role,first_name,last_name,username,email',
+        ]);
 
         return response()->json([
             'message' => $waitingForOtherRole
                 ? 'Your part is complete. The report remains open for the other support team.'
                 : ($validated['status'] === 'resolved' ? 'Report resolved.' : 'Report reopened for your team.'),
-            'report' => $this->reportPayload(
-                $report->fresh()->load([
-                    'applicant:id,role,first_name,last_name,email',
-                    'applicant.studentProfile:id,user_id,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
-                    'scholarship:id,title',
-                ]),
-                true,
-                $viewerRole,
-            ),
+            'report' => $viewerRole === 'provider'
+                ? $this->providerSupportWorkspaceItem($freshReport)
+                : $this->reportPayload($freshReport, true, $viewerRole),
         ]);
     }
 
@@ -759,6 +807,7 @@ class SupportReportController extends Controller
             'work_state' => $state,
             'work_label' => $label,
             'work_detail' => $detail,
+            'action_url' => "/provider/workspaces/support/cases/{$report->id}",
         ];
     }
 
@@ -849,10 +898,12 @@ class SupportReportController extends Controller
             'provider_status_label' => $report->assigned_role === 'provider'
                 ? ucfirst($report->provider_status)
                 : 'Not required',
+            'provider_response' => $report->provider_response,
             'provider_resolved_at' => $report->provider_resolved_at?->format('M d, Y h:i A'),
             'provider_resolved_by' => $viewerRole ? $report->providerResolver?->name : null,
             'admin_status' => $report->admin_status,
             'admin_status_label' => ucfirst($report->admin_status),
+            'admin_response' => $report->admin_response,
             'admin_resolved_at' => $report->admin_resolved_at?->format('M d, Y h:i A'),
             'admin_resolved_by' => $viewerRole ? $report->adminResolver?->name : null,
             'requires_both_roles' => $report->assigned_role === 'provider',
@@ -881,6 +932,7 @@ class SupportReportController extends Controller
                 'id' => $report->applicant?->id,
                 'name' => $report->applicant?->name,
                 'email' => $report->applicant?->email,
+                'contact_number' => $report->applicant?->contact_number,
                 'role' => $report->applicant?->role,
                 'profile_photo_url' => $viewerRole === 'provider'
                     && $report->applicant?->isApplicant()

@@ -32,6 +32,9 @@ class ProviderServicePurchase extends Model
         'currency',
         'status',
         'fulfillment_status',
+        'current_action_owner',
+        'current_action',
+        'action_due_at',
         'reference_number',
         'checkout_session_id',
         'checkout_url',
@@ -54,12 +57,15 @@ class ProviderServicePurchase extends Model
         'meeting_decided_at',
         'meeting_decided_by',
         'paid_at',
+        'started_at',
         'failed_at',
         'fulfilled_at',
+        'closed_at',
         'provider_confirmed_at',
         'provider_feedback',
         'provider_rating',
         'reopened_at',
+        'revision_count',
         'fulfilled_by',
         'fulfillment_notes',
         'failure_message',
@@ -73,15 +79,19 @@ class ProviderServicePurchase extends Model
             'livemode' => 'boolean',
             'service_terms_accepted_at' => 'datetime',
             'target_due_at' => 'datetime',
+            'action_due_at' => 'datetime',
             'milestones' => 'array',
             'meeting_scheduled_for' => 'datetime',
             'meeting_decided_at' => 'datetime',
             'paid_at' => 'datetime',
+            'started_at' => 'datetime',
             'failed_at' => 'datetime',
             'fulfilled_at' => 'datetime',
+            'closed_at' => 'datetime',
             'provider_confirmed_at' => 'datetime',
             'provider_rating' => 'integer',
             'reopened_at' => 'datetime',
+            'revision_count' => 'integer',
             'gateway_metadata' => 'array',
         ];
     }
@@ -119,5 +129,10 @@ class ProviderServicePurchase extends Model
     public function files(): HasMany
     {
         return $this->hasMany(ProviderServiceFile::class);
+    }
+
+    public function lifecycleEvents(): HasMany
+    {
+        return $this->hasMany(ProviderServiceLifecycleEvent::class);
     }
 }

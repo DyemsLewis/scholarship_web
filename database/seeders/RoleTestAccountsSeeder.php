@@ -23,7 +23,7 @@ class RoleTestAccountsSeeder extends Seeder
             ->whereNull('parent_account_id')
             ->first();
         $providerOwner = User::query()
-            ->where('email', env('TULAY_ARAL_EMAIL', 'tulayaral@scholarship.test'))
+            ->where('email', env('DEMO_PROVIDER_EMAIL', 'programs@harborlight.test'))
             ->where('role', 'provider')
             ->whereNull('parent_account_id')
             ->with('providerProfile')
@@ -33,21 +33,17 @@ class RoleTestAccountsSeeder extends Seeder
             $providerOwner = User::query()
                 ->where('role', 'provider')
                 ->whereNull('parent_account_id')
-                ->where(function ($query): void {
-                    $query
-                        ->where('username', 'tulayaral')
-                        ->orWhere('email', 'programs@tulayaral.test');
-                })
+                ->orderBy('id')
                 ->with('providerProfile')
                 ->first();
         }
 
         if (! $adminOwner || ! $providerOwner) {
-            throw new RuntimeException('Seed the demo admin and Tulay Aral provider before creating role test accounts.');
+            throw new RuntimeException('Seed the demo admin and primary provider before creating role test accounts.');
         }
 
         DB::transaction(function () use ($adminOwner, $providerOwner, $password): void {
-            foreach ($this->providerAccounts() as $account) {
+            foreach ($this->providerAccounts($providerOwner) as $account) {
                 $user = $this->seedManagedUser(
                     owner: $providerOwner,
                     role: 'provider',
@@ -78,9 +74,10 @@ class RoleTestAccountsSeeder extends Seeder
                 ]);
             }
 
+            $staffPrefix = $providerOwner->username === 'harborlight' ? 'harborlight' : 'tulay';
             $reviewer = User::query()
                 ->where('parent_account_id', $providerOwner->id)
-                ->where('username', 'tulay.reviewer')
+                ->where('username', $staffPrefix.'.reviewer')
                 ->first();
             $reviewApplicationIds = ScholarshipApplication::query()
                 ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerOwner->id))
@@ -159,12 +156,12 @@ class RoleTestAccountsSeeder extends Seeder
     }
 
     /** @return array<int, array<string, mixed>> */
-    private function providerAccounts(): array
+    private function providerAccounts(User $owner): array
     {
-        return [
+        $accounts = [
             [
-                'email' => 'tulay.manager@scholarship.test',
-                'username' => 'tulay.manager',
+                'email' => 'harborlight.manager@scholarship.test',
+                'username' => 'harborlight.manager',
                 'first_name' => 'Marco',
                 'middle_initial' => 'A',
                 'last_name' => 'Villanueva',
@@ -173,8 +170,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => User::PROVIDER_PERMISSIONS,
             ],
             [
-                'email' => 'tulay.programs@scholarship.test',
-                'username' => 'tulay.programs',
+                'email' => 'harborlight.programs@scholarship.test',
+                'username' => 'harborlight.programs',
                 'first_name' => 'Patricia',
                 'middle_initial' => 'B',
                 'last_name' => 'Gomez',
@@ -183,8 +180,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_programs'],
             ],
             [
-                'email' => 'tulay.reviewer@scholarship.test',
-                'username' => 'tulay.reviewer',
+                'email' => 'harborlight.reviewer@scholarship.test',
+                'username' => 'harborlight.reviewer',
                 'first_name' => 'Rafael',
                 'middle_initial' => 'C',
                 'last_name' => 'Torres',
@@ -193,8 +190,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['verify_applications'],
             ],
             [
-                'email' => 'tulay.selection@scholarship.test',
-                'username' => 'tulay.selection',
+                'email' => 'harborlight.selection@scholarship.test',
+                'username' => 'harborlight.selection',
                 'first_name' => 'Selena',
                 'middle_initial' => 'C',
                 'last_name' => 'Mendoza',
@@ -203,8 +200,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_selection_activities'],
             ],
             [
-                'email' => 'tulay.decisions@scholarship.test',
-                'username' => 'tulay.decisions',
+                'email' => 'harborlight.decisions@scholarship.test',
+                'username' => 'harborlight.decisions',
                 'first_name' => 'Diana',
                 'middle_initial' => 'C',
                 'last_name' => 'Aquino',
@@ -213,8 +210,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['record_final_decisions'],
             ],
             [
-                'email' => 'tulay.recipients@scholarship.test',
-                'username' => 'tulay.recipients',
+                'email' => 'harborlight.recipients@scholarship.test',
+                'username' => 'harborlight.recipients',
                 'first_name' => 'Rina',
                 'middle_initial' => 'C',
                 'last_name' => 'Flores',
@@ -223,8 +220,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_recipients'],
             ],
             [
-                'email' => 'tulay.monitoring@scholarship.test',
-                'username' => 'tulay.monitoring',
+                'email' => 'harborlight.monitoring@scholarship.test',
+                'username' => 'harborlight.monitoring',
                 'first_name' => 'Monica',
                 'middle_initial' => 'C',
                 'last_name' => 'Santos',
@@ -233,8 +230,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_monitoring'],
             ],
             [
-                'email' => 'tulay.releases@scholarship.test',
-                'username' => 'tulay.releases',
+                'email' => 'harborlight.releases@scholarship.test',
+                'username' => 'harborlight.releases',
                 'first_name' => 'Beatrice',
                 'middle_initial' => 'C',
                 'last_name' => 'Cruz',
@@ -243,8 +240,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_benefit_releases'],
             ],
             [
-                'email' => 'tulay.profile@scholarship.test',
-                'username' => 'tulay.profile',
+                'email' => 'harborlight.profile@scholarship.test',
+                'username' => 'harborlight.profile',
                 'first_name' => 'Olivia',
                 'middle_initial' => 'C',
                 'last_name' => 'Domingo',
@@ -253,8 +250,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_profile'],
             ],
             [
-                'email' => 'tulay.team@scholarship.test',
-                'username' => 'tulay.team',
+                'email' => 'harborlight.team@scholarship.test',
+                'username' => 'harborlight.team',
                 'first_name' => 'Teresa',
                 'middle_initial' => 'C',
                 'last_name' => 'Bautista',
@@ -263,8 +260,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_team'],
             ],
             [
-                'email' => 'tulay.support@scholarship.test',
-                'username' => 'tulay.support',
+                'email' => 'harborlight.support@scholarship.test',
+                'username' => 'harborlight.support',
                 'first_name' => 'Sofia',
                 'middle_initial' => 'D',
                 'last_name' => 'Lim',
@@ -273,8 +270,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_reports'],
             ],
             [
-                'email' => 'tulay.billing@scholarship.test',
-                'username' => 'tulay.billing',
+                'email' => 'harborlight.billing@scholarship.test',
+                'username' => 'harborlight.billing',
                 'first_name' => 'Daniel',
                 'middle_initial' => 'E',
                 'last_name' => 'Reyes',
@@ -283,6 +280,17 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_billing'],
             ],
         ];
+
+        if ($owner->username === 'harborlight') {
+            return $accounts;
+        }
+
+        return array_map(static function (array $account): array {
+            $account['email'] = str_replace('harborlight.', 'tulay.', $account['email']);
+            $account['username'] = str_replace('harborlight.', 'tulay.', $account['username']);
+
+            return $account;
+        }, $accounts);
     }
 
     /** @return array<int, array<string, mixed>> */

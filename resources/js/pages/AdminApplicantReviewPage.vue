@@ -50,13 +50,9 @@ const schoolRecord = computed(() => applicant.value?.verification_documents?.fin
 const recentSchoolId = computed(() => applicant.value?.verification_documents?.find(
     (document) => document.document_type === 'recent_school_id',
 ) ?? null);
-const achievementEvidence = computed(() => applicant.value?.verification_documents?.find(
-    (document) => document.document_type === 'achievement_evidence',
-) ?? null);
-const profileEvidenceDocuments = computed(() => [academicRecord.value, recentSchoolId.value, schoolRecord.value, achievementEvidence.value].filter(Boolean));
+const profileEvidenceDocuments = computed(() => [academicRecord.value, recentSchoolId.value, schoolRecord.value].filter(Boolean));
 const profileEvidenceReady = computed(() => Boolean(academicRecord.value)
-    && Boolean(recentSchoolId.value)
-    && (!applicant.value?.achievements || achievementEvidence.value));
+    && Boolean(recentSchoolId.value));
 const savedAcademicResult = computed(() => academicResultLabel(applicant.value));
 const academicScanRequired = computed(() => Boolean(applicant.value?.academic_scan_required));
 const academicScanReady = computed(() => !academicScanRequired.value || academicRecord.value?.ocr_status === 'succeeded');
@@ -332,7 +328,7 @@ async function updateApplicant(verificationStatus) {
     }
 
     if (!profileEvidenceReady.value) {
-        decisionError.value = 'The applicant must upload the required academic record, school ID, and achievement evidence before profile verification.';
+        decisionError.value = 'The applicant must upload the required academic record and recent school ID before profile verification.';
         return;
     }
 
@@ -719,9 +715,6 @@ onMounted(loadApplicant);
                                 {{ applicant.verification_documents?.length
                                     ? 'School enrollment proof is available, but the applicant must still upload an academic record before the saved result can be verified.'
                                     : 'No academic record has been uploaded. The saved academic result cannot be verified yet.' }}
-                            </p>
-                            <p v-else-if="applicant.achievements && !achievementEvidence" class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-800">
-                                The applicant listed an achievement but has not uploaded supporting evidence for it yet.
                             </p>
                         </article>
 

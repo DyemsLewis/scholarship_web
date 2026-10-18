@@ -80,12 +80,7 @@
     }
 
     .admin-shell {
-        background:
-            radial-gradient(circle at 88% 3rem, rgba(252, 211, 77, 0.12), transparent 18rem),
-            linear-gradient(rgba(8, 20, 38, 0.025) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(8, 20, 38, 0.025) 1px, transparent 1px),
-            linear-gradient(180deg, #f7f9fb 0%, #edf2f6 48%, #e9eef4 100%);
-        background-size: auto, 2.5rem 2.5rem, 2.5rem 2.5rem, auto;
+        background: #edf1f5;
     }
 
     .provider-page,
@@ -129,6 +124,12 @@
     }
 
     .provider-page .provider-panel {
+        @apply rounded-sm border-slate-300;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(8, 20, 38, 0.035);
+    }
+
+    .admin-page .admin-panel {
         @apply rounded-sm border-slate-300;
         background: #fff;
         box-shadow: 0 1px 4px rgba(8, 20, 38, 0.035);
@@ -234,8 +235,14 @@
         background: #ffffff;
     }
 
+    .admin-page .admin-hero {
+        @apply rounded-sm px-4 py-3 shadow-[0_1px_4px_rgba(8,20,38,0.035)] sm:px-5;
+        background: #ffffff;
+    }
+
     .provider-page .provider-hero::before,
-    .provider-page .provider-hero::after {
+    .provider-page .provider-hero::after,
+    .admin-page .admin-hero::after {
         display: none;
     }
 
@@ -387,6 +394,18 @@
         @apply overflow-x-auto;
         scrollbar-width: thin;
         scrollbar-color: #94a3b8 transparent;
+    }
+
+    .staff-table-viewport {
+        min-height: 24rem;
+        overflow-x: auto;
+        background: #fff;
+        scrollbar-width: thin;
+        scrollbar-color: #94a3b8 transparent;
+    }
+
+    .staff-table-viewport > table {
+        width: 100%;
     }
 
     .portal-data-table {

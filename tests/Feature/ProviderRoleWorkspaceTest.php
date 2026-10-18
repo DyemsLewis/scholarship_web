@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ProviderServicePurchase;
 use App\Models\RecipientBenefitReceiptResponse;
 use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientBenefitReleaseRecord;
@@ -9,13 +10,14 @@ use App\Models\RecipientMonitoringCycle;
 use App\Models\RecipientMonitoringIntervention;
 use App\Models\RecipientMonitoringPlan;
 use App\Models\RecipientMonitoringSubmission;
-use App\Models\ProviderServicePurchase;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\SupportReport;
 use App\Models\User;
+use App\Services\ApplicationWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -32,6 +34,13 @@ class ProviderRoleWorkspaceTest extends TestCase
             'account_title' => 'manager',
             'permissions' => User::PROVIDER_PERMISSIONS,
         ]);
+        $program = $this->program($owner, 'Agreement Review Program', 'published', now()->addMonth()->toDateString());
+        $recipient = $this->application($program, $this->applicant('Awaiting', 'Agreement'), 'complete', null, now());
+        $recipient->update([
+            'final_outcome' => 'selected',
+            'status' => 'awarded',
+            'student_response_status' => null,
+        ]);
 
         $this->actingAs($manager)
             ->get('/provider')
@@ -40,8 +49,17 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->assertNull($manager->fresh('providerProfile')->publicPayload()['provider_workspace_url']);
 
+        $this->actingAs($manager)
+            ->getJson('/provider/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('manager_overview.summary.programs', 1)
+            ->assertJsonPath('manager_overview.summary.applications', 1)
+            ->assertJsonPath('manager_overview.priority_action.title', 'Recipient onboarding')
+            ->assertJsonPath('manager_overview.priority_action.count', 1)
+            ->assertJsonPath('manager_overview.priority_action.href', '/provider/workspaces/recipients');
+
         foreach ([
-            '/provider/workspaces/programs',
+            '/provider/programs',
             '/provider/workspaces/reviews',
             '/provider/workspaces/selection',
             '/provider/workspaces/decisions',
@@ -55,6 +73,62 @@ class ProviderRoleWorkspaceTest extends TestCase
         ] as $workspace) {
             $this->actingAs($manager)->get($workspace)->assertOk();
         }
+
+        $this->actingAs($manager)
+            ->get('/provider/workspaces/programs')
+            ->assertRedirect('/provider/programs');
+    }
+
+    public function test_full_access_manager_legacy_urls_resolve_to_focused_workspaces_and_records(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $manager = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $owner->id,
+            'account_title' => 'manager',
+            'permissions' => User::PROVIDER_PERMISSIONS,
+        ]);
+        $program = $this->program($owner, 'Legacy Route Program', 'published', now()->addMonth()->toDateString());
+        $screening = $this->application($program, $this->applicant('Review', 'Applicant'), 'screening', null, now());
+        $selection = $this->application($program, $this->applicant('Selection', 'Applicant'), 'exam', null, now());
+        $decision = $this->application($program, $this->applicant('Decision', 'Applicant'), 'decision', null, now());
+        $recipient = $this->application($program, $this->applicant('Recipient', 'Applicant'), 'complete', null, now());
+        $recipient->update(['final_outcome' => 'selected', 'status' => 'awarded']);
+
+        $redirects = [
+            '/provider/applications' => '/provider/workspaces/reviews/assigned',
+            "/provider/programs/{$program->id}/applications/results" => "/provider/workspaces/selection/results?program_id={$program->id}",
+            "/provider/programs/{$program->id}/updates" => "/provider/programs/{$program->id}",
+            '/provider/monitoring' => '/provider/workspaces/monitoring/review',
+            "/provider/monitoring/{$program->id}/academic" => "/provider/workspaces/monitoring/review?program_id={$program->id}",
+            "/provider/monitoring/{$program->id}/releases" => "/provider/workspaces/releases/upcoming?program_id={$program->id}",
+            "/provider/monitoring/{$program->id}/outcomes" => "/provider/workspaces/recipients/active?program_id={$program->id}",
+            '/provider/profile/details' => '/provider/workspaces/organization-profile/public',
+            '/provider/team' => '/provider/workspaces/team',
+        ];
+
+        foreach ($redirects as $legacyUrl => $focusedUrl) {
+            $this->actingAs($manager)->get($legacyUrl)->assertRedirect($focusedUrl);
+        }
+
+        $recordViews = [
+            $screening->id => 'provider-application-review-record',
+            $selection->id => 'provider-selection-activity-record',
+            $decision->id => 'provider-final-decision-record',
+            $recipient->id => 'provider-recipient-record',
+        ];
+
+        foreach ($recordViews as $applicationId => $view) {
+            $this->actingAs($manager)
+                ->get("/provider/applications/{$applicationId}")
+                ->assertOk()
+                ->assertViewIs($view);
+        }
+
+        $this->actingAs($manager)
+            ->get("/provider/monitoring/{$program->id}/plan")
+            ->assertOk()
+            ->assertViewIs('provider-monitoring-plan');
     }
 
     public function test_program_coordinator_enters_a_dedicated_workspace(): void
@@ -64,26 +138,31 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($coordinator)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/programs');
+            ->assertOk()
+            ->assertViewIs('provider-program-coordinator-dashboard');
 
         $this->actingAs($coordinator)
             ->get('/provider/programs')
-            ->assertRedirect('/provider/workspaces/programs');
+            ->assertOk()
+            ->assertViewIs('provider-program-directory');
 
         $this->actingAs($coordinator)
             ->get('/provider/workspaces/programs')
-            ->assertOk()
-            ->assertViewIs('provider-program-coordinator-workspace');
+            ->assertRedirect('/provider/programs');
 
         foreach (['drafts', 'review', 'published', 'closed'] as $section) {
             $this->actingAs($coordinator)
-                ->get("/provider/workspaces/programs/{$section}")
+                ->get("/provider/programs/{$section}")
                 ->assertOk()
-                ->assertViewIs('provider-program-coordinator-workspace');
+                ->assertViewIs('provider-program-directory');
+
+            $this->actingAs($coordinator)
+                ->get("/provider/workspaces/programs/{$section}")
+                ->assertRedirect("/provider/programs/{$section}");
         }
 
         $this->assertSame(
-            '/provider/workspaces/programs',
+            '/provider/programs',
             $coordinator->fresh('providerProfile')->publicPayload()['provider_workspace_url'],
         );
     }
@@ -178,23 +257,41 @@ class ProviderRoleWorkspaceTest extends TestCase
         $owner = User::factory()->create(['role' => 'provider']);
         $program = $this->program($owner, 'Reviewer Program', 'published');
         $reviewer = $this->applicationReviewer($owner, [$program->id]);
+        $application = $this->application(
+            $program,
+            $this->applicant('Review', 'Applicant'),
+            'screening',
+            $reviewer->id,
+            now(),
+        );
 
         $this->actingAs($reviewer)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/reviews');
+            ->assertOk()
+            ->assertViewIs('provider-application-reviewer-dashboard');
 
         $this->actingAs($reviewer)
             ->get('/provider/applications/review')
-            ->assertRedirect('/provider/workspaces/reviews');
+            ->assertRedirect('/provider/workspaces/reviews/assigned');
 
         $this->actingAs($reviewer)
             ->get("/provider/programs/{$program->id}/applications/review")
-            ->assertRedirect("/provider/workspaces/reviews?program_id={$program->id}");
+            ->assertRedirect("/provider/workspaces/reviews/assigned?program_id={$program->id}");
 
         $this->actingAs($reviewer)
             ->get('/provider/workspaces/reviews')
             ->assertOk()
-            ->assertViewIs('provider-application-reviewer-workspace');
+            ->assertViewIs('provider-application-reviewer-dashboard');
+
+        $this->actingAs($reviewer)
+            ->getJson('/provider/workspaces/reviews/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('contract_version', 1)
+            ->assertJsonPath('workspace.title', 'Reviewer dashboard')
+            ->assertJsonPath('metrics.0.value', 1)
+            ->assertJsonPath('sections.0.items.0.id', $application->id)
+            ->assertJsonCount(4, 'metrics')
+            ->assertJsonCount(2, 'sections');
 
         foreach (['assigned', 'unassigned', 'returned', 'history'] as $section) {
             $this->actingAs($reviewer)
@@ -203,13 +300,18 @@ class ProviderRoleWorkspaceTest extends TestCase
                 ->assertViewIs('provider-application-reviewer-workspace');
         }
 
+        $this->actingAs($reviewer)
+            ->get("/provider/applications/{$application->id}")
+            ->assertOk()
+            ->assertViewIs('provider-application-review-record');
+
         $this->assertSame(
             '/provider/workspaces/reviews',
             $reviewer->fresh('providerProfile')->publicPayload()['provider_workspace_url'],
         );
     }
 
-    public function test_application_reviewer_login_opens_the_dedicated_workspace_directly(): void
+    public function test_application_reviewer_login_opens_the_reset_provider_shell(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $reviewer = $this->applicationReviewer($owner);
@@ -223,7 +325,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             'email' => $reviewer->email,
             'password' => 'review-password123',
         ])->assertOk()
-            ->assertJsonPath('redirect', '/provider/workspaces/reviews')
+            ->assertJsonPath('redirect', '/provider')
             ->assertJsonPath('user.provider_workspace_url', '/provider/workspaces/reviews');
     }
 
@@ -237,17 +339,18 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/reviews');
+            ->assertOk()
+            ->assertViewIs('provider-application-reviewer-dashboard');
 
         $this->actingAs($reviewer)
             ->get('/provider/workspaces/reviews')
             ->assertOk()
-            ->assertViewIs('provider-application-reviewer-workspace');
+            ->assertViewIs('provider-application-reviewer-dashboard');
 
         $this->actingAs($reviewer)
             ->get('/provider/workspaces/selection')
             ->assertOk()
-            ->assertViewIs('provider-selection-officer-workspace');
+            ->assertViewIs('provider-selection-officer-dashboard');
 
         $payload = $reviewer->fresh('providerProfile')->publicPayload();
 
@@ -325,6 +428,34 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('pagination.to', 6);
     }
 
+    public function test_application_reviewer_can_claim_an_unassigned_screening_record(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Claim Review Program', 'published');
+        $reviewer = $this->applicationReviewer($owner, [$program->id]);
+        $application = $this->application(
+            $program,
+            $this->applicant('Open', 'Review'),
+            'screening',
+            null,
+            now()->subDay(),
+        );
+
+        $this->actingAs($reviewer)
+            ->patchJson("/provider/applications/{$application->id}/review-claim")
+            ->assertOk()
+            ->assertJsonPath('application.assigned_reviewer.id', $reviewer->id);
+
+        $this->assertDatabaseHas('scholarship_applications', [
+            'id' => $application->id,
+            'assigned_reviewer_id' => $reviewer->id,
+        ]);
+
+        $this->actingAs($reviewer)
+            ->patchJson("/provider/applications/{$application->id}/review-claim")
+            ->assertOk();
+    }
+
     public function test_application_reviewer_has_separate_returned_and_history_queues(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
@@ -373,6 +504,7 @@ class ProviderRoleWorkspaceTest extends TestCase
         $coordinator = $this->programCoordinator($owner);
 
         $this->actingAs($coordinator)->get('/provider/workspaces/reviews')->assertForbidden();
+        $this->actingAs($coordinator)->getJson('/provider/workspaces/reviews/dashboard/data')->assertForbidden();
         $this->actingAs($coordinator)->get('/provider/workspaces/reviews/returned')->assertForbidden();
         $this->actingAs($coordinator)->getJson('/provider/workspaces/reviews/data')->assertForbidden();
     }
@@ -381,30 +513,34 @@ class ProviderRoleWorkspaceTest extends TestCase
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $program = $this->program($owner, 'Selection Program', 'published');
+        $program->update([
+            'selection_stages' => ['screening', 'exam', 'formal_application', 'decision'],
+        ]);
         $officer = $this->selectionOfficer($owner, [$program->id]);
 
         $this->actingAs($officer)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/selection');
+            ->assertOk()
+            ->assertViewIs('provider-selection-officer-dashboard');
 
         $this->actingAs($officer)
             ->get('/provider/applications/activities')
-            ->assertRedirect('/provider/workspaces/selection?queue=setup');
+            ->assertRedirect('/provider/workspaces/selection/unassigned');
 
         $this->actingAs($officer)
             ->get('/provider/applications/results')
-            ->assertRedirect('/provider/workspaces/selection?queue=results');
+            ->assertRedirect('/provider/workspaces/selection/results');
 
         $this->actingAs($officer)
             ->get("/provider/programs/{$program->id}/applications/results")
-            ->assertRedirect("/provider/workspaces/selection?queue=results&program_id={$program->id}");
+            ->assertRedirect("/provider/workspaces/selection/results?program_id={$program->id}");
 
         $this->actingAs($officer)
             ->get('/provider/workspaces/selection')
             ->assertOk()
-            ->assertViewIs('provider-selection-officer-workspace');
+            ->assertViewIs('provider-selection-officer-dashboard');
 
-        foreach (['setup', 'results', 'active'] as $section) {
+        foreach (['setup', 'unassigned', 'results', 'active', 'history'] as $section) {
             $this->actingAs($officer)
                 ->get("/provider/workspaces/selection/{$section}")
                 ->assertOk()
@@ -415,6 +551,43 @@ class ProviderRoleWorkspaceTest extends TestCase
             '/provider/workspaces/selection',
             $officer->fresh('providerProfile')->publicPayload()['provider_workspace_url'],
         );
+
+        $application = $this->application(
+            $program,
+            $this->applicant('Selection', 'Candidate'),
+            'exam',
+            null,
+            now()->subDay(),
+        );
+        $application->stageProgresses()->delete();
+        $application->forceFill(['workflow_stage' => 'screening'])->save();
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($application->fresh());
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $officer);
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/selection/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('contract_version', 1)
+            ->assertJsonPath('workspace.title', 'Selection dashboard')
+            ->assertJsonPath('metrics.1.value', 1)
+            ->assertJsonPath('sections.1.items.0.id', $application->id)
+            ->assertJsonCount(4, 'metrics')
+            ->assertJsonCount(2, 'sections');
+
+        $this->actingAs($officer)
+            ->get("/provider/applications/{$application->id}")
+            ->assertOk()
+            ->assertViewIs('provider-selection-activity-record');
+
+        $this->actingAs($officer)
+            ->getJson("/provider/applications/{$application->id}/data?workspace=selection")
+            ->assertOk()
+            ->assertJsonPath('workspace.mode', 'selection')
+            ->assertJsonPath('workspace.capabilities.record_selection_result', true)
+            ->assertJsonPath('application.workflow_stage', 'exam')
+            ->assertJsonPath('application.applicant.name', 'Selection Candidate')
+            ->assertJsonCount(0, 'application.documents');
     }
 
     public function test_selection_workspace_separates_activity_setup_from_ready_results(): void
@@ -507,6 +680,7 @@ class ProviderRoleWorkspaceTest extends TestCase
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/selection')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/selection/dashboard/data')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/selection/results')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/selection/data')->assertForbidden();
     }
@@ -519,24 +693,25 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($officer)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/decisions');
+            ->assertOk()
+            ->assertViewIs('provider-decision-officer-dashboard');
 
         $this->actingAs($officer)
             ->get('/provider/applications/decisions')
-            ->assertRedirect('/provider/workspaces/decisions?queue=pending');
+            ->assertRedirect('/provider/workspaces/decisions/pending');
 
         $this->actingAs($officer)
             ->get('/provider/applications/waitlist')
-            ->assertRedirect('/provider/workspaces/decisions?queue=waitlist');
+            ->assertRedirect('/provider/workspaces/decisions/waitlist');
 
         $this->actingAs($officer)
             ->get("/provider/programs/{$program->id}/applications/waitlist")
-            ->assertRedirect("/provider/workspaces/decisions?queue=waitlist&program_id={$program->id}");
+            ->assertRedirect("/provider/workspaces/decisions/waitlist?program_id={$program->id}");
 
         $this->actingAs($officer)
             ->get('/provider/workspaces/decisions')
             ->assertOk()
-            ->assertViewIs('provider-decision-officer-workspace');
+            ->assertViewIs('provider-decision-officer-dashboard');
 
         foreach (['pending', 'waitlist', 'recorded'] as $section) {
             $this->actingAs($officer)
@@ -549,6 +724,43 @@ class ProviderRoleWorkspaceTest extends TestCase
             '/provider/workspaces/decisions',
             $officer->fresh('providerProfile')->publicPayload()['provider_workspace_url'],
         );
+
+        $application = $this->application(
+            $program,
+            $this->applicant('Final', 'Candidate'),
+            'screening',
+            null,
+            now()->subDays(2),
+        );
+        $application->stageProgresses()->delete();
+        $application->forceFill(['workflow_stage' => 'screening'])->save();
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $workflow->start($application->fresh());
+        $application = $workflow->recordStageResult($application, 'screening', 'passed', $officer);
+        $application = $workflow->recordStageResult($application, 'formal_application', 'passed', $officer);
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/decisions/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('contract_version', 1)
+            ->assertJsonPath('workspace.title', 'Decision dashboard')
+            ->assertJsonPath('metrics.0.value', 1)
+            ->assertJsonPath('sections.0.items.0.id', $application->id)
+            ->assertJsonCount(4, 'metrics')
+            ->assertJsonCount(2, 'sections');
+
+        $this->actingAs($officer)
+            ->get("/provider/applications/{$application->id}")
+            ->assertOk()
+            ->assertViewIs('provider-final-decision-record');
+
+        $this->actingAs($officer)
+            ->getJson("/provider/applications/{$application->id}/data?workspace=decision")
+            ->assertOk()
+            ->assertJsonPath('workspace.mode', 'decision')
+            ->assertJsonPath('workspace.capabilities.record_final_outcome', true)
+            ->assertJsonPath('application.workflow_stage', 'decision')
+            ->assertJsonPath('application.applicant.name', 'Final Candidate');
     }
 
     public function test_decision_workspace_separates_pending_waitlist_and_recorded_outcomes(): void
@@ -667,27 +879,36 @@ class ProviderRoleWorkspaceTest extends TestCase
         $owner = User::factory()->create(['role' => 'provider']);
         $program = $this->program($owner, 'Recipient Program', 'published');
         $officer = $this->recipientOfficer($owner, [$program->id]);
+        $recipient = $this->selectedRecipient($program, $this->applicant('Recipient', 'Record'));
 
         $this->actingAs($officer)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/recipients');
+            ->assertOk()
+            ->assertViewIs('provider-recipient-officer-dashboard');
 
         $this->actingAs($officer)
             ->get('/provider/applications/recipients')
-            ->assertRedirect('/provider/workspaces/recipients?queue=awaiting');
+            ->assertRedirect('/provider/workspaces/recipients/agreements');
 
         $this->actingAs($officer)
             ->get("/provider/programs/{$program->id}/applications/recipients")
-            ->assertRedirect("/provider/workspaces/recipients?queue=awaiting&program_id={$program->id}");
+            ->assertRedirect("/provider/workspaces/recipients/agreements?program_id={$program->id}");
 
         $this->actingAs($officer)
             ->get('/provider/monitoring')
-            ->assertRedirect('/provider/workspaces/recipients?queue=active');
+            ->assertRedirect('/provider/workspaces/recipients/active');
 
         $this->actingAs($officer)
             ->get('/provider/workspaces/recipients')
             ->assertOk()
-            ->assertViewIs('provider-recipient-officer-workspace');
+            ->assertViewIs('provider-recipient-officer-dashboard');
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/recipients/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('workspace.key', 'recipient-officer')
+            ->assertJsonPath('metrics.0.value', 1)
+            ->assertJsonPath('sections.0.items.0.id', $recipient->id);
 
         foreach (['agreements', 'active', 'declined', 'closed'] as $section) {
             $this->actingAs($officer)
@@ -695,6 +916,18 @@ class ProviderRoleWorkspaceTest extends TestCase
                 ->assertOk()
                 ->assertViewIs('provider-recipient-officer-workspace');
         }
+
+        $this->actingAs($officer)
+            ->get("/provider/applications/{$recipient->id}")
+            ->assertOk()
+            ->assertViewIs('provider-recipient-record');
+
+        $this->actingAs($officer)
+            ->getJson("/provider/applications/{$recipient->id}/recipient-record")
+            ->assertOk()
+            ->assertJsonPath('record.recipient.name', 'Recipient Record')
+            ->assertJsonPath('record.agreement.status', 'pending')
+            ->assertJsonPath('record.support.agreement_status', 'pending');
 
         $this->assertSame(
             '/provider/workspaces/recipients',
@@ -802,6 +1035,7 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)->get('/provider/workspaces/recipients')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/recipients/active')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/recipients/dashboard/data')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/recipients/data')->assertForbidden();
     }
 
@@ -810,19 +1044,47 @@ class ProviderRoleWorkspaceTest extends TestCase
         $owner = User::factory()->create(['role' => 'provider']);
         $program = $this->program($owner, 'Monitoring Program', 'published');
         $officer = $this->monitoringOfficer($owner, [$program->id]);
+        $this->selectedRecipient($program, $this->applicant('Monitoring', 'Record'), 'accepted');
+        $plan = RecipientMonitoringPlan::query()->create([
+            'scholarship_id' => $program->id,
+            'created_by' => $owner->id,
+            'updated_by' => $owner->id,
+            'frequency' => 'semester',
+            'grace_period_days' => 7,
+            'allow_exception_requests' => true,
+            'status' => 'active',
+            'version' => 1,
+            'activated_at' => now(),
+        ]);
+        $cycle = $this->monitoringCycle($program, $plan, 'Monitoring record', now()->addWeek()->toDateString());
+        $cycle->requirements()->create([
+            'type' => 'program_activity',
+            'title' => 'Required activity',
+            'required' => true,
+            'requires_file' => false,
+            'sort_order' => 0,
+        ]);
 
         $this->actingAs($officer)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/monitoring');
+            ->assertOk()
+            ->assertViewIs('provider-monitoring-officer-dashboard');
 
         $this->actingAs($officer)
             ->get('/provider/monitoring')
-            ->assertRedirect('/provider/workspaces/monitoring?queue=review');
+            ->assertRedirect('/provider/workspaces/monitoring/review');
 
         $this->actingAs($officer)
             ->get('/provider/workspaces/monitoring')
             ->assertOk()
-            ->assertViewIs('provider-monitoring-officer-workspace');
+            ->assertViewIs('provider-monitoring-officer-dashboard');
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/monitoring/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('workspace.key', 'monitoring-officer')
+            ->assertJsonPath('metrics.0.value', 1)
+            ->assertJsonPath('sections.0.items.0.id', $cycle->id);
 
         foreach (['review', 'follow-ups', 'awaiting', 'history'] as $section) {
             $this->actingAs($officer)
@@ -830,6 +1092,26 @@ class ProviderRoleWorkspaceTest extends TestCase
                 ->assertOk()
                 ->assertViewIs('provider-monitoring-officer-workspace');
         }
+
+        $this->actingAs($officer)
+            ->get("/provider/workspaces/monitoring/check-ins/{$cycle->id}")
+            ->assertOk()
+            ->assertViewIs('provider-monitoring-check-in-record');
+
+        $this->actingAs($officer)
+            ->getJson("/provider/workspaces/monitoring/check-ins/{$cycle->id}/data")
+            ->assertOk()
+            ->assertJsonPath('program.title', 'Monitoring Program')
+            ->assertJsonPath('cycle.title', 'Monitoring record')
+            ->assertJsonPath('cycle.provider_record_pending_count', 1)
+            ->assertJsonPath('cycle.pending_review_count', 1);
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/monitoring/data')
+            ->assertOk()
+            ->assertJsonPath('summary.review', 1)
+            ->assertJsonPath('check_ins.0.id', $cycle->id)
+            ->assertJsonPath('check_ins.0.counts.provider_records', 1);
 
         $this->assertSame(
             '/provider/workspaces/monitoring',
@@ -905,6 +1187,11 @@ class ProviderRoleWorkspaceTest extends TestCase
             'sort_order' => 0,
         ]);
         $historyCycle = $this->monitoringCycle($assignedProgram, $plan, 'Past check-in', now()->subDay()->toDateString());
+        $historyCycle->update([
+            'status' => 'closed',
+            'closed_by' => $officer->id,
+            'closed_at' => now(),
+        ]);
         $historyCycle->requirements()->create([
             'type' => 'enrollment',
             'title' => 'Past enrollment record',
@@ -953,6 +1240,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('next_task.work_state', 'review')
             ->assertJsonPath('check_ins.0.id', $reviewCycle->id)
             ->assertJsonPath('check_ins.0.counts.pending_reviews', 1)
+            ->assertJsonPath('check_ins.0.action_url', "/provider/workspaces/monitoring/check-ins/{$reviewCycle->id}")
             ->assertJsonCount(1, 'check_ins');
 
         $this->actingAs($officer)
@@ -1034,27 +1322,61 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)->get('/provider/workspaces/monitoring')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/monitoring/follow-ups')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/monitoring/dashboard/data')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/monitoring/data')->assertForbidden();
+        $program = $this->program($owner, 'Restricted Monitoring Program', 'published');
+        $plan = RecipientMonitoringPlan::query()->create([
+            'scholarship_id' => $program->id,
+            'created_by' => $owner->id,
+            'updated_by' => $owner->id,
+            'frequency' => 'semester',
+            'grace_period_days' => 7,
+            'allow_exception_requests' => true,
+            'status' => 'active',
+            'version' => 1,
+            'activated_at' => now(),
+        ]);
+        $cycle = $this->monitoringCycle($program, $plan, 'Restricted check-in', now()->addWeek()->toDateString());
+        $this->actingAs($reviewer)->get("/provider/workspaces/monitoring/check-ins/{$cycle->id}")->assertForbidden();
+        $this->actingAs($reviewer)->getJson("/provider/workspaces/monitoring/check-ins/{$cycle->id}/data")->assertForbidden();
     }
 
     public function test_benefit_release_officer_enters_a_dedicated_release_desk(): void
     {
+        Storage::fake('local');
         $owner = User::factory()->create(['role' => 'provider']);
         $program = $this->program($owner, 'Release Program', 'published');
         $officer = $this->benefitReleaseOfficer($owner, [$program->id]);
+        $applicant = $this->applicant('Release', 'Record');
+        $applicant->studentProfile()->update([
+            'profile_photo_path' => 'profile-photos/release-record.jpg',
+            'profile_photo_original_name' => 'release-record.jpg',
+        ]);
+        Storage::disk('local')->put('profile-photos/release-record.jpg', 'profile image');
+        $recipient = $this->selectedRecipient($program, $applicant->fresh('studentProfile'), 'accepted');
+        $release = $this->benefitRelease($program, $owner, 'Initial learning allowance', now()->addDay());
+        $this->benefitReleaseRecord($release, $recipient, 'prepared');
 
         $this->actingAs($officer)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/releases');
+            ->assertOk()
+            ->assertViewIs('provider-benefit-release-officer-dashboard');
 
         $this->actingAs($officer)
             ->get('/provider/monitoring')
-            ->assertRedirect('/provider/workspaces/releases?queue=issues');
+            ->assertRedirect('/provider/workspaces/releases/issues');
 
         $this->actingAs($officer)
             ->get('/provider/workspaces/releases')
             ->assertOk()
-            ->assertViewIs('provider-benefit-release-officer-workspace');
+            ->assertViewIs('provider-benefit-release-officer-dashboard');
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/releases/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('workspace.key', 'benefit-release-officer')
+            ->assertJsonPath('metrics.2.value', 1)
+            ->assertJsonPath('sections.1.items.0.id', $release->id);
 
         foreach (['issues', 'record', 'upcoming', 'history'] as $section) {
             $this->actingAs($officer)
@@ -1062,6 +1384,35 @@ class ProviderRoleWorkspaceTest extends TestCase
                 ->assertOk()
                 ->assertViewIs('provider-benefit-release-officer-workspace');
         }
+
+        $this->actingAs($officer)
+            ->get('/provider/workspaces/releases/schedule')
+            ->assertOk()
+            ->assertViewIs('provider-benefit-release-schedule');
+
+        $this->actingAs($officer)
+            ->getJson("/provider/workspaces/releases/schedule/data?program_id={$program->id}&release_at=".urlencode(now()->addWeek()->toIso8601String()))
+            ->assertOk()
+            ->assertJsonPath('selected_program.title', 'Release Program')
+            ->assertJsonPath('candidates.0.name', 'Release Record')
+            ->assertJsonPath('candidates.0.eligible', true)
+            ->assertJsonPath('candidates.0.profile_photo_url', route('provider.applications.profile-photo.view', $recipient, false));
+
+        $this->actingAs($officer)
+            ->get("/provider/workspaces/releases/distributions/{$release->id}")
+            ->assertOk()
+            ->assertViewIs('provider-benefit-release-record');
+
+        $this->actingAs($officer)
+            ->getJson("/provider/workspaces/releases/distributions/{$release->id}/data")
+            ->assertOk()
+            ->assertJsonPath('program.title', 'Release Program')
+            ->assertJsonPath('release.title', 'Initial learning allowance')
+            ->assertJsonPath('release.records.0.name', 'Release Record');
+
+        $this->actingAs($officer)
+            ->get(route('provider.applications.profile-photo.view', $recipient))
+            ->assertOk();
 
         $this->assertSame(
             '/provider/workspaces/releases',
@@ -1112,6 +1463,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('next_task.work_state', 'issues')
             ->assertJsonPath('releases.0.id', $issueRelease->id)
             ->assertJsonPath('releases.0.counts.open_issues', 1)
+            ->assertJsonPath('releases.0.action_url', "/provider/workspaces/releases/distributions/{$issueRelease->id}")
             ->assertJsonCount(1, 'releases')
             ->assertJsonCount(1, 'programs');
 
@@ -1175,7 +1527,10 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)->get('/provider/workspaces/releases')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/releases/record')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/releases/dashboard/data')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/releases/data')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/releases/schedule')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/releases/schedule/data')->assertForbidden();
     }
 
     public function test_organization_profile_manager_enters_a_dedicated_profile_desk(): void
@@ -1185,17 +1540,39 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($manager)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/organization-profile');
+            ->assertOk()
+            ->assertViewIs('provider-organization-profile-manager-dashboard');
 
         $this->actingAs($manager)
             ->get('/provider/workspaces/organization-profile')
             ->assertOk()
-            ->assertViewIs('provider-organization-profile-manager-workspace');
+            ->assertViewIs('provider-organization-profile-manager-dashboard');
+
+        $this->actingAs($manager)
+            ->getJson('/provider/workspaces/organization-profile/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('workspace.key', 'organization-profile-manager')
+            ->assertJsonCount(4, 'metrics');
 
         $this->actingAs($manager)
             ->get('/provider/workspaces/organization-profile/readiness')
             ->assertOk()
             ->assertViewIs('provider-organization-profile-manager-workspace');
+
+        $this->actingAs($manager)
+            ->get('/provider/workspaces/organization-profile/public')
+            ->assertOk()
+            ->assertViewIs('provider-organization-profile-public');
+
+        $this->actingAs($manager)
+            ->get('/provider/workspaces/organization-profile/contact')
+            ->assertOk()
+            ->assertViewIs('provider-organization-profile-contact');
+
+        $this->actingAs($manager)
+            ->get('/provider/workspaces/organization-profile/verification')
+            ->assertOk()
+            ->assertViewIs('provider-organization-profile-verification');
 
         $this->assertSame(
             '/provider/workspaces/organization-profile',
@@ -1320,6 +1697,88 @@ class ProviderRoleWorkspaceTest extends TestCase
         ]);
     }
 
+    public function test_profile_manager_updates_one_profile_area_without_erasing_the_others(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $owner->providerProfile()->update([
+            'provider_name' => 'Section Safe Foundation',
+            'provider_type' => 'foundation',
+            'provider_website' => 'https://section-safe.test',
+            'provider_description' => 'Original public description.',
+            'mission' => 'Support local learners.',
+            'year_established' => 2012,
+            'provider_contact_email' => 'support@section-safe.test',
+            'provider_contact_number' => '09175550001',
+            'contact_department' => 'Scholarship desk',
+            'office_hours' => 'Weekdays',
+            'provider_address' => 'Antipolo City, Rizal',
+            'service_area' => 'Rizal Province',
+            'legal_name' => 'Section Safe Foundation, Inc.',
+            'registration_authority' => 'SEC',
+            'registration_number' => 'SEC-2012-100',
+            'registration_date' => '2012-05-10',
+            'verification_status' => 'approved',
+            'verified_at' => now(),
+        ]);
+        $document = $owner->providerVerificationDocuments()->create([
+            'uploaded_by' => $owner->id,
+            'document_type' => 'organization_registration',
+            'original_name' => 'registration.pdf',
+            'path' => 'provider-verification/registration.pdf',
+            'mime_type' => 'application/pdf',
+            'size' => 500,
+            'status' => 'approved',
+            'uploaded_at' => now(),
+            'terms_accepted_at' => now(),
+            'terms_version' => '1.0',
+        ]);
+        $manager = $this->organizationProfileManager($owner);
+
+        $this->actingAs($manager)
+            ->patchJson('/provider/workspaces/organization-profile/contact', [
+                'provider_contact_email' => 'help@section-safe.test',
+                'provider_contact_number' => '09175550002',
+                'provider_contact_department' => 'Applicant help desk',
+                'provider_office_hours' => 'Monday to Friday',
+                'provider_address' => 'Antipolo City, Rizal',
+                'provider_service_area' => 'Rizal Province',
+            ])
+            ->assertOk()
+            ->assertJsonPath('verification_reset', false);
+
+        $this->assertDatabaseHas('provider_profiles', [
+            'user_id' => $owner->id,
+            'provider_name' => 'Section Safe Foundation',
+            'provider_contact_email' => 'help@section-safe.test',
+            'legal_name' => 'Section Safe Foundation, Inc.',
+            'verification_status' => 'approved',
+        ]);
+
+        $this->actingAs($manager)
+            ->patchJson('/provider/workspaces/organization-profile/public', [
+                'provider_name' => 'Section Safe Foundation',
+                'provider_type' => 'foundation',
+                'provider_website' => 'https://section-safe.test',
+                'provider_description' => 'Updated public description.',
+                'provider_mission' => 'Support local learners.',
+                'provider_year_established' => 2012,
+            ])
+            ->assertOk()
+            ->assertJsonPath('verification_reset', true);
+
+        $this->assertDatabaseHas('provider_profiles', [
+            'user_id' => $owner->id,
+            'provider_description' => 'Updated public description.',
+            'provider_contact_email' => 'help@section-safe.test',
+            'legal_name' => 'Section Safe Foundation, Inc.',
+            'verification_status' => 'pending',
+        ]);
+        $this->assertDatabaseHas('provider_verification_documents', [
+            'id' => $document->id,
+            'status' => 'submitted',
+        ]);
+    }
+
     public function test_non_profile_staff_cannot_open_the_organization_profile_desk(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
@@ -1327,7 +1786,12 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)->get('/provider/workspaces/organization-profile')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/organization-profile/readiness')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/organization-profile/dashboard/data')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/organization-profile/public')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/organization-profile/contact')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/organization-profile/verification')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/organization-profile/data')->assertForbidden();
+        $this->actingAs($reviewer)->patchJson('/provider/workspaces/organization-profile/public')->assertForbidden();
     }
 
     public function test_team_administrator_enters_a_dedicated_access_desk(): void
@@ -1337,7 +1801,8 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($administrator)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/team');
+            ->assertOk()
+            ->assertViewIs('provider-team-administrator-dashboard');
 
         $this->actingAs($administrator)
             ->get('/provider/team')
@@ -1346,7 +1811,13 @@ class ProviderRoleWorkspaceTest extends TestCase
         $this->actingAs($administrator)
             ->get('/provider/workspaces/team')
             ->assertOk()
-            ->assertViewIs('provider-team-administrator-workspace');
+            ->assertViewIs('provider-team-administrator-dashboard');
+
+        $this->actingAs($administrator)
+            ->getJson('/provider/workspaces/team/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('workspace.key', 'team-administrator')
+            ->assertJsonPath('metrics.1.value', 1);
 
         foreach (['setup', 'active', 'suspended'] as $section) {
             $this->actingAs($administrator)
@@ -1354,6 +1825,18 @@ class ProviderRoleWorkspaceTest extends TestCase
                 ->assertOk()
                 ->assertViewIs('provider-team-administrator-workspace');
         }
+
+        $this->actingAs($administrator)
+            ->get('/provider/team/accounts/create')
+            ->assertOk()
+            ->assertViewIs('provider-team-account-form');
+
+        $this->actingAs($administrator)
+            ->getJson('/provider/team/data')
+            ->assertOk()
+            ->assertJsonPath('available_permissions.0', 'manage_programs')
+            ->assertJsonPath('available_roles.0.value', 'manager')
+            ->assertJsonPath('role_presets.program_coordinator.0', 'manage_programs');
 
         $this->assertSame(
             '/provider/workspaces/team',
@@ -1409,9 +1892,9 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $protectedPayload = collect($activeResponse->json('accounts'))->firstWhere('id', $protected->id);
         $this->assertNotNull($protectedPayload);
-        $this->assertFalse($protectedPayload['can_manage']);
-        $this->assertNull($protectedPayload['action_url']);
-        $this->assertSame('This account has access beyond your administrative scope.', $protectedPayload['protected_reason']);
+        $this->assertTrue($protectedPayload['can_manage']);
+        $this->assertSame("/provider/team/accounts/{$protected->id}/edit", $protectedPayload['action_url']);
+        $this->assertNull($protectedPayload['protected_reason']);
         $this->assertNotNull(collect($activeResponse->json('accounts'))->firstWhere('id', $active->id));
 
         $this->actingAs($administrator)
@@ -1420,6 +1903,41 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('accounts.0.id', $suspended->id)
             ->assertJsonPath('accounts.0.work_state', 'suspended')
             ->assertJsonCount(1, 'accounts');
+    }
+
+    public function test_team_administrator_can_provision_an_operational_role_without_receiving_its_workspace(): void
+    {
+        Notification::fake();
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Delegated Program', 'published');
+        $administrator = $this->teamAdministrator($owner);
+
+        $this->actingAs($administrator)
+            ->postJson('/provider/team/accounts', [
+                'first_name' => 'Paolo',
+                'last_name' => 'Santos',
+                'middle_initial' => 'R',
+                'email' => 'paolo.santos@example.test',
+                'username' => 'paolo.santos',
+                'contact_number' => '09175550009',
+                'account_title' => 'program_coordinator',
+                'permissions' => ['manage_programs'],
+                'program_access_mode' => 'selected',
+                'assigned_program_ids' => [$program->id],
+                'password' => 'password123',
+                'password_confirmation' => 'password123',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('account.team_role', 'program_coordinator')
+            ->assertJsonPath('account.permissions.0', 'manage_programs')
+            ->assertJsonPath('account.assigned_program_ids.0', $program->id);
+
+        $this->assertDatabaseHas('users', [
+            'parent_account_id' => $owner->id,
+            'username' => 'paolo.santos',
+            'account_title' => 'program_coordinator',
+        ]);
+        $this->actingAs($administrator)->get('/provider/programs')->assertForbidden();
     }
 
     public function test_team_access_registry_paginates_five_staff_accounts_per_page(): void
@@ -1469,7 +1987,9 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)->get('/provider/workspaces/team')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/team/active')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/team/dashboard/data')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/team/data')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/team/accounts/create')->assertForbidden();
     }
 
     public function test_support_staff_enters_a_dedicated_case_desk(): void
@@ -1479,7 +1999,8 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($staff)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/support');
+            ->assertOk()
+            ->assertViewIs('provider-support-staff-dashboard');
 
         $this->actingAs($staff)
             ->get('/provider/reports')
@@ -1488,7 +2009,13 @@ class ProviderRoleWorkspaceTest extends TestCase
         $this->actingAs($staff)
             ->get('/provider/workspaces/support')
             ->assertOk()
-            ->assertViewIs('provider-support-staff-workspace');
+            ->assertViewIs('provider-support-staff-dashboard');
+
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/support/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('workspace.key', 'support-staff')
+            ->assertJsonPath('metrics.0.value', 0);
 
         foreach (['needs-response', 'waiting', 'platform', 'resolved'] as $section) {
             $this->actingAs($staff)
@@ -1496,6 +2023,17 @@ class ProviderRoleWorkspaceTest extends TestCase
                 ->assertOk()
                 ->assertViewIs('provider-support-staff-workspace');
         }
+
+        $this->actingAs($staff)
+            ->get('/provider/workspaces/support/report-platform-issue')
+            ->assertOk()
+            ->assertViewIs('provider-support-platform-report');
+
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/support/report-platform-issue/data')
+            ->assertOk()
+            ->assertJsonPath('workspace.role', 'Support staff')
+            ->assertJsonStructure(['categories', 'programs']);
 
         $this->assertSame(
             '/provider/workspaces/support',
@@ -1585,6 +2123,39 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonCount(1, 'reports');
 
         $this->actingAs($staff)
+            ->get("/provider/workspaces/support/cases/{$needsAction->id}")
+            ->assertOk()
+            ->assertViewIs('provider-support-case');
+
+        $this->actingAs($staff)
+            ->getJson("/provider/workspaces/support/cases/{$needsAction->id}/data")
+            ->assertOk()
+            ->assertJsonPath('report.id', $needsAction->id)
+            ->assertJsonPath('report.work_state', 'needs_action')
+            ->assertJsonPath('report.action_url', "/provider/workspaces/support/cases/{$needsAction->id}");
+
+        $this->actingAs($staff)
+            ->patchJson("/provider/reports/{$needsAction->id}/status", ['status' => 'resolved'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('provider_response');
+
+        $this->actingAs($staff)
+            ->patchJson("/provider/reports/{$needsAction->id}/status", [
+                'status' => 'resolved',
+                'provider_response' => 'Please upload the current report card under the requested school record item.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('report.work_state', 'waiting')
+            ->assertJsonPath('report.provider_response', 'Please upload the current report card under the requested school record item.');
+
+        $this->assertDatabaseHas('support_reports', [
+            'id' => $needsAction->id,
+            'provider_status' => 'resolved',
+            'provider_response' => 'Please upload the current report card under the requested school record item.',
+            'provider_resolved_by' => $staff->id,
+        ]);
+
+        $this->actingAs($staff)
             ->patchJson("/provider/reports/{$outside->id}/status", ['status' => 'resolved'])
             ->assertForbidden();
     }
@@ -1625,7 +2196,9 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)->get('/provider/workspaces/support')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/support/waiting')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/support/dashboard/data')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/support/data')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/support/report-platform-issue')->assertForbidden();
     }
 
     public function test_billing_staff_enters_a_dedicated_service_request_desk(): void
@@ -1635,12 +2208,19 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($staff)
             ->get('/provider')
-            ->assertRedirect('/provider/workspaces/billing');
+            ->assertOk()
+            ->assertViewIs('provider-billing-staff-dashboard');
 
         $this->actingAs($staff)
             ->get('/provider/workspaces/billing')
             ->assertOk()
-            ->assertViewIs('provider-billing-staff-workspace');
+            ->assertViewIs('provider-billing-staff-dashboard');
+
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/billing/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('workspace.key', 'billing-staff')
+            ->assertJsonPath('metrics.0.value', 0);
 
         foreach (['action', 'active', 'waiting', 'completed'] as $section) {
             $this->actingAs($staff)
@@ -1653,6 +2233,31 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->get('/provider/workspaces/billing/services')
             ->assertOk()
             ->assertViewIs('provider-billing');
+
+        $this->actingAs($staff)
+            ->get('/provider/billing/requests')
+            ->assertRedirect('/provider/workspaces/billing/action');
+
+        foreach (array_keys(config('billing.plans', [])) as $plan) {
+            $this->actingAs($staff)
+                ->get("/provider/workspaces/billing/services/{$plan}")
+                ->assertOk()
+                ->assertViewIs('provider-billing');
+        }
+
+        $purchase = $this->servicePurchase($owner);
+
+        foreach ([
+            "/provider/billing/{$purchase->id}",
+            "/provider/billing/{$purchase->id}/meeting",
+            "/provider/billing/{$purchase->id}/files",
+            "/provider/billing/{$purchase->id}/updates",
+        ] as $recordUrl) {
+            $this->actingAs($staff)
+                ->get($recordUrl)
+                ->assertOk()
+                ->assertViewIs('provider-service-workspace');
+        }
 
         $this->assertSame(
             '/provider/workspaces/billing',
@@ -1744,6 +2349,9 @@ class ProviderRoleWorkspaceTest extends TestCase
 
         $this->actingAs($reviewer)->get('/provider/workspaces/billing')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/billing/active')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/billing/dashboard/data')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/billing/services')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/billing/services/assisted_setup')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/billing/data')->assertForbidden();
     }
 

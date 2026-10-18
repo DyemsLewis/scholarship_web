@@ -6,9 +6,9 @@ use App\Models\User;
 
 final class ProviderWorkspace
 {
-    public const PROGRAM_COORDINATOR_ROUTE = 'provider.workspaces.programs';
+    public const PROGRAM_COORDINATOR_ROUTE = 'provider.programs';
 
-    public const PROGRAM_COORDINATOR_PATH = '/provider/workspaces/programs';
+    public const PROGRAM_COORDINATOR_PATH = '/provider/programs';
 
     public const APPLICATION_REVIEWER_ROUTE = 'provider.workspaces.reviews';
 

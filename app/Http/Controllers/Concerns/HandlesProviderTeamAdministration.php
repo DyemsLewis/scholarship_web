@@ -41,9 +41,7 @@ trait HandlesProviderTeamAdministration
                 'owner' => $owner->name,
             ],
             'accounts' => $accounts->map(fn (User $account) => $this->providerTeamAccountPayload($account))->values(),
-            'available_permissions' => $this->grantableProviderPermissions($request->user()),
-            'available_programs' => $this->providerAssignablePrograms($request->user()),
-            'can_assign_all_programs' => ! $request->user()->hasLimitedProviderProgramAccess(),
+            ...$this->providerTeamConfiguration($request->user()),
         ]);
     }
 
@@ -54,9 +52,7 @@ trait HandlesProviderTeamAdministration
 
         return response()->json([
             'account' => $this->providerTeamAccountPayload($account->loadMissing('providerProfile')),
-            'available_permissions' => $this->grantableProviderPermissions($request->user()),
-            'available_programs' => $this->providerAssignablePrograms($request->user()),
-            'can_assign_all_programs' => ! $request->user()->hasLimitedProviderProgramAccess(),
+            ...$this->providerTeamConfiguration($request->user()),
         ]);
     }
 
@@ -255,11 +251,7 @@ trait HandlesProviderTeamAdministration
     {
         abort_unless($request->user()?->isProvider(), 403);
 
-        if (ProviderWorkspace::usesTeamAdministratorWorkspace($request->user())) {
-            return redirect()->route(ProviderWorkspace::TEAM_ADMINISTRATOR_ROUTE);
-        }
-
-        return view('provider-team');
+        return redirect()->route(ProviderWorkspace::TEAM_ADMINISTRATOR_ROUTE);
     }
 
     public function teamAccountForm(Request $request, ?User $account = null): View|RedirectResponse
@@ -379,7 +371,7 @@ trait HandlesProviderTeamAdministration
 
     private function grantableProviderPermissions(User $actor): array
     {
-        if (! $actor->isManagedAccount()) {
+        if ($this->canDelegateAllProviderPermissions($actor)) {
             return User::PROVIDER_PERMISSIONS;
         }
 
@@ -398,14 +390,16 @@ trait HandlesProviderTeamAdministration
         );
 
         if ($actor->isManagedAccount()) {
-            abort_if(
-                array_diff(
-                    array_intersect(User::PROVIDER_PERMISSIONS, $account->effectivePortalPermissions()),
-                    array_intersect(User::PROVIDER_PERMISSIONS, $actor->effectivePortalPermissions()),
-                ) !== [],
-                403,
-                'You cannot manage a team account with broader permissions than your own.',
-            );
+            if (! $this->canDelegateAllProviderPermissions($actor)) {
+                abort_if(
+                    array_diff(
+                        array_intersect(User::PROVIDER_PERMISSIONS, $account->effectivePortalPermissions()),
+                        array_intersect(User::PROVIDER_PERMISSIONS, $actor->effectivePortalPermissions()),
+                    ) !== [],
+                    403,
+                    'You cannot manage a team account with broader permissions than your own.',
+                );
+            }
 
             if ($actor->hasLimitedProviderProgramAccess()) {
                 abort_unless(
@@ -421,6 +415,48 @@ trait HandlesProviderTeamAdministration
         }
     }
 
+    private function canDelegateAllProviderPermissions(User $actor): bool
+    {
+        return ! $actor->isManagedAccount()
+            || str_replace(['-', ' '], '_', strtolower(trim((string) $actor->account_title))) === 'team_administrator';
+    }
+
+    private function providerTeamConfiguration(User $actor): array
+    {
+        $permissions = $this->grantableProviderPermissions($actor);
+        $roles = collect(self::PROVIDER_TEAM_ROLES)
+            ->filter(function (string $label, string $value) use ($permissions): bool {
+                if ($value === 'custom') {
+                    return true;
+                }
+
+                $preset = self::PROVIDER_TEAM_ROLE_PERMISSION_PRESETS[$value] ?? [];
+
+                return $preset !== [] && array_diff($preset, $permissions) === [];
+            })
+            ->map(fn (string $label, string $value): array => [
+                'value' => $value,
+                'label' => $label,
+            ])
+            ->values();
+
+        return [
+            'available_permissions' => $permissions,
+            'permission_catalog' => collect($permissions)
+                ->map(fn (string $permission): array => [
+                    'value' => $permission,
+                    'label' => self::PROVIDER_GOVERNANCE_RESPONSIBILITIES[$permission]['label'] ?? str($permission)->headline()->toString(),
+                    'description' => self::PROVIDER_GOVERNANCE_RESPONSIBILITIES[$permission]['description'] ?? 'Provides access to this provider responsibility.',
+                ])
+                ->values(),
+            'available_roles' => $roles,
+            'role_presets' => collect(self::PROVIDER_TEAM_ROLE_PERMISSION_PRESETS)
+                ->only($roles->pluck('value')->all())
+                ->map(fn (array $preset): array => array_values(array_intersect($preset, $permissions))),
+            'available_programs' => $this->providerAssignablePrograms($actor),
+            'can_assign_all_programs' => ! $actor->hasLimitedProviderProgramAccess(),
+        ];
+    }
 
     private function providerTeamAccountPayload(User $account): array
     {
@@ -465,5 +501,4 @@ trait HandlesProviderTeamAdministration
             ->values()
             ->all();
     }
-
 }

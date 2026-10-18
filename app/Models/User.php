@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\AcademicRequirement;
+use App\Support\AdminWorkspace;
 use App\Support\ProviderWorkspace;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
@@ -462,6 +463,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'is_organization_owner' => $this->isProvider() && ! $this->isManagedAccount(),
             'provider_operating_mode' => $this->providerOperatingMode(),
             'provider_workspace_url' => ProviderWorkspace::preferredPath($this),
+            'admin_workspace_key' => $this->isAdmin() ? AdminWorkspace::key($this) : null,
+            'admin_workspace_url' => $this->isAdmin() ? AdminWorkspace::preferredPath($this) : null,
             'name' => $this->name,
             'first_name' => $this->first_name,
             'last_name' => $this->last_name,

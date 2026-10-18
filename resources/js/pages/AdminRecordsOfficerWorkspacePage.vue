@@ -57,7 +57,7 @@ async function loadLogs(page = 1) {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/admin/workspaces/records/activity/data', {
+        const response = await window.axios.get(usesPortalManagerWorkspace ? '/admin/log-entries' : '/admin/workspaces/records/activity/data', {
             params: {
                 page,
                 per_page: pagination.value.per_page,

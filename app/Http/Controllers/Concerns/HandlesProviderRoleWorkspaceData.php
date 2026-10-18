@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Concerns;
 
+use App\Domain\Recipients\RecipientSupportCatalog;
 use App\Models\ProviderVerificationDocument;
 use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientMonitoringCycle;
@@ -14,7 +15,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -264,16 +264,13 @@ trait HandlesProviderRoleWorkspaceData
         $oldestSubmittedAt = (clone $reviewable)->min('submitted_at');
 
         $nextReview = (clone $reviewable)
-            ->where(fn (Builder $query) => $query
-                ->where('assigned_reviewer_id', $reviewer->id)
-                ->orWhereNull('assigned_reviewer_id'))
+            ->where('assigned_reviewer_id', $reviewer->id)
             ->with([
                 'applicant.studentProfile',
                 'documents',
                 'assignedReviewer.providerProfile',
                 'scholarship',
             ])
-            ->orderByRaw('CASE WHEN assigned_reviewer_id = ? THEN 0 ELSE 1 END', [$reviewer->id])
             ->orderByRaw("CASE WHEN correction_status = 'submitted' THEN 0 ELSE 1 END")
             ->orderBy('submitted_at')
             ->orderBy('id')
@@ -999,6 +996,60 @@ trait HandlesProviderRoleWorkspaceData
         ]);
     }
 
+    public function benefitReleaseScheduleData(Request $request): JsonResponse
+    {
+        $officer = $request->user();
+        abort_unless($officer?->isProvider(), 403);
+        abort_unless($officer->hasPortalPermission('manage_benefit_releases'), 403);
+
+        $validated = $request->validate([
+            'program_id' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'release_at' => ['sometimes', 'nullable', 'date'],
+        ]);
+        $programs = $this->providerScholarshipsQuery($officer)
+            ->with('benefits')
+            ->orderBy('title')
+            ->get();
+        $program = filled($validated['program_id'] ?? null)
+            ? $programs->firstWhere('id', (int) $validated['program_id'])
+            : $programs->first();
+
+        if (filled($validated['program_id'] ?? null)) {
+            abort_unless($program, 403);
+        }
+
+        $releaseAt = filled($validated['release_at'] ?? null)
+            ? CarbonImmutable::parse($validated['release_at'])
+            : now();
+        $candidates = collect();
+
+        if ($program) {
+            $applications = $this->selectedRecipientApplications($program)
+                ->where('student_response_status', 'accepted')
+                ->values();
+            $cycles = $program->monitoringCycles()
+                ->with(['requirements', 'submissions'])
+                ->get();
+            $candidates = $this->recipientReleaseCandidatesPayload($applications, $cycles, $releaseAt);
+        }
+
+        return response()->json([
+            'programs' => $programs->map(fn (Scholarship $item): array => [
+                'id' => $item->id,
+                'title' => $item->title,
+                'status' => $item->status,
+            ])->values(),
+            'selected_program' => $program ? [
+                'id' => $program->id,
+                'title' => $program->title,
+                'benefits' => $program->benefits
+                    ->map(fn ($benefit): array => $benefit->programPayload())
+                    ->values(),
+            ] : null,
+            'candidates' => $candidates,
+        ]);
+    }
+
     public function organizationProfileManagerWorkspaceData(Request $request): JsonResponse
     {
         $manager = $request->user();
@@ -1068,7 +1119,7 @@ trait HandlesProviderRoleWorkspaceData
                 'fa-building',
                 $identityFields,
                 'Edit identity',
-                route('provider.profile.details', absolute: false),
+                route('provider.workspaces.organization-profile.public', absolute: false),
             ),
             $sectionPayload(
                 'contact',
@@ -1077,7 +1128,7 @@ trait HandlesProviderRoleWorkspaceData
                 'fa-address-book',
                 $contactFields,
                 'Edit contact',
-                route('provider.profile.details', absolute: false),
+                route('provider.workspaces.organization-profile.contact', absolute: false),
             ),
             $sectionPayload(
                 'location',
@@ -1086,7 +1137,7 @@ trait HandlesProviderRoleWorkspaceData
                 'fa-location-dot',
                 $locationFields,
                 'Edit location',
-                route('provider.profile.details', absolute: false),
+                route('provider.workspaces.organization-profile.contact', absolute: false),
             ),
             $sectionPayload(
                 'verification',
@@ -1095,7 +1146,7 @@ trait HandlesProviderRoleWorkspaceData
                 'fa-shield-halved',
                 $verificationFields,
                 'Manage proof',
-                route('provider.profile.verification', absolute: false),
+                route('provider.workspaces.organization-profile.verification', absolute: false),
             ),
         ]);
         $totalFields = $sections->sum('total');
@@ -1124,7 +1175,7 @@ trait HandlesProviderRoleWorkspaceData
                 'title' => 'Replace the rejected verification proof',
                 'detail' => $profile?->verification_notes ?: 'Review the administrator note and upload corrected organization evidence.',
                 'action_label' => 'Review verification',
-                'action_url' => route('provider.profile.verification', absolute: false),
+                'action_url' => route('provider.workspaces.organization-profile.verification', absolute: false),
             ],
             ! $owner->hasVerifiedEmail() => [
                 'state' => 'waiting',
@@ -1132,7 +1183,7 @@ trait HandlesProviderRoleWorkspaceData
                 'title' => 'Organization email is not verified',
                 'detail' => 'The organization owner must use the email verification link before publishing access can be approved.',
                 'action_label' => 'View verification',
-                'action_url' => route('provider.profile.verification', absolute: false),
+                'action_url' => route('provider.workspaces.organization-profile.verification', absolute: false),
             ],
             $firstIncomplete !== null => [
                 'state' => 'complete',
@@ -1148,7 +1199,7 @@ trait HandlesProviderRoleWorkspaceData
                 'title' => 'Verification proof is under review',
                 'detail' => 'The profile is complete. Wait for the administrator decision before replacing submitted proof.',
                 'action_label' => 'View submitted proof',
-                'action_url' => route('provider.profile.verification', absolute: false),
+                'action_url' => route('provider.workspaces.organization-profile.verification', absolute: false),
             ],
             $optionalMissing->isNotEmpty() => [
                 'state' => 'improve',
@@ -1156,7 +1207,7 @@ trait HandlesProviderRoleWorkspaceData
                 'title' => 'Add more public organization context',
                 'detail' => 'Consider adding '.Str::lower($optionalMissing->take(2)->implode(' and ')).'.',
                 'action_label' => 'Improve profile',
-                'action_url' => route('provider.profile.details', absolute: false),
+                'action_url' => route('provider.workspaces.organization-profile.public', absolute: false),
             ],
             default => null,
         };
@@ -1179,6 +1230,24 @@ trait HandlesProviderRoleWorkspaceData
                     'unsubmitted' => 'Proof not submitted',
                     default => 'Pending review',
                 },
+                'values' => [
+                    'provider_name' => $profile?->provider_name,
+                    'provider_type' => $profile?->provider_type,
+                    'provider_website' => $profile?->provider_website,
+                    'provider_description' => $profile?->provider_description,
+                    'provider_mission' => $profile?->mission,
+                    'provider_year_established' => $profile?->year_established,
+                    'provider_contact_email' => $profile?->provider_contact_email,
+                    'provider_contact_number' => $profile?->provider_contact_number,
+                    'provider_contact_department' => $profile?->contact_department,
+                    'provider_office_hours' => $profile?->office_hours,
+                    'provider_address' => $profile?->provider_address,
+                    'provider_service_area' => $profile?->service_area,
+                    'legal_name' => $profile?->legal_name,
+                    'registration_authority' => $profile?->registration_authority,
+                    'registration_number' => $profile?->registration_number,
+                    'registration_date' => $profile?->registration_date?->format('Y-m-d'),
+                ],
             ],
             'summary' => [
                 'completion_percentage' => $completionPercentage,
@@ -1191,6 +1260,9 @@ trait HandlesProviderRoleWorkspaceData
             'sections' => $sections->values(),
             'recent_documents' => $documents
                 ->take(3)
+                ->map(fn (ProviderVerificationDocument $document): array => $this->verificationDocumentPayload($document))
+                ->values(),
+            'verification_documents' => $documents
                 ->map(fn (ProviderVerificationDocument $document): array => $this->verificationDocumentPayload($document))
                 ->values(),
         ]);
@@ -1232,7 +1304,8 @@ trait HandlesProviderRoleWorkspaceData
             $unverified = ! $account->hasVerifiedEmail();
             $passwordReset = (bool) $account->must_reset_password;
             $suspended = $account->isSuspended();
-            $broaderPermissions = array_diff($account->effectivePortalPermissions(), $administratorPermissions) !== [];
+            $broaderPermissions = ! $this->canDelegateAllProviderPermissions($administrator)
+                && array_diff($account->effectivePortalPermissions(), $administratorPermissions) !== [];
             $broaderPrograms = $administrator->hasLimitedProviderProgramAccess()
                 && (! $account->hasLimitedProviderProgramAccess()
                     || array_diff($account->assignedProviderProgramIds(), $administratorProgramIds) !== []);
@@ -1722,6 +1795,35 @@ trait HandlesProviderRoleWorkspaceData
         RecipientMonitoringCycle $cycle,
         array $payload,
     ): array {
+        $nextActions = collect($payload['next_action_counts'] ?? []);
+        $caseStatuses = collect($payload['case_status_counts'] ?? []);
+        $dueStatuses = collect($payload['due_status_counts'] ?? []);
+        $reviewRequirements = (int) $nextActions->get('review_requirements', 0);
+        $providerRecords = (int) $nextActions->get('record_requirement', 0);
+        $closeCases = (int) $nextActions->get('close_check_in', 0);
+        $overdueCases = (int) $nextActions->get('resolve_overdue', 0);
+        $managedFollowUps = (int) $nextActions->get('manage_follow_up', 0);
+        $providerActionCount = (int) $nextActions
+            ->only(['decide_adjustment', 'review_requirements', 'record_requirement', 'close_check_in'])
+            ->sum();
+        $recipientActionCount = (int) $nextActions
+            ->only([
+                'accept_agreement',
+                'submit_requirements',
+                'replace_record',
+                'complete_follow_up',
+                'request_adjustment',
+            ])
+            ->sum();
+        $followUpCaseCount = (int) $caseStatuses->get(RecipientSupportCatalog::CASE_FOLLOW_UP, 0);
+        $completedCaseCount = (int) $caseStatuses
+            ->only([
+                RecipientSupportCatalog::CASE_CLOSED,
+                RecipientSupportCatalog::CASE_WAIVED,
+                RecipientSupportCatalog::CASE_CANCELLED,
+            ])
+            ->sum();
+        $recipientCount = (int) ($payload['recipient_count'] ?? 0);
         $pendingAdjustments = (int) ($payload['pending_adjustment_count'] ?? 0);
         $pendingReviews = (int) ($payload['pending_review_count'] ?? 0);
         $actionNeeded = (int) ($payload['action_needed_count'] ?? 0);
@@ -1734,17 +1836,38 @@ trait HandlesProviderRoleWorkspaceData
                 'Review requests',
                 0,
             ],
-            $pendingReviews > 0 => [
+            $reviewRequirements > 0 => [
                 'review',
-                'Submission review',
-                $pendingReviews.' submitted item'.($pendingReviews === 1 ? '' : 's').' waiting for review',
-                'Review submissions',
+                'Monitoring review',
+                $reviewRequirements.' recipient record'.($reviewRequirements === 1 ? '' : 's').' waiting for review',
+                'Review items',
                 1,
             ],
-            $openInterventions > 0 => [
+            $providerRecords > 0 => [
+                'review',
+                'Provider result needed',
+                $providerRecords.' recipient'.($providerRecords === 1 ? '' : 's').' need a provider-confirmed result',
+                'Record results',
+                1,
+            ],
+            $closeCases > 0 => [
+                'review',
+                'Ready to close',
+                $closeCases.' completed recipient check-in'.($closeCases === 1 ? '' : 's').' need an outcome',
+                'Close check-ins',
+                2,
+            ],
+            $overdueCases > 0 => [
+                'followup',
+                'Overdue review',
+                $overdueCases.' overdue recipient check-in'.($overdueCases === 1 ? '' : 's').' need resolution',
+                'Resolve overdue work',
+                2,
+            ],
+            $followUpCaseCount > 0 || $managedFollowUps > 0 => [
                 'followup',
                 'Open follow-up',
-                $openInterventions.' active intervention'.($openInterventions === 1 ? '' : 's'),
+                $followUpCaseCount.' recipient follow-up'.($followUpCaseCount === 1 ? '' : 's').' active',
                 'Open follow-ups',
                 2,
             ],
@@ -1755,10 +1878,12 @@ trait HandlesProviderRoleWorkspaceData
                 'Review recipients',
                 3,
             ],
-            ($payload['status'] ?? null) === 'open' => [
+            $completedCaseCount < $recipientCount => [
                 'awaiting',
-                'Awaiting uploads',
-                ((int) ($payload['item_pending_count'] ?? 0)).' required item'.((int) ($payload['item_pending_count'] ?? 0) === 1 ? '' : 's').' still pending',
+                $dueStatuses->get('grace_period', 0) > 0 ? 'Request window open' : 'Awaiting recipient',
+                $recipientActionCount > 0
+                    ? $recipientActionCount.' recipient'.($recipientActionCount === 1 ? '' : 's').' have the next step'
+                    : 'No provider decision is required yet',
                 'Track check-in',
                 4,
             ],
@@ -1775,9 +1900,12 @@ trait HandlesProviderRoleWorkspaceData
             ? (int) CarbonImmutable::today()->diffInDays(CarbonImmutable::parse($dueAt), false)
             : null;
         $timingState = match (true) {
-            ($payload['is_past_due'] ?? false) => 'closed',
+            $dueStatuses->get('overdue', 0) > 0 => 'overdue',
+            $dueStatuses->get('grace_period', 0) > 0 => 'grace_period',
+            $dueStatuses->get('extended', 0) > 0 => 'extended',
+            $recipientCount > 0 && $completedCaseCount === $recipientCount => 'closed',
             $daysUntilDue === null => 'unscheduled',
-            $daysUntilDue < 0 => 'overdue',
+            $daysUntilDue < 0 => 'grace_period',
             $daysUntilDue <= 7 => 'due_soon',
             default => 'scheduled',
         };
@@ -1802,19 +1930,25 @@ trait HandlesProviderRoleWorkspaceData
             'due_label' => $cycle->due_at?->format('M d, Y'),
             'days_until_due' => $daysUntilDue,
             'timing_state' => $timingState,
-            'recipient_count' => (int) ($payload['recipient_count'] ?? 0),
+            'recipient_count' => $recipientCount,
             'counts' => [
                 'requirements' => $cycle->requirements->count(),
                 'expected_items' => (int) ($payload['item_expected_count'] ?? 0),
                 'received_items' => (int) ($payload['item_submitted_count'] ?? 0),
                 'pending_items' => (int) ($payload['item_pending_count'] ?? 0),
                 'pending_reviews' => $pendingReviews,
+                'provider_records' => (int) ($payload['provider_record_pending_count'] ?? 0),
                 'pending_adjustments' => $pendingAdjustments,
                 'action_needed' => $actionNeeded,
                 'open_interventions' => $openInterventions,
+                'provider_actions' => $providerActionCount,
+                'recipient_actions' => $recipientActionCount,
+                'followup_cases' => $followUpCaseCount,
+                'overdue_cases' => $overdueCases,
+                'completed_cases' => $completedCaseCount,
             ],
             'action_label' => $actionLabel,
-            'action_url' => route('provider.monitoring.academic', $cycle->scholarship_id, false).'?cycle='.$cycle->id,
+            'action_url' => route('provider.workspaces.monitoring.check-ins.show', $cycle, false),
         ];
     }
 
@@ -1901,7 +2035,7 @@ trait HandlesProviderRoleWorkspaceData
                 'proof' => $release->records->whereNotNull('receipt_path')->count(),
             ],
             'action_label' => $actionLabel,
-            'action_url' => route('provider.monitoring.releases', $release->scholarship_id, false).'?release='.$release->id,
+            'action_url' => route('provider.workspaces.releases.distributions.show', $release, false),
         ];
     }
 
@@ -2002,5 +2136,4 @@ trait HandlesProviderRoleWorkspaceData
             'submitted_at' => $submittedAt?->format('M d, Y h:i A'),
         ];
     }
-
 }

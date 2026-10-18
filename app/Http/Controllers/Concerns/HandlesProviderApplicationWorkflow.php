@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
+use App\Models\ApplicationStageAssignment;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
@@ -419,7 +420,7 @@ trait HandlesProviderApplicationWorkflow
 
         return response()->json([
             'message' => $notification['title'].'.',
-            'application' => $this->applicationPayload($updated, true),
+            'application' => $this->applicationPayloadForProviderActor($updated, $request->user()),
             'review_navigation' => $this->reviewNavigationPayload($updated, $previousStage),
         ]);
     }
@@ -488,8 +489,87 @@ trait HandlesProviderApplicationWorkflow
 
         return response()->json([
             'message' => "Final outcome recorded as {$outcomeLabel}.",
-            'application' => $this->applicationPayload($updated, true),
+            'application' => $this->applicationPayloadForProviderActor($updated, $request->user()),
             'review_navigation' => $this->reviewNavigationPayload($updated, 'decision'),
+        ]);
+    }
+
+    public function reopenApplicationDecision(
+        Request $request,
+        ScholarshipApplication $application,
+    ): JsonResponse {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+        ]);
+        $availability = $this->workflowService->reopenDecisionAvailability($application);
+        abort_unless(
+            $availability['required_permission']
+                && $request->user()->hasPortalPermission($availability['required_permission']),
+            403,
+        );
+
+        $updated = $this->workflowService->reopenLatestDecision(
+            $application,
+            $request->user(),
+            trim($validated['reason']),
+        );
+        app(ScholarshipEventService::class)->syncApplication($updated);
+        $updated = $updated->fresh()->load([
+            'applicant.studentProfile',
+            'documents.reviewer',
+            'schedules',
+            'stageProgresses',
+            'statusHistories.actor',
+            'scholarship.events',
+        ]);
+        $stageLabel = $availability['stage_label'];
+
+        PortalNotification::create([
+            'user_id' => $updated->applicant_id,
+            'type' => 'application_status',
+            'title' => 'Application review reopened',
+            'message' => "The provider reopened the {$stageLabel} result for {$updated->scholarship?->title}. Your application is under review again.",
+            'action_url' => route('dashboard.applications.show', $updated, false),
+        ]);
+        ActivityLog::record(
+            $request->user(),
+            'application_decision_reopened',
+            "{$request->user()->name} reopened {$availability['stage']} for application #{$updated->id}.",
+            $request,
+            [
+                'application_id' => $updated->id,
+                'stage' => $availability['stage'],
+                'previous_result' => $availability['result'],
+                'reason' => trim($validated['reason']),
+            ],
+        );
+        ScholarshipFunnelEvent::record(
+            $updated->applicant,
+            'application_decision_reopened',
+            $updated->scholarship,
+            $updated,
+            'provider',
+            [
+                'stage' => $availability['stage'],
+                'previous_result' => $availability['result'],
+                'reopened_by' => $request->user()->id,
+            ],
+        );
+        app(DecisionSupportService::class)->syncApplication($updated, 'provider_decision_reopened');
+
+        $workspace = match ($availability['stage']) {
+            'screening' => 'review',
+            'decision' => 'decision',
+            default => 'selection',
+        };
+
+        return response()->json([
+            'message' => "{$stageLabel} reopened for review.",
+            'application' => $this->applicationPayloadForProviderActor($updated, $request->user()),
+            'redirect_url' => route('provider.applications.show', $updated, false)."?workspace={$workspace}",
         ]);
     }
 
@@ -722,6 +802,47 @@ trait HandlesProviderApplicationWorkflow
         ]);
     }
 
+    public function claimApplicationReview(Request $request, ScholarshipApplication $application): JsonResponse
+    {
+        $reviewer = $request->user();
+        abort_unless($reviewer?->isProvider(), 403);
+        abort_unless($reviewer->hasPortalPermission('verify_applications'), 403);
+        abort_unless($reviewer->canAccessProviderProgram($application->scholarship), 403);
+
+        $workflow = $this->workflowService->payload($application);
+
+        if (($workflow['current_stage'] ?? null) !== 'screening'
+            || in_array($workflow['application_state'] ?? null, ['closed', 'withdrawn'], true)) {
+            throw ValidationException::withMessages([
+                'application' => 'This application is no longer waiting for screening review.',
+            ]);
+        }
+
+        if ($application->assigned_reviewer_id
+            && (int) $application->assigned_reviewer_id !== (int) $reviewer->id) {
+            throw ValidationException::withMessages([
+                'application' => 'This application is already assigned to another reviewer.',
+            ]);
+        }
+
+        if (! $application->assigned_reviewer_id) {
+            $application->forceFill(['assigned_reviewer_id' => $reviewer->id])->save();
+
+            ActivityLog::record(
+                $reviewer,
+                'application_review_claimed',
+                "{$reviewer->name} claimed application #{$application->id} for review.",
+                $request,
+                ['application_id' => $application->id, 'assigned_reviewer_id' => $reviewer->id],
+            );
+        }
+
+        return response()->json([
+            'message' => 'Application added to your review queue.',
+            'application' => $this->freshApplicationPayload($application, $reviewer),
+        ]);
+    }
+
     public function upsertApplicationSchedule(Request $request, ScholarshipApplication $application): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
@@ -856,7 +977,7 @@ trait HandlesProviderApplicationWorkflow
         return response()->json([
             'message' => "{$eventLabel} schedule published and the applicant was notified.",
             'schedule' => ApplicationSchedulePayload::make($schedule->fresh()),
-            'application' => $this->applicationPayload($freshApplication, true),
+            'application' => $this->applicationPayloadForProviderActor($freshApplication, $request->user()),
         ]);
     }
 
@@ -929,7 +1050,7 @@ trait HandlesProviderApplicationWorkflow
         return response()->json([
             'message' => 'Schedule record updated. The applicant stage was not changed.',
             'schedule' => ApplicationSchedulePayload::make($schedule->fresh()),
-            'application' => $this->applicationPayload($freshApplication, true),
+            'application' => $this->applicationPayloadForProviderActor($freshApplication, $request->user()),
         ]);
     }
 
@@ -1039,7 +1160,7 @@ trait HandlesProviderApplicationWorkflow
             'message' => $needsReplacement
                 ? 'The applicant was asked to upload a new 2x2 photo.'
                 : 'The applicant photo was marked as acceptable.',
-            'application' => $this->freshApplicationPayload($application),
+            'application' => $this->freshApplicationPayload($application, $request->user()),
         ]);
     }
 
@@ -1075,7 +1196,7 @@ trait HandlesProviderApplicationWorkflow
         if ($verificationStatus === 'approved') {
             return response()->json([
                 'message' => 'The applicant academic record is already verified.',
-                'application' => $this->freshApplicationPayload($application),
+                'application' => $this->freshApplicationPayload($application, $request->user()),
             ]);
         }
 
@@ -1096,13 +1217,6 @@ trait HandlesProviderApplicationWorkflow
             ->exists()) {
             throw ValidationException::withMessages([
                 'verification' => 'The applicant must upload an academic record before it can be verified.',
-            ]);
-        }
-
-        if (filled($applicant->studentProfile?->achievements)
-            && ! $applicant->applicantVerificationDocuments()->where('document_type', 'achievement_evidence')->exists()) {
-            throw ValidationException::withMessages([
-                'verification' => 'The applicant must upload evidence for the listed achievement before the profile can be verified.',
             ]);
         }
 
@@ -1205,7 +1319,7 @@ trait HandlesProviderApplicationWorkflow
 
         return response()->json([
             'message' => 'Applicant academic record verified. Application approval remains a separate review decision.',
-            'application' => $this->freshApplicationPayload($application),
+            'application' => $this->freshApplicationPayload($application, $request->user()),
         ]);
     }
 
@@ -1263,7 +1377,7 @@ trait HandlesProviderApplicationWorkflow
 
         return response()->json([
             'message' => $isRequest ? 'Correction request sent to the applicant.' : 'Correction marked as resolved.',
-            'application' => $this->applicationPayload($freshApplication, true),
+            'application' => $this->applicationPayloadForProviderActor($freshApplication, $request->user()),
         ]);
     }
 
@@ -1336,7 +1450,7 @@ trait HandlesProviderApplicationWorkflow
 
         return response()->json([
             'message' => $message,
-            'application' => $this->applicationPayload($updated->fresh(), true),
+            'application' => $this->applicationPayloadForProviderActor($updated->fresh(), $request->user()),
         ]);
     }
 
@@ -1597,7 +1711,7 @@ trait HandlesProviderApplicationWorkflow
 
         return response()->json([
             'message' => $applicantFacingChanged ? 'Application status updated.' : 'Provider review saved.',
-            'application' => $this->applicationPayload($freshApplication, true),
+            'application' => $this->applicationPayloadForProviderActor($freshApplication, $request->user()),
         ]);
     }
 
@@ -1800,30 +1914,9 @@ trait HandlesProviderApplicationWorkflow
 
         return response()->json([
             'message' => 'Document status updated.',
-            'application' => $this->applicationPayload($freshApplication, true),
+            'application' => $this->applicationPayloadForProviderActor($freshApplication, $request->user()),
         ]);
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     private function bulkAdvanceTargets(ScholarshipApplication $application, ?array $readiness = null): array
     {
@@ -1876,7 +1969,6 @@ trait HandlesProviderApplicationWorkflow
         ];
     }
 
-
     private function ensureScheduleCanBePublished(ScholarshipApplication $application, string $type): void
     {
         $workflow = $this->workflowService->payload($application);
@@ -1891,6 +1983,26 @@ trait HandlesProviderApplicationWorkflow
     private function stageActivityIsComplete(ScholarshipApplication $application, string $stage): bool
     {
         if (! ScholarshipSelectionPlan::isSchedulable($stage)) {
+            return true;
+        }
+
+        $normalizedSessionCompleted = ApplicationStageAssignment::query()
+            ->where('scholarship_application_id', $application->id)
+            ->whereIn('status', ['assigned', 'acknowledged'])
+            ->whereHas('attendance', fn (Builder $query) => $query->where('status', '!=', 'pending'))
+            ->whereHas('session', fn (Builder $query) => $query
+                ->where('stage_key', $stage)
+                ->where('status', 'completed')
+                ->where(function (Builder $proofQuery): void {
+                    $proofQuery
+                        ->where('proof_required', false)
+                        ->orWhereHas('evidence', fn (Builder $evidenceQuery) => $evidenceQuery
+                            ->where('scope', 'session')
+                            ->where('is_current', true));
+                }))
+            ->exists();
+
+        if ($normalizedSessionCompleted) {
             return true;
         }
 

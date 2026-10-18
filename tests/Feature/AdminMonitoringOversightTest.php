@@ -9,6 +9,7 @@ use App\Models\RecipientMonitoringSubmission;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Services\RecipientMonitoringCaseService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -98,6 +99,38 @@ class AdminMonitoringOversightTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_admin_workspace_lists_and_reviews_an_exact_monitoring_case(): void
+    {
+        [$admin, $provider, $application, $requirement, $cycle, $case] = $this->monitoringRecord();
+
+        $this->actingAs($admin)
+            ->getJson('/admin/workspaces/reviews/monitoring/data?status=attention')
+            ->assertOk()
+            ->assertJsonPath('items.0.case_id', $case->id)
+            ->assertJsonPath('items.0.application_id', $application->id)
+            ->assertJsonPath('items.0.cycle_title', $cycle->title)
+            ->assertJsonPath('items.0.oversight_status', 'attention')
+            ->assertJsonPath('items.0.next_action_owner', 'Provider');
+
+        $this->actingAs($admin)
+            ->getJson("/admin/monitoring/{$application->id}/data?case={$case->id}")
+            ->assertOk()
+            ->assertJsonPath('record.case_id', $case->id)
+            ->assertJsonPath('record.requirements.0.id', $requirement->id)
+            ->assertJsonPath('record.current_issue.title', 'Check-in is past due');
+
+        $this->actingAs($admin)
+            ->postJson("/admin/monitoring/{$application->id}/oversight-reviews?case={$case->id}", [
+                'outcome' => 'reviewed',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('record.case_id', $case->id)
+            ->assertJsonPath('record.last_review.outcome', 'reviewed');
+
+        $review = $application->monitoringOversightReviews()->latest('id')->firstOrFail();
+        $this->assertSame($case->id, data_get($review->flags_snapshot, 'case_id'));
+    }
+
     private function monitoringRecord(): array
     {
         $admin = User::factory()->create(['role' => 'admin']);
@@ -141,7 +174,8 @@ class AdminMonitoringOversightTest extends TestCase
             'grading_scale' => 'percentage',
             'sort_order' => 1,
         ]);
+        $case = app(RecipientMonitoringCaseService::class)->sync($cycle, $application);
 
-        return [$admin, $provider, $application, $requirement, $cycle];
+        return [$admin, $provider, $application, $requirement, $cycle, $case];
     }
 }

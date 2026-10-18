@@ -10,6 +10,7 @@ use App\Models\ProviderVerificationDocument;
 use App\Models\RecipientBenefitReceiptResponse;
 use App\Models\RecipientBenefitReleaseRecord;
 use App\Models\RecipientMonitoringAdjustmentRequest;
+use App\Models\RecipientMonitoringCase;
 use App\Models\RecipientMonitoringOversightReview;
 use App\Models\RecipientMonitoringSubmission;
 use App\Models\RecipientSupportDecision;
@@ -20,6 +21,7 @@ use App\Rules\PhoneNumber;
 use App\Services\AcademicRecordOcrService;
 use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
+use App\Services\RecipientMonitoringCaseService;
 use App\Services\ScholarshipPublicationGuard;
 use App\Support\AcademicRequirement;
 use App\Support\AdminWorkspace;
@@ -39,7 +41,10 @@ use Throwable;
 
 class AdminController extends Controller
 {
-    public function __construct(private readonly AcademicRecordOcrService $academicRecordOcrService) {}
+    public function __construct(
+        private readonly AcademicRecordOcrService $academicRecordOcrService,
+        private readonly RecipientMonitoringCaseService $monitoringCaseService,
+    ) {}
 
     private const ADMIN_ROLE_PERMISSION_PRESETS = [
         'Account manager' => ['manage_accounts'],
@@ -138,7 +143,7 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         if (AdminWorkspace::usesAccountManagerWorkspace($request->user())) {
-            return redirect()->route(AdminWorkspace::ACCOUNT_MANAGER_ROUTE);
+            return redirect()->route('admin.workspaces.accounts.directory');
         }
 
         if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
@@ -157,7 +162,10 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         if (AdminWorkspace::usesAccountManagerWorkspace($request->user())) {
-            return redirect()->route(AdminWorkspace::ACCOUNT_MANAGER_ROUTE, $user ? ['account' => $user->id] : ['create' => 1]);
+            return redirect()->route(
+                $user ? 'admin.workspaces.accounts.show' : 'admin.workspaces.accounts.create',
+                $user ? ['user' => $user->id] : [],
+            );
         }
 
         if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
@@ -215,9 +223,16 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         if (AdminWorkspace::usesReviewOfficerWorkspace($request->user())) {
-            $query = $request->query('type') ? ['type' => $request->query('type')] : [];
+            $route = match ($request->query('type')) {
+                'providers' => 'admin.workspaces.reviews.providers',
+                'programs' => 'admin.workspaces.reviews.programs',
+                'applicants' => 'admin.workspaces.reviews.applicants',
+                'benefits' => 'admin.workspaces.reviews.benefits',
+                'monitoring' => 'admin.workspaces.reviews.monitoring',
+                default => AdminWorkspace::REVIEW_OFFICER_ROUTE,
+            };
 
-            return redirect()->route(AdminWorkspace::REVIEW_OFFICER_ROUTE, $query);
+            return redirect()->route($route);
         }
 
         if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
@@ -402,7 +417,7 @@ class AdminController extends Controller
         abort_unless($request->user()->isAdmin(), 403);
 
         if (AdminWorkspace::usesRecordsOfficerWorkspace($request->user())) {
-            return redirect()->route(AdminWorkspace::RECORDS_OFFICER_ROUTE, $request->query());
+            return redirect()->route('admin.workspaces.records.activity', $request->query());
         }
 
         if (AdminWorkspace::usesPortalManagerWorkspace($request->user())) {
@@ -764,6 +779,12 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
         abort_unless($this->isRecipientMonitoringRecord($application), 404);
 
+        if ($case = $this->requestedMonitoringCase($request, $application)) {
+            return response()->json([
+                'record' => $this->monitoringCaseOversightPayload($case),
+            ]);
+        }
+
         $application->load($this->monitoringOversightRelations());
 
         return response()->json([
@@ -783,21 +804,27 @@ class AdminController extends Controller
             'notes' => [Rule::requiredIf($request->input('outcome') !== 'reviewed'), 'nullable', 'string', 'max:2000'],
         ]);
 
+        $case = $this->requestedMonitoringCase($request, $application);
         $application->load($this->monitoringOversightRelations());
-        $current = $this->monitoringOversightPayload($application);
+        $current = $case
+            ? $this->monitoringCaseOversightPayload($case)
+            : $this->monitoringOversightPayload($application);
         $review = $application->monitoringOversightReviews()->create([
             'reviewed_by' => $request->user()->id,
             'outcome' => $validated['outcome'],
             'notes' => $validated['notes'] ?? null,
-            'flags_snapshot' => $current['attention_items'],
+            'flags_snapshot' => $case
+                ? ['case_id' => $case->id, 'items' => $current['attention_items']]
+                : $current['attention_items'],
             'reviewed_at' => now(),
         ]);
 
         if (in_array($validated['outcome'], ['follow_up_required', 'escalated'], true)) {
             $application->loadMissing('scholarship.provider');
-            $provider = $application->scholarship?->provider;
-
-            if ($provider) {
+            $this->monitoringProviderRecipients(
+                $application->scholarship,
+                $validated['outcome'] === 'escalated',
+            )->each(function (User $provider) use ($application, $review, $validated): void {
                 PortalNotification::create([
                     'user_id' => $provider->id,
                     'type' => 'monitoring_oversight_review',
@@ -806,9 +833,9 @@ class AdminController extends Controller
                         : 'Monitoring follow-up requested',
                     'message' => $application->scholarship?->title.': '.($validated['notes'] ?? 'Review the recipient monitoring record.'),
                     'action_url' => route('provider.monitoring.show', $application->scholarship, false),
-                    'deduplication_key' => "monitoring-oversight-review:{$review->id}",
+                    'deduplication_key' => "monitoring-oversight-review:{$review->id}:{$provider->id}",
                 ]);
-            }
+            });
         }
 
         ActivityLog::record(
@@ -818,6 +845,7 @@ class AdminController extends Controller
             $request,
             [
                 'scholarship_application_id' => $application->id,
+                'recipient_monitoring_case_id' => $case?->id,
                 'oversight_review_id' => $review->id,
                 'outcome' => $validated['outcome'],
             ],
@@ -827,7 +855,9 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Oversight review recorded.',
-            'record' => $this->monitoringOversightPayload($application, true),
+            'record' => $case
+                ? $this->monitoringCaseOversightPayload($case->fresh())
+                : $this->monitoringOversightPayload($application, true),
         ], 201);
     }
 
@@ -1094,14 +1124,6 @@ class AdminController extends Controller
             ->exists()) {
             return response()->json([
                 'message' => 'The applicant must upload an academic record before the academic result can be verified.',
-            ], 422);
-        }
-
-        if ($validated['verification_status'] === 'approved'
-            && filled($applicant->studentProfile?->achievements)
-            && ! $applicant->applicantVerificationDocuments()->where('document_type', 'achievement_evidence')->exists()) {
-            return response()->json([
-                'message' => 'The applicant must upload evidence for the listed achievement before the profile can be verified.',
             ], 422);
         }
 
@@ -1942,6 +1964,17 @@ class AdminController extends Controller
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
+        ActivityLog::record(
+            $request->user(),
+            'records_users_exported',
+            'Exported user account records.',
+            $request,
+            [
+                'record_count' => User::query()->count(),
+                'filename' => 'scholarship-users.csv',
+            ],
+        );
+
         return response()->streamDownload(function () {
             $handle = fopen('php://output', 'w');
             CsvExport::writeRow($handle, ['ID', 'Name', 'Email', 'Email Verified', 'Username', 'Contact Number', 'Role', 'Account Status', 'Must Reset Password', 'Created At']);
@@ -1973,6 +2006,17 @@ class AdminController extends Controller
     public function exportApplications(Request $request)
     {
         abort_unless($request->user()?->isAdmin(), 403);
+
+        ActivityLog::record(
+            $request->user(),
+            'records_applications_exported',
+            'Exported scholarship application records.',
+            $request,
+            [
+                'record_count' => ScholarshipApplication::query()->count(),
+                'filename' => 'scholarship-applications.csv',
+            ],
+        );
 
         return response()->streamDownload(function () {
             $handle = fopen('php://output', 'w');
@@ -2019,10 +2063,20 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
 
         $validated = $request->validate([
-            'status' => ['sometimes', 'nullable', Rule::in(['all', 'attention', 'reviewed', 'stable', 'closed'])],
+            'status' => ['sometimes', 'nullable', Rule::in(['all', 'attention', 'open', 'reviewed', 'stable', 'closed'])],
             'application_id' => ['sometimes', 'nullable', 'integer', 'exists:scholarship_applications,id'],
+            'case_id' => ['sometimes', 'nullable', 'integer', 'exists:recipient_monitoring_cases,id'],
         ]);
         $status = $validated['status'] ?? 'all';
+
+        if (blank($validated['application_id'] ?? null)) {
+            return $this->exportMonitoringCases(
+                $request,
+                $status,
+                filled($validated['case_id'] ?? null) ? (int) $validated['case_id'] : null,
+            );
+        }
+
         $query = $this->monitoringOversightQuery()->orderBy('id');
 
         if (filled($validated['application_id'] ?? null)) {
@@ -2036,6 +2090,19 @@ class AdminController extends Controller
         $filename = filled($validated['application_id'] ?? null)
             ? "recipient-monitoring-application-{$validated['application_id']}.csv"
             : 'recipient-monitoring-'.$status.'.csv';
+
+        ActivityLog::record(
+            $request->user(),
+            'records_monitoring_exported',
+            'Exported recipient monitoring records.',
+            $request,
+            [
+                'record_count' => $records->count(),
+                'status' => $status,
+                'application_id' => $validated['application_id'] ?? null,
+                'filename' => $filename,
+            ],
+        );
 
         return response()->streamDownload(function () use ($records): void {
             $handle = fopen('php://output', 'w');
@@ -2073,6 +2140,92 @@ class AdminController extends Controller
                     $record['released_total'],
                     $record['release_total'],
                     $record['last_activity_at'],
+                    data_get($record, 'last_review.outcome_label'),
+                    data_get($record, 'last_review.notes'),
+                    data_get($record, 'last_review.reviewed_at'),
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv']);
+    }
+
+    private function exportMonitoringCases(
+        Request $request,
+        string $status,
+        ?int $caseId = null,
+    ) {
+        $records = RecipientMonitoringCase::query()
+            ->with(['cycle', 'application', 'applicant'])
+            ->when($caseId, fn ($query) => $query->whereKey($caseId))
+            ->orderBy('id')
+            ->get()
+            ->map(fn (RecipientMonitoringCase $case): array => $this->monitoringCaseOversightPayload($case))
+            ->when($status !== 'all', function ($items) use ($status) {
+                return $items->filter(fn (array $record): bool => match ($status) {
+                    'open' => ! in_array($record['case_status'], ['closed', 'waived', 'cancelled'], true),
+                    'stable' => $record['oversight_status'] === 'open',
+                    default => $record['oversight_status'] === $status,
+                });
+            })
+            ->values();
+        $filename = $caseId
+            ? "recipient-monitoring-case-{$caseId}.csv"
+            : 'recipient-monitoring-'.$status.'.csv';
+
+        ActivityLog::record(
+            $request->user(),
+            'records_monitoring_exported',
+            'Exported monitoring case oversight records.',
+            $request,
+            [
+                'record_count' => $records->count(),
+                'status' => $status,
+                'recipient_monitoring_case_id' => $caseId,
+                'filename' => $filename,
+            ],
+        );
+
+        return response()->streamDownload(function () use ($records): void {
+            $handle = fopen('php://output', 'w');
+            CsvExport::writeRow($handle, [
+                'Case ID',
+                'Recipient',
+                'Email',
+                'Program',
+                'Provider',
+                'Check-in',
+                'Case Status',
+                'Due Status',
+                'Due Date',
+                'Oversight Status',
+                'Current Exception',
+                'Next Action Owner',
+                'Next Action',
+                'Requirements Confirmed',
+                'Requirements Total',
+                'Latest Admin Outcome',
+                'Latest Admin Note',
+                'Reviewed At',
+            ]);
+
+            foreach ($records as $record) {
+                CsvExport::writeRow($handle, [
+                    $record['case_id'],
+                    $record['applicant_name'],
+                    $record['applicant_email'],
+                    $record['program_title'],
+                    $record['provider_name'],
+                    $record['cycle_title'],
+                    $record['case_status_label'],
+                    $record['due_status_label'],
+                    $record['due_on'],
+                    $record['oversight_label'],
+                    data_get($record, 'current_issue.title'),
+                    data_get($record, 'provider_action.role_label'),
+                    data_get($record, 'provider_action.label'),
+                    $record['requirements_confirmed'],
+                    $record['requirements_total'],
                     data_get($record, 'last_review.outcome_label'),
                     data_get($record, 'last_review.notes'),
                     data_get($record, 'last_review.reviewed_at'),
@@ -2407,6 +2560,251 @@ class AdminController extends Controller
             ->values();
 
         return $oversight;
+    }
+
+    private function requestedMonitoringCase(
+        Request $request,
+        ScholarshipApplication $application,
+    ): ?RecipientMonitoringCase {
+        if (! $request->filled('case')) {
+            return $application->monitoringCases()
+                ->orderByRaw("CASE WHEN due_status = 'overdue' THEN 0 WHEN next_action_role = 'provider' THEN 1 ELSE 2 END")
+                ->orderBy('effective_due_at')
+                ->first();
+        }
+
+        $caseId = filter_var($request->input('case'), FILTER_VALIDATE_INT);
+        abort_unless($caseId, 404);
+
+        return $application->monitoringCases()->whereKey($caseId)->firstOrFail();
+    }
+
+    private function monitoringProviderRecipients(?Scholarship $program, bool $includeOwner)
+    {
+        $owner = $program?->provider;
+        if (! $program || ! $owner) {
+            return collect();
+        }
+
+        $recipients = User::query()
+            ->where('role', 'provider')
+            ->where('account_status', 'active')
+            ->where(function ($query) use ($owner): void {
+                $query->whereKey($owner->id)
+                    ->orWhere('parent_account_id', $owner->id);
+            })
+            ->get()
+            ->filter(fn (User $user): bool => $user->hasPortalPermission('manage_monitoring')
+                && $user->canAccessProviderProgram($program)
+            );
+
+        if ($includeOwner && $owner->isActive()) {
+            $recipients->push($owner);
+        }
+        if ($recipients->isEmpty() && $owner->isActive()) {
+            $recipients->push($owner);
+        }
+
+        return $recipients->unique('id')->values();
+    }
+
+    private function monitoringCaseOversightPayload(RecipientMonitoringCase $case): array
+    {
+        $case->loadMissing(['cycle.requirements', 'application', 'applicant.studentProfile']);
+        $application = $case->application;
+        $case = $this->monitoringCaseService->sync($case->cycle, $application);
+        $case->load([
+            'cycle.requirements',
+            'events.actor',
+            'applicant.studentProfile',
+            'application.scholarship.provider.providerProfile',
+            'application.monitoringOversightReviews.reviewer.adminProfile',
+        ]);
+        $application = $case->application;
+        $submissions = $application->monitoringSubmissions()
+            ->with('requirement')
+            ->where('recipient_monitoring_cycle_id', $case->recipient_monitoring_cycle_id)
+            ->get();
+        $adjustments = $application->monitoringAdjustmentRequests()
+            ->with(['requirement', 'decider'])
+            ->where('recipient_monitoring_cycle_id', $case->recipient_monitoring_cycle_id)
+            ->get();
+        $interventions = $application->monitoringInterventions()
+            ->with(['requirement', 'creator'])
+            ->where('recipient_monitoring_cycle_id', $case->recipient_monitoring_cycle_id)
+            ->get();
+        $casePayload = $this->monitoringCaseService->payload(
+            $case,
+            $adjustments,
+            $interventions,
+            true,
+            'provider',
+        );
+        $requirements = $case->cycle->requirements
+            ->where('required', true)
+            ->map(function ($requirement) use ($case, $submissions): array {
+                $submission = $submissions->firstWhere(
+                    'recipient_monitoring_cycle_requirement_id',
+                    $requirement->id,
+                );
+                $reviewStatus = $submission?->review_status;
+                $status = match (true) {
+                    in_array($reviewStatus, ['met', 'excused'], true) => 'confirmed',
+                    in_array($reviewStatus, ['needs_correction', 'needs_replacement', 'not_met'], true) => 'attention',
+                    $submission !== null => 'review_pending',
+                    $case->due_status === 'overdue' => 'overdue',
+                    default => 'waiting',
+                };
+
+                return [
+                    'id' => $requirement->id,
+                    'title' => $requirement->title,
+                    'status' => $status,
+                    'status_label' => match ($status) {
+                        'confirmed' => 'Confirmed',
+                        'attention' => 'Correction needed',
+                        'review_pending' => 'Provider review',
+                        'overdue' => 'Overdue',
+                        default => 'Waiting',
+                    },
+                    'file' => $submission?->path ? [
+                        'name' => $submission->original_name,
+                        'view_url' => route('admin.monitoring-submissions.view', $submission),
+                    ] : null,
+                ];
+            })
+            ->values();
+
+        if ($requirements->isEmpty()) {
+            $submission = $submissions->firstWhere('recipient_monitoring_cycle_requirement_id', null);
+            $reviewStatus = $submission?->review_status;
+            $status = match (true) {
+                in_array($reviewStatus, ['met', 'excused'], true) => 'confirmed',
+                in_array($reviewStatus, ['needs_correction', 'needs_replacement', 'not_met'], true) => 'attention',
+                $submission !== null => 'review_pending',
+                $case->due_status === 'overdue' => 'overdue',
+                default => 'waiting',
+            };
+            $requirements->push([
+                'id' => 'cycle-'.$case->recipient_monitoring_cycle_id,
+                'title' => $case->cycle->title,
+                'status' => $status,
+                'status_label' => match ($status) {
+                    'confirmed' => 'Confirmed',
+                    'attention' => 'Correction needed',
+                    'review_pending' => 'Provider review',
+                    'overdue' => 'Overdue',
+                    default => 'Waiting',
+                },
+                'file' => $submission?->path ? [
+                    'name' => $submission->original_name,
+                    'view_url' => route('admin.monitoring-submissions.view', $submission),
+                ] : null,
+            ]);
+        }
+
+        $issue = $this->monitoringCaseIssue($case, $casePayload);
+        $latestReview = $application->monitoringOversightReviews
+            ->first(fn (RecipientMonitoringOversightReview $review): bool => (int) data_get($review->flags_snapshot, 'case_id') === $case->id
+            );
+        $reviewIsCurrent = $latestReview?->reviewed_at
+            && $latestReview->reviewed_at->greaterThanOrEqualTo($case->updated_at);
+        $oversightStatus = match (true) {
+            $reviewIsCurrent && $latestReview->outcome === 'reviewed' => 'reviewed',
+            $case->isClosed() => 'closed',
+            $issue !== null => 'attention',
+            default => 'open',
+        };
+
+        return [
+            'application_id' => $application->id,
+            'case_id' => $case->id,
+            'applicant_name' => $case->applicant?->name,
+            'applicant_email' => $case->applicant?->email,
+            'applicant_photo_url' => filled($case->applicant?->studentProfile?->profile_photo_path)
+                ? route('admin.applicants.profile-photo.view', $case->applicant)
+                : null,
+            'program_title' => $application->scholarship?->title,
+            'provider_name' => $application->scholarship?->provider?->providerProfile?->provider_name
+                ?: $application->scholarship?->provider?->name,
+            'cycle_title' => $case->cycle?->title,
+            'case_status' => $casePayload['status'],
+            'case_status_label' => $casePayload['status_label'],
+            'due_status' => $casePayload['due_status'],
+            'due_status_label' => $casePayload['due_status_label'],
+            'due_on' => $casePayload['effective_due_label'],
+            'oversight_status' => $oversightStatus,
+            'oversight_label' => match ($oversightStatus) {
+                'attention' => 'Needs admin attention',
+                'reviewed' => 'Admin reviewed',
+                'closed' => 'Check-in closed',
+                default => 'No current exception',
+            },
+            'current_issue' => $issue,
+            'attention_items' => $issue ? [$issue] : [],
+            'provider_action' => $case->due_status === 'overdue' ? [
+                'key' => 'resolve_overdue',
+                'role' => 'provider',
+                'role_label' => 'Provider',
+                'label' => 'Resolve the overdue check-in',
+            ] : $casePayload['next_action'],
+            'requirements' => $requirements,
+            'requirements_total' => $requirements->count(),
+            'requirements_confirmed' => $requirements->where('status', 'confirmed')->count(),
+            'exception_context' => $casePayload['exception_context'],
+            'timeline' => $casePayload['history'],
+            'last_review' => $latestReview ? [
+                'outcome' => $latestReview->outcome,
+                'outcome_label' => match ($latestReview->outcome) {
+                    'follow_up_required' => 'Provider follow-up required',
+                    'escalated' => 'Escalated',
+                    default => 'Reviewed',
+                },
+                'notes' => $latestReview->notes,
+                'reviewed_by' => $latestReview->reviewer?->name,
+                'reviewed_at' => $latestReview->reviewed_at?->format('M d, Y h:i A'),
+            ] : null,
+        ];
+    }
+
+    private function monitoringCaseIssue(
+        RecipientMonitoringCase $case,
+        array $casePayload,
+    ): ?array {
+        if ($case->isClosed()) {
+            return null;
+        }
+
+        $age = (int) ($case->updated_at?->copy()->startOfDay()->diffInDays(now()->startOfDay()) ?? 0);
+        $overdueDays = (int) ($case->effective_due_at?->copy()->startOfDay()->diffInDays(now()->startOfDay()) ?? 0);
+
+        return match (true) {
+            $case->due_status === 'overdue' => [
+                'severity' => $overdueDays >= 7 ? 'high' : 'medium',
+                'source' => 'check_in',
+                'title' => 'Check-in is past due',
+                'detail' => $overdueDays.' day'.($overdueDays === 1 ? '' : 's').' overdue. '.$casePayload['status_reason'],
+            ],
+            $case->status === 'extension_pending' => [
+                'severity' => 'medium',
+                'source' => 'request',
+                'title' => 'Recipient request needs a decision',
+                'detail' => $casePayload['status_reason'],
+            ],
+            $case->status === 'follow_up' => [
+                'severity' => 'medium',
+                'source' => 'follow_up',
+                'title' => 'Provider follow-up remains open',
+                'detail' => $casePayload['status_reason'],
+            ],
+            $case->next_action_role === 'provider' && $age >= 2 => [
+                'severity' => $age >= 7 ? 'high' : 'medium',
+                'source' => 'provider_action',
+                'title' => $casePayload['next_action']['label'] ?? 'Provider action is waiting',
+                'detail' => 'Waiting for provider action for '.$age.' day'.($age === 1 ? '' : 's').'.',
+            ],
+            default => null,
+        };
     }
 
     private function monitoringOversightQuery()

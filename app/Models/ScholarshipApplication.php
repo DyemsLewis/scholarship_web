@@ -160,6 +160,21 @@ class ScholarshipApplication extends Model
         return $this->hasMany(ApplicationStageProgress::class)->orderBy('position');
     }
 
+    public function stageAssignments(): HasMany
+    {
+        return $this->hasMany(ApplicationStageAssignment::class);
+    }
+
+    public function stageEvidence(): HasMany
+    {
+        return $this->hasMany(ApplicationStageEvidence::class);
+    }
+
+    public function stageAuditEvents(): HasMany
+    {
+        return $this->hasMany(ApplicationStageAuditEvent::class);
+    }
+
     public function monitoringSubmissions(): HasMany
     {
         return $this->hasMany(RecipientMonitoringSubmission::class);
@@ -175,9 +190,19 @@ class ScholarshipApplication extends Model
         return $this->hasMany(RecipientMonitoringIntervention::class);
     }
 
+    public function monitoringCases(): HasMany
+    {
+        return $this->hasMany(RecipientMonitoringCase::class);
+    }
+
     public function benefitReleaseRecords(): HasMany
     {
         return $this->hasMany(RecipientBenefitReleaseRecord::class);
+    }
+
+    public function benefitEntitlements(): HasMany
+    {
+        return $this->hasMany(RecipientBenefitEntitlement::class);
     }
 
     public function benefitReceiptResponses(): HasMany

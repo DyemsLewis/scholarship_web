@@ -46,36 +46,40 @@ class ProviderGranularPermissionTest extends TestCase
 
         $this->actingAs($verifier)
             ->get("/provider/programs/{$program->id}/applications/review")
-            ->assertRedirect("/provider/workspaces/reviews?program_id={$program->id}");
+            ->assertRedirect("/provider/workspaces/reviews/assigned?program_id={$program->id}");
         $this->actingAs($verifier)->get("/provider/programs/{$program->id}/applications/activities")->assertForbidden();
         $this->actingAs($verifier)->get('/provider/monitoring')->assertForbidden();
 
         $this->actingAs($selectionOfficer)
             ->get("/provider/programs/{$program->id}/applications/activities")
-            ->assertRedirect("/provider/workspaces/selection?queue=setup&program_id={$program->id}");
+            ->assertRedirect("/provider/workspaces/selection/unassigned?program_id={$program->id}");
         $this->actingAs($selectionOfficer)->get("/provider/programs/{$program->id}/applications/review")->assertForbidden();
         $this->actingAs($selectionOfficer)->get("/provider/programs/{$program->id}/applications/decisions")->assertForbidden();
 
         $this->actingAs($decisionOfficer)
             ->get("/provider/programs/{$program->id}/applications/decisions")
-            ->assertRedirect("/provider/workspaces/decisions?queue=pending&program_id={$program->id}");
+            ->assertRedirect("/provider/workspaces/decisions/pending?program_id={$program->id}");
         $this->actingAs($decisionOfficer)->get("/provider/programs/{$program->id}/applications/activities")->assertForbidden();
 
         $this->actingAs($recipientOfficer)
             ->get("/provider/programs/{$program->id}/applications/recipients")
-            ->assertRedirect("/provider/workspaces/recipients?queue=awaiting&program_id={$program->id}");
+            ->assertRedirect("/provider/workspaces/recipients/agreements?program_id={$program->id}");
         $this->actingAs($recipientOfficer)->get("/provider/monitoring/{$program->id}/academic")->assertForbidden();
 
         $this->actingAs($monitoringOfficer)
             ->get('/provider/monitoring')
-            ->assertRedirect('/provider/workspaces/monitoring?queue=review');
-        $this->actingAs($monitoringOfficer)->get("/provider/monitoring/{$program->id}/academic")->assertOk();
+            ->assertRedirect('/provider/workspaces/monitoring/review');
+        $this->actingAs($monitoringOfficer)
+            ->get("/provider/monitoring/{$program->id}/academic")
+            ->assertRedirect("/provider/workspaces/monitoring/review?program_id={$program->id}");
         $this->actingAs($monitoringOfficer)->get("/provider/monitoring/{$program->id}/releases")->assertForbidden();
 
-        $this->actingAs($releaseOfficer)->get("/provider/monitoring/{$program->id}/releases")->assertOk();
+        $this->actingAs($releaseOfficer)
+            ->get("/provider/monitoring/{$program->id}/releases")
+            ->assertRedirect("/provider/workspaces/releases/upcoming?program_id={$program->id}");
         $this->actingAs($releaseOfficer)
             ->get('/provider/monitoring')
-            ->assertRedirect('/provider/workspaces/releases?queue=issues');
+            ->assertRedirect('/provider/workspaces/releases/issues');
         $this->actingAs($releaseOfficer)->get("/provider/monitoring/{$program->id}/academic")->assertForbidden();
     }
 

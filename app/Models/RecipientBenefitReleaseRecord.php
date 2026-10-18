@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RecipientBenefitReleaseRecord extends Model
@@ -56,5 +57,10 @@ class RecipientBenefitReleaseRecord extends Model
     public function receiptResponse(): HasOne
     {
         return $this->hasOne(RecipientBenefitReceiptResponse::class);
+    }
+
+    public function allocations(): HasMany
+    {
+        return $this->hasMany(RecipientBenefitReleaseAllocation::class);
     }
 }

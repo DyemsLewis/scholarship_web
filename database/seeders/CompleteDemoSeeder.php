@@ -3,6 +3,10 @@
 namespace Database\Seeders;
 
 use App\Models\ApplicantVerificationDocument;
+use App\Models\ApplicationStageAssignment;
+use App\Models\ApplicationStageAuditEvent;
+use App\Models\ApplicationStageEvidence;
+use App\Models\ApplicationStageSession;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\RecipientBenefitReceiptResponse;
@@ -23,6 +27,7 @@ use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Support\ReviewRubric;
 use App\Support\Terms;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -33,6 +38,8 @@ class CompleteDemoSeeder extends Seeder
 {
     private const PASSWORD = 'password123';
 
+    private const PRODUCTION_CONFIRMATION = 'BUILD_COMPLETE_DEMONSTRATION';
+
     private const REQUIREMENTS = [
         'Certificate of enrollment',
         'Latest report card or grades',
@@ -42,8 +49,13 @@ class CompleteDemoSeeder extends Seeder
 
     public function run(): void
     {
-        if (! app()->environment(['local', 'testing'])) {
-            throw new RuntimeException('The complete demo seeder is restricted to local and testing environments.');
+        if (! app()->environment(['local', 'testing', 'production'])) {
+            throw new RuntimeException('The complete demo seeder is restricted to recognized application environments.');
+        }
+
+        if (app()->environment('production')
+            && getenv('DEMO_SEED_CONFIRM') !== self::PRODUCTION_CONFIRMATION) {
+            throw new RuntimeException('Production demo seeding requires explicit one-time confirmation.');
         }
 
         if (User::query()->exists()) {
@@ -73,6 +85,7 @@ class CompleteDemoSeeder extends Seeder
             $applications->put($record['scenario'], $application);
         }
 
+        $this->call(DemoSelectionActivitySeeder::class);
         $this->seedRecipientMonitoring($provider, $scholarship, $applications);
         $this->seedSupportReports(
             $admin,
@@ -89,16 +102,16 @@ class CompleteDemoSeeder extends Seeder
             throw new RuntimeException('Demo IDs did not restart at 1. Reset the database before running this seeder.');
         }
 
-        $this->command?->info('Complete local demo created with role teams, program lifecycle examples, and full workflow branch coverage.');
+        $this->command?->info('Complete demonstration created with role teams, program lifecycle examples, and full workflow branch coverage.');
     }
 
     private function seedAdmin(): User
     {
         $admin = User::query()->create([
-            'email' => 'admin@findscholarship.test',
+            'email' => 'superadmin@findscholarship.test',
             'username' => 'superadmin',
             'role' => 'admin',
-            'password' => env('DEMO_PASSWORD', self::PASSWORD),
+            'password' => $this->demoPassword(admin: true),
             'account_status' => 'active',
             'must_reset_password' => false,
             'terms_accepted_at' => now()->subMonths(6),
@@ -120,12 +133,12 @@ class CompleteDemoSeeder extends Seeder
     private function seedProvider(User $admin): User
     {
         $provider = User::query()->create([
-            'email' => 'programs@tulayaral.test',
-            'username' => 'tulayaral',
+            'email' => 'programs@harborlight.test',
+            'username' => 'harborlight',
             'role' => 'provider',
             'account_title' => 'Executive Program Director',
             'permissions' => User::PROVIDER_PERMISSIONS,
-            'password' => env('DEMO_PASSWORD', self::PASSWORD),
+            'password' => $this->demoPassword(),
             'account_status' => 'active',
             'must_reset_password' => false,
             'terms_accepted_at' => now()->subMonths(5),
@@ -134,28 +147,28 @@ class CompleteDemoSeeder extends Seeder
         ]);
         $provider->forceFill(['email_verified_at' => now()->subMonths(5)])->save();
         $provider->providerProfile()->create([
-            'first_name' => 'Mara',
-            'last_name' => 'Reyes',
-            'middle_initial' => 'L',
+            'first_name' => 'Isabel',
+            'last_name' => 'Quinto',
+            'middle_initial' => 'M',
             'contact_number' => '09171234567',
             'representative_position' => 'Executive Program Director',
-            'provider_name' => 'Tulay Aral Community Foundation',
+            'provider_name' => 'Harborlight Education Collective',
             'provider_type' => 'non_profit',
-            'provider_website' => 'https://findscholarship.online/providers/tulay-aral',
-            'provider_address' => 'Barangay San Isidro, Antipolo City, Rizal',
-            'provider_description' => 'A community education foundation helping qualified senior high school learners stay enrolled and prepare for college.',
-            'mission' => 'Make practical education support easier to access, verify, and sustain for learners with limited resources.',
-            'year_established' => 2018,
-            'service_area' => 'Antipolo City and selected communities in Rizal',
-            'logo_path' => '/images/programs/tulay-aral-logo.png',
-            'provider_contact_email' => 'programs@tulayaral.test',
+            'provider_website' => 'https://findscholarship.online/providers/harborlight',
+            'provider_address' => 'Barangay Mayamot, Antipolo City, Rizal',
+            'provider_description' => 'A demonstration education collective coordinating verified study support, selection activities, and recipient services for senior high school learners.',
+            'mission' => 'Connect learners with accountable education support and clear pathways from application through program completion.',
+            'year_established' => 2019,
+            'service_area' => 'Antipolo City and nearby communities in Rizal',
+            'logo_path' => '/images/demo/providers/harborlight-collective.svg',
+            'provider_contact_email' => 'programs@harborlight.test',
             'provider_contact_number' => '09171234567',
             'contact_department' => 'Scholarship Programs Office',
             'office_hours' => 'Monday to Friday, 8:30 AM to 5:00 PM',
-            'legal_name' => 'Tulay Aral Community Foundation, Inc.',
+            'legal_name' => 'Harborlight Education Collective, Inc.',
             'registration_authority' => 'Securities and Exchange Commission',
-            'registration_number' => 'DEMO-CN201812345',
-            'registration_date' => '2018-06-18',
+            'registration_number' => 'DEMO-CN201945821',
+            'registration_date' => '2019-08-14',
             'verification_status' => 'approved',
             'verification_notes' => 'Complete fictional organization record approved for local system demonstration.',
             'verified_at' => now()->subMonths(4),
@@ -167,7 +180,7 @@ class CompleteDemoSeeder extends Seeder
             'representative_authorization' => 'Representative authorization letter',
             'organization_profile' => 'Organization profile and program history',
         ] as $type => $label) {
-            $contents = $this->demoDocument('Tulay Aral Community Foundation', $label, 'Provider verification record');
+            $contents = $this->demoDocument('Harborlight Education Collective', $label, 'Provider verification record');
             $path = "demo-showcase/provider/{$type}.svg";
             Storage::disk('local')->put($path, $contents);
             $provider->providerVerificationDocuments()->create([
@@ -192,8 +205,8 @@ class CompleteDemoSeeder extends Seeder
     {
         $scholarship = Scholarship::query()->create([
             'provider_id' => $provider->id,
-            'image_path' => '/images/programs/tulay-aral-logo.png',
-            'title' => 'Tulay Aral Complete Path Scholarship',
+            'image_path' => '/images/demo/programs/harborlight-scholars.svg',
+            'title' => 'Harborlight Senior Scholars Program',
             'category' => 'Financial assistance',
             'program_cycle' => 'School Year 2026-2027',
             'description' => 'A year-long senior high school scholarship with education allowance, learning materials, mentoring, and structured recipient support.',
@@ -211,8 +224,8 @@ class CompleteDemoSeeder extends Seeder
             'eligible_locations' => "Rizal\nMetro Manila",
             'income_requirement' => 'PHP 10,000 - 20,000',
             'exclude_current_scholarship_recipients' => true,
-            'location_name' => 'Tulay Aral Community Learning Hub',
-            'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
+            'location_name' => 'Harborlight Learning Center',
+            'location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
             'latitude' => 14.6255000,
             'longitude' => 121.1245000,
             'requirements' => implode("\n", self::REQUIREMENTS),
@@ -221,8 +234,8 @@ class CompleteDemoSeeder extends Seeder
             'handoff_mode' => 'onsite',
             'handoff_instructions' => 'Bring the original enrollment record, latest grades, and recent school ID for formal verification.',
             'handoff_deadline' => now()->addDays(20)->toDateString(),
-            'handoff_location_name' => 'Tulay Aral Community Learning Hub',
-            'handoff_location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
+            'handoff_location_name' => 'Harborlight Learning Center',
+            'handoff_location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
             'review_rubric' => ReviewRubric::DEFAULT,
             'application_questions' => [
                 ['id' => 'study_goal', 'prompt' => 'How will the scholarship help you continue your studies?', 'required' => true],
@@ -249,15 +262,15 @@ class CompleteDemoSeeder extends Seeder
                 'noncompliance_consequence' => 'The provider contacts the recipient and reviews the circumstances before delaying or ending unreleased support.',
                 'exit_or_exception_process' => 'Recipients may request more time or an exception for illness, transfer, family circumstances, or another documented issue.',
             ],
-            'contact_email' => 'programs@tulayaral.test',
+            'contact_email' => 'programs@harborlight.test',
             'contact_number' => '09171234567',
             'application_opens_at' => now()->subDays(30)->toDateString(),
             'deadline' => now()->addDays(45)->toDateString(),
             'expected_results_at' => now()->addDays(65)->toDateString(),
             'support_starts_at' => now()->subDays(20)->toDateString(),
             'support_ends_at' => now()->addMonths(8)->toDateString(),
-            'official_program_url' => 'https://findscholarship.online/scholarships/tulay-aral-complete-path',
-            'contact_person' => 'Mara L. Reyes',
+            'official_program_url' => 'https://findscholarship.online/scholarships/harborlight-senior-scholars',
+            'contact_person' => 'Isabel M. Quinto',
             'contact_department' => 'Scholarship Programs Office',
             'status' => 'published',
             'views_count' => 148,
@@ -297,11 +310,11 @@ class CompleteDemoSeeder extends Seeder
         $scholarship->events()->createMany([
             [
                 'type' => 'exam',
-                'title' => 'Complete Path Qualifying Exam',
+                'title' => 'Senior Scholars Qualifying Exam',
                 'scheduled_at' => now()->addDays(8)->setTime(9, 0),
                 'mode' => 'onsite',
-                'venue' => 'Tulay Aral Community Learning Hub',
-                'location_address' => 'Barangay San Isidro, Antipolo City, Rizal',
+                'venue' => 'Harborlight Learning Center',
+                'location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
                 'instructions' => 'Bring a recent school ID, two pencils, and the schedule notice.',
                 'status' => 'scheduled',
                 'created_by' => $provider->id,
@@ -312,7 +325,7 @@ class CompleteDemoSeeder extends Seeder
                 'title' => 'Finalist Online Interview',
                 'scheduled_at' => now()->addDays(15)->setTime(13, 30),
                 'mode' => 'online',
-                'online_url' => 'https://meet.google.com/demo-tulay-aral-room',
+                'online_url' => 'https://meet.google.com/demo-harborlight-room',
                 'instructions' => 'Join ten minutes early and keep your school ID ready.',
                 'status' => 'scheduled',
                 'created_by' => $provider->id,
@@ -322,7 +335,7 @@ class CompleteDemoSeeder extends Seeder
 
         $scholarship->announcements()->create([
             'audience' => 'all_applicants',
-            'title' => 'Complete Path application cycle is active',
+            'title' => 'Senior Scholars application cycle is active',
             'message' => 'Check your application record for the next required action and schedule.',
             'recipient_count' => count($this->applicantRecords()),
             'published_by' => $provider->id,
@@ -337,7 +350,8 @@ class CompleteDemoSeeder extends Seeder
     {
         $definitions = [
             'draft' => [
-                'title' => 'Tulay Aral Transportation Starter Grant',
+                'title' => 'Commute Forward Student Grant',
+                'image_path' => '/images/demo/programs/commute-forward.svg',
                 'description' => 'A draft transport-support program that the coordinator can finish and submit for review.',
                 'status' => 'draft',
                 'application_opens_at' => now()->addMonths(2)->toDateString(),
@@ -345,7 +359,8 @@ class CompleteDemoSeeder extends Seeder
                 'views_count' => 0,
             ],
             'pending_review' => [
-                'title' => 'Tulay Aral Community Technology Access Grant',
+                'title' => 'Connected Classrooms Access Grant',
+                'image_path' => '/images/demo/programs/connected-classrooms.svg',
                 'description' => 'A completed program submission waiting for administrator publication review.',
                 'status' => 'pending_review',
                 'application_opens_at' => now()->addMonth()->toDateString(),
@@ -353,7 +368,8 @@ class CompleteDemoSeeder extends Seeder
                 'views_count' => 0,
             ],
             'closed' => [
-                'title' => 'Tulay Aral School Essentials Grant 2025-2026',
+                'title' => 'Ready-to-Learn Essentials Fund 2025-2026',
+                'image_path' => '/images/demo/programs/ready-to-learn.svg',
                 'program_cycle' => 'School Year 2025-2026',
                 'description' => 'A completed prior-cycle program retained for records and reporting demonstrations.',
                 'status' => 'closed',
@@ -364,7 +380,8 @@ class CompleteDemoSeeder extends Seeder
                 'views_count' => 224,
             ],
             'rejected' => [
-                'title' => 'Tulay Aral Weekend Learning Hub Grant',
+                'title' => 'Saturday Learning Support Award',
+                'image_path' => '/images/demo/programs/saturday-learning.svg',
                 'description' => 'A returned program example that requires clearer release conditions before resubmission.',
                 'status' => 'rejected',
                 'application_opens_at' => now()->addMonths(2)->toDateString(),
@@ -372,7 +389,8 @@ class CompleteDemoSeeder extends Seeder
                 'views_count' => 0,
             ],
             'full_capacity' => [
-                'title' => 'Tulay Aral One-Time College Readiness Award',
+                'title' => 'College Launch One-Time Grant',
+                'image_path' => '/images/demo/programs/college-launch.svg',
                 'description' => 'A published one-slot award used to demonstrate a program that has reached recipient capacity.',
                 'status' => 'published',
                 'slots_available' => 1,
@@ -408,7 +426,7 @@ class CompleteDemoSeeder extends Seeder
                 'username' => 'provider.pending',
                 'first_name' => 'Leah',
                 'last_name' => 'Mercado',
-                'provider_name' => 'Lakbay Aral Learning Network',
+                'provider_name' => 'Pinebridge Learner Support Network',
                 'status' => 'pending',
                 'notes' => 'Organization registration and representative authority are waiting for administrator review.',
             ],
@@ -417,7 +435,7 @@ class CompleteDemoSeeder extends Seeder
                 'username' => 'provider.revision',
                 'first_name' => 'Anton',
                 'last_name' => 'Rivera',
-                'provider_name' => 'Gabay Kabataan Education Initiative',
+                'provider_name' => 'Eastbay Youth Advancement Trust',
                 'status' => 'rejected',
                 'notes' => 'Replace the expired registration proof and upload a signed representative authorization.',
             ],
@@ -430,7 +448,7 @@ class CompleteDemoSeeder extends Seeder
                 'role' => 'provider',
                 'account_title' => 'Organization Representative',
                 'permissions' => User::PROVIDER_PERMISSIONS,
-                'password' => env('DEMO_PASSWORD', self::PASSWORD),
+                'password' => $this->demoPassword(),
                 'account_status' => 'active',
                 'must_reset_password' => false,
                 'terms_accepted_at' => now()->subMonth(),
@@ -492,7 +510,7 @@ class CompleteDemoSeeder extends Seeder
             'email' => $email,
             'username' => $username,
             'role' => 'applicant',
-            'password' => env('DEMO_PASSWORD', self::PASSWORD),
+            'password' => $this->demoPassword(),
             'account_status' => 'active',
             'must_reset_password' => false,
             'terms_accepted_at' => now()->subMonths(2),
@@ -854,7 +872,7 @@ class CompleteDemoSeeder extends Seeder
             $application,
             'selected',
             $provider,
-            'Selected for the Complete Path Scholarship after the full provider review.',
+            'Selected for the Senior Scholars Program after the full provider review.',
             'approved_for_award',
         );
         $application->update(['awarded_amount' => 18000]);
@@ -898,7 +916,7 @@ class CompleteDemoSeeder extends Seeder
                 'student_response_terms_version' => $application->provider_contract_terms_version,
                 'provider_contract_terms_accepted_at' => $acceptedAt,
                 'provider_contract_acceptance_ip' => '127.0.0.1',
-                'provider_contract_acceptance_user_agent' => 'Complete local demo seeder',
+                'provider_contract_acceptance_user_agent' => 'Complete demonstration seeder',
             ]);
             ApplicationStatusHistory::query()->create([
                 'scholarship_application_id' => $application->id,
@@ -925,12 +943,12 @@ class CompleteDemoSeeder extends Seeder
             : now()->addDays($type === 'exam' ? 6 : 10)->setTime($type === 'exam' ? 9 : 14, 0);
         $application->schedules()->create([
             'type' => $type,
-            'title' => $type === 'exam' ? 'Complete Path Qualifying Exam' : 'Finalist Online Interview',
+            'title' => $type === 'exam' ? 'Senior Scholars Qualifying Exam' : 'Finalist Online Interview',
             'scheduled_at' => $scheduledAt,
             'mode' => $online ? 'online' : 'onsite',
-            'venue' => $online ? null : 'Tulay Aral Community Learning Hub',
-            'location_address' => $online ? null : 'Barangay San Isidro, Antipolo City, Rizal',
-            'online_url' => $online ? 'https://meet.google.com/demo-tulay-aral-room' : null,
+            'venue' => $online ? null : 'Harborlight Learning Center',
+            'location_address' => $online ? null : 'Barangay Mayamot, Antipolo City, Rizal',
+            'online_url' => $online ? 'https://meet.google.com/demo-harborlight-room' : null,
             'instructions' => $type === 'exam'
                 ? 'Bring a recent school ID and arrive twenty minutes early.'
                 : 'Join ten minutes early and keep your school ID ready.',
@@ -941,6 +959,233 @@ class CompleteDemoSeeder extends Seeder
             'completed_at' => $completed ? $scheduledAt->copy()->addMinutes($type === 'exam' ? 90 : 30) : null,
             'created_by' => $provider->id,
             'updated_by' => $provider->id,
+        ]);
+    }
+
+    public function seedSelectionActivities(
+        User $provider,
+        Scholarship $scholarship,
+        Collection $applications,
+    ): void {
+        $formalApplication = $applications->get('formal_application');
+        $formalApplication?->stageProgresses()
+            ->where('stage_key', 'formal_application')
+            ->where('status', 'current')
+            ->update([
+                'operational_status' => 'waiting_for_schedule',
+                'proof_required' => false,
+                'updated_at' => now(),
+            ]);
+
+        $this->seedSelectionActivity(
+            provider: $provider,
+            scholarship: $scholarship,
+            application: $applications->get('exam_scheduled'),
+            stage: 'exam',
+            title: 'Qualifying exam - Morning group',
+            startsAt: now()->addDays(6)->setTime(9, 0),
+            durationMinutes: 90,
+            mode: 'onsite',
+            status: 'scheduled',
+        );
+        $this->seedSelectionActivity(
+            provider: $provider,
+            scholarship: $scholarship,
+            application: $applications->get('interview_scheduled'),
+            stage: 'interview',
+            title: 'Finalist interview - Online group',
+            startsAt: now()->addDays(10)->setTime(14, 0),
+            durationMinutes: 30,
+            mode: 'online',
+            status: 'scheduled',
+        );
+        $this->seedSelectionActivity(
+            provider: $provider,
+            scholarship: $scholarship,
+            application: $applications->get('exam_result'),
+            stage: 'exam',
+            title: 'Qualifying exam - Completed group',
+            startsAt: now()->subDays(10)->setTime(9, 0),
+            durationMinutes: 90,
+            mode: 'onsite',
+            status: 'completed',
+            includeProof: true,
+        );
+        $this->seedSelectionActivity(
+            provider: $provider,
+            scholarship: $scholarship,
+            application: $applications->get('interview_result'),
+            stage: 'interview',
+            title: 'Finalist interview - Completed group',
+            startsAt: now()->subDays(5)->setTime(14, 0),
+            durationMinutes: 30,
+            mode: 'online',
+            status: 'completed',
+            includeProof: true,
+        );
+
+        // This historical exception keeps the admin oversight queue demonstrable.
+        $this->seedSelectionActivity(
+            provider: $provider,
+            scholarship: $scholarship,
+            application: $applications->get('exam_failed'),
+            stage: 'exam',
+            title: 'Qualifying exam - Proof follow-up',
+            startsAt: now()->subDays(13)->setTime(9, 0),
+            durationMinutes: 90,
+            mode: 'onsite',
+            status: 'completed',
+            includeProof: false,
+        );
+    }
+
+    private function seedSelectionActivity(
+        User $provider,
+        Scholarship $scholarship,
+        ScholarshipApplication $application,
+        string $stage,
+        string $title,
+        CarbonInterface $startsAt,
+        int $durationMinutes,
+        string $mode,
+        string $status,
+        bool $includeProof = false,
+    ): void {
+        $endsAt = $startsAt->copy()->addMinutes($durationMinutes);
+        $publishedAt = $startsAt->isFuture()
+            ? now()->subDay()
+            : $startsAt->copy()->subDays(4);
+        $assignedAt = $publishedAt->copy()->subHour();
+        $acknowledgedAt = $publishedAt->copy()->addHours(2);
+        $completedAt = $status === 'completed' ? $endsAt->copy()->addMinutes(10) : null;
+
+        $session = ApplicationStageSession::query()->create([
+            'scholarship_id' => $scholarship->id,
+            'stage_key' => $stage,
+            'title' => $title,
+            'starts_at' => $startsAt,
+            'ends_at' => $endsAt,
+            'timezone' => 'Asia/Manila',
+            'mode' => $mode,
+            'venue' => $mode === 'onsite' ? 'Harborlight Learning Center' : null,
+            'location_address' => $mode === 'onsite' ? 'Barangay Mayamot, Antipolo City, Rizal' : null,
+            'meeting_url' => $mode === 'online' ? 'https://meet.google.com/demo-harborlight-room' : null,
+            'capacity' => 24,
+            'instructions' => $stage === 'exam'
+                ? 'Bring a recent school ID and arrive twenty minutes early.'
+                : 'Join ten minutes early and keep your school ID ready.',
+            'status' => $status,
+            'proof_required' => true,
+            'published_at' => $publishedAt,
+            'completed_at' => $completedAt,
+            'created_by' => $provider->id,
+            'updated_by' => $provider->id,
+        ]);
+        $assignment = $session->assignments()->create([
+            'scholarship_application_id' => $application->id,
+            'status' => 'acknowledged',
+            'notes' => 'Assigned for the complete local workflow demonstration.',
+            'assigned_by' => $provider->id,
+            'assigned_at' => $assignedAt,
+            'acknowledged_at' => $acknowledgedAt,
+        ]);
+        $assignment->attendance()->create([
+            'status' => $status === 'completed' ? 'present' : 'pending',
+            'notes' => $status === 'completed' ? ucfirst($stage).' attendance confirmed.' : null,
+            'recorded_by' => $status === 'completed' ? $provider->id : null,
+            'recorded_at' => $status === 'completed' ? $endsAt : null,
+        ]);
+
+        if ($application->workflow_stage === $stage) {
+            $application->stageProgresses()
+                ->where('stage_key', $stage)
+                ->where('status', 'current')
+                ->update([
+                    'operational_status' => $status === 'completed' ? 'ready_for_review' : 'scheduled',
+                    'proof_required' => true,
+                    'updated_at' => now(),
+                ]);
+        }
+
+        $this->seedSelectionAudit($session, $provider, 'session_created', null, 'draft', null, $assignedAt->copy()->subHour());
+        $this->seedSelectionAudit($session, $provider, 'applicant_assigned', null, 'assigned', $assignment, $assignedAt);
+        $this->seedSelectionAudit($session, $provider, 'session_published', 'draft', 'scheduled', null, $publishedAt);
+        $this->seedSelectionAudit($session, $application->applicant, 'applicant_acknowledged', 'assigned', 'acknowledged', $assignment, $acknowledgedAt);
+
+        if ($status !== 'completed') {
+            return;
+        }
+
+        $this->seedSelectionAudit($session, $provider, 'attendance_recorded', 'pending', 'present', $assignment, $endsAt);
+        if ($includeProof) {
+            $evidence = $this->seedSelectionEvidence($provider, $session, $stage, $completedAt);
+            $this->seedSelectionAudit(
+                $session,
+                $provider,
+                'evidence_uploaded',
+                null,
+                'current',
+                null,
+                $completedAt->copy()->subMinutes(5),
+                ['evidence_id' => $evidence->id, 'category' => $evidence->category, 'scope' => 'session'],
+            );
+        }
+        $this->seedSelectionAudit($session, $provider, 'session_completed', 'ongoing', 'completed', null, $completedAt);
+    }
+
+    private function seedSelectionEvidence(
+        User $provider,
+        ApplicationStageSession $session,
+        string $stage,
+        CarbonInterface $uploadedAt,
+    ): ApplicationStageEvidence {
+        $category = $stage === 'exam' ? 'score_sheet' : 'evaluation';
+        $label = $stage === 'exam' ? 'Qualifying exam score sheet' : 'Finalist interview evaluation';
+        $contents = $this->demoDocument($session->scholarship?->title ?? 'Scholarship program', $label, 'Provider-private selection activity proof');
+        $path = "demo-showcase/application-stage-evidence/{$session->id}/{$category}.svg";
+        Storage::disk('local')->put($path, $contents);
+
+        return $session->evidence()->create([
+            'scholarship_id' => $session->scholarship_id,
+            'stage_key' => $stage,
+            'scope' => 'session',
+            'category' => $category,
+            'original_name' => Str::slug($label).'.svg',
+            'path' => $path,
+            'disk' => 'local',
+            'mime_type' => 'image/svg+xml',
+            'size' => strlen($contents),
+            'event_date' => $session->starts_at->toDateString(),
+            'note' => 'Complete local demo proof for provider and admin review.',
+            'visibility' => 'provider_private',
+            'is_current' => true,
+            'uploaded_by' => $provider->id,
+            'uploaded_at' => $uploadedAt,
+        ]);
+    }
+
+    private function seedSelectionAudit(
+        ApplicationStageSession $session,
+        User $actor,
+        string $event,
+        ?string $from,
+        ?string $to,
+        ?ApplicationStageAssignment $assignment,
+        CarbonInterface $occurredAt,
+        array $metadata = [],
+    ): ApplicationStageAuditEvent {
+        return ApplicationStageAuditEvent::query()->create([
+            'scholarship_id' => $session->scholarship_id,
+            'scholarship_application_id' => $assignment?->scholarship_application_id,
+            'application_stage_session_id' => $session->id,
+            'application_stage_assignment_id' => $assignment?->id,
+            'stage_key' => $session->stage_key,
+            'event_type' => $event,
+            'from_status' => $from,
+            'to_status' => $to,
+            'metadata' => $metadata ?: null,
+            'actor_id' => $actor->id,
+            'occurred_at' => $occurredAt,
         ]);
     }
 
@@ -1679,5 +1924,29 @@ class CompleteDemoSeeder extends Seeder
   <text x="95" y="585" fill="#b45309" font-family="Arial, sans-serif" font-size="18" font-weight="700">DEMO ONLY - NOT AN OFFICIAL RECORD</text>
 </svg>
 SVG;
+    }
+
+    private function demoPassword(bool $admin = false): string
+    {
+        $key = $admin ? 'DEMO_ADMIN_PASSWORD' : 'DEMO_PASSWORD';
+        $configured = getenv($key);
+        $password = is_string($configured) && $configured !== ''
+            ? $configured
+            : (app()->environment(['local', 'testing']) ? self::PASSWORD : '');
+
+        if (app()->environment('production') && ! $this->isStrongDemoPassword($password)) {
+            throw new RuntimeException("Configure a strong {$key} before seeding the production demonstration.");
+        }
+
+        return $password;
+    }
+
+    private function isStrongDemoPassword(string $password): bool
+    {
+        return strlen($password) >= 16
+            && preg_match('/[a-z]/', $password) === 1
+            && preg_match('/[A-Z]/', $password) === 1
+            && preg_match('/[0-9]/', $password) === 1
+            && preg_match('/[^a-zA-Z0-9]/', $password) === 1;
     }
 }

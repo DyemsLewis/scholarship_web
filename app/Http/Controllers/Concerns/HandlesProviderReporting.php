@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\ApplicationDocument;
+use App\Models\ProviderServicePurchase;
 use App\Models\ProviderVerificationDocument;
+use App\Models\RecipientBenefitReceiptResponse;
+use App\Models\RecipientMonitoringSubmission;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\SupportReport;
+use App\Models\User;
 use App\Services\DecisionSupportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,6 +54,12 @@ trait HandlesProviderReporting
                 'ready_result' => 0,
                 'final_decision' => 0,
             ];
+        $managerOverview = $this->providerManagerOverview(
+            $provider,
+            $providerOwner,
+            $scholarships,
+            $applicationWorkflowCounts,
+        );
 
         return response()->json([
             'user' => [
@@ -71,7 +82,115 @@ trait HandlesProviderReporting
                     : 0,
                 'all' => (int) ($applicationWorkflowCounts['all'] ?? 0),
             ],
+            'manager_overview' => $managerOverview,
         ]);
+    }
+
+    private function providerManagerOverview(
+        User $actor,
+        User $owner,
+        $scholarships,
+        array $applicationWorkflowCounts,
+    ): array {
+        $providerId = $owner->id;
+        $programIds = $scholarships->pluck('id');
+        $programAttention = $scholarships->whereIn('status', ['draft', 'rejected'])->count();
+        $pendingAgreements = $actor->hasPortalPermission('manage_recipients')
+            ? (clone $this->providerApplicationsQuery($actor))
+                ->where('final_outcome', 'selected')
+                ->whereNull('student_response_status')
+                ->count()
+            : 0;
+        $monitoringReviews = $actor->hasPortalPermission('manage_monitoring') && $programIds->isNotEmpty()
+            ? RecipientMonitoringSubmission::query()
+                ->where('review_status', 'pending')
+                ->whereHas('cycle', fn ($query) => $query->whereIn('scholarship_id', $programIds))
+                ->count()
+            : 0;
+        $releaseIssues = $actor->hasPortalPermission('manage_benefit_releases') && $programIds->isNotEmpty()
+            ? RecipientBenefitReceiptResponse::query()
+                ->where('status', 'open')
+                ->whereHas('releaseRecord.release', fn ($query) => $query->whereIn('scholarship_id', $programIds))
+                ->count()
+            : 0;
+        $supportCases = $actor->hasPortalPermission('manage_reports')
+            ? SupportReport::query()
+                ->where('provider_id', $providerId)
+                ->where('assigned_role', 'provider')
+                ->where('provider_status', 'open')
+                ->count()
+            : 0;
+        $billingActions = $actor->hasPortalPermission('manage_billing')
+            ? ProviderServicePurchase::query()
+                ->where('provider_id', $providerId)
+                ->where(fn ($query) => $query
+                    ->whereIn('status', ['pending', 'failed'])
+                    ->orWhere(fn ($paid) => $paid
+                        ->where('status', 'paid')
+                        ->whereIn('fulfillment_status', ['needs_information', 'provider_review'])))
+                ->count()
+            : 0;
+        $activeTeam = $actor->hasPortalPermission('manage_team')
+            ? User::query()
+                ->where('parent_account_id', $providerId)
+                ->where('account_status', 'active')
+                ->count()
+            : 0;
+        $verificationAttention = $owner->providerProfile?->verification_status === 'approved' ? 0 : 1;
+        $workspaceItems = collect([
+            ['key' => 'programs', 'label' => 'Programs', 'detail' => 'Drafts, requested changes, and publishing', 'count' => $programAttention, 'href' => '/provider/programs/drafts', 'permission' => 'manage_programs'],
+            ['key' => 'reviews', 'label' => 'Application review', 'detail' => 'Profiles and evidence awaiting verification', 'count' => (int) ($applicationWorkflowCounts['needs_review'] ?? 0), 'href' => '/provider/workspaces/reviews', 'permission' => 'verify_applications'],
+            ['key' => 'selection', 'label' => 'Selection activities', 'detail' => 'Activities to schedule or results to record', 'count' => (int) ($applicationWorkflowCounts['waiting_activity'] ?? 0) + (int) ($applicationWorkflowCounts['ready_result'] ?? 0), 'href' => '/provider/workspaces/selection', 'permission' => 'manage_selection_activities'],
+            ['key' => 'decisions', 'label' => 'Final decisions', 'detail' => 'Applications ready for a final outcome', 'count' => (int) ($applicationWorkflowCounts['final_decision'] ?? 0), 'href' => '/provider/workspaces/decisions', 'permission' => 'record_final_decisions'],
+            ['key' => 'recipients', 'label' => 'Recipient onboarding', 'detail' => 'Selection agreements awaiting response', 'count' => $pendingAgreements, 'href' => '/provider/workspaces/recipients', 'permission' => 'manage_recipients'],
+            ['key' => 'monitoring', 'label' => 'Monitoring', 'detail' => 'Submitted check-in items awaiting review', 'count' => $monitoringReviews, 'href' => '/provider/workspaces/monitoring', 'permission' => 'manage_monitoring'],
+            ['key' => 'releases', 'label' => 'Benefit releases', 'detail' => 'Recipient distribution issues awaiting resolution', 'count' => $releaseIssues, 'href' => '/provider/workspaces/releases', 'permission' => 'manage_benefit_releases'],
+            ['key' => 'support', 'label' => 'Support cases', 'detail' => 'Applicant concerns awaiting a provider response', 'count' => $supportCases, 'href' => '/provider/workspaces/support', 'permission' => 'manage_reports'],
+            ['key' => 'billing', 'label' => 'Service requests', 'detail' => 'Payments, responses, or deliveries needing action', 'count' => $billingActions, 'href' => '/provider/workspaces/billing', 'permission' => 'manage_billing'],
+            ['key' => 'profile', 'label' => 'Organization profile', 'detail' => 'Verification or organization details need attention', 'count' => $verificationAttention, 'href' => '/provider/workspaces/organization-profile', 'permission' => 'manage_profile'],
+        ])->filter(fn (array $item): bool => $actor->hasPortalPermission($item['permission']))
+            ->map(fn (array $item): array => collect($item)->except('permission')->all())
+            ->values();
+        $priority = $workspaceItems
+            ->filter(fn (array $item): bool => $item['count'] > 0)
+            ->sortBy(fn (array $item): int => array_search($item['key'], [
+                'profile', 'programs', 'reviews', 'selection', 'decisions',
+                'recipients', 'monitoring', 'releases', 'support', 'billing',
+            ], true))
+            ->first();
+
+        return [
+            'organization_name' => $owner->provider_name ?: $owner->name,
+            'summary' => [
+                'programs' => $scholarships->count(),
+                'published_programs' => $scholarships->where('status', 'published')->count(),
+                'applications' => (int) ($applicationWorkflowCounts['all'] ?? 0),
+                'attention' => $workspaceItems->sum('count'),
+                'active_team' => $activeTeam,
+            ],
+            'priority_action' => $priority
+                ? [
+                    'eyebrow' => 'Next organization action',
+                    'title' => $priority['label'],
+                    'description' => $priority['detail'],
+                    'count' => $priority['count'],
+                    'label' => 'Open workspace',
+                    'href' => $priority['href'],
+                ]
+                : [
+                    'eyebrow' => 'Organization status',
+                    'title' => 'No workflow needs immediate attention',
+                    'description' => 'Use the sidebar to review a specific operating area.',
+                    'count' => 0,
+                    'label' => 'Review programs',
+                    'href' => '/provider/programs',
+                ],
+            'attention_workspaces' => $workspaceItems
+                ->filter(fn (array $item): bool => $item['count'] > 0)
+                ->sortByDesc('count')
+                ->take(6)
+                ->values(),
+        ];
     }
 
     public function insightsData(Request $request): JsonResponse

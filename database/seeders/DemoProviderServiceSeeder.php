@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\ProviderServicePurchase;
 use App\Models\User;
+use App\Services\ProviderServiceLifecycleService;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Storage;
@@ -17,23 +18,19 @@ class DemoProviderServiceSeeder extends Seeder
         $admin = User::query()->where('role', 'admin')->orderBy('id')->first();
         $provider = User::query()
             ->where('role', 'provider')
-            ->where('email', env('TULAY_ARAL_EMAIL', 'tulayaral@scholarship.test'))
+            ->where('email', env('DEMO_PROVIDER_EMAIL', 'programs@harborlight.test'))
             ->first();
 
-        if (! $provider && app()->environment(['local', 'testing'])) {
+        if (! $provider) {
             $provider = User::query()
                 ->where('role', 'provider')
                 ->whereNull('parent_account_id')
-                ->where(function ($query): void {
-                    $query
-                        ->where('username', 'tulayaral')
-                        ->orWhere('email', 'programs@tulayaral.test');
-                })
+                ->orderBy('id')
                 ->first();
         }
 
         if (! $admin || ! $provider) {
-            $this->command?->warn('Demo admin or Tulay Aral provider account is missing. Provider services were not seeded.');
+            $this->command?->warn('Demo admin or Harborlight provider account is missing. Provider services were not seeded.');
 
             return;
         }
@@ -245,7 +242,7 @@ class DemoProviderServiceSeeder extends Seeder
 
         $purchase->fill(['status' => 'paid', ...$workspace])->save();
 
-        return $purchase;
+        return app(ProviderServiceLifecycleService::class)->initialize($purchase);
     }
 
     private function seedUpdates(ProviderServicePurchase $purchase, array $updates): void

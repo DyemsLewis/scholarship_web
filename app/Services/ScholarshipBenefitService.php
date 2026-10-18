@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Domain\Recipients\RecipientSupportCatalog;
 use App\Models\Scholarship;
 use App\Models\ScholarshipBenefit;
 use Illuminate\Http\Request;
@@ -78,6 +79,8 @@ class ScholarshipBenefitService
                 $scholarship->benefits()->create($this->legacyBenefits($scholarship->award_amount)[0]);
             }
 
+            $this->syncSupportMode($scholarship);
+
             return;
         }
 
@@ -88,6 +91,7 @@ class ScholarshipBenefitService
         }
 
         $scholarship->unsetRelation('benefits');
+        $this->syncSupportMode($scholarship);
     }
 
     public function copy(Scholarship $source, Scholarship $target): void
@@ -109,6 +113,7 @@ class ScholarshipBenefitService
         $target->benefits()->createMany(
             $benefits !== [] ? $benefits : ($this->legacyBenefits($source->award_amount) ?? [])
         );
+        $this->syncSupportMode($target);
     }
 
     public function changed(Scholarship $scholarship, array $benefits): bool
@@ -155,5 +160,29 @@ class ScholarshipBenefitService
             'duration' => $benefit['duration'] ?? null,
             'description' => $benefit['description'] ?? null,
         ];
+    }
+
+    private function syncSupportMode(Scholarship $scholarship): void
+    {
+        $frequencies = $scholarship->benefits()->pluck('frequency');
+        $supportMode = RecipientSupportCatalog::supportModeFromFrequencies($frequencies);
+        $currentMode = in_array($scholarship->support_mode, RecipientSupportCatalog::SUPPORT_MODES, true)
+            ? $scholarship->support_mode
+            : RecipientSupportCatalog::SUPPORT_ONE_TIME;
+        $currentPolicy = in_array($scholarship->monitoring_policy, RecipientSupportCatalog::MONITORING_POLICIES, true)
+            ? $scholarship->monitoring_policy
+            : RecipientSupportCatalog::defaultMonitoringPolicy($currentMode);
+        $hasMonitoring = $scholarship->monitoringPlan()->exists()
+            || $scholarship->monitoringCycles()->exists();
+        $policy = $hasMonitoring
+            ? RecipientSupportCatalog::MONITORING_RECURRING
+            : ($currentPolicy === RecipientSupportCatalog::defaultMonitoringPolicy($currentMode)
+                ? RecipientSupportCatalog::defaultMonitoringPolicy($supportMode)
+                : $currentPolicy);
+
+        $scholarship->forceFill([
+            'support_mode' => $supportMode,
+            'monitoring_policy' => $policy,
+        ])->saveQuietly();
     }
 }

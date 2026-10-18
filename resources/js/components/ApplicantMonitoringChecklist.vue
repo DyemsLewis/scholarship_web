@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import FilePreviewModal from './FilePreviewModal.vue';
+import MonitoringCaseHistoryModal from './MonitoringCaseHistoryModal.vue';
 import { showPortalToast } from '../support/portalToast';
 
 const props = defineProps({
@@ -19,6 +20,7 @@ const previewFile = ref(null);
 const adjustmentTarget = ref(null);
 const adjustmentForm = ref(defaultAdjustmentForm());
 const isRequestingAdjustment = ref(false);
+const historyTarget = ref(null);
 
 function defaultAdjustmentForm() {
     return {
@@ -40,6 +42,7 @@ function statusClass(status) {
     if (status === 'extension_approved') return 'bg-emerald-100 text-emerald-800';
     if (status === 'provider_recorded') return 'bg-slate-100 text-slate-600';
     if (status === 'upcoming') return 'bg-sky-50 text-sky-700';
+    if (status === 'grace_period') return 'bg-amber-100 text-amber-900';
     if (status === 'closed') return 'bg-slate-100 text-slate-500';
     return 'bg-amber-100 text-amber-900';
 }
@@ -215,6 +218,7 @@ async function saveManualGrade(requirement) {
         :context="programTitle"
         @close="previewFile = null"
     />
+    <MonitoringCaseHistoryModal :open="Boolean(historyTarget)" :monitoring-case="historyTarget?.monitoring_case" :subject="historyTarget?.title" @close="historyTarget = null" />
 
     <input ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" @change="uploadRequirement">
 
@@ -225,14 +229,15 @@ async function saveManualGrade(requirement) {
                     <div>
                         <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Current check-in</p>
                         <h4 class="mt-1 font-bold text-slate-950">{{ checkIn.title }}</h4>
-                        <p class="mt-1 text-xs text-slate-500">{{ checkIn.period_label }} | Due {{ checkIn.due_label }}</p>
+                        <p class="mt-1 text-xs text-slate-500">{{ checkIn.period_label }} | Due {{ checkIn.effective_due_label || checkIn.due_label }}</p>
                     </div>
-                    <p class="text-xs font-bold text-slate-700">{{ checkIn.submitted_count }} of {{ checkIn.required_count }} submitted</p>
+                    <div class="shrink-0 text-left sm:text-right"><p class="text-xs font-bold text-slate-700">{{ checkIn.monitoring_case?.status_label || `${checkIn.submitted_count} of ${checkIn.required_count} submitted` }}</p><p v-if="checkIn.monitoring_case?.outcome_label" class="mt-1 text-[10px] font-bold text-slate-600">Outcome: {{ checkIn.monitoring_case.outcome_label }}</p><p v-else-if="checkIn.next_action" class="mt-1 text-[10px] font-semibold text-slate-500">{{ checkIn.next_action.role === 'applicant' ? 'Your next step' : checkIn.next_action.role === 'provider' ? 'Waiting on provider' : 'Status' }}: {{ checkIn.next_action.label }}</p><button v-if="checkIn.monitoring_case?.history?.length || checkIn.monitoring_case?.exception_context" type="button" class="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 underline underline-offset-4" @click="historyTarget = checkIn"><i class="fa-solid fa-clock-rotate-left text-[10px]" aria-hidden="true"></i>History</button></div>
                 </div>
                 <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
                     <div class="h-full rounded-full bg-amber-400" :style="{ width: `${progressWidth(checkIn)}%` }"></div>
                 </div>
                 <p v-if="checkIn.instructions" class="mt-3 text-sm leading-6 text-slate-600">{{ checkIn.instructions }}</p>
+                <p v-if="checkIn.monitoring_case?.decision_reason" class="mt-3 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-600">{{ checkIn.monitoring_case.decision_reason }}</p>
             </header>
 
             <div class="divide-y divide-slate-200">

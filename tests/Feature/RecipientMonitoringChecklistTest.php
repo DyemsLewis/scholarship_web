@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\PortalNotification;
+use App\Models\RecipientMonitoringAdjustmentRequest;
+use App\Models\RecipientMonitoringCase;
+use App\Models\RecipientMonitoringCaseEvent;
 use App\Models\RecipientMonitoringCycle;
 use App\Models\RecipientMonitoringCycleRequirement;
-use App\Models\RecipientMonitoringAdjustmentRequest;
 use App\Models\RecipientMonitoringIntervention;
 use App\Models\RecipientMonitoringPlan;
 use App\Models\RecipientMonitoringSubmission;
@@ -152,6 +154,8 @@ class RecipientMonitoringChecklistTest extends TestCase
             ->assertJsonPath('cycles.0.item_submitted_count', 2)
             ->assertJsonPath('cycles.0.item_pending_count', 0)
             ->assertJsonPath('cycles.0.recipients.0.checklist_complete', true)
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.exception_context', null)
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.history', [])
             ->assertJsonPath('program_summary.attention_count', 2);
 
         $this->actingAs($applicant)
@@ -339,7 +343,11 @@ class RecipientMonitoringChecklistTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('cycle.recipients.0.requirements.1.adjustment_request.status', 'approved')
-            ->assertJsonPath('cycle.recipients.0.requirements.1.effective_due_at', $approvedDue->toDateString());
+            ->assertJsonPath('cycle.recipients.0.requirements.1.effective_due_at', $approvedDue->toDateString())
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.exception_context.summary', 'Extension approved through '.$approvedDue->format('M d, Y'))
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.history.0.title', 'Extension Approved')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.history.0.actor', $provider->name)
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.history.1.title', 'Extension requested');
 
         RecipientMonitoringCycle::findOrFail($cycleId)->update(['due_at' => now()->subDay()->toDateString()]);
         $this->actingAs($applicant)
@@ -347,7 +355,9 @@ class RecipientMonitoringChecklistTest extends TestCase
                 'supporting_record' => UploadedFile::fake()->create('late-registration.pdf', 120, 'application/pdf'),
                 'terms_accepted' => true,
             ])
-            ->assertCreated();
+            ->assertCreated()
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.monitoring_case.exception_context.approved_due_label', $approvedDue->format('M d, Y'))
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.monitoring_case.history.0.actor', 'Provider team');
 
         $this->assertDatabaseHas('recipient_monitoring_adjustment_requests', [
             'id' => $adjustmentId,
@@ -438,6 +448,328 @@ class RecipientMonitoringChecklistTest extends TestCase
             ->assertOk()
             ->assertJsonPath('cycle.recipients.0.requirements.0.interventions.0.status', 'completed');
         $this->assertSame('completed', RecipientMonitoringIntervention::findOrFail($interventionId)->status);
+    }
+
+    public function test_monitoring_case_keeps_one_next_action_as_the_checklist_advances(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $response = $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+                'title' => 'First semester check-in',
+                'opens_at' => now()->toDateString(),
+                'due_at' => now()->addMonth()->toDateString(),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'awaiting_submission')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.due_status', 'open')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.role', 'applicant')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.key', 'submit_requirements');
+        $cycleId = $response->json('cycle.id');
+        $requirements = RecipientMonitoringCycleRequirement::query()
+            ->where('recipient_monitoring_cycle_id', $cycleId)
+            ->get()
+            ->keyBy('type');
+
+        Http::fake([
+            'api.ocr.space/*' => Http::response([
+                'OCRExitCode' => 1,
+                'IsErroredOnProcessing' => false,
+                'ParsedResults' => [['ParsedText' => 'General Average: 91%']],
+            ]),
+        ]);
+
+        $this->actingAs($applicant)
+            ->postJson("/dashboard/applications/{$application->id}/monitoring-requirements/{$requirements->get('enrollment')->id}/submission", [
+                'supporting_record' => UploadedFile::fake()->create('registration.pdf', 120, 'application/pdf'),
+                'terms_accepted' => true,
+            ])
+            ->assertCreated();
+        $this->actingAs($applicant)
+            ->postJson("/dashboard/applications/{$application->id}/monitoring-requirements/{$requirements->get('academic_progress')->id}/submission", [
+                'supporting_record' => UploadedFile::fake()->image('grades.jpg'),
+                'terms_accepted' => true,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.case_status', 'awaiting_submission')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.next_action.role', 'provider')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.next_action.key', 'record_requirement');
+
+        $this->actingAs($provider)
+            ->postJson("/provider/monitoring-requirements/{$requirements->get('program_participation')->id}/applications/{$application->id}/record", [
+                'decision' => 'met',
+                'notes' => 'Participation confirmed from the attendance sheet.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'under_review')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.key', 'review_requirements');
+
+        $submissions = RecipientMonitoringSubmission::query()
+            ->where('scholarship_application_id', $application->id)
+            ->whereIn('recipient_monitoring_cycle_requirement_id', [
+                $requirements->get('academic_progress')->id,
+                $requirements->get('enrollment')->id,
+            ])
+            ->get();
+        foreach ($submissions as $submission) {
+            $lastResponse = $this->actingAs($provider)
+                ->patchJson("/provider/monitoring-submissions/{$submission->id}/review", [
+                    'decision' => 'met',
+                    'notes' => 'Record confirmed.',
+                ])
+                ->assertOk();
+        }
+
+        $lastResponse
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'ready_to_close')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.role', 'provider')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.key', 'close_check_in');
+        $this->assertDatabaseHas('recipient_monitoring_cases', [
+            'recipient_monitoring_cycle_id' => $cycleId,
+            'scholarship_application_id' => $application->id,
+            'status' => 'ready_to_close',
+            'due_status' => 'open',
+            'next_action_role' => 'provider',
+            'next_action' => 'close_check_in',
+        ]);
+    }
+
+    public function test_monitoring_case_distinguishes_the_request_window_from_overdue_work(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $cycleId = $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+                'title' => 'First semester check-in',
+                'opens_at' => now()->toDateString(),
+                'due_at' => now()->addWeek()->toDateString(),
+            ])
+            ->assertCreated()
+            ->json('cycle.id');
+
+        RecipientMonitoringCycle::findOrFail($cycleId)->update([
+            'due_at' => now()->subDay()->toDateString(),
+        ]);
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.status', 'grace_period')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.due_status', 'grace_period')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.next_action.role', 'applicant')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.next_action.key', 'request_adjustment')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.requirements.0.status', 'grace_period');
+        $this->actingAs($provider)
+            ->getJson('/provider/workspaces/monitoring/data?queue=awaiting')
+            ->assertOk()
+            ->assertJsonPath('check_ins.0.id', $cycleId)
+            ->assertJsonPath('check_ins.0.work_label', 'Request window open')
+            ->assertJsonPath('check_ins.0.timing_state', 'grace_period');
+
+        RecipientMonitoringCycle::findOrFail($cycleId)->update([
+            'due_at' => now()->subDays(8)->toDateString(),
+        ]);
+        $this->actingAs($provider)
+            ->getJson("/provider/scholarships/{$scholarship->id}/monitoring-cycles")
+            ->assertOk()
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.due_status', 'overdue')
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.next_action.role', 'provider')
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.next_action.key', 'resolve_overdue');
+        $this->actingAs($provider)
+            ->getJson('/provider/workspaces/monitoring/data?queue=followup')
+            ->assertOk()
+            ->assertJsonPath('check_ins.0.id', $cycleId)
+            ->assertJsonPath('check_ins.0.work_label', 'Overdue review')
+            ->assertJsonPath('check_ins.0.timing_state', 'overdue');
+
+        $case = RecipientMonitoringCase::query()
+            ->where('recipient_monitoring_cycle_id', $cycleId)
+            ->where('scholarship_application_id', $application->id)
+            ->firstOrFail();
+        $this->assertSame('overdue', $case->due_status);
+        $this->assertSame('resolve_overdue', $case->next_action);
+    }
+
+    public function test_provider_closes_and_reopens_a_completed_check_in_with_an_event_history(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $response = $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+                'title' => 'First semester check-in',
+                'opens_at' => now()->toDateString(),
+                'due_at' => now()->addMonth()->toDateString(),
+            ])
+            ->assertCreated();
+        $cycleId = $response->json('cycle.id');
+        $requirements = RecipientMonitoringCycleRequirement::query()
+            ->where('recipient_monitoring_cycle_id', $cycleId)
+            ->get();
+
+        foreach ($requirements as $requirement) {
+            RecipientMonitoringSubmission::create([
+                'recipient_monitoring_cycle_id' => $cycleId,
+                'recipient_monitoring_cycle_requirement_id' => $requirement->id,
+                'scholarship_application_id' => $application->id,
+                'applicant_id' => $applicant->id,
+                'submission_source' => $requirement->requires_file ? 'applicant_upload' : 'provider_record',
+                'original_name' => $requirement->requires_file ? 'confirmed-record.pdf' : 'Provider confirmation',
+                'path' => $requirement->requires_file ? "monitoring/{$requirement->id}.pdf" : 'provider-record://confirmed',
+                'mime_type' => $requirement->requires_file ? 'application/pdf' : null,
+                'submitted_at' => now(),
+                'review_status' => 'met',
+                'review_notes' => 'Confirmed for closure testing.',
+                'reviewed_by' => $provider->id,
+                'reviewed_at' => now(),
+            ]);
+        }
+
+        $readyResponse = $this->actingAs($provider)
+            ->getJson("/provider/scholarships/{$scholarship->id}/monitoring-cycles")
+            ->assertOk()
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.status', 'ready_to_close');
+        $caseId = $readyResponse->json('cycles.0.recipients.0.monitoring_case.id');
+
+        $otherProvider = User::factory()->create(['role' => 'provider', 'account_status' => 'active']);
+        $this->actingAs($otherProvider)
+            ->patchJson("/provider/monitoring-cases/{$caseId}/close", [
+                'outcome' => 'completed',
+            ])
+            ->assertForbidden();
+        $this->actingAs($provider)
+            ->patchJson("/provider/monitoring-cases/{$caseId}/close", [
+                'outcome' => 'completed_with_support',
+                'reason' => 'Requirements were completed after provider support.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('outcome');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/monitoring-cases/{$caseId}/close", [
+                'outcome' => 'completed',
+            ])
+            ->assertOk()
+            ->assertJsonPath('cycle.status', 'closed')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'closed')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.outcome', 'completed')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.outcome_label', 'Completed');
+
+        $this->assertDatabaseHas('recipient_monitoring_case_events', [
+            'recipient_monitoring_case_id' => $caseId,
+            'action' => 'closed',
+            'from_status' => 'ready_to_close',
+            'to_status' => 'closed',
+            'outcome' => 'completed',
+        ]);
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.monitoring_case.outcome_label', 'Completed')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.monitoring_case.history.0.title', 'Check-in closed')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.monitoring_case.history.0.actor', 'Provider team');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/monitoring-cases/{$caseId}/reopen", [
+                'reason' => 'A second review is required after a provider audit.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('cycle.status', 'open')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'ready_to_close')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.outcome', null);
+
+        $this->assertDatabaseHas('recipient_monitoring_case_events', [
+            'recipient_monitoring_case_id' => $caseId,
+            'action' => 'reopened',
+            'from_status' => 'closed',
+            'to_status' => 'ready_to_close',
+        ]);
+        $this->assertSame(2, RecipientMonitoringCaseEvent::query()
+            ->where('recipient_monitoring_case_id', $caseId)
+            ->count());
+    }
+
+    public function test_provider_records_an_overdue_incomplete_outcome_or_a_reasoned_waiver(): void
+    {
+        [$provider, , $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $response = $this->actingAs($provider)
+            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+                'title' => 'Overdue check-in',
+                'opens_at' => now()->toDateString(),
+                'due_at' => now()->addWeek()->toDateString(),
+            ])
+            ->assertCreated();
+        $cycleId = $response->json('cycle.id');
+        RecipientMonitoringCycle::findOrFail($cycleId)->update([
+            'due_at' => now()->subDays(8)->toDateString(),
+        ]);
+        $caseId = $this->actingAs($provider)
+            ->getJson("/provider/scholarships/{$scholarship->id}/monitoring-cycles")
+            ->assertOk()
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.due_status', 'overdue')
+            ->json('cycles.0.recipients.0.monitoring_case.id');
+
+        $this->actingAs($provider)
+            ->patchJson("/provider/monitoring-cases/{$caseId}/close", [
+                'outcome' => 'incomplete',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('reason');
+        $this->actingAs($provider)
+            ->patchJson("/provider/monitoring-cases/{$caseId}/close", [
+                'outcome' => 'incomplete',
+                'reason' => 'No required records were received after the grace period.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.outcome', 'incomplete')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.decision_reason', 'No required records were received after the grace period.');
+
+        [$waiverProvider, , $waiverScholarship] = $this->selectedRecipientWithPlan();
+        $waiverResponse = $this->actingAs($waiverProvider)
+            ->postJson("/provider/scholarships/{$waiverScholarship->id}/monitoring-check-ins", [
+                'title' => 'Special circumstance check-in',
+                'opens_at' => now()->toDateString(),
+                'due_at' => now()->addMonth()->toDateString(),
+            ])
+            ->assertCreated();
+        $waiverCaseId = $waiverResponse->json('cycle.recipients.0.monitoring_case.id');
+        $waiverRequirementId = $waiverResponse->json('cycle.requirements.0.id');
+        $waiverApplicationId = $waiverResponse->json('cycle.recipients.0.application_id');
+
+        $interventionId = $this->actingAs($waiverProvider)
+            ->postJson("/provider/monitoring-requirements/{$waiverRequirementId}/applications/{$waiverApplicationId}/interventions", [
+                'type' => 'consultation',
+                'summary' => 'Confirm the recipient circumstance before deciding the check-in.',
+            ])
+            ->assertCreated()
+            ->json('cycle.recipients.0.requirements.0.interventions.0.id');
+        $this->actingAs($waiverProvider)
+            ->patchJson("/provider/monitoring-cases/{$waiverCaseId}/waive", [
+                'outcome' => 'excused',
+                'reason' => 'The recipient has an approved documented leave for this period.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('case');
+        $this->actingAs($waiverProvider)
+            ->patchJson("/provider/monitoring-interventions/{$interventionId}/complete", [
+                'completion_notes' => 'The documented circumstance was confirmed.',
+            ])
+            ->assertOk();
+
+        $this->actingAs($waiverProvider)
+            ->patchJson("/provider/monitoring-cases/{$waiverCaseId}/waive", [
+                'outcome' => 'excused',
+                'reason' => 'The recipient has an approved documented leave for this period.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('cycle.status', 'closed')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'waived')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.outcome_label', 'Excused');
+
+        $this->assertDatabaseHas('recipient_monitoring_case_events', [
+            'recipient_monitoring_case_id' => $waiverCaseId,
+            'action' => 'waived',
+            'outcome' => 'excused',
+        ]);
+        $this->assertDatabaseHas('recipient_monitoring_cases', [
+            'scholarship_application_id' => $application->id,
+            'outcome' => 'incomplete',
+        ]);
     }
 
     private function selectedRecipientWithPlan(): array

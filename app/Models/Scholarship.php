@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Scholarship extends Model
@@ -62,6 +63,8 @@ class Scholarship extends Model
         'expected_results_at',
         'support_starts_at',
         'support_ends_at',
+        'support_mode',
+        'monitoring_policy',
         'official_program_url',
         'contact_person',
         'contact_department',
@@ -116,6 +119,21 @@ class Scholarship extends Model
         return $this->hasMany(ScholarshipEvent::class);
     }
 
+    public function stageSessions(): HasMany
+    {
+        return $this->hasMany(ApplicationStageSession::class);
+    }
+
+    public function stageEvidence(): HasMany
+    {
+        return $this->hasMany(ApplicationStageEvidence::class);
+    }
+
+    public function stageAuditEvents(): HasMany
+    {
+        return $this->hasMany(ApplicationStageAuditEvent::class);
+    }
+
     public function announcements(): HasMany
     {
         return $this->hasMany(ScholarshipAnnouncement::class)
@@ -135,11 +153,26 @@ class Scholarship extends Model
         return $this->hasOne(RecipientMonitoringPlan::class);
     }
 
+    public function monitoringCases(): HasMany
+    {
+        return $this->hasManyThrough(
+            RecipientMonitoringCase::class,
+            RecipientMonitoringCycle::class,
+            'scholarship_id',
+            'recipient_monitoring_cycle_id',
+        );
+    }
+
     public function benefitReleases(): HasMany
     {
         return $this->hasMany(RecipientBenefitRelease::class)
             ->orderByDesc('release_at')
             ->orderByDesc('id');
+    }
+
+    public function benefitEntitlements(): HasMany
+    {
+        return $this->hasMany(RecipientBenefitEntitlement::class);
     }
 
     public function benefits(): HasMany
