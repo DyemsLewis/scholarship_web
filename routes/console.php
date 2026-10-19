@@ -16,6 +16,10 @@ Schedule::command('monitoring:send-reminders')
     ->dailyAt('08:15')
     ->withoutOverlapping();
 
+Schedule::command('provider-services:send-reminders')
+    ->dailyAt('08:30')
+    ->withoutOverlapping();
+
 Schedule::command('platform:backup')
     ->dailyAt('02:00')
     ->when(fn (): bool => (bool) config('platform.backup.enabled'))

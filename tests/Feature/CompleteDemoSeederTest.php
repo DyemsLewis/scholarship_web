@@ -2,16 +2,18 @@
 
 namespace Tests\Feature;
 
-use App\Models\ApplicationStageAssignment;
-use App\Models\ApplicationStageAttendance;
-use App\Models\ApplicationStageAuditEvent;
-use App\Models\ApplicationStageEvidence;
 use App\Models\ApplicationStageSession;
+use App\Models\ProviderServiceLifecycleEvent;
+use App\Models\ProviderServicePurchase;
+use App\Models\ProviderServiceRequest;
+use App\Models\RecipientBenefitEntitlement;
 use App\Models\RecipientBenefitRelease;
+use App\Models\RecipientMonitoringCase;
 use App\Models\RecipientMonitoringCycle;
 use App\Models\RecipientMonitoringPlan;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\SupportReport;
 use App\Models\User;
 use Database\Seeders\CompleteDemoSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -22,7 +24,7 @@ class CompleteDemoSeederTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_it_builds_a_complete_workflow_and_exception_demo_from_an_empty_database(): void
+    public function test_it_builds_a_successful_only_demo_from_an_empty_database(): void
     {
         Storage::fake('local');
 
@@ -30,114 +32,113 @@ class CompleteDemoSeederTest extends TestCase
 
         $this->assertSame(1, User::query()->where('role', 'admin')->whereNull('parent_account_id')->count());
         $this->assertSame(7, User::query()->where('role', 'admin')->whereNotNull('parent_account_id')->count());
-        $this->assertSame(3, User::query()->where('role', 'provider')->whereNull('parent_account_id')->count());
+        $this->assertSame(1, User::query()->where('role', 'provider')->whereNull('parent_account_id')->count());
         $this->assertSame(12, User::query()->where('role', 'provider')->whereNotNull('parent_account_id')->count());
-        $this->assertSame(24, User::query()->where('role', 'applicant')->count());
+        $this->assertSame(1, User::query()->where('role', 'applicant')->count());
         $this->assertSame('superadmin@findscholarship.test', User::query()->findOrFail(1)->email);
         $this->assertSame('programs@harborlight.test', User::query()->findOrFail(2)->email);
+        $this->assertDatabaseMissing('users', ['username' => 'provider.pending']);
+        $this->assertDatabaseMissing('users', ['username' => 'provider.revision']);
 
-        $this->assertSame(6, Scholarship::query()->count());
-        $this->assertSame(24, ScholarshipApplication::query()->count());
-        foreach (['draft', 'pending_review', 'closed', 'rejected'] as $status) {
-            $this->assertDatabaseHas('scholarships', ['status' => $status]);
-        }
+        $this->assertSame(3, Scholarship::query()->count());
         $this->assertSame(2, Scholarship::query()->where('status', 'published')->count());
-        $this->assertDatabaseHas('scholarships', [
-            'title' => 'College Launch One-Time Grant',
-            'slots_available' => 1,
-        ]);
-        $this->assertSame(6, Scholarship::query()->distinct()->count('image_path'));
-        $this->assertDatabaseHas('scholarship_applications', [
-            'workflow_stage' => 'screening',
-            'application_state' => 'needs_correction',
-        ]);
-        $this->assertDatabaseHas('scholarship_applications', [
-            'workflow_stage' => 'exam',
-            'application_state' => 'in_provider_process',
-        ]);
-        $this->assertDatabaseHas('scholarship_applications', [
-            'workflow_stage' => 'interview',
-            'application_state' => 'in_provider_process',
-        ]);
-        $this->assertDatabaseHas('scholarship_applications', [
-            'workflow_stage' => 'decision',
-            'application_state' => 'awaiting_decision',
-        ]);
-        $this->assertDatabaseHas('scholarship_applications', ['status' => 'rejected']);
-        $this->assertDatabaseHas('scholarship_applications', ['status' => 'exam_failed']);
-        $this->assertDatabaseHas('scholarship_applications', ['status' => 'interview_failed']);
-        $this->assertDatabaseHas('scholarship_applications', ['status' => 'not_awarded']);
-        $this->assertDatabaseHas('scholarship_applications', ['status' => 'withdrawn']);
-        $this->assertDatabaseHas('scholarship_applications', ['student_response_status' => 'declined']);
-        $this->assertDatabaseHas('scholarship_applications', ['status' => 'benefits_terminated']);
-        $this->assertDatabaseHas('scholarship_applications', ['status' => 'renewed']);
-        $this->assertSame(1, ScholarshipApplication::query()->where('final_outcome', 'waitlisted')->count());
-        $this->assertSame(10, ScholarshipApplication::query()->where('final_outcome', 'selected')->count());
-        $this->assertSame(7, ScholarshipApplication::query()->where('student_response_status', 'accepted')->count());
+        $this->assertSame(1, Scholarship::query()->where('status', 'closed')->count());
+        $this->assertSame(0, Scholarship::query()->whereIn('status', ['draft', 'pending_review', 'rejected'])->count());
+        $this->assertSame(3, Scholarship::query()->distinct()->count('image_path'));
 
-        $this->assertSame(5, ApplicationStageSession::query()->count());
-        $this->assertSame(2, ApplicationStageSession::query()->where('status', 'scheduled')->count());
-        $this->assertSame(3, ApplicationStageSession::query()->where('status', 'completed')->count());
-        $this->assertSame(5, ApplicationStageAssignment::query()->where('status', 'acknowledged')->count());
-        $this->assertSame(5, ApplicationStageAttendance::query()->count());
-        $this->assertSame(2, ApplicationStageEvidence::query()->where('is_current', true)->count());
-        $this->assertGreaterThanOrEqual(28, ApplicationStageAuditEvent::query()->count());
-        $this->assertDatabaseHas('application_stage_progresses', [
-            'stage_key' => 'formal_application',
-            'status' => 'current',
-            'operational_status' => 'waiting_for_schedule',
-        ]);
-        $this->assertDatabaseHas('application_stage_progresses', [
-            'stage_key' => 'exam',
-            'status' => 'current',
-            'operational_status' => 'ready_for_review',
-        ]);
-        $this->assertDatabaseHas('application_stage_progresses', [
-            'stage_key' => 'interview',
-            'status' => 'current',
-            'operational_status' => 'ready_for_review',
-        ]);
+        $successfulApplicant = User::query()
+            ->where('username', 'vincentrafaeltorres')
+            ->firstOrFail();
+        $successfulApplication = ScholarshipApplication::query()
+            ->where('applicant_id', $successfulApplicant->id)
+            ->firstOrFail();
+
+        $this->assertSame(1, ScholarshipApplication::query()->count());
+        $this->assertSame('awarded', $successfulApplication->status);
+        $this->assertSame('complete', $successfulApplication->workflow_stage);
+        $this->assertSame('closed', $successfulApplication->application_state);
+        $this->assertSame('selected', $successfulApplication->final_outcome);
+        $this->assertSame('accepted', $successfulApplication->student_response_status);
+        $this->assertSame(0, ScholarshipApplication::query()->whereIn('status', [
+            'submitted',
+            'rejected',
+            'exam_failed',
+            'interview_failed',
+            'not_awarded',
+            'withdrawn',
+            'benefits_terminated',
+        ])->count());
+        $this->assertSame(0, ScholarshipApplication::query()->whereIn('application_state', [
+            'submitted',
+            'needs_correction',
+            'in_provider_process',
+            'awaiting_decision',
+            'withdrawn',
+        ])->count());
+
+        $this->assertSame(0, ApplicationStageSession::query()->count());
+        $this->assertSame(5, $successfulApplication->stageProgresses()->where('status', 'passed')->count());
+        $this->assertSame(0, $successfulApplication->stageProgresses()->whereIn('status', [
+            'pending',
+            'current',
+            'not_passed',
+        ])->count());
 
         $this->assertSame(1, RecipientMonitoringPlan::query()->where('status', 'active')->count());
-        $this->assertSame(2, RecipientMonitoringCycle::query()->where('status', 'open')->count());
-        $this->assertSame(3, RecipientBenefitRelease::query()->count());
-        $this->assertDatabaseHas('recipient_monitoring_submissions', ['review_status' => 'pending']);
-        $this->assertDatabaseHas('recipient_monitoring_submissions', ['review_status' => 'needs_correction']);
-        $this->assertDatabaseHas('recipient_monitoring_submissions', ['review_status' => 'not_met']);
-        $this->assertDatabaseHas('recipient_monitoring_submissions', ['review_status' => 'excused']);
-        $this->assertDatabaseHas('recipient_monitoring_adjustment_requests', [
-            'request_type' => 'extension',
-            'status' => 'pending',
+        $this->assertSame(1, RecipientMonitoringCycle::query()->where('status', 'closed')->count());
+        $this->assertSame(0, RecipientMonitoringCycle::query()->where('status', '!=', 'closed')->count());
+        $this->assertSame(1, RecipientMonitoringCase::query()->where('status', 'closed')->count());
+        $this->assertDatabaseHas('recipient_monitoring_cases', [
+            'scholarship_application_id' => $successfulApplication->id,
+            'status' => 'closed',
+            'outcome' => 'completed',
+            'next_action_role' => null,
+            'next_action' => null,
         ]);
-        $this->assertDatabaseHas('recipient_monitoring_adjustment_requests', [
-            'request_type' => 'exception',
-            'status' => 'approved',
-        ]);
-        $this->assertDatabaseHas('recipient_monitoring_interventions', ['status' => 'open']);
-        $this->assertDatabaseHas('recipient_benefit_release_records', ['status' => 'withheld']);
-        $this->assertDatabaseHas('recipient_benefit_receipt_responses', [
-            'response_type' => 'issue',
-            'status' => 'open',
-        ]);
-        $this->assertDatabaseHas('recipient_support_decisions', ['decision' => 'completed']);
-        $this->assertDatabaseHas('recipient_support_decisions', ['decision' => 'renewed']);
+        $this->assertSame(3, $successfulApplication->monitoringSubmissions()->count());
+        $this->assertSame(0, $successfulApplication->monitoringSubmissions()
+            ->whereIn('review_status', ['pending', 'needs_correction', 'not_met'])
+            ->count());
+        $this->assertDatabaseCount('recipient_monitoring_adjustment_requests', 0);
+        $this->assertDatabaseCount('recipient_monitoring_interventions', 0);
+
+        $this->assertSame(2, RecipientBenefitRelease::query()->where('status', 'completed')->count());
+        $this->assertSame(0, RecipientBenefitRelease::query()->where('status', '!=', 'completed')->count());
+        $this->assertDatabaseCount('recipient_benefit_release_records', 2);
+        $this->assertDatabaseCount('recipient_benefit_receipt_responses', 2);
+        $this->assertSame(2, $successfulApplication->benefitReleaseRecords()->where('status', 'released')->count());
+        $this->assertSame(3, RecipientBenefitEntitlement::query()
+            ->where('scholarship_application_id', $successfulApplication->id)
+            ->where('status', 'fulfilled')
+            ->count());
         $this->assertDatabaseHas('recipient_support_decisions', [
-            'decision' => 'terminated',
-            'response_status' => 'open',
-        ]);
-        $this->assertDatabaseHas('support_reports', ['status' => 'open']);
-        $this->assertDatabaseHas('support_reports', ['status' => 'resolved']);
-        $this->assertDatabaseHas('provider_profiles', ['verification_status' => 'pending']);
-        $this->assertDatabaseHas('provider_profiles', ['verification_status' => 'rejected']);
-        $this->assertSame(2, $this->app['db']->table('provider_service_purchases')->count());
-        $this->assertDatabaseHas('scholarship_applications', [
-            'id' => 1,
-            'assigned_reviewer_id' => User::query()->where('username', 'harborlight.reviewer')->value('id'),
+            'scholarship_application_id' => $successfulApplication->id,
+            'decision' => 'completed',
         ]);
 
-        Storage::disk('local')->assertExists('demo-showcase/profile-photos/3/applicant-01.jpg');
-        Storage::disk('local')->assertExists('demo-showcase/application-stage-evidence/3/score_sheet.svg');
-        Storage::disk('local')->assertExists('demo-showcase/application-stage-evidence/4/evaluation.svg');
+        $this->assertSame(1, SupportReport::query()->where('status', 'resolved')->count());
+        $this->assertSame(0, SupportReport::query()->where('status', '!=', 'resolved')->count());
+        $this->assertDatabaseMissing('provider_profiles', ['verification_status' => 'pending']);
+        $this->assertDatabaseMissing('provider_profiles', ['verification_status' => 'rejected']);
+        $this->assertDatabaseHas('provider_profiles', [
+            'user_id' => 2,
+            'verification_status' => 'approved',
+        ]);
+
+        $completedService = ProviderServicePurchase::query()->firstOrFail();
+        $this->assertSame(1, ProviderServicePurchase::query()->count());
+        $this->assertSame('paid', $completedService->status);
+        $this->assertSame('completed', $completedService->fulfillment_status);
+        $this->assertSame(0, ProviderServiceRequest::query()->count());
+        $this->assertSame(2, ProviderServiceLifecycleEvent::query()->count());
+
+        Storage::disk('local')->assertExists(
+            "demo-showcase/profile-photos/{$successfulApplicant->id}/applicant-12.jpg",
+        );
+        Storage::disk('local')->assertExists(
+            "demo-showcase/application-documents/{$successfulApplication->id}/certificate-of-enrollment.svg",
+        );
+        Storage::disk('local')->assertMissing('demo-showcase/profile-photos/3/applicant-01.jpg');
 
         $this->actingAs(User::query()->findOrFail(1))
             ->get(route('admin.index'))
@@ -149,56 +150,34 @@ class CompleteDemoSeederTest extends TestCase
         $this->get(route('provider.applications.data'))
             ->assertOk();
 
-        $selectionOfficer = User::query()->where('username', 'harborlight.selection')->firstOrFail();
-        $this->actingAs($selectionOfficer)
-            ->getJson('/provider/workspaces/selection/sessions/data?queue=active')
-            ->assertOk()
-            ->assertJsonPath('summary.active', 2)
-            ->assertJsonPath('summary.unassigned', 1)
-            ->assertJsonPath('summary.results', 2)
-            ->assertJsonPath('summary.history', 3)
-            ->assertJsonCount(2, 'sessions');
-        $this->getJson('/provider/workspaces/selection/sessions/data?queue=unassigned')
-            ->assertOk()
-            ->assertJsonCount(1, 'applications')
-            ->assertJsonPath('applications.0.stage.key', 'formal_application');
-        $this->getJson('/provider/workspaces/selection/sessions/data?queue=results')
-            ->assertOk()
-            ->assertJsonCount(2, 'applications');
-        $this->getJson('/provider/workspaces/selection/sessions/data?queue=history')
-            ->assertOk()
-            ->assertJsonCount(3, 'sessions');
-
-        $reviewOfficer = User::query()->where('username', 'admin.reviews')->firstOrFail();
-        $attentionSession = ApplicationStageSession::query()
-            ->where('title', 'Qualifying exam - Proof follow-up')
-            ->firstOrFail();
-        $this->actingAs($reviewOfficer)
-            ->getJson('/admin/workspaces/reviews/selection-activities/data?status=attention')
-            ->assertOk()
-            ->assertJsonCount(1, 'items')
-            ->assertJsonPath('items.0.id', $attentionSession->id)
-            ->assertJsonPath('items.0.primary_flag', 'Required session proof is missing.');
-
-        $scheduledAssignment = ApplicationStageAssignment::query()
-            ->whereHas('session', fn ($query) => $query->where('title', 'Qualifying exam - Morning group'))
-            ->with('application.applicant')
-            ->firstOrFail();
-        $this->actingAs($scheduledAssignment->application->applicant)
-            ->getJson(route('dashboard.applications.show.data', $scheduledAssignment->application))
-            ->assertOk()
-            ->assertJsonPath('application.selection_activities.0.id', $scheduledAssignment->id)
-            ->assertJsonPath('application.selection_activities.0.type', 'exam')
-            ->assertJsonPath('application.selection_activities.0.applicant_acknowledged', true);
-
-        $monitoringApplication = ScholarshipApplication::query()
-            ->where('student_response_status', 'accepted')
-            ->whereHas('monitoringSubmissions', fn ($query) => $query->where('review_status', 'pending'))
-            ->firstOrFail();
-        $this->actingAs($monitoringApplication->applicant)
-            ->get(route('dashboard.monitoring.show', $monitoringApplication))
+        $providerBilling = User::query()->where('username', 'harborlight.billing')->firstOrFail();
+        $this->actingAs($providerBilling)
+            ->get('/provider/workspaces/billing')
             ->assertOk();
-        $this->get(route('dashboard.applications.show', $monitoringApplication))
+        $this->getJson('/provider/workspaces/billing/data?queue=completed')
+            ->assertOk()
+            ->assertJsonPath('summary.requests', 0)
+            ->assertJsonPath('summary.needs_action', 0)
+            ->assertJsonPath('summary.active', 0)
+            ->assertJsonPath('summary.waiting', 0)
+            ->assertJsonPath('summary.completed', 1);
+
+        $adminBilling = User::query()->where('username', 'admin.billing')->firstOrFail();
+        $this->actingAs($adminBilling)
+            ->get('/admin/workspaces/billing')
+            ->assertOk();
+        $this->getJson('/admin/workspaces/billing/summary')
+            ->assertOk()
+            ->assertJsonPath('summary.ready', 0)
+            ->assertJsonPath('summary.active', 0)
+            ->assertJsonPath('summary.waiting', 0)
+            ->assertJsonPath('summary.completed', 1)
+            ->assertJsonPath('summary.meeting_requests', 0);
+
+        $this->actingAs($successfulApplicant)
+            ->get(route('dashboard.monitoring.show', $successfulApplication))
+            ->assertOk();
+        $this->get(route('dashboard.applications.show', $successfulApplication))
             ->assertOk();
     }
 }

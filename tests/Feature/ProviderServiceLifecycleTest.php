@@ -2,9 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Models\PortalNotification;
 use App\Models\ProviderServicePurchase;
 use App\Models\User;
 use App\Services\ProviderServiceLifecycleService;
+use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -142,6 +144,67 @@ class ProviderServiceLifecycleTest extends TestCase
         $this->assertSame('platform', $purchase->current_action_owner);
         $this->assertSame('Review the meeting request', $purchase->current_action);
         $this->assertNotNull($purchase->action_due_at);
+    }
+
+    public function test_cancellation_request_takes_priority_and_cancelled_services_have_no_next_action(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $lifecycle = app(ProviderServiceLifecycleService::class);
+        $purchase = $this->purchase($provider, 'paid');
+        $purchase->update(['cancellation_status' => 'requested']);
+
+        $purchase = $lifecycle->syncCurrentAction($purchase);
+        $this->assertSame('platform', $purchase->current_action_owner);
+        $this->assertSame('Review the cancellation request', $purchase->current_action);
+
+        $purchase = $lifecycle->transitionDelivery($purchase, 'cancelled', $admin, [
+            'cancellation_status' => 'approved',
+            'refund_status' => 'not_applicable',
+        ], 'service_cancellation_approved');
+        $this->assertNull($purchase->current_action_owner);
+        $this->assertNull($purchase->current_action);
+        $this->assertNotNull($purchase->closed_at);
+    }
+
+    public function test_action_deadlines_are_contextual_and_stable_until_the_owner_changes(): void
+    {
+        CarbonImmutable::setTestNow('2026-10-19 09:00:00');
+
+        try {
+            $provider = User::factory()->create(['role' => 'provider']);
+            $admin = User::factory()->create(['role' => 'admin']);
+            $lifecycle = app(ProviderServiceLifecycleService::class);
+            $purchase = $this->purchase($provider, 'paid');
+            $purchase->update(['target_due_at' => now()->addDays(10)]);
+
+            $purchase = $lifecycle->initialize($purchase);
+            $this->assertTrue($purchase->action_due_at->equalTo(now()->addDays(2)));
+
+            $stableDueAt = $purchase->action_due_at->copy();
+            CarbonImmutable::setTestNow('2026-10-20 09:00:00');
+            $purchase = $lifecycle->syncCurrentAction($purchase);
+            $this->assertTrue($purchase->action_due_at->equalTo($stableDueAt));
+
+            $reminder = PortalNotification::create([
+                'user_id' => $admin->id,
+                'type' => 'provider_service_action_reminder',
+                'title' => 'Service action due soon',
+                'message' => 'Start this service request.',
+                'action_url' => "/admin/workspaces/billing/requests/{$purchase->id}/delivery",
+                'deduplication_key' => "provider-service:{$purchase->id}:action:platform:upcoming:test",
+            ]);
+
+            $purchase = $lifecycle->transitionDelivery($purchase, 'in_progress', $admin);
+            $this->assertTrue($purchase->action_due_at->equalTo(now()->addDays(5)));
+            $this->assertNotNull($reminder->fresh()->read_at);
+
+            $purchase = $lifecycle->transitionDelivery($purchase, 'needs_information', $admin);
+            $this->assertSame('provider', $purchase->current_action_owner);
+            $this->assertTrue($purchase->action_due_at->equalTo(now()->addDays(3)));
+        } finally {
+            CarbonImmutable::setTestNow();
+        }
     }
 
     private function purchase(User $provider, string $paymentStatus = 'pending'): ProviderServicePurchase

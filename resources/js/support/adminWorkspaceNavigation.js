@@ -76,7 +76,7 @@ export const adminWorkspaceDefinitions = {
             { key: 'billing-ready', href: '/admin/workspaces/billing/queues/ready', label: 'Ready to start', icon: 'fa-solid fa-play', exact: true },
             { key: 'billing-active', href: '/admin/workspaces/billing/queues/active', label: 'Active delivery', icon: 'fa-solid fa-list-check', exact: true },
             { key: 'billing-waiting', href: '/admin/workspaces/billing/queues/waiting', label: 'Waiting on provider', icon: 'fa-solid fa-clock', exact: true },
-            { key: 'billing-completed', href: '/admin/workspaces/billing/queues/completed', label: 'Completed requests', icon: 'fa-solid fa-circle-check', exact: true },
+            { key: 'billing-completed', href: '/admin/workspaces/billing/queues/completed', label: 'Closed requests', icon: 'fa-solid fa-circle-check', exact: true },
             sharedProfileLink,
         ],
     },

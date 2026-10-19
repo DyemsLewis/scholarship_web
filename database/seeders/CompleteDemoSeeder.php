@@ -97,12 +97,13 @@ class CompleteDemoSeeder extends Seeder
         $this->seedProviderVerificationExamples($admin);
         $this->call(RoleTestAccountsSeeder::class);
         $this->call(DemoProviderServiceSeeder::class);
+        $this->call(SuccessfulDemoCleanupSeeder::class);
 
         if ((int) $admin->id !== 1 || (int) $provider->id !== 2 || (int) $scholarship->id !== 1) {
             throw new RuntimeException('Demo IDs did not restart at 1. Reset the database before running this seeder.');
         }
 
-        $this->command?->info('Complete demonstration created with role teams, program lifecycle examples, and full workflow branch coverage.');
+        $this->command?->info('Successful demonstration created with role teams and a completed recipient lifecycle.');
     }
 
     private function seedAdmin(): User

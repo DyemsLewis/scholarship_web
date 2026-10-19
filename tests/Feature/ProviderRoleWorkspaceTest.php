@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ProviderServicePurchase;
+use App\Models\ProviderServiceRequest;
 use App\Models\RecipientBenefitReceiptResponse;
 use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientBenefitReleaseRecord;
@@ -2222,7 +2223,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('workspace.key', 'billing-staff')
             ->assertJsonPath('metrics.0.value', 0);
 
-        foreach (['action', 'active', 'waiting', 'completed'] as $section) {
+        foreach (['requests', 'action', 'active', 'waiting', 'completed'] as $section) {
             $this->actingAs($staff)
                 ->get("/provider/workspaces/billing/{$section}")
                 ->assertOk()
@@ -2235,28 +2236,56 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertViewIs('provider-billing');
 
         $this->actingAs($staff)
+            ->getJson('/provider/workspaces/billing/services/data')
+            ->assertOk()
+            ->assertJsonCount(count(config('billing.plans', [])), 'plans')
+            ->assertJsonPath('plans.0.category', 'Program readiness')
+            ->assertJsonMissingPath('purchases');
+
+        $this->actingAs($staff)
             ->get('/provider/billing/requests')
-            ->assertRedirect('/provider/workspaces/billing/action');
+            ->assertRedirect('/provider/workspaces/billing/requests');
 
         foreach (array_keys(config('billing.plans', [])) as $plan) {
             $this->actingAs($staff)
                 ->get("/provider/workspaces/billing/services/{$plan}")
                 ->assertOk()
-                ->assertViewIs('provider-billing');
+                ->assertViewIs('provider-service-detail');
+
+            $this->actingAs($staff)
+                ->getJson("/provider/workspaces/billing/services/{$plan}/data")
+                ->assertOk()
+                ->assertJsonPath('plan.code', $plan)
+                ->assertJsonCount(3, 'plan.features')
+                ->assertJsonCount(3, 'plan.preparation')
+                ->assertJsonCount(3, 'plan.process')
+                ->assertJsonMissingPath('purchases');
+
+            $this->actingAs($staff)
+                ->get("/provider/workspaces/billing/services/{$plan}/request")
+                ->assertOk()
+                ->assertViewIs('provider-service-intake');
+
+            $this->actingAs($staff)
+                ->getJson("/provider/workspaces/billing/services/{$plan}/request/data")
+                ->assertOk()
+                ->assertJsonPath('plan.code', $plan)
+                ->assertJsonMissingPath('purchases');
         }
 
         $purchase = $this->servicePurchase($owner);
 
         foreach ([
-            "/provider/billing/{$purchase->id}",
-            "/provider/billing/{$purchase->id}/meeting",
-            "/provider/billing/{$purchase->id}/files",
-            "/provider/billing/{$purchase->id}/updates",
-        ] as $recordUrl) {
+            "/provider/billing/{$purchase->id}" => 'providerServiceOverview',
+            "/provider/billing/{$purchase->id}/meeting" => 'providerServiceMeeting',
+            "/provider/billing/{$purchase->id}/files" => 'providerServiceFiles',
+            "/provider/billing/{$purchase->id}/updates" => 'providerServiceUpdates',
+        ] as $recordUrl => $workspacePage) {
             $this->actingAs($staff)
                 ->get($recordUrl)
                 ->assertOk()
-                ->assertViewIs('provider-service-workspace');
+                ->assertViewIs('provider-service-workspace')
+                ->assertSee('data-page="'.$workspacePage.'"', false);
         }
 
         $this->assertSame(
@@ -2265,11 +2294,18 @@ class ProviderRoleWorkspaceTest extends TestCase
         );
     }
 
-    public function test_billing_desk_separates_action_active_waiting_and_completed_requests(): void
+    public function test_billing_desk_separates_pre_payment_requests_from_paid_service_delivery(): void
     {
         $owner = User::factory()->create(['role' => 'provider']);
         $staff = $this->billingStaff($owner);
         $pending = $this->servicePurchase($owner, ['status' => 'pending', 'fulfillment_status' => 'ready']);
+        $unfinishedRequest = $this->serviceRequest($owner);
+        $checkoutRequest = $this->serviceRequest($owner, ['status' => 'checkout_started']);
+        $checkoutPurchase = $this->servicePurchase($owner, [
+            'service_request_id' => $checkoutRequest->id,
+            'status' => 'pending',
+            'fulfillment_status' => 'queued',
+        ]);
         $needsInformation = $this->servicePurchase($owner, ['fulfillment_status' => 'needs_information']);
         $providerReview = $this->servicePurchase($owner, ['fulfillment_status' => 'provider_review']);
         $active = $this->servicePurchase($owner, ['fulfillment_status' => 'in_progress']);
@@ -2277,18 +2313,33 @@ class ProviderRoleWorkspaceTest extends TestCase
         $completed = $this->servicePurchase($owner, ['fulfillment_status' => 'completed']);
         $outsideOwner = User::factory()->create(['role' => 'provider']);
         $this->servicePurchase($outsideOwner, ['fulfillment_status' => 'provider_review']);
+        $this->serviceRequest($outsideOwner);
 
         $this->actingAs($staff)
             ->getJson('/provider/workspaces/billing/data')
             ->assertOk()
             ->assertJsonPath('workspace.role', 'Billing staff')
-            ->assertJsonPath('summary.needs_action', 3)
+            ->assertJsonPath('queue', 'requests')
+            ->assertJsonPath('summary.requests', 3)
+            ->assertJsonPath('summary.needs_action', 2)
             ->assertJsonPath('summary.active', 1)
             ->assertJsonPath('summary.waiting', 1)
             ->assertJsonPath('summary.completed', 1)
-            ->assertJsonPath('summary.total', 6)
-            ->assertJsonPath('next_task.id', $providerReview->id)
-            ->assertJsonCount(3, 'purchases');
+            ->assertJsonPath('summary.total', 8)
+            ->assertJsonCount(3, 'entries')
+            ->assertJsonCount(3, 'requests')
+            ->assertJsonCount(0, 'purchases')
+            ->assertJsonFragment([
+                'record_id' => $checkoutRequest->id,
+                'work_label' => 'Payment pending',
+            ]);
+
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/billing/data?queue=needs_action')
+            ->assertOk()
+            ->assertJsonPath('queue', 'needs_action')
+            ->assertJsonCount(2, 'entries')
+            ->assertJsonMissing(['id' => $checkoutPurchase->id]);
 
         $this->actingAs($staff)
             ->getJson('/provider/workspaces/billing/data?queue=active')
@@ -2309,8 +2360,20 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('purchases.0.id', $completed->id)
             ->assertJsonCount(1, 'purchases');
 
+        $this->actingAs($staff)
+            ->getJson('/provider/workspaces/billing/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('metrics.0.key', 'requests')
+            ->assertJsonPath('metrics.0.value', 3)
+            ->assertJsonPath('metrics.1.key', 'needs_action')
+            ->assertJsonPath('metrics.1.value', 2)
+            ->assertJsonPath('sections.0.key', 'unfinished-requests')
+            ->assertJsonPath('sections.1.key', 'provider-actions');
+
         $this->assertNotNull($pending);
+        $this->assertNotNull($unfinishedRequest);
         $this->assertNotNull($needsInformation);
+        $this->assertNotNull($providerReview);
     }
 
     public function test_service_request_desk_paginates_five_requests_per_page(): void
@@ -2319,17 +2382,16 @@ class ProviderRoleWorkspaceTest extends TestCase
         $staff = $this->billingStaff($owner);
 
         foreach (range(1, 6) as $number) {
-            $this->servicePurchase($owner, [
+            $this->serviceRequest($owner, [
                 'plan_name' => "Pagination service {$number}",
-                'status' => 'pending',
-                'fulfillment_status' => 'ready',
             ]);
         }
 
         $this->actingAs($staff)
             ->getJson('/provider/workspaces/billing/data')
             ->assertOk()
-            ->assertJsonCount(5, 'purchases')
+            ->assertJsonCount(5, 'entries')
+            ->assertJsonCount(5, 'requests')
             ->assertJsonPath('pagination.per_page', 5)
             ->assertJsonPath('pagination.total', 6)
             ->assertJsonPath('pagination.last_page', 2);
@@ -2337,7 +2399,8 @@ class ProviderRoleWorkspaceTest extends TestCase
         $this->actingAs($staff)
             ->getJson('/provider/workspaces/billing/data?page=2')
             ->assertOk()
-            ->assertJsonCount(1, 'purchases')
+            ->assertJsonCount(1, 'entries')
+            ->assertJsonCount(1, 'requests')
             ->assertJsonPath('pagination.from', 6)
             ->assertJsonPath('pagination.to', 6);
     }
@@ -2348,10 +2411,15 @@ class ProviderRoleWorkspaceTest extends TestCase
         $reviewer = $this->applicationReviewer($owner);
 
         $this->actingAs($reviewer)->get('/provider/workspaces/billing')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/billing/requests')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/billing/active')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/billing/dashboard/data')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/billing/services')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/billing/services/data')->assertForbidden();
         $this->actingAs($reviewer)->get('/provider/workspaces/billing/services/assisted_setup')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/billing/services/assisted_setup/data')->assertForbidden();
+        $this->actingAs($reviewer)->get('/provider/workspaces/billing/services/assisted_setup/request')->assertForbidden();
+        $this->actingAs($reviewer)->getJson('/provider/workspaces/billing/services/assisted_setup/request/data')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/workspaces/billing/data')->assertForbidden();
     }
 
@@ -2487,6 +2555,28 @@ class ProviderRoleWorkspaceTest extends TestCase
             'fulfillment_status' => 'ready',
             'reference_number' => 'PS-'.strtoupper(fake()->unique()->bothify('########')),
             'paid_at' => now()->subDay(),
+            ...$attributes,
+        ]);
+    }
+
+    private function serviceRequest(User $owner, array $attributes = []): ProviderServiceRequest
+    {
+        return ProviderServiceRequest::query()->create([
+            'provider_id' => $owner->id,
+            'created_by' => $owner->id,
+            'plan_code' => 'assisted_setup',
+            'plan_name' => 'Assisted program setup',
+            'amount' => 75000,
+            'currency' => 'PHP',
+            'status' => 'ready_for_review',
+            'answers' => [
+                'contact_name' => $owner->name,
+                'contact_email' => $owner->email,
+                'requested_outcome' => 'Prepare the scholarship program for publishing.',
+            ],
+            'request_summary' => 'Prepare a scholarship program for publishing.',
+            'requested_outcome' => 'A complete program setup ready for review.',
+            'submitted_at' => now(),
             ...$attributes,
         ]);
     }

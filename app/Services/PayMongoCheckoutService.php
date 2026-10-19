@@ -31,6 +31,12 @@ class PayMongoCheckoutService
         }
 
         $baseUrl = rtrim((string) config('billing.paymongo.base_url'), '/');
+        $returnRoute = $purchase->service_request_id
+            ? 'provider.workspaces.billing.service-requests.review'
+            : 'provider.workspaces.billing.services.show';
+        $returnParameters = $purchase->service_request_id
+            ? ['serviceRequest' => $purchase->service_request_id]
+            : ['plan' => $purchase->plan_code];
         $payload = [
             'data' => [
                 'attributes' => [
@@ -42,11 +48,13 @@ class PayMongoCheckoutService
                         'quantity' => 1,
                     ]],
                     'payment_method_types' => config('billing.paymongo.payment_methods', ['card', 'gcash', 'qrph']),
-                    'success_url' => route('provider.billing', [
+                    'success_url' => route($returnRoute, [
+                        ...$returnParameters,
                         'checkout' => 'submitted',
                         'reference' => $purchase->reference_number,
                     ]),
-                    'cancel_url' => route('provider.billing', [
+                    'cancel_url' => route($returnRoute, [
+                        ...$returnParameters,
                         'checkout' => 'cancelled',
                         'reference' => $purchase->reference_number,
                     ]),

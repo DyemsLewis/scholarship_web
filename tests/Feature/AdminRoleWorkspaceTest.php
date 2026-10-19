@@ -697,13 +697,20 @@ class AdminRoleWorkspaceTest extends TestCase
         $this->actingAs($billingOfficer)
             ->get("/admin/workspaces/billing/requests/{$purchase->id}")
             ->assertOk()
-            ->assertViewIs('admin-billing-request-record');
+            ->assertViewIs('admin-billing-request-record')
+            ->assertSee('data-page="adminServiceOverview"', false);
 
-        foreach (['delivery', 'files', 'updates', 'meeting'] as $section) {
+        foreach ([
+            'delivery' => 'adminServiceDelivery',
+            'files' => 'adminServiceFiles',
+            'updates' => 'adminServiceUpdates',
+            'meeting' => 'adminServiceMeeting',
+        ] as $section => $workspacePage) {
             $this->actingAs($billingOfficer)
                 ->get("/admin/workspaces/billing/requests/{$purchase->id}/{$section}")
                 ->assertOk()
-                ->assertViewIs('admin-billing-request-record');
+                ->assertViewIs('admin-billing-request-record')
+                ->assertSee('data-page="'.$workspacePage.'"', false);
         }
 
         $this->actingAs($billingOfficer)
@@ -714,6 +721,10 @@ class AdminRoleWorkspaceTest extends TestCase
             ->get('/admin/billing')
             ->assertOk()
             ->assertViewIs('admin-billing');
+
+        $this->actingAs($primaryAdmin)
+            ->get("/admin/billing/{$purchase->id}")
+            ->assertRedirect("/admin/workspaces/billing/requests/{$purchase->id}");
     }
 
     public function test_admin_without_billing_permission_cannot_open_billing_officer_workspace(): void
@@ -1074,6 +1085,18 @@ class AdminRoleWorkspaceTest extends TestCase
             ],
         ]);
         $provider = User::factory()->create(['role' => 'provider']);
+        $service = ProviderServicePurchase::query()->create([
+            'provider_id' => $provider->id,
+            'created_by' => $provider->id,
+            'plan_code' => 'assisted_setup',
+            'plan_name' => 'Portal Managed Setup',
+            'amount' => 75000,
+            'currency' => 'PHP',
+            'status' => 'paid',
+            'fulfillment_status' => 'ready',
+            'reference_number' => 'SVC-PORTAL-001',
+            'paid_at' => now(),
+        ]);
 
         $this->actingAs($portalManager)
             ->get('/admin')
@@ -1166,6 +1189,15 @@ class AdminRoleWorkspaceTest extends TestCase
         $this->actingAs($portalManager)
             ->get('/admin/billing')
             ->assertRedirect('/admin/workspaces/portal/billing');
+
+        $this->actingAs($portalManager)
+            ->get("/admin/billing/{$service->id}")
+            ->assertRedirect("/admin/workspaces/billing/requests/{$service->id}");
+
+        $this->actingAs($portalManager)
+            ->get("/admin/workspaces/billing/requests/{$service->id}")
+            ->assertOk()
+            ->assertSee('data-page="adminServiceOverview"', false);
 
         $this->actingAs($portalManager)
             ->get('/admin/finance')

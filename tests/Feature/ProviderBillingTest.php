@@ -56,104 +56,31 @@ class ProviderBillingTest extends TestCase
         $this->actingAs($programStaff)->get('/provider/billing')->assertForbidden();
     }
 
-    public function test_provider_checkout_uses_paymongo_v2_and_stores_a_pending_order(): void
+    public function test_legacy_checkout_callback_returns_to_the_matching_service_detail(): void
     {
-        Http::fake([
-            'https://api.paymongo.com/v2/checkout_sessions' => Http::response([
-                'data' => [
-                    'id' => 'cs_test_checkout',
-                    'type' => 'checkout_session',
-                    'attributes' => [
-                        'checkout_url' => 'https://checkout.paymongo.com/cs_test_checkout',
-                        'livemode' => false,
-                    ],
-                ],
-            ]),
-        ]);
         $provider = User::factory()->create(['role' => 'provider']);
+        $purchase = $this->pendingPurchase($provider);
 
-        $response = $this->actingAs($provider)->postJson('/provider/billing/checkout', [
-            'plan_code' => 'assisted_setup',
-            'accept_terms' => true,
-        ])->assertCreated()
-            ->assertJsonPath('checkout_url', 'https://checkout.paymongo.com/cs_test_checkout')
-            ->assertJsonPath('purchase.status', 'pending');
-
-        $purchase = ProviderServicePurchase::query()->findOrFail($response->json('purchase.id'));
-
-        $this->assertSame($provider->id, $purchase->provider_id);
-        $this->assertSame(75000, $purchase->amount);
-        $this->assertSame('PHP', $purchase->currency);
-        $this->assertSame('cs_test_checkout', $purchase->checkout_session_id);
-        $this->assertNotNull($purchase->service_terms_accepted_at);
-        $this->assertSame('queued', $purchase->fulfillment_status);
-        $this->assertNull($purchase->request_summary);
-        $this->assertNull($purchase->requested_outcome);
-        $this->assertCount(3, $purchase->milestones);
-
-        Http::assertSent(function (ClientRequest $request) use ($purchase): bool {
-            return $request->url() === 'https://api.paymongo.com/v2/checkout_sessions'
-                && $request->hasHeader('Authorization', 'Basic '.base64_encode('sk_test_portal:'))
-                && $request['data']['attributes']['line_items'][0]['amount'] === 75000
-                && $request['data']['attributes']['line_items'][0]['currency'] === 'PHP'
-                && $request['data']['attributes']['reference_number'] === $purchase->reference_number
-                && $request['data']['attributes']['metadata']['purchase_id'] === (string) $purchase->id
-                && $request['data']['attributes']['pass_on_fees'] === false;
-        });
+        $this->actingAs($provider)
+            ->get('/provider/billing?checkout=submitted&reference='.$purchase->reference_number)
+            ->assertRedirect(route('provider.workspaces.billing.services.show', [
+                'plan' => 'assisted_setup',
+                'checkout' => 'submitted',
+                'reference' => $purchase->reference_number,
+            ]));
     }
 
-    public function test_checkout_requires_optional_service_terms_acceptance(): void
+    public function test_direct_checkout_endpoint_cannot_bypass_service_intake(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);
 
         $this->actingAs($provider)->postJson('/provider/billing/checkout', [
             'plan_code' => 'assisted_setup',
-            'accept_terms' => false,
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors('accept_terms');
+            'accept_terms' => true,
+        ])->assertNotFound();
 
         Http::assertNothingSent();
         $this->assertDatabaseCount('provider_service_purchases', 0);
-    }
-
-    public function test_application_cycle_checkout_records_the_requested_support_areas(): void
-    {
-        Http::fake([
-            'https://api.paymongo.com/v2/checkout_sessions' => Http::response([
-                'data' => [
-                    'id' => 'cs_test_cycle_support',
-                    'type' => 'checkout_session',
-                    'attributes' => [
-                        'checkout_url' => 'https://checkout.paymongo.com/cs_test_cycle_support',
-                        'livemode' => false,
-                    ],
-                ],
-            ]),
-        ]);
-        $provider = User::factory()->create(['role' => 'provider']);
-
-        $this->actingAs($provider)->postJson('/provider/billing/checkout', [
-            'plan_code' => 'application_cycle_support',
-            'accept_terms' => true,
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors('support_areas');
-
-        $response = $this->actingAs($provider)->postJson('/provider/billing/checkout', [
-            'plan_code' => 'application_cycle_support',
-            'accept_terms' => true,
-            'support_areas' => ['applicant_queues', 'stages_schedules'],
-            'support_note' => 'We need help preparing for a larger applicant intake.',
-        ])->assertCreated();
-
-        $purchase = ProviderServicePurchase::query()->findOrFail($response->json('purchase.id'));
-
-        $this->assertStringContainsString('Applicant queues and reviewer workload', $purchase->request_summary);
-        $this->assertStringContainsString('Selection stages and schedules', $purchase->request_summary);
-        $this->assertStringContainsString('larger applicant intake', $purchase->request_summary);
-        $this->assertSame(
-            'A clear, organized application cycle and action plan for the selected support areas.',
-            $purchase->requested_outcome,
-        );
     }
 
     public function test_valid_signed_paid_webhook_confirms_payment_once_and_notifies_both_roles(): void
@@ -370,13 +297,29 @@ class ProviderBillingTest extends TestCase
             ->assertOk()
             ->assertJsonPath('purchase.assigned_to', $admin->id)
             ->assertJsonPath('purchase.priority', 'high')
-            ->assertJsonCount(2, 'purchase.updates');
+            ->assertJsonCount(0, 'purchase.updates')
+            ->assertJsonCount(0, 'purchase.files');
 
-        $providerWorkspace = $this->actingAs($provider)
+        $this->actingAs($admin)
+            ->getJson("/admin/billing/{$purchase->id}/data?section=updates")
+            ->assertOk()
+            ->assertJsonCount(2, 'purchase.updates')
+            ->assertJsonCount(0, 'purchase.files')
+            ->assertJsonFragment(['message' => 'Coordinate the final check with the portal manager.']);
+
+        $this->actingAs($provider)
             ->getJson("/provider/billing/{$purchase->id}/data")
             ->assertOk()
             ->assertJsonPath('purchase.assigned_to', $admin->id)
+            ->assertJsonCount(0, 'purchase.updates')
+            ->assertJsonCount(0, 'purchase.files');
+
+        $providerWorkspace = $this->actingAs($provider)
+            ->getJson("/provider/billing/{$purchase->id}/data?section=updates")
+            ->assertOk()
+            ->assertJsonPath('purchase.assigned_to', $admin->id)
             ->assertJsonCount(1, 'purchase.updates')
+            ->assertJsonCount(0, 'purchase.files')
             ->assertJsonMissing(['message' => 'Coordinate the final check with the portal manager.']);
 
         $this->assertSame('progress_update', $providerWorkspace->json('purchase.updates.0.kind'));
@@ -404,13 +347,37 @@ class ProviderBillingTest extends TestCase
                 'service_file' => UploadedFile::fake()->create('review-recommendations.pdf', 120, 'application/pdf'),
             ], ['Accept' => 'application/json'])
             ->assertCreated()
-            ->assertJsonFragment(['category' => 'deliverable']);
+            ->assertJsonFragment(['category' => 'deliverable'])
+            ->assertJsonCount(2, 'purchase.files')
+            ->assertJsonCount(0, 'purchase.updates');
 
         $deliverable = collect($deliverableResponse->json('purchase.files'))->firstWhere('category', 'deliverable');
 
         $this->actingAs($provider)
             ->get($deliverable['view_url'])
             ->assertOk();
+
+        $this->actingAs($provider)
+            ->getJson("/provider/billing/{$purchase->id}/data?section=files")
+            ->assertOk()
+            ->assertJsonCount(2, 'purchase.files')
+            ->assertJsonCount(0, 'purchase.updates');
+
+        $this->actingAs($provider)
+            ->getJson("/provider/billing/{$purchase->id}/data?section=meeting")
+            ->assertOk()
+            ->assertJsonCount(0, 'purchase.files')
+            ->assertJsonCount(0, 'purchase.updates');
+
+        $this->actingAs($provider)
+            ->getJson("/provider/billing/{$purchase->id}/data?section=invalid")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('section');
+
+        $this->actingAs($admin)
+            ->getJson("/admin/billing/{$purchase->id}/data?section=invalid")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('section');
     }
 
     public function test_provider_can_request_a_service_meeting_and_admin_can_confirm_it(): void
@@ -461,10 +428,20 @@ class ProviderBillingTest extends TestCase
         $this->actingAs($admin)
             ->patchJson("/admin/billing/{$purchase->id}/meeting", [
                 'meeting_status' => 'confirmed',
-                'meeting_admin_note' => 'Use the private meeting link included in this service workspace.',
+                'meeting_admin_note' => 'The meeting room is ready.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('meeting_join_url');
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/billing/{$purchase->id}/meeting", [
+                'meeting_status' => 'confirmed',
+                'meeting_admin_note' => 'Use the confirmed meeting room at the scheduled time.',
+                'meeting_join_url' => 'https://meet.example.test/service-review',
             ])
             ->assertOk()
             ->assertJsonPath('purchase.meeting_status', 'confirmed')
+            ->assertJsonPath('purchase.meeting_join_url', 'https://meet.example.test/service-review')
             ->assertJsonPath('purchase.meeting_decided_by', $admin->id);
 
         $this->assertDatabaseHas('provider_service_updates', [
@@ -612,6 +589,111 @@ class ProviderBillingTest extends TestCase
             ])
             ->assertCreated()
             ->assertJsonPath('purchase.fulfillment_status', 'ready');
+    }
+
+    public function test_provider_cancellation_requires_admin_review_and_locks_the_closed_service(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update(['status' => 'paid', 'paid_at' => now(), 'fulfillment_status' => 'in_progress']);
+
+        $this->actingAs($provider)
+            ->postJson("/provider/billing/{$purchase->id}/cancellation", [
+                'reason' => 'Our organization no longer needs this service during the current cycle.',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('purchase.cancellation_status', 'requested')
+            ->assertJsonPath('purchase.current_action', 'Review the cancellation request');
+
+        $this->assertDatabaseHas('portal_notifications', [
+            'user_id' => $admin->id,
+            'type' => 'provider_service_cancellation',
+            'action_url' => "/admin/workspaces/billing/requests/{$purchase->id}/closeout",
+        ]);
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/billing/{$purchase->id}/cancellation", [
+                'decision' => 'approved',
+                'decision_note' => 'Cancellation is approved and the finance team will process the refund.',
+                'refund_status' => 'manual_refund_pending',
+            ])
+            ->assertOk()
+            ->assertJsonPath('purchase.fulfillment_status', 'cancelled')
+            ->assertJsonPath('purchase.refund_status', 'manual_refund_pending');
+
+        $this->actingAs($provider)
+            ->postJson("/provider/billing/{$purchase->id}/updates", ['message' => 'This should not be accepted.'])
+            ->assertUnprocessable();
+        $this->actingAs($admin)
+            ->postJson("/admin/billing/{$purchase->id}/restore", ['reason' => 'Restore this closed request.'])
+            ->assertUnprocessable();
+        $this->actingAs($provider)
+            ->getJson("/provider/billing/{$purchase->id}/data?section=history")
+            ->assertOk()
+            ->assertJsonPath('purchase.lifecycle_events.0.event_type', 'service_cancellation_requested')
+            ->assertJsonPath('purchase.lifecycle_events.1.event_type', 'service_cancellation_approved');
+    }
+
+    public function test_declined_cancellation_can_be_requested_again_and_restored_when_no_refund_exists(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update(['status' => 'paid', 'paid_at' => now(), 'fulfillment_status' => 'ready']);
+
+        $reason = 'The organization wants to cancel because the planned activity has changed.';
+        $this->actingAs($provider)->postJson("/provider/billing/{$purchase->id}/cancellation", ['reason' => $reason])->assertCreated();
+        $this->actingAs($admin)->patchJson("/admin/billing/{$purchase->id}/cancellation", [
+            'decision' => 'declined',
+            'decision_note' => 'The request can still be adjusted without cancelling the paid service.',
+        ])->assertOk()->assertJsonPath('purchase.cancellation_status', 'declined');
+
+        $this->actingAs($provider)->postJson("/provider/billing/{$purchase->id}/cancellation", ['reason' => $reason])->assertCreated();
+        $this->actingAs($admin)->patchJson("/admin/billing/{$purchase->id}/cancellation", [
+            'decision' => 'approved',
+            'decision_note' => 'Cancellation is approved with no refund required for this record.',
+            'refund_status' => 'not_applicable',
+        ])->assertOk()->assertJsonPath('purchase.fulfillment_status', 'cancelled');
+
+        $this->actingAs($admin)->postJson("/admin/billing/{$purchase->id}/restore", [
+            'reason' => 'Both teams agreed to resume the service under the original payment.',
+        ])->assertOk()
+            ->assertJsonPath('purchase.fulfillment_status', 'in_progress')
+            ->assertJsonPath('purchase.cancellation_status', 'reversed');
+
+        $this->assertDatabaseHas('provider_service_lifecycle_events', [
+            'provider_service_purchase_id' => $purchase->id,
+            'event_type' => 'service_cancellation_reversed',
+            'delivery_from' => 'cancelled',
+            'delivery_to' => 'in_progress',
+        ]);
+    }
+
+    public function test_service_exports_are_scoped_and_formula_safe(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['provider_name' => '=Unsafe Provider']);
+        $otherProvider = User::factory()->create(['role' => 'provider']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $purchase = $this->pendingPurchase($provider);
+        $purchase->update(['status' => 'paid', 'paid_at' => now(), 'fulfillment_status' => 'completed']);
+        $otherPurchase = $this->pendingPurchase($otherProvider);
+        $otherPurchase->update(['status' => 'paid', 'paid_at' => now(), 'fulfillment_status' => 'completed']);
+
+        $providerCsv = $this->actingAs($provider)
+            ->get('/provider/workspaces/billing/export?queue=completed')
+            ->assertOk()
+            ->streamedContent();
+        $this->assertStringContainsString($purchase->reference_number, $providerCsv);
+        $this->assertStringNotContainsString($otherPurchase->reference_number, $providerCsv);
+
+        $adminCsv = $this->actingAs($admin)
+            ->get('/admin/workspaces/billing/export?queue=completed')
+            ->assertOk()
+            ->streamedContent();
+        $this->assertStringContainsString("'=Unsafe Provider", $adminCsv);
+        $this->assertStringContainsString($otherPurchase->reference_number, $adminCsv);
     }
 
     private function pendingPurchase(User $provider): ProviderServicePurchase

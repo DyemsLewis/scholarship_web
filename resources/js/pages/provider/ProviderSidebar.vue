@@ -176,15 +176,16 @@ if (permissions.has('manage_reports')) {
 if (permissions.has('manage_billing')) {
     navLinks.push({
         href: '/provider/workspaces/billing',
-        label: 'Service requests',
+        label: 'Platform services',
         icon: 'fa-solid fa-receipt',
         key: 'billing',
         activePaths: ['/provider/billing'],
         children: [
             { href: '/provider/workspaces/billing', label: 'Dashboard', exact: true },
-            { href: '/provider/workspaces/billing/action', label: 'Needs action', exact: true },
-            { href: '/provider/workspaces/billing/active', label: 'In progress', exact: true },
+            { href: '/provider/workspaces/billing/requests', label: 'Requests to finish', exact: true },
+            { href: '/provider/workspaces/billing/action', label: 'Action needed', exact: true },
             { href: '/provider/workspaces/billing/waiting', label: 'Waiting to start', exact: true },
+            { href: '/provider/workspaces/billing/active', label: 'In progress', exact: true },
             { href: '/provider/workspaces/billing/completed', label: 'Completed', exact: true },
             { href: '/provider/workspaces/billing/services', label: 'Browse services', exact: true },
         ],

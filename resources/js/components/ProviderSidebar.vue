@@ -208,7 +208,7 @@ const entryLinks = computed(() => {
                 { href: providerWorkspaceUrl, label: 'Needs action', activePaths: ['/provider/workspaces/billing/action'] },
                 { href: '/provider/workspaces/billing/active', label: 'In progress', exact: true },
                 { href: '/provider/workspaces/billing/waiting', label: 'Waiting to start', exact: true },
-                { href: '/provider/workspaces/billing/completed', label: 'Completed requests', exact: true },
+                { href: '/provider/workspaces/billing/completed', label: 'Closed requests', exact: true },
                 { href: '/provider/workspaces/billing/services', label: 'Browse services', exact: true },
             ],
         }];

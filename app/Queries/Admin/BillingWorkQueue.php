@@ -12,6 +12,8 @@ class BillingWorkQueue
     {
         $next = $this->forQueue('ready')
             ->with(['provider.providerProfile', 'assignee.adminProfile'])
+            ->orderByRaw('CASE WHEN action_due_at IS NOT NULL AND action_due_at < ? THEN 0 ELSE 1 END', [now()])
+            ->orderBy('action_due_at')
             ->oldest('paid_at')
             ->first();
 
@@ -31,24 +33,12 @@ class BillingWorkQueue
     public function directory(array $filters): array
     {
         $queue = $filters['queue'] ?? 'ready';
-        $query = $this->forQueue($queue)
-            ->with(['provider.providerProfile', 'assignee.adminProfile']);
-        $search = trim((string) ($filters['search'] ?? ''));
-
-        if ($search !== '') {
-            $query->where(function (Builder $builder) use ($search): void {
-                $builder->where('reference_number', 'like', "%{$search}%")
-                    ->orWhere('plan_name', 'like', "%{$search}%")
-                    ->orWhere('request_summary', 'like', "%{$search}%")
-                    ->orWhereHas('provider', fn (Builder $provider) => $provider
-                        ->where('email', 'like', "%{$search}%")
-                        ->orWhereHas('providerProfile', fn (Builder $profile) => $profile
-                            ->where('provider_name', 'like', "%{$search}%")));
-            });
-        }
+        $query = $this->filteredQuery($queue, trim((string) ($filters['search'] ?? '')));
 
         $paginator = $query
+            ->orderByRaw('CASE WHEN action_due_at IS NOT NULL AND action_due_at < ? THEN 0 ELSE 1 END', [now()])
             ->orderByRaw("CASE WHEN meeting_status = 'requested' THEN 0 ELSE 1 END")
+            ->orderBy('action_due_at')
             ->orderBy($queue === 'completed' ? 'fulfilled_at' : 'paid_at', $queue === 'completed' ? 'desc' : 'asc')
             ->latest('id')
             ->paginate((int) ($filters['per_page'] ?? 10))
@@ -60,6 +50,34 @@ class BillingWorkQueue
         ];
     }
 
+    public function exportRows(array $filters): iterable
+    {
+        $queue = $filters['queue'] ?? 'ready';
+
+        return $this->filteredQuery($queue, trim((string) ($filters['search'] ?? '')))
+            ->orderByRaw('CASE WHEN action_due_at IS NOT NULL AND action_due_at < ? THEN 0 ELSE 1 END', [now()])
+            ->orderBy('action_due_at')
+            ->latest('id')
+            ->cursor();
+    }
+
+    private function filteredQuery(string $queue, string $search): Builder
+    {
+        return $this->forQueue($queue)
+            ->with(['provider.providerProfile', 'assignee.adminProfile'])
+            ->when($search !== '', function (Builder $query) use ($search): void {
+                $query->where(function (Builder $builder) use ($search): void {
+                    $builder->where('reference_number', 'like', "%{$search}%")
+                        ->orWhere('plan_name', 'like', "%{$search}%")
+                        ->orWhere('request_summary', 'like', "%{$search}%")
+                        ->orWhereHas('provider', fn (Builder $provider) => $provider
+                            ->where('email', 'like', "%{$search}%")
+                            ->orWhereHas('providerProfile', fn (Builder $profile) => $profile
+                                ->where('provider_name', 'like', "%{$search}%")));
+                });
+            });
+    }
+
     private function forQueue(string $queue): Builder
     {
         $query = ProviderServicePurchase::query()->where('status', 'paid');
@@ -67,7 +85,7 @@ class BillingWorkQueue
         return match ($queue) {
             'active' => $query->where('fulfillment_status', 'in_progress'),
             'waiting' => $query->whereIn('fulfillment_status', ['needs_information', 'provider_review']),
-            'completed' => $query->where('fulfillment_status', 'completed'),
+            'completed' => $query->whereIn('fulfillment_status', ['completed', 'cancelled']),
             default => $query->whereIn('fulfillment_status', ['queued', 'ready']),
         };
     }
@@ -77,7 +95,7 @@ class BillingWorkQueue
         $state = match ($purchase->fulfillment_status) {
             'in_progress' => 'active',
             'needs_information', 'provider_review' => 'waiting',
-            'completed' => 'completed',
+            'completed', 'cancelled' => 'completed',
             default => 'ready',
         };
         $milestones = collect($purchase->milestones ?? []);
@@ -97,11 +115,17 @@ class BillingWorkQueue
                 'provider_review' => 'Provider review',
                 'in_progress' => 'In progress',
                 'completed' => 'Completed',
+                'cancelled' => 'Cancelled',
                 default => 'Ready to start',
             },
             'priority' => $purchase->priority ?? 'normal',
             'assigned_to' => $purchase->assignee?->name,
             'target_due_at' => $purchase->target_due_at?->format('M d, Y'),
+            'action_due_label' => $this->actionDueLabel($purchase),
+            'action_overdue' => $purchase->action_due_at
+                ? $purchase->action_due_at->copy()->timezone(config('app.timezone'))->startOfDay()
+                    ->isBefore(now(config('app.timezone'))->startOfDay())
+                : false,
             'paid_at' => $purchase->paid_at?->format('M d, Y h:i A'),
             'meeting_requested' => $purchase->meeting_status === 'requested',
             'milestone_progress' => [
@@ -110,6 +134,25 @@ class BillingWorkQueue
             ],
             'action_url' => route('admin.workspaces.billing.requests.show', $purchase, false),
         ];
+    }
+
+    private function actionDueLabel(ProviderServicePurchase $purchase): ?string
+    {
+        if (! $purchase->action_due_at || ! $purchase->current_action_owner) {
+            return null;
+        }
+
+        $days = (int) now(config('app.timezone'))->startOfDay()->diffInDays(
+            $purchase->action_due_at->copy()->timezone(config('app.timezone'))->startOfDay(),
+            false,
+        );
+
+        return match (true) {
+            $days < 0 => 'Overdue '.abs($days).'d',
+            $days === 0 => 'Due today',
+            $days === 1 => 'Due tomorrow',
+            default => 'Due '.$purchase->action_due_at->format('M d'),
+        };
     }
 
     private function providerLogoUrl(ProviderServicePurchase $purchase): ?string

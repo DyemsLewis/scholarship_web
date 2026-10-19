@@ -35,7 +35,7 @@ final class BillingOfficerDashboardQuery
                 ['key' => 'ready', 'label' => 'Ready to start', 'value' => $summary['ready'], 'detail' => 'Paid requests', 'tone' => 'attention', 'url' => '/admin/workspaces/billing/queues/ready'],
                 ['key' => 'active', 'label' => 'Active delivery', 'value' => $summary['active'], 'detail' => 'In progress', 'url' => '/admin/workspaces/billing/queues/active'],
                 ['key' => 'waiting', 'label' => 'Waiting on provider', 'value' => $summary['waiting'], 'detail' => 'Information or review', 'tone' => 'attention', 'url' => '/admin/workspaces/billing/queues/waiting'],
-                ['key' => 'completed', 'label' => 'Completed', 'value' => $summary['completed'], 'detail' => $summary['meeting_requests'].' meeting request'.($summary['meeting_requests'] === 1 ? '' : 's'), 'tone' => 'positive', 'url' => '/admin/workspaces/billing/queues/completed'],
+                ['key' => 'completed', 'label' => 'Closed', 'value' => $summary['completed'], 'detail' => 'Completed or cancelled', 'tone' => 'positive', 'url' => '/admin/workspaces/billing/queues/completed'],
             ],
             sections: [
                 [

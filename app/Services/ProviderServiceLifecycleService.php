@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\PortalNotification;
 use App\Models\ProviderServicePurchase;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -22,12 +24,13 @@ class ProviderServiceLifecycleService
      * @var array<string, list<string>>
      */
     private const DELIVERY_TRANSITIONS = [
-        'queued' => ['ready', 'needs_information', 'in_progress'],
-        'ready' => ['needs_information', 'in_progress'],
-        'needs_information' => ['ready', 'in_progress'],
-        'in_progress' => ['ready', 'needs_information', 'provider_review'],
-        'provider_review' => ['in_progress', 'completed'],
+        'queued' => ['ready', 'needs_information', 'in_progress', 'cancelled'],
+        'ready' => ['needs_information', 'in_progress', 'cancelled'],
+        'needs_information' => ['ready', 'in_progress', 'cancelled'],
+        'in_progress' => ['ready', 'needs_information', 'provider_review', 'cancelled'],
+        'provider_review' => ['in_progress', 'completed', 'cancelled'],
         'completed' => ['in_progress'],
+        'cancelled' => ['in_progress'],
     ];
 
     public function initialize(ProviderServicePurchase $purchase): ProviderServicePurchase
@@ -88,6 +91,13 @@ class ProviderServiceLifecycleService
             $this->applyCurrentAction($locked);
             $locked->save();
 
+            if ($toStatus === 'paid' && $locked->service_request_id) {
+                $locked->serviceRequest()->update([
+                    'status' => 'converted',
+                    'converted_at' => now(),
+                ]);
+            }
+
             if ($fromStatus !== $toStatus) {
                 $this->recordEvent($locked, $actor, $eventType, [
                     'payment_from' => $fromStatus,
@@ -133,6 +143,9 @@ class ProviderServiceLifecycleService
             if ($toStatus === 'completed') {
                 $locked->fulfilled_at ??= now();
                 $locked->closed_at ??= now();
+            } elseif ($toStatus === 'cancelled') {
+                $locked->fulfilled_at = null;
+                $locked->closed_at ??= now();
             } else {
                 $locked->closed_at = null;
             }
@@ -176,12 +189,98 @@ class ProviderServiceLifecycleService
                 || in_array($toStatus, self::DELIVERY_TRANSITIONS[$purchase->fulfillment_status] ?? [], true));
     }
 
+    /** @param array<string, mixed> $metadata */
+    public function recordAuditEvent(
+        ProviderServicePurchase $purchase,
+        ?User $actor,
+        string $eventType,
+        array $metadata = [],
+    ): void {
+        $purchase->lifecycleEvents()->create([
+            'actor_id' => $actor?->id,
+            'event_type' => $eventType,
+            'delivery_from' => $purchase->fulfillment_status,
+            'delivery_to' => $purchase->fulfillment_status,
+            'action_owner' => $purchase->current_action_owner,
+            'metadata' => [
+                'current_action' => $purchase->current_action,
+                'action_due_at' => $purchase->action_due_at?->toISOString(),
+                'revision_count' => (int) $purchase->revision_count,
+                ...$metadata,
+            ],
+        ]);
+    }
+
     private function applyCurrentAction(ProviderServicePurchase $purchase): void
     {
+        $previousOwner = $purchase->current_action_owner;
+        $previousAction = $purchase->current_action;
+        $previousDueAt = $purchase->action_due_at;
         [$owner, $action] = $this->nextAction($purchase);
+
+        $nextDueAt = match (true) {
+            $owner === null => null,
+            $purchase->status !== 'paid' => null,
+            $owner === $previousOwner && $action === $previousAction && $previousDueAt !== null => $this->stableDueAt($purchase, $previousDueAt),
+            default => $this->actionDueAt($purchase, $action),
+        };
+
         $purchase->current_action_owner = $owner;
         $purchase->current_action = $action;
-        $purchase->action_due_at = $owner ? $purchase->target_due_at : null;
+        $purchase->action_due_at = $nextDueAt;
+
+        if ($previousOwner !== null && (
+            $owner !== $previousOwner
+            || $action !== $previousAction
+            || $previousDueAt?->getTimestamp() !== $nextDueAt?->getTimestamp()
+        )) {
+            PortalNotification::query()
+                ->whereNull('read_at')
+                ->where('deduplication_key', 'like', "provider-service:{$purchase->id}:action:%")
+                ->update(['read_at' => now()]);
+        }
+    }
+
+    private function stableDueAt(ProviderServicePurchase $purchase, $previousDueAt): CarbonImmutable
+    {
+        $stableDueAt = CarbonImmutable::instance($previousDueAt);
+
+        if (! $purchase->target_due_at) {
+            return $stableDueAt;
+        }
+
+        $target = CarbonImmutable::instance($purchase->target_due_at);
+
+        return $target->lessThan($stableDueAt) ? $target : $stableDueAt;
+    }
+
+    private function actionDueAt(ProviderServicePurchase $purchase, ?string $action): CarbonImmutable
+    {
+        $now = CarbonImmutable::now();
+        $target = $purchase->target_due_at
+            ? CarbonImmutable::instance($purchase->target_due_at)
+            : null;
+
+        $suggested = match ($action) {
+            'Review the meeting request' => $this->meetingDecisionDueAt($purchase, $now),
+            'Review the cancellation request' => $now->addDay(),
+            'Provide requested information', 'Review the delivered work' => $now->addDays(3),
+            'Assign and start the service' => $now->addDays(2),
+            default => $now->addDays(5),
+        };
+
+        return $target && $target->lessThan($suggested) ? $target : $suggested;
+    }
+
+    private function meetingDecisionDueAt(ProviderServicePurchase $purchase, CarbonImmutable $now): CarbonImmutable
+    {
+        if (! $purchase->meeting_scheduled_for) {
+            return $now->addDay();
+        }
+
+        $decisionDueAt = CarbonImmutable::instance($purchase->meeting_scheduled_for)->subDay();
+
+        return $decisionDueAt->isPast() ? $now : $decisionDueAt->min($now->addDay());
     }
 
     /**
@@ -201,10 +300,15 @@ class ProviderServiceLifecycleService
             return ['platform', 'Review payment state'];
         }
 
+        if ($purchase->cancellation_status === 'requested') {
+            return ['platform', 'Review the cancellation request'];
+        }
+
         return match ($purchase->fulfillment_status) {
             'needs_information' => ['provider', 'Provide requested information'],
             'provider_review' => ['provider', 'Review the delivered work'],
             'completed' => [null, null],
+            'cancelled' => [null, null],
             default => $purchase->meeting_status === 'requested'
                 ? ['platform', 'Review the meeting request']
                 : ['platform', $purchase->fulfillment_status === 'in_progress'
@@ -232,7 +336,13 @@ class ProviderServiceLifecycleService
             'action_owner' => $purchase->current_action_owner,
             'metadata' => [
                 'current_action' => $purchase->current_action,
+                'action_due_at' => $purchase->action_due_at?->toISOString(),
                 'revision_count' => (int) $purchase->revision_count,
+                'cancellation_status' => $purchase->cancellation_status,
+                'cancellation_reason' => $purchase->cancellation_reason,
+                'cancellation_decision_note' => $purchase->cancellation_decision_note,
+                'refund_status' => $purchase->refund_status,
+                'refund_reference' => $purchase->refund_reference,
             ],
         ]);
     }

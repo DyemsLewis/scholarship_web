@@ -26,6 +26,7 @@ use App\Http\Controllers\ProviderApplicationPageController;
 use App\Http\Controllers\ProviderController;
 use App\Http\Controllers\ProviderProgramPageController;
 use App\Http\Controllers\ProviderRecipientPageController;
+use App\Http\Controllers\ProviderServiceRequestController;
 use App\Http\Controllers\ProviderWorkspacePageController;
 use App\Http\Controllers\SupportReportController;
 use Illuminate\Support\Facades\Route;
@@ -179,13 +180,14 @@ Route::middleware(['auth', 'admin'])
                 Route::get('/dashboard/data', [BillingOfficerWorkspaceController::class, 'dashboardData'])->name('workspaces.billing.dashboard.data');
                 Route::get('/summary', [BillingOfficerWorkspaceController::class, 'summary'])->name('workspaces.billing.summary');
                 Route::get('/queue-data', [BillingOfficerWorkspaceController::class, 'data'])->name('workspaces.billing.queue-data');
+                Route::get('/export', [BillingOfficerWorkspaceController::class, 'export'])->name('workspaces.billing.export');
                 Route::get('/queues/{queue}', [BillingOfficerWorkspaceController::class, 'queue'])
                     ->whereIn('queue', ['ready', 'active', 'waiting', 'completed'])
                     ->name('workspaces.billing.queue');
                 Route::get('/requests/{purchase}', [BillingOfficerWorkspaceController::class, 'show'])->whereNumber('purchase')->name('workspaces.billing.requests.show');
                 Route::get('/requests/{purchase}/{section}', [BillingOfficerWorkspaceController::class, 'show'])
                     ->whereNumber('purchase')
-                    ->whereIn('section', ['delivery', 'files', 'updates', 'meeting'])
+                    ->whereIn('section', ['delivery', 'files', 'updates', 'meeting', 'closeout', 'history'])
                     ->name('workspaces.billing.requests.section');
             });
         Route::get('/workspaces/billing/data', [BillingController::class, 'billingOfficerWorkspaceData'])->middleware('permission:manage_billing')->name('workspaces.billing.data');
@@ -264,6 +266,8 @@ Route::middleware(['auth', 'admin'])
         Route::get('/billing/{purchase}/data', [BillingController::class, 'adminWorkspaceData'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.workspace.data');
         Route::patch('/billing/{purchase}/fulfillment', [BillingController::class, 'updateFulfillment'])->middleware('permission:manage_billing')->name('billing.fulfillment');
         Route::patch('/billing/{purchase}/meeting', [BillingController::class, 'decideProviderMeeting'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.meeting.decide');
+        Route::patch('/billing/{purchase}/cancellation', [BillingController::class, 'decideProviderCancellation'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.cancellation.decide');
+        Route::post('/billing/{purchase}/restore', [BillingController::class, 'restoreCancelledService'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.restore');
         Route::post('/billing/{purchase}/updates', [BillingController::class, 'storeAdminUpdate'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.updates.store');
         Route::post('/billing/{purchase}/deliverables', [BillingController::class, 'uploadAdminDeliverable'])->middleware('permission:manage_billing')->whereNumber('purchase')->name('billing.deliverables.store');
         Route::get('/finance', [FinanceController::class, 'page'])->middleware('permission:view_finance')->name('finance');
@@ -585,6 +589,9 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/billing/dashboard/data', [RoleDashboardController::class, 'billing'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing.dashboard.data');
+        Route::get('/workspaces/billing/requests', [BillingController::class, 'providerBillingStaffWorkspace'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.requests');
         Route::get('/workspaces/billing/action', [BillingController::class, 'providerBillingStaffWorkspace'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing.action');
@@ -600,13 +607,51 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/billing/data', [BillingController::class, 'providerBillingStaffWorkspaceData'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing.data');
+        Route::get('/workspaces/billing/export', [BillingController::class, 'providerBillingExport'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.export');
         Route::get('/workspaces/billing/services', [BillingController::class, 'providerPage'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->name('workspaces.billing.services');
+        Route::get('/workspaces/billing/services/data', [BillingController::class, 'providerServiceCatalogData'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->name('workspaces.billing.services.data');
         Route::get('/workspaces/billing/services/{plan}', [BillingController::class, 'providerPage'])
             ->middleware(['permission:manage_billing', 'provider.approved'])
             ->whereIn('plan', array_keys(config('billing.plans', [])))
             ->name('workspaces.billing.services.show');
+        Route::get('/workspaces/billing/services/{plan}/data', [BillingController::class, 'providerServiceDetailData'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->whereIn('plan', array_keys(config('billing.plans', [])))
+            ->name('workspaces.billing.services.show.data');
+        Route::get('/workspaces/billing/services/{plan}/request', [ProviderServiceRequestController::class, 'intakePage'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->whereIn('plan', array_keys(config('billing.plans', [])))
+            ->name('workspaces.billing.services.request');
+        Route::get('/workspaces/billing/services/{plan}/request/data', [ProviderServiceRequestController::class, 'intakeData'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->whereIn('plan', array_keys(config('billing.plans', [])))
+            ->name('workspaces.billing.services.request.data');
+        Route::post('/workspaces/billing/services/{plan}/requests', [ProviderServiceRequestController::class, 'store'])
+            ->middleware(['permission:manage_billing', 'provider.approved', 'throttle:10,1'])
+            ->whereIn('plan', array_keys(config('billing.plans', [])))
+            ->name('workspaces.billing.service-requests.store');
+        Route::patch('/workspaces/billing/service-requests/{serviceRequest}', [ProviderServiceRequestController::class, 'update'])
+            ->middleware(['permission:manage_billing', 'provider.approved', 'throttle:10,1'])
+            ->whereNumber('serviceRequest')
+            ->name('workspaces.billing.service-requests.update');
+        Route::get('/workspaces/billing/service-requests/{serviceRequest}/review', [ProviderServiceRequestController::class, 'reviewPage'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->whereNumber('serviceRequest')
+            ->name('workspaces.billing.service-requests.review');
+        Route::get('/workspaces/billing/service-requests/{serviceRequest}/review/data', [ProviderServiceRequestController::class, 'reviewData'])
+            ->middleware(['permission:manage_billing', 'provider.approved'])
+            ->whereNumber('serviceRequest')
+            ->name('workspaces.billing.service-requests.review.data');
+        Route::post('/workspaces/billing/service-requests/{serviceRequest}/checkout', [ProviderServiceRequestController::class, 'checkout'])
+            ->middleware(['permission:manage_billing', 'provider.approved', 'throttle:5,1'])
+            ->whereNumber('serviceRequest')
+            ->name('workspaces.billing.service-requests.checkout');
         Route::get('/dashboard/data', [ProviderController::class, 'dashboardData'])->name('dashboard.data');
         Route::get('/programs', [ProgramDirectoryController::class, 'index'])
             ->defaults('programFilter', 'all')
@@ -688,12 +733,13 @@ Route::middleware(['auth', 'provider'])
         Route::get('/billing', [BillingController::class, 'providerPage'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing');
         Route::get('/billing/requests', [BillingController::class, 'providerPage'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing.requests');
         Route::get('/billing/data', [BillingController::class, 'providerData'])->middleware(['permission:manage_billing', 'provider.approved'])->name('billing.data');
-        Route::post('/billing/checkout', [BillingController::class, 'checkout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:5,1'])->name('billing.checkout');
         Route::post('/billing/sync', [BillingController::class, 'syncCheckout'])->middleware(['permission:manage_billing', 'provider.approved', 'throttle:10,1'])->name('billing.sync');
         Route::get('/billing/{purchase}', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace');
         Route::get('/billing/{purchase}/meeting', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.meeting');
         Route::get('/billing/{purchase}/files', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.files');
         Route::get('/billing/{purchase}/updates', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.updates');
+        Route::get('/billing/{purchase}/closeout', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.closeout');
+        Route::get('/billing/{purchase}/history', [BillingController::class, 'providerWorkspacePage'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.history');
         Route::get('/billing/{purchase}/data', [BillingController::class, 'providerWorkspaceData'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.workspace.data');
         Route::patch('/billing/{purchase}/request', [BillingController::class, 'updateProviderRequest'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.request.update');
         Route::post('/billing/{purchase}/meeting', [BillingController::class, 'requestProviderMeeting'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.meeting.request');
@@ -701,6 +747,7 @@ Route::middleware(['auth', 'provider'])
         Route::post('/billing/{purchase}/files', [BillingController::class, 'uploadProviderFile'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.files.store');
         Route::post('/billing/{purchase}/confirm', [BillingController::class, 'confirmProviderCompletion'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.confirm');
         Route::post('/billing/{purchase}/reopen', [BillingController::class, 'reopenProviderService'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.reopen');
+        Route::post('/billing/{purchase}/cancellation', [BillingController::class, 'requestProviderCancellation'])->middleware(['permission:manage_billing', 'provider.approved'])->whereNumber('purchase')->name('billing.cancellation.request');
         Route::get('/reports', [SupportReportController::class, 'providerPage'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports');
         Route::get('/reports/data', [SupportReportController::class, 'providerData'])->middleware(['permission:manage_reports', 'provider.approved'])->name('reports.data');
         Route::post('/reports', [SupportReportController::class, 'storeProvider'])->middleware(['permission:manage_reports', 'provider.approved', 'throttle:6,1'])->name('reports.store');

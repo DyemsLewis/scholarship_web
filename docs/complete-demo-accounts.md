@@ -9,13 +9,6 @@ The complete demo uses fictional identities and synthetic applicant portraits. L
 | Super admin | `superadmin` | `superadmin@findscholarship.test` |
 | Provider owner | `harborlight` | `programs@harborlight.test` |
 
-## Provider Verification Accounts
-
-| Demonstration | Username | Email |
-| --- | --- | --- |
-| Verification pending | `provider.pending` | `verification.pending@demo.test` |
-| Verification returned for replacement | `provider.revision` | `verification.revision@demo.test` |
-
 ## Provider Team Accounts
 
 | Workspace | Username | Email |
@@ -33,7 +26,7 @@ The complete demo uses fictional identities and synthetic applicant portraits. L
 | Support staff | `harborlight.support` | `harborlight.support@scholarship.test` |
 | Billing staff | `harborlight.billing` | `harborlight.billing@scholarship.test` |
 
-Program-scoped staff are assigned to the Harborlight Senior Scholars Program. The reviewer has two pre-screening records assigned, while the selection, decision, recipient, monitoring, release, support, and billing workspaces contain records for their respective demonstrations.
+Program-scoped staff are assigned to the Harborlight Senior Scholars Program. The role workspaces share one completed recipient record, resolved support history, and a completed optional-service purchase without unfinished queues.
 
 ## Admin Team Accounts
 
@@ -51,41 +44,17 @@ Program-scoped staff are assigned to the Harborlight Senior Scholars Program. Th
 
 | Demonstration | Username | Email |
 | --- | --- | --- |
-| Pre-screening review | `alyssamaereyes` | `alyssa-maereyes@demo.test` |
-| Correction requested | `joshuamiguelsantos` | `joshua-miguelsantos@demo.test` |
-| Formal application | `biancalouisenavarro` | `bianca-louisenavarro@demo.test` |
-| Exam scheduled | `markangelodelacruz` | `mark-angelodela-cruz@demo.test` |
-| Exam completed, result needed | `carlojaviermendoza` | `carlo-javiermendoza@demo.test` |
-| Interview scheduled | `sofiamarievillanueva` | `sofia-marievillanueva@demo.test` |
-| Interview completed, result needed | `gabrielluisramos` | `gabriel-luisramos@demo.test` |
-| Final decision needed | `trishaannegarcia` | `trisha-annegarcia@demo.test` |
-| Waitlisted | `camilleroseflores` | `camille-roseflores@demo.test` |
-| Selected, agreement needed | `danielpaoloaquino` | `daniel-paoloaquino@demo.test` |
-| Active monitoring and review work | `nicoleandreabautista` | `nicole-andreabautista@demo.test` |
 | Completed monitoring and support | `vincentrafaeltorres` | `vincent-rafaeltorres@demo.test` |
-| Pre-screening rejected | `janinemaelopez` | `janine-maelopez@demo.test` |
-| Exam not passed | `ethancolemartinez` | `ethan-colemartinez@demo.test` |
-| Interview not passed | `patriciajoycastillo` | `patricia-joycastillo@demo.test` |
-| Final decision: not selected | `luisgabrielherrera` | `luis-gabrielherrera@demo.test` |
-| Application withdrawn | `andreafaithdomingo` | `andrea-faithdomingo@demo.test` |
-| Recipient agreement declined | `miguelandresalazar` | `miguel-andresalazar@demo.test` |
-| Extension pending and exception approved | `hannahgracevaldez` | `hannah-gracevaldez@demo.test` |
-| Overdue monitoring and replacement needed | `johncarlomanalo` | `john-carlomanalo@demo.test` |
-| Open benefit receipt issue | `mariaisabelortega` | `maria-isabelortega@demo.test` |
-| Support ended early with reconsideration | `paolonathancruz` | `paolo-nathancruz@demo.test` |
-| Scholarship support renewed | `clarissemaeevangelista` | `clarisse-maeevangelista@demo.test` |
-| Full-capacity program recipient | `adrianjamespascual` | `adrian-jamespascual@demo.test` |
+
+This applicant has a selected and accepted application, five passed stages, an approved and closed monitoring check-in, two confirmed benefit releases, fulfilled benefits, and a completed support decision.
 
 ## Program Lifecycle Examples
 
 | Program | State |
 | --- | --- |
-| Harborlight Senior Scholars Program | Published with the complete application and recipient lifecycle |
-| Commute Forward Student Grant | Draft |
-| Connected Classrooms Access Grant | Waiting for administrator review |
+| Harborlight Senior Scholars Program | Published with one completed recipient lifecycle |
 | Ready-to-Learn Essentials Fund 2025-2026 | Closed prior cycle |
-| Saturday Learning Support Award | Returned for revision |
-| College Launch One-Time Grant | Published and at its one-recipient capacity |
+| College Launch One-Time Grant | Published one-time grant |
 
 ## Reset Command
 
@@ -95,4 +64,4 @@ Run only against a database intentionally prepared for the demonstration:
 php artisan migrate:fresh --seeder=CompleteDemoSeeder --force
 ```
 
-The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, the Harborlight Senior Scholars Program as ID `1`, and applications as IDs `1` through `24`.
+The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, and the Harborlight Senior Scholars Program as ID `1`. It removes unsuccessful and unfinished synthetic scenarios after building the successful demonstration.

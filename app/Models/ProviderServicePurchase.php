@@ -21,11 +21,26 @@ class ProviderServicePurchase extends Model
         'in_progress',
         'provider_review',
         'completed',
+        'cancelled',
+    ];
+
+    public const CANCELLATION_STATUSES = [
+        'requested',
+        'approved',
+        'declined',
+        'reversed',
+    ];
+
+    public const REFUND_STATUSES = [
+        'not_applicable',
+        'manual_refund_pending',
+        'refunded',
     ];
 
     protected $fillable = [
         'provider_id',
         'created_by',
+        'service_request_id',
         'plan_code',
         'plan_name',
         'amount',
@@ -54,6 +69,7 @@ class ProviderServicePurchase extends Model
         'meeting_purpose',
         'meeting_status',
         'meeting_admin_note',
+        'meeting_join_url',
         'meeting_decided_at',
         'meeting_decided_by',
         'paid_at',
@@ -66,6 +82,16 @@ class ProviderServicePurchase extends Model
         'provider_rating',
         'reopened_at',
         'revision_count',
+        'cancellation_status',
+        'cancellation_reason',
+        'cancellation_requested_at',
+        'cancellation_requested_by',
+        'cancellation_decision_note',
+        'cancellation_decided_at',
+        'cancellation_decided_by',
+        'cancelled_at',
+        'refund_status',
+        'refund_reference',
         'fulfilled_by',
         'fulfillment_notes',
         'failure_message',
@@ -92,6 +118,9 @@ class ProviderServicePurchase extends Model
             'provider_rating' => 'integer',
             'reopened_at' => 'datetime',
             'revision_count' => 'integer',
+            'cancellation_requested_at' => 'datetime',
+            'cancellation_decided_at' => 'datetime',
+            'cancelled_at' => 'datetime',
             'gateway_metadata' => 'array',
         ];
     }
@@ -104,6 +133,11 @@ class ProviderServicePurchase extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function serviceRequest(): BelongsTo
+    {
+        return $this->belongsTo(ProviderServiceRequest::class, 'service_request_id');
     }
 
     public function fulfiller(): BelongsTo
@@ -119,6 +153,16 @@ class ProviderServicePurchase extends Model
     public function meetingDecider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'meeting_decided_by');
+    }
+
+    public function cancellationRequester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancellation_requested_by');
+    }
+
+    public function cancellationDecider(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancellation_decided_by');
     }
 
     public function updates(): HasMany

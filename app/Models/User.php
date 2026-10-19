@@ -205,6 +205,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(ProviderServicePurchase::class, 'provider_id');
     }
 
+    public function providerServiceRequests(): HasMany
+    {
+        return $this->hasMany(ProviderServiceRequest::class, 'provider_id');
+    }
+
     public function providerScholarships(): HasMany
     {
         return $this->hasMany(Scholarship::class, 'provider_id');
