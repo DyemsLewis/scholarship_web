@@ -54,7 +54,9 @@ Route::get('/dashboard/providers/{provider}/data', [ApplicantDashboardController
 Route::get('/dashboard/scholarships/{scholarship}', [ApplicantDashboardController::class, 'scholarshipDetail'])->middleware('auth')->name('dashboard.scholarships.show');
 Route::get('/dashboard/scholarships/{scholarship}/data', [ApplicantDashboardController::class, 'scholarshipDetailData'])->middleware('auth')->name('dashboard.scholarships.show.data');
 Route::post('/dashboard/scholarships/{scholarship}/application-start', [ApplicantDashboardController::class, 'trackApplicationStart'])->middleware(['auth', 'throttle:30,1'])->name('dashboard.scholarships.application-start');
+Route::get('/dashboard/scholarships/{scholarship}/{section}', [ApplicantDashboardController::class, 'scholarshipDetail'])->middleware('auth')->where('section', 'eligibility|award|application|provider')->name('dashboard.scholarships.show.section');
 Route::get('/dashboard/applications', [ApplicantDashboardController::class, 'applications'])->middleware('auth')->name('dashboard.applications');
+Route::get('/dashboard/applications/start/{scholarship}', [ApplicantDashboardController::class, 'startApplication'])->middleware('auth')->name('dashboard.applications.start');
 Route::get('/dashboard/monitoring', [ApplicantDashboardController::class, 'monitoring'])->middleware('auth')->name('dashboard.monitoring');
 Route::get('/dashboard/monitoring/{application}', [ApplicantDashboardController::class, 'monitoringDetail'])->middleware('auth')->whereNumber('application')->name('dashboard.monitoring.show');
 Route::get('/dashboard/documents', [ApplicantDashboardController::class, 'documents'])->middleware('auth')->name('dashboard.documents');
@@ -76,6 +78,7 @@ Route::get('/dashboard/overview-data', [ApplicantDashboardController::class, 'ov
 Route::get('/dashboard/applications/data', [ApplicantDashboardController::class, 'applicationsData'])->middleware('auth')->name('dashboard.applications.data');
 Route::get('/dashboard/applications/{application}', [ApplicantDashboardController::class, 'applicationDetail'])->middleware('auth')->name('dashboard.applications.show');
 Route::get('/dashboard/applications/{application}/data', [ApplicantDashboardController::class, 'applicationDetailData'])->middleware('auth')->name('dashboard.applications.show.data');
+Route::get('/dashboard/applications/{application}/{section}', [ApplicantDashboardController::class, 'applicationDetail'])->middleware('auth')->where('section', 'submission|activities|outcome|history')->name('dashboard.applications.show.section');
 Route::get('/dashboard/documents/data', [ApplicantDashboardController::class, 'documentsData'])->middleware('auth')->name('dashboard.documents.data');
 Route::post('/dashboard/student-documents', [ApplicantDashboardController::class, 'uploadPreparedDocument'])->middleware(['auth', 'throttle:20,1'])->name('dashboard.student-documents.store');
 Route::get('/dashboard/student-documents/{document}/view', [ApplicantDashboardController::class, 'viewPreparedDocument'])->middleware('auth')->name('dashboard.student-documents.view');

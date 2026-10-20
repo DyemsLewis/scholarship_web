@@ -43,7 +43,7 @@ onMounted(loadService);
                     Back to services
                 </a>
 
-                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">Loading service details...</div>
+                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading service details...</p></div>
 
                 <div v-else-if="errorMessage || !plan" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-8 text-center text-sm font-semibold text-rose-800">
                     {{ errorMessage || 'This support service is not available.' }}
@@ -51,12 +51,8 @@ onMounted(loadService);
 
                 <template v-else>
                     <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
-                        <div class="flex items-start justify-between gap-10 px-7 py-6">
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">{{ plan.category }}</p>
-                                <h1 id="service-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1>
-                                <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.description }}</p>
-                            </div>
+                        <div class="flex items-center justify-between gap-10 px-7 py-6">
+                            <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">{{ plan.category }}</p><h1 id="service-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.description }}</p></div></div>
                             <div class="shrink-0 text-right">
                                 <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">One-time fee</p>
                                 <p class="mt-1 text-2xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p>
@@ -90,7 +86,7 @@ onMounted(loadService);
                         </div>
 
                         <div class="border-b border-slate-200 px-6 py-5">
-                            <h2 class="text-base font-bold text-slate-950">What you receive</h2>
+                            <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-box-open" aria-hidden="true"></i></span><h2 class="text-base font-bold text-slate-950">What you receive</h2></div>
                             <ul class="mt-3 divide-y divide-slate-200 border-y border-slate-200">
                                 <li v-for="feature in plan.features" :key="feature" class="flex items-center gap-3 py-3 text-sm font-semibold text-slate-800">
                                     <i class="fa-solid fa-check text-emerald-600" aria-hidden="true"></i>
@@ -100,7 +96,7 @@ onMounted(loadService);
                         </div>
 
                         <div class="border-b border-slate-200 px-6 py-5">
-                            <h2 class="text-base font-bold text-slate-950">How it works</h2>
+                            <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-list-ol" aria-hidden="true"></i></span><h2 class="text-base font-bold text-slate-950">How it works</h2></div>
                             <ol class="mt-3 divide-y divide-slate-200 border-y border-slate-200">
                                 <li v-for="(step, index) in plan.process" :key="step.title" class="grid grid-cols-[2.5rem_14rem_minmax(0,1fr)] items-center gap-4 py-3">
                                     <span class="grid h-8 w-8 place-items-center bg-slate-950 text-xs font-bold text-amber-300">{{ index + 1 }}</span>
@@ -111,7 +107,7 @@ onMounted(loadService);
                         </div>
 
                         <div class="px-6 py-5">
-                            <h2 class="text-base font-bold text-slate-950">Before you request</h2>
+                            <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><h2 class="text-base font-bold text-slate-950">Before you request</h2></div>
                             <ul class="mt-3 space-y-2">
                                 <li v-for="item in plan.preparation" :key="item" class="flex items-start gap-3 text-sm leading-6 text-slate-700">
                                     <i class="fa-solid fa-circle mt-2.5 text-[5px] text-amber-600" aria-hidden="true"></i>
@@ -123,10 +119,10 @@ onMounted(loadService);
                     </section>
 
                     <section class="mt-4 flex items-center justify-between border border-slate-200 border-t-2 border-t-slate-950 bg-white px-6 py-5 shadow-sm">
-                        <div>
+                        <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span><div>
                             <h2 class="text-base font-bold text-slate-950">Ready to request support?</h2>
                             <p class="mt-1 text-sm text-slate-600">Complete a short service-specific form, then review everything before payment.</p>
-                        </div>
+                        </div></div>
                         <a :href="`/provider/workspaces/billing/services/${plan.code}/request`" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">
                             Start request
                             <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>

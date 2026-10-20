@@ -94,11 +94,16 @@
 
     .provider-container,
     .admin-container {
-        @apply mx-auto w-full max-w-[90rem];
+        @apply w-full;
     }
 
     .provider-container {
+        @apply mx-auto;
         max-width: 92rem;
+    }
+
+    .admin-container {
+        max-width: none;
     }
 
     .provider-container-narrow,
@@ -137,7 +142,10 @@
 
     .provider-page h1,
     .provider-page h2,
-    .provider-page h3 {
+    .provider-page h3,
+    .admin-page h1,
+    .admin-page h2,
+    .admin-page h3 {
         font-family: var(--font-sans);
     }
 
@@ -155,23 +163,35 @@
     .provider-page select,
     .provider-page textarea,
     .provider-page a[class*='bg-']:not([class*='rounded-full']),
-    .provider-page a[class*='border']:not([class*='rounded-full']) {
+    .provider-page a[class*='border']:not([class*='rounded-full']),
+    .admin-page button:not([class*='rounded-full']),
+    .admin-page input,
+    .admin-page select,
+    .admin-page textarea,
+    .admin-page a[class*='bg-']:not([class*='rounded-full']),
+    .admin-page a[class*='border']:not([class*='rounded-full']) {
         border-radius: 0.1875rem;
     }
 
     .provider-page input:not([type='checkbox']):not([type='radio']),
     .provider-page select,
-    .provider-page textarea {
+    .provider-page textarea,
+    .admin-page input:not([type='checkbox']):not([type='radio']),
+    .admin-page select,
+    .admin-page textarea {
         color: #0f172a;
     }
 
     .provider-page input::placeholder,
-    .provider-page textarea::placeholder {
+    .provider-page textarea::placeholder,
+    .admin-page input::placeholder,
+    .admin-page textarea::placeholder {
         color: #94a3b8;
         opacity: 1;
     }
 
-    .provider-page select option {
+    .provider-page select option,
+    .admin-page select option {
         background-color: #fff;
         color: #0f172a;
         color-scheme: light;
@@ -183,10 +203,17 @@
 
     .provider-page input:focus,
     .provider-page select:focus,
-    .provider-page textarea:focus {
+    .provider-page textarea:focus,
+    .admin-page input:focus,
+    .admin-page select:focus,
+    .admin-page textarea:focus {
         border-color: #475569;
         box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.12);
         outline: none;
+    }
+
+    .admin-page .workspace-dashboard-frame {
+        max-width: none;
     }
 
     .provider-page .portal-data-table thead,

@@ -63,7 +63,7 @@ onMounted(loadExceptions);
 
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
 
-        <AdminTableFrame title="Exception records" :description="resultLabel" class="mt-4">
+        <AdminTableFrame title="Exception records" :description="resultLabel" icon="fa-solid fa-triangle-exclamation" class="mt-4">
             <template #filters>
                 <div class="grid grid-cols-[minmax(24rem,1fr)_14rem] gap-3">
                     <label class="relative block"><span class="sr-only">Search payment exceptions</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" placeholder="Search provider, service, or reference" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
@@ -72,14 +72,14 @@ onMounted(loadExceptions);
             </template>
 
             <div v-if="loading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading payment exceptions...</div>
-            <table v-else-if="items.length" class="w-full min-w-[68rem] border-collapse text-left">
+            <table v-else-if="items.length" class="portal-data-table min-w-[68rem]">
                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Reference</th><th class="border-b border-slate-200 px-4 py-3">Provider</th><th class="border-b border-slate-200 px-4 py-3">Service</th><th class="border-b border-slate-200 px-4 py-3">Status</th><th class="border-b border-slate-200 px-4 py-3">Amount</th><th class="border-b border-slate-200 px-5 py-3">Recorded</th></tr></thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
                     <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
                         <td class="px-5 py-3.5 font-mono text-xs font-bold text-slate-900">{{ item.reference_number }}</td>
                         <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-building-columns" aria-hidden="true"></i><img v-if="item.provider_logo_url" :src="item.provider_logo_url" :alt="`${item.provider} logo`" class="absolute inset-0 h-full w-full bg-white object-contain p-1" @error="$event.currentTarget.remove()"></span><span class="min-w-0"><span class="block max-w-xs truncate text-sm font-bold text-slate-900">{{ item.provider }}</span><span class="mt-0.5 block max-w-xs truncate text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
                         <td class="px-4 py-3.5 text-sm font-semibold text-slate-700">{{ item.service }}</td>
-                        <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(item.status)]">{{ item.status }}</span><p v-if="item.reason" class="mt-1 max-w-xs truncate text-xs text-slate-500" :title="item.reason">{{ item.reason }}</p></td>
+                        <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(item.status)]">{{ item.status }}</span><p v-if="item.reason" class="mt-1 max-w-md text-xs leading-5 text-slate-500">{{ item.reason }}</p></td>
                         <td class="px-4 py-3.5 text-sm font-black text-slate-950">{{ money(item.amount, item.currency) }}</td>
                         <td class="px-5 py-3.5 text-sm text-slate-600">{{ item.failed_at || item.created_at }}</td>
                     </tr>

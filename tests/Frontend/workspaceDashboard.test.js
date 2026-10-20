@@ -32,5 +32,16 @@ test('dashboard normalization supplies stable defaults and rejects partial actio
     assert.equal(dashboard.workspace.eyebrow, 'Workspace');
     assert.equal(dashboard.primary_action, null);
     assert.equal(dashboard.metrics[0].tone, 'neutral');
+    assert.equal(dashboard.metrics[0].icon, 'fa-solid fa-chart-simple');
     assert.equal(dashboardToneClass('attention'), 'text-amber-700');
+});
+
+test('dashboard normalization assigns restrained icons from workflow keys', () => {
+    const dashboard = normalizeWorkspaceDashboard({
+        metrics: [{ key: 'pending-decisions', label: 'Pending' }],
+        sections: [{ key: 'release-priorities', title: 'Releases' }],
+    });
+
+    assert.equal(dashboard.metrics[0].icon, 'fa-solid fa-gavel');
+    assert.equal(dashboard.sections[0].icon, 'fa-solid fa-hand-holding-dollar');
 });

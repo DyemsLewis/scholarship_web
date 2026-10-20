@@ -37,7 +37,7 @@ final class RecordsOfficerDashboardQuery
                 'key' => 'records-officer',
                 'eyebrow' => 'Platform records',
                 'title' => 'Records dashboard',
-                'description' => 'Review security-sensitive activity and keep authorized exports separate.',
+                'description' => 'Review audit activity and manage authorized exports.',
                 'icon' => 'fa-solid fa-box-archive',
                 'access_scope' => 'Audit logs and authorized exports',
             ],
@@ -46,12 +46,13 @@ final class RecordsOfficerDashboardQuery
                 'url' => $summary['security_7_days'] > 0
                     ? '/admin/workspaces/records/activity?category=security&period=week'
                     : '/admin/workspaces/records/activity',
+                'icon' => 'fa-solid fa-arrow-right',
             ],
             metrics: [
-                ['key' => 'today', 'label' => 'Recorded today', 'value' => $summary['today'], 'detail' => 'New audit events', 'url' => '/admin/workspaces/records/activity?period=today'],
-                ['key' => 'security', 'label' => 'Security events', 'value' => $summary['security_7_days'], 'detail' => 'Failed sign-ins · 7 days', 'tone' => 'attention', 'url' => '/admin/workspaces/records/activity?category=security&period=week'],
-                ['key' => 'exports', 'label' => 'Recent exports', 'value' => $summary['exports_30_days'], 'detail' => 'Last 30 days', 'url' => '/admin/workspaces/records/exports'],
-                ['key' => 'total', 'label' => 'Audit records', 'value' => $summary['total'], 'detail' => 'All recorded activity', 'url' => '/admin/workspaces/records/activity?period=all'],
+                ['key' => 'today', 'label' => 'Recorded today', 'value' => $summary['today'], 'detail' => 'New audit events', 'url' => '/admin/workspaces/records/activity?period=today', 'icon' => 'fa-regular fa-calendar'],
+                ['key' => 'security', 'label' => 'Security events', 'value' => $summary['security_7_days'], 'detail' => 'Failed sign-ins · 7 days', 'tone' => 'attention', 'url' => '/admin/workspaces/records/activity?category=security&period=week', 'icon' => 'fa-solid fa-shield-halved'],
+                ['key' => 'exports', 'label' => 'Recent exports', 'value' => $summary['exports_30_days'], 'detail' => 'Last 30 days', 'url' => '/admin/workspaces/records/exports', 'icon' => 'fa-solid fa-file-export'],
+                ['key' => 'total', 'label' => 'Audit records', 'value' => $summary['total'], 'detail' => 'All recorded activity', 'url' => '/admin/workspaces/records/activity?period=all', 'icon' => 'fa-solid fa-box-archive'],
             ],
             sections: [
                 [
@@ -60,7 +61,8 @@ final class RecordsOfficerDashboardQuery
                     'title' => 'Recent failed sign-ins',
                     'description' => 'Review the latest failed sign-in events from the past seven days.',
                     'empty_message' => 'No failed sign-in was recorded in the past seven days.',
-                    'action' => ['label' => 'Open security records', 'url' => '/admin/workspaces/records/activity?category=security&period=week'],
+                    'icon' => 'fa-solid fa-shield-halved',
+                    'action' => ['label' => 'Open security records', 'url' => '/admin/workspaces/records/activity?category=security&period=week', 'icon' => 'fa-solid fa-arrow-right'],
                     'items' => $security,
                 ],
                 [
@@ -69,7 +71,8 @@ final class RecordsOfficerDashboardQuery
                     'title' => 'Latest recorded activity',
                     'description' => 'A concise view of recent platform changes and actions.',
                     'empty_message' => 'No recent platform activity was recorded.',
-                    'action' => ['label' => 'Open activity records', 'url' => '/admin/workspaces/records/activity'],
+                    'icon' => 'fa-solid fa-clock-rotate-left',
+                    'action' => ['label' => 'Open activity records', 'url' => '/admin/workspaces/records/activity', 'icon' => 'fa-solid fa-arrow-right'],
                     'items' => $recent,
                 ],
             ],

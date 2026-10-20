@@ -20,7 +20,7 @@ async function addUpdate() {
 <template>
     <AdminServiceWorkspaceShell :purchase="purchase" active-section="updates" :loading="isLoading" :error-message="errorMessage" :success-message="successMessage" :queue-url="queueUrl">
         <section class="admin-panel mt-4 overflow-hidden">
-            <header class="border-b border-slate-200 px-6 py-4"><h2 class="text-lg font-black text-slate-950">Service updates</h2><p class="mt-1 text-sm text-slate-500">Send one clear response or leave an internal note.</p></header>
+            <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-message" aria-hidden="true"></i></span><div><h2 class="text-lg font-black text-slate-950">Service updates</h2><p class="mt-0.5 text-sm text-slate-500">Send one clear response or leave an internal note.</p></div></header>
             <form class="grid grid-cols-[14rem_minmax(0,1fr)_auto] items-end gap-3 border-b border-slate-200 bg-slate-50 px-6 py-5" @submit.prevent="addUpdate">
                 <label class="text-sm font-bold text-slate-700">Type<select v-model="updateForm.kind" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="progress_update">Provider update</option><option value="clarification_request">Request information</option><option value="internal_note">Internal note</option></select></label>
                 <label class="text-sm font-bold text-slate-700">Message<textarea v-model="updateForm.message" rows="2" maxlength="2000" class="mt-2 w-full border border-slate-300 bg-white px-3 py-2 font-normal" placeholder="Write a concise update."></textarea></label>

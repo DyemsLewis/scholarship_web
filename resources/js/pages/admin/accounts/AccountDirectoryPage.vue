@@ -11,7 +11,7 @@ const search = ref('');
 const requestedRole = new URLSearchParams(window.location.search).get('role');
 const role = ref(['applicant', 'provider'].includes(requestedRole) ? requestedRole : 'all');
 const accounts = ref([]);
-const stats = ref({ total_users: 0, active_users: 0, recent_signups: 0 });
+const stats = ref({ total_users: 0, applicants: 0, providers: 0, attention_total: 0 });
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
 let searchTimer;
 
@@ -72,13 +72,14 @@ onMounted(loadAccounts);
 
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
 
-        <dl class="mt-4 grid grid-cols-3 border border-slate-300 bg-white shadow-sm">
-            <div class="border-r border-slate-200 px-5 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">All accounts</dt><dd class="mt-1 text-xl font-black text-slate-950">{{ stats.total_users }}</dd></div>
-            <div class="border-r border-slate-200 px-5 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Active</dt><dd class="mt-1 text-xl font-black text-slate-950">{{ stats.active_users }}</dd></div>
-            <div class="px-5 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Added this week</dt><dd class="mt-1 text-xl font-black text-slate-950">{{ stats.recent_signups }}</dd></div>
+        <dl class="mt-4 grid grid-cols-4 border border-slate-300 bg-white shadow-sm">
+            <div class="flex items-center gap-3 border-r border-slate-200 px-5 py-3.5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">All accounts</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ stats.total_users }}</dd></div></div>
+            <div class="flex items-center gap-3 border-r border-slate-200 px-5 py-3.5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-user-graduate" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Applicants</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ stats.applicants }}</dd></div></div>
+            <div class="flex items-center gap-3 border-r border-slate-200 px-5 py-3.5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-building-columns" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Providers</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ stats.providers }}</dd></div></div>
+            <div class="flex items-center gap-3 px-5 py-3.5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-amber-100 text-amber-800"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Need attention</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ stats.attention_total }}</dd></div></div>
         </dl>
 
-        <AdminTableFrame title="Portal accounts" :description="resultLabel" class="mt-4">
+        <AdminTableFrame title="Accounts" :description="resultLabel" icon="fa-solid fa-address-book" class="mt-4">
             <template #filters>
                 <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_14rem]">
                     <label class="relative">

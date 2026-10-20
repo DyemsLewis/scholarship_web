@@ -65,10 +65,10 @@ async function createAccount() {
 
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
 
-        <form class="admin-panel mt-4 overflow-hidden" @submit.prevent="createAccount">
+        <form class="admin-panel mt-4 w-full overflow-hidden" @submit.prevent="createAccount">
             <section class="border-b border-slate-200 px-6 py-5">
-                <h2 class="text-base font-black text-slate-950">Account purpose</h2>
-                <div class="mt-4 max-w-md">
+                <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-user-tag" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Account type</h2><p class="mt-0.5 text-sm text-slate-500">Choose who will use this login.</p></div></div>
+                <div class="mt-4 w-full">
                     <label :class="labelClass" for="account-role">Account type</label>
                     <select id="account-role" v-model="form.role" :class="inputClass">
                         <option value="applicant">Applicant</option>
@@ -79,7 +79,7 @@ async function createAccount() {
             </section>
 
             <section class="border-b border-slate-200 px-6 py-5">
-                <h2 class="text-base font-black text-slate-950">Identity and login</h2>
+                <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-address-card" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Identity and login</h2><p class="mt-0.5 text-sm text-slate-500">Enter the account holder's contact and sign-in details.</p></div></div>
                 <div class="mt-4 grid grid-cols-3 gap-5">
                     <label><span :class="labelClass">First name</span><input v-model="form.first_name" required maxlength="255" :class="inputClass"><span v-if="fieldError('first_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('first_name') }}</span></label>
                     <label><span :class="labelClass">Middle initial</span><input v-model="form.middle_initial" required maxlength="1" :class="inputClass" @input="form.middle_initial = form.middle_initial.replace(/[^a-z]/gi, '').slice(0, 1).toUpperCase()"><span v-if="fieldError('middle_initial')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('middle_initial') }}</span></label>
@@ -91,8 +91,8 @@ async function createAccount() {
             </section>
 
             <section class="px-6 py-5">
-                <h2 class="text-base font-black text-slate-950">Temporary access</h2>
-                <div class="mt-4 grid max-w-4xl grid-cols-2 gap-5">
+                <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-key" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Temporary access</h2><p class="mt-0.5 text-sm text-slate-500">Set the first password shared with the account holder.</p></div></div>
+                <div class="mt-4 grid w-full grid-cols-2 gap-5">
                     <label><span :class="labelClass">Temporary password</span><input v-model="form.password" required type="password" minlength="8" autocomplete="new-password" :class="inputClass"><span v-if="fieldError('password')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('password') }}</span></label>
                     <label><span :class="labelClass">Confirm password</span><input v-model="form.password_confirmation" required type="password" minlength="8" autocomplete="new-password" :class="inputClass"></label>
                 </div>

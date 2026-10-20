@@ -126,13 +126,16 @@ onMounted(() => loadPrograms());
         <section class="student-page" aria-labelledby="program-directory-title">
             <div class="mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                    <div class="flex items-start justify-between gap-8">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Program workspace</p>
-                            <h1 id="program-directory-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">
-                                {{ pageCopy.title }}
-                            </h1>
-                            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
+                    <div class="flex items-center justify-between gap-8">
+                        <div class="flex min-w-0 items-center gap-4">
+                            <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true">
+                                <i class="fa-solid fa-graduation-cap"></i>
+                            </span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Program workspace</p>
+                                <h1 id="program-directory-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
+                                <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
+                            </div>
                         </div>
                         <div class="flex items-center gap-5">
                             <div v-if="context.organization_name" class="max-w-xs border-l border-slate-200 pl-5 text-right">
@@ -141,7 +144,7 @@ onMounted(() => loadPrograms());
                                 <p v-if="context.access_scope === 'assigned'" class="mt-1 text-xs text-slate-500">Assigned programs only</p>
                             </div>
                             <a href="/provider/programs/create" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">
-                                <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
+                                <i class="fa-solid fa-plus text-xs text-amber-300" aria-hidden="true"></i>
                                 Create program
                             </a>
                         </div>
@@ -149,21 +152,21 @@ onMounted(() => loadPrograms());
                 </header>
 
                 <section class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Program summary">
-                    <div class="border-r border-slate-200 px-5 py-4">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">All programs</p>
-                        <p class="mt-1 text-2xl font-bold text-slate-950">{{ summary.total }}</p>
+                    <div class="flex items-center gap-4 border-r border-slate-200 px-5 py-4">
+                        <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600" aria-hidden="true"><i class="fa-solid fa-layer-group text-sm"></i></span>
+                        <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">All programs</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ summary.total }}</p></div>
                     </div>
-                    <div class="border-r border-slate-200 px-5 py-4">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Needs action</p>
-                        <p class="mt-1 text-2xl font-bold text-slate-950">{{ summary.needs_action }}</p>
+                    <div class="flex items-center gap-4 border-r border-slate-200 px-5 py-4">
+                        <span :class="['grid h-9 w-9 shrink-0 place-items-center', summary.needs_action ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600']" aria-hidden="true"><i :class="['fa-solid text-sm', summary.needs_action ? 'fa-bell' : 'fa-check']"></i></span>
+                        <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Needs action</p><p :class="['mt-1 text-2xl font-bold', summary.needs_action ? 'text-amber-700' : 'text-slate-950']">{{ summary.needs_action }}</p></div>
                     </div>
-                    <div class="border-r border-slate-200 px-5 py-4">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Under review</p>
-                        <p class="mt-1 text-2xl font-bold text-slate-950">{{ summary.under_review }}</p>
+                    <div class="flex items-center gap-4 border-r border-slate-200 px-5 py-4">
+                        <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600" aria-hidden="true"><i class="fa-solid fa-clock-rotate-left text-sm"></i></span>
+                        <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Under review</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ summary.under_review }}</p></div>
                     </div>
-                    <div class="px-5 py-4">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Published</p>
-                        <p class="mt-1 text-2xl font-bold text-slate-950">{{ summary.published }}</p>
+                    <div class="flex items-center gap-4 px-5 py-4">
+                        <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600" aria-hidden="true"><i class="fa-solid fa-circle-check text-sm"></i></span>
+                        <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Published</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ summary.published }}</p></div>
                     </div>
                 </section>
 
@@ -216,13 +219,12 @@ onMounted(() => loadPrograms());
                             </thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-if="isLoading && !programs.length">
-                                    <td colspan="6" class="px-5 py-12 text-center text-sm font-semibold text-slate-500">
-                                        Loading programs...
-                                    </td>
+                                    <td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-circle-notch animate-spin text-sm"></i></span><p class="mt-2 text-sm font-semibold text-slate-500">Loading programs...</p></td>
                                 </tr>
                                 <tr v-else-if="!programs.length">
                                     <td colspan="6" class="px-5 py-12 text-center">
-                                        <p class="font-semibold text-slate-800">No programs found</p>
+                                        <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-folder-open text-sm"></i></span>
+                                        <p class="mt-2 font-semibold text-slate-800">No programs found</p>
                                         <p class="mt-1 text-sm text-slate-500">Try another search or open a different program section.</p>
                                     </td>
                                 </tr>

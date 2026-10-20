@@ -47,7 +47,7 @@ async function saveDelivery() {
         :queue-url="queueUrl"
     >
         <form class="admin-panel mt-4 overflow-hidden" @submit.prevent="saveDelivery">
-            <header class="border-b border-slate-200 px-6 py-4"><h2 class="text-lg font-black text-slate-950">Delivery plan</h2><p class="mt-1 text-sm text-slate-500">Assign the work, set its state, and track the agreed output.</p></header>
+            <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span><div><h2 class="text-lg font-black text-slate-950">Delivery plan</h2><p class="mt-0.5 text-sm text-slate-500">Assign the work, set its state, and track the agreed output.</p></div></header>
             <div class="space-y-6 px-6 py-5">
                 <div class="grid grid-cols-4 gap-4">
                     <label class="text-sm font-bold text-slate-700">Work state<select v-model="workflow.fulfillment_status" :disabled="['completed', 'cancelled'].includes(purchase.fulfillment_status)" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option v-if="purchase.fulfillment_status === 'cancelled'" value="cancelled">Cancelled</option><option v-for="option in statusOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>

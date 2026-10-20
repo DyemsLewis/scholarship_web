@@ -124,7 +124,7 @@ class DemoAccountAccessTest extends TestCase
         $this->get("/dashboard/scholarships/{$publishedProgram->id}")->assertOk();
         $this->getJson("/dashboard/scholarships/{$publishedProgram->id}/data")
             ->assertOk()
-            ->assertJsonPath('scholarship.id', $publishedProgram->id);
+            ->assertJsonPath('detail.identity.id', $publishedProgram->id);
         $this->getJson('/notifications')->assertOk();
         $this->get('/admin')->assertForbidden();
         $this->get('/provider')->assertForbidden();

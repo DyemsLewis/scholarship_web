@@ -30,6 +30,25 @@ class SuccessfulDemoCleanupSeeder extends Seeder
 
     private const SUCCESSFUL_APPLICANT_USERNAME = 'vincentrafaeltorres';
 
+    private const ACTIVE_MONITORING_APPLICANT_USERNAME = 'nicoleandreabautista';
+
+    /**
+     * Keep one positive record at each meaningful workflow point. Failed,
+     * rejected, correction, overdue, and issue scenarios are still removed.
+     */
+    private const RETAINED_APPLICANT_USERNAMES = [
+        'alyssamaereyes',
+        'biancalouisenavarro',
+        'markangelodelacruz',
+        'carlojaviermendoza',
+        'sofiamarievillanueva',
+        'gabrielluisramos',
+        'trishaannegarcia',
+        'danielpaoloaquino',
+        self::ACTIVE_MONITORING_APPLICANT_USERNAME,
+        self::SUCCESSFUL_APPLICANT_USERNAME,
+    ];
+
     private const REMOVED_PROVIDER_USERNAMES = [
         'provider.pending',
         'provider.revision',
@@ -56,6 +75,10 @@ class SuccessfulDemoCleanupSeeder extends Seeder
             ->where('username', self::SUCCESSFUL_APPLICANT_USERNAME)
             ->where('email', 'vincent-rafaeltorres@demo.test')
             ->firstOrFail();
+        $activeMonitoringApplicant = User::query()
+            ->where('username', self::ACTIVE_MONITORING_APPLICANT_USERNAME)
+            ->where('email', 'nicole-andreabautista@demo.test')
+            ->firstOrFail();
         $program = Scholarship::query()
             ->whereBelongsTo($provider, 'provider')
             ->where('title', 'Harborlight Senior Scholars Program')
@@ -64,11 +87,15 @@ class SuccessfulDemoCleanupSeeder extends Seeder
             ->whereBelongsTo($program)
             ->whereBelongsTo($successfulApplicant, 'applicant')
             ->firstOrFail();
+        $activeMonitoringApplication = ScholarshipApplication::query()
+            ->whereBelongsTo($program)
+            ->whereBelongsTo($activeMonitoringApplicant, 'applicant')
+            ->firstOrFail();
 
         $removedApplicants = User::query()
             ->where('role', 'applicant')
             ->where('email', 'like', '%@demo.test')
-            ->where('username', '!=', self::SUCCESSFUL_APPLICANT_USERNAME)
+            ->whereNotIn('username', self::RETAINED_APPLICANT_USERNAMES)
             ->get(['id']);
         $removedApplicationIds = ScholarshipApplication::query()
             ->whereIn('applicant_id', $removedApplicants->pluck('id'))
@@ -76,8 +103,15 @@ class SuccessfulDemoCleanupSeeder extends Seeder
         $removedProviderIds = User::query()
             ->whereIn('username', self::REMOVED_PROVIDER_USERNAMES)
             ->pluck('id');
+        $retainedApplicationIds = ScholarshipApplication::query()
+            ->whereIn('applicant_id', User::query()
+                ->whereIn('username', self::RETAINED_APPLICANT_USERNAMES)
+                ->select('id'))
+            ->pluck('id');
         $removedSessionIds = ApplicationStageSession::query()
             ->where('scholarship_id', $program->id)
+            ->whereDoesntHave('assignments', fn ($query) => $query
+                ->whereIn('scholarship_application_id', $retainedApplicationIds))
             ->pluck('id');
         $cycleIds = RecipientMonitoringCycle::query()
             ->where('scholarship_id', $program->id)
@@ -87,8 +121,11 @@ class SuccessfulDemoCleanupSeeder extends Seeder
             $provider,
             $successfulApplicant,
             $successfulApplication,
+            $activeMonitoringApplicant,
+            $activeMonitoringApplication,
             $program,
             $removedApplicants,
+            $removedSessionIds,
         ): void {
             ProviderServiceRequest::query()
                 ->where('provider_id', $provider->id)
@@ -107,7 +144,7 @@ class SuccessfulDemoCleanupSeeder extends Seeder
                 ->delete();
 
             ApplicationStageSession::query()
-                ->where('scholarship_id', $program->id)
+                ->whereIn('id', $removedSessionIds)
                 ->delete();
 
             User::query()
@@ -132,10 +169,33 @@ class SuccessfulDemoCleanupSeeder extends Seeder
                 ->where('title', 'First semester progress check')
                 ->firstOrFail();
             $cycle->update([
-                'status' => 'closed',
-                'closed_by' => $provider->id,
-                'closed_at' => now()->subDays(3),
+                'status' => 'open',
+                'closed_by' => null,
+                'closed_at' => null,
             ]);
+
+            RecipientMonitoringCase::query()->updateOrCreate(
+                [
+                    'recipient_monitoring_cycle_id' => $cycle->id,
+                    'scholarship_application_id' => $activeMonitoringApplication->id,
+                ],
+                [
+                    'applicant_id' => $activeMonitoringApplicant->id,
+                    'status' => RecipientSupportCatalog::CASE_UNDER_REVIEW,
+                    'due_status' => 'open',
+                    'effective_due_at' => $cycle->due_at,
+                    'outcome' => null,
+                    'status_reason' => 'An academic progress record is waiting for provider review.',
+                    'next_action_role' => 'provider',
+                    'next_action' => 'review_requirements',
+                    'opened_at' => $cycle->published_at ?? $cycle->created_at,
+                    'submitted_at' => now()->subDays(5),
+                    'review_started_at' => now()->subDays(4),
+                    'ready_to_close_at' => null,
+                    'closed_by' => null,
+                    'closed_at' => null,
+                ],
+            );
 
             RecipientMonitoringCase::query()->updateOrCreate(
                 [
@@ -169,12 +229,30 @@ class SuccessfulDemoCleanupSeeder extends Seeder
                 ->where('title', 'Second semester education allowance')
                 ->firstOrFail();
             $secondRelease->update([
-                'release_at' => now()->subDays(2)->setTime(10, 0),
-                'status' => 'completed',
+                'release_at' => now()->addDays(30)->setTime(10, 0),
+                'status' => 'scheduled',
             ]);
+
+            $completionRelease = RecipientBenefitRelease::query()->updateOrCreate(
+                [
+                    'scholarship_id' => $program->id,
+                    'title' => 'Program completion allowance',
+                ],
+                [
+                    'created_by' => $provider->id,
+                    'release_at' => now()->subDays(2)->setTime(10, 0),
+                    'benefit_description' => 'Final education allowance for the completed recipient lifecycle.',
+                    'amount' => 9000,
+                    'release_method' => 'bank_transfer',
+                    'instructions' => 'Confirm the final allowance against the provider release register.',
+                    'requires_original_verification' => false,
+                    'status' => 'completed',
+                    'published_at' => now()->subDays(10),
+                ],
+            );
             $releaseRecord = RecipientBenefitReleaseRecord::query()->updateOrCreate(
                 [
-                    'recipient_benefit_release_id' => $secondRelease->id,
+                    'recipient_benefit_release_id' => $completionRelease->id,
                     'scholarship_application_id' => $successfulApplication->id,
                 ],
                 [
@@ -210,6 +288,9 @@ class SuccessfulDemoCleanupSeeder extends Seeder
                     'withheld_at' => null,
                     'cancelled_at' => null,
                 ]);
+
+            app(RecipientBenefitEntitlementService::class)
+                ->ensureForApplication($activeMonitoringApplication);
         });
 
         foreach ($removedApplicants as $applicant) {
@@ -231,6 +312,6 @@ class SuccessfulDemoCleanupSeeder extends Seeder
             Storage::disk('local')->deleteDirectory("demo-showcase/application-stage-evidence/{$sessionId}");
         }
 
-        $this->command?->info('Demo cleanup complete: only successful records remain.');
+        $this->command?->info('Demo cleanup complete: positive workflow stages and successful recipient records remain.');
     }
 }

@@ -141,17 +141,13 @@ onMounted(loadCase);
             <div class="mx-auto max-w-[94rem]">
                 <a :href="backUrl" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to support cases</a>
 
-                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center text-sm font-semibold text-slate-500 shadow-sm">Loading support case...</div>
+                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center shadow-sm"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading support case...</p></div>
                 <div v-else-if="!report" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-12 text-center text-sm font-semibold text-rose-800" role="alert">{{ errorMessage || 'This support case is unavailable.' }}</div>
 
                 <template v-else>
                     <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                         <div class="flex items-center justify-between gap-8">
-                            <div class="min-w-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Support case</p>
-                                <h1 id="support-case-title" class="mt-1 truncate font-display text-3xl font-bold tracking-tight text-slate-950">{{ report.subject }}</h1>
-                                <p class="mt-1.5 text-sm text-slate-600">{{ report.category_label }} · Received {{ report.created_at }}</p>
-                            </div>
+                            <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Support case</p><h1 id="support-case-title" class="mt-1 truncate font-display text-2xl font-bold tracking-tight text-slate-950">{{ report.subject }}</h1><p class="mt-1 text-sm text-slate-600">{{ report.category_label }} · Received {{ report.created_at }}</p></div></div>
                             <span :class="['inline-flex shrink-0 border px-3 py-2 text-[11px] font-bold uppercase tracking-wide', stateClass(report.work_state)]">{{ report.work_label }}</span>
                         </div>
                     </header>
@@ -180,10 +176,7 @@ onMounted(loadCase);
                     </section>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="reported-issue-heading">
-                        <header class="border-b border-slate-200 px-6 py-4">
-                            <h2 id="reported-issue-heading" class="text-base font-bold text-slate-950">Reported issue</h2>
-                            <p class="mt-1 text-xs text-slate-500">Read the original concern before taking action.</p>
-                        </header>
+                        <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-message" aria-hidden="true"></i></span><div><h2 id="reported-issue-heading" class="text-base font-bold text-slate-950">Reported issue</h2><p class="mt-1 text-xs text-slate-500">Read the original concern before taking action.</p></div></header>
                         <div class="px-6 py-5"><p class="whitespace-pre-wrap text-sm leading-7 text-slate-700">{{ report.description }}</p></div>
                         <div v-if="report.context || report.attachment" class="flex items-center gap-6 border-t border-slate-200 bg-slate-50 px-6 py-4">
                             <div v-if="report.context" class="min-w-0 flex-1"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Affected page or context</p><p class="mt-1 truncate text-sm font-semibold text-slate-800">{{ report.context }}</p></div>
@@ -192,7 +185,7 @@ onMounted(loadCase);
                     </section>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="case-progress-heading">
-                        <header class="border-b border-slate-200 px-6 py-4"><h2 id="case-progress-heading" class="text-base font-bold text-slate-950">Case progress</h2></header>
+                        <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-route" aria-hidden="true"></i></span><h2 id="case-progress-heading" class="text-base font-bold text-slate-950">Case progress</h2></header>
                         <ol class="grid grid-cols-3 divide-x divide-slate-200">
                             <li v-for="(step, index) in progressSteps" :key="step.label" class="flex items-start gap-3 px-6 py-5">
                                 <span :class="['grid h-8 w-8 shrink-0 place-items-center text-xs font-black', step.current ? 'bg-amber-300 text-slate-950' : step.complete ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-500']"><i v-if="step.complete" class="fa-solid fa-check" aria-hidden="true"></i><span v-else>{{ index + 1 }}</span></span>
@@ -203,22 +196,18 @@ onMounted(loadCase);
 
                     <section v-if="isIncomingCase" class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="provider-response-heading">
                         <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-4">
-                            <div><h2 id="provider-response-heading" class="text-base font-bold text-slate-950">Response to applicant</h2><p class="mt-1 text-xs text-slate-500">Give one clear answer and the next action, if any.</p></div>
-                            <button v-if="!canRespond" type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950" @click="requestReopen">Reopen response</button>
+                            <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-reply" aria-hidden="true"></i></span><div><h2 id="provider-response-heading" class="text-base font-bold text-slate-950">Response to applicant</h2><p class="mt-1 text-xs text-slate-500">Give one clear answer and the next action, if any.</p></div></div>
+                            <button v-if="!canRespond" type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950" @click="requestReopen"><i class="fa-solid fa-rotate-left text-[10px]" aria-hidden="true"></i>Reopen response</button>
                         </header>
                         <div v-if="canRespond" class="px-6 py-5">
                             <label for="provider-response" class="sr-only">Response to applicant</label>
                             <textarea id="provider-response" v-model="responseText" rows="6" maxlength="2000" class="w-full border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-950" placeholder="Explain the answer and what the applicant should do next."></textarea>
-                            <div class="mt-3 flex items-center justify-between"><p class="text-xs text-slate-500">{{ responseLength }}/2000 characters</p><button type="button" :disabled="isSaving || responseLength < 10" class="h-11 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40" @click="requestComplete">Send response</button></div>
+                            <div class="mt-3 flex items-center justify-between"><p class="text-xs text-slate-500">{{ responseLength }}/2000 characters</p><button type="button" :disabled="isSaving || responseLength < 10" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40" @click="requestComplete"><i class="fa-solid fa-paper-plane text-[10px]" aria-hidden="true"></i>Send response</button></div>
                         </div>
                         <div v-else class="px-6 py-5"><p class="whitespace-pre-wrap text-sm leading-7 text-slate-700">{{ report.provider_response || 'No written provider response was recorded.' }}</p><p v-if="report.provider_resolved_by" class="mt-4 text-xs font-semibold text-slate-500">Sent by {{ report.provider_resolved_by }} · {{ report.provider_resolved_at }}</p></div>
                     </section>
 
-                    <section v-else class="mt-4 border border-slate-200 bg-white px-6 py-5 shadow-sm">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Platform review</p>
-                        <h2 class="mt-1 text-base font-bold text-slate-950">No provider response is required</h2>
-                        <p class="mt-1 text-sm text-slate-600">Your organization submitted this issue. Platform support controls its review and closure.</p>
-                    </section>
+                    <section v-else class="mt-4 flex items-center gap-4 border border-slate-200 bg-white px-6 py-5 shadow-sm"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Platform review</p><h2 class="mt-1 text-base font-bold text-slate-950">No provider response is required</h2><p class="mt-1 text-sm text-slate-600">Your organization submitted this issue. Platform support controls its review and closure.</p></div></section>
                 </template>
             </div>
         </section>

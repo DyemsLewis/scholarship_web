@@ -13,7 +13,7 @@ defineProps({
     <main class="admin-shell">
         <AdminWorkspaceSidebar :workspace="workspace" />
 
-        <section class="admin-page">
+        <section class="admin-page min-w-0">
             <div class="admin-container min-w-0">
                 <slot></slot>
             </div>

@@ -11,12 +11,15 @@ use Illuminate\Support\Str;
 
 class ApplicantScholarshipDetailService
 {
+    private const VIEWS = ['summary', 'eligibility', 'award', 'application', 'provider'];
+
     public function __construct(
         private readonly ScholarshipEligibilityService $eligibilityService,
     ) {}
 
-    public function build(Scholarship $scholarship, User $user): array
+    public function build(Scholarship $scholarship, User $user, string $view = 'summary'): array
     {
+        $view = in_array($view, self::VIEWS, true) ? $view : 'summary';
         $scholarship
             ->loadMissing(['provider.providerProfile', 'benefits', 'events'])
             ->loadCount(['applications', 'bookmarks']);
@@ -32,7 +35,6 @@ class ApplicantScholarshipDetailService
             ->exists();
         $profileReadiness = $user->applicantProfileReadiness();
         $eligibility = $this->eligibilityService->evaluate($scholarship, $user);
-        $documents = $this->eligibilityService->preparedDocumentReadiness($scholarship, $user);
         $decision = $this->decision(
             $scholarship,
             $application,
@@ -40,19 +42,50 @@ class ApplicantScholarshipDetailService
             $profileReadiness,
             $eligibility,
         );
+        $eligibilityContent = $this->eligibility($scholarship, $eligibility, $profileReadiness);
+        $requirementsContent = in_array($view, ['summary', 'application'], true)
+            ? $this->requirements(
+                $scholarship,
+                $this->eligibilityService->preparedDocumentReadiness($scholarship, $user),
+            )
+            : null;
+        $processContent = in_array($view, ['summary', 'application'], true)
+            ? $this->process($scholarship)
+            : null;
+        $providerContent = in_array($view, ['summary', 'provider'], true)
+            ? $this->provider($scholarship, $user)
+            : null;
+        $awardContent = in_array($view, ['summary', 'award'], true)
+            ? $this->overview($scholarship)
+            : null;
+
+        $content = match ($view) {
+            'eligibility' => $eligibilityContent,
+            'award' => $awardContent,
+            'application' => [
+                'requirements' => $requirementsContent,
+                'process' => $processContent,
+            ],
+            'provider' => $providerContent,
+            default => $this->summary(
+                $scholarship,
+                $eligibilityContent,
+                $requirementsContent ?? [],
+                $processContent ?? [],
+                $providerContent ?? [],
+                $awardContent ?? [],
+            ),
+        };
 
         return [
-            'version' => 1,
+            'version' => 2,
+            'view' => $view,
+            'page' => $this->page($view),
             'identity' => $this->identity($scholarship),
             'decision' => $decision,
-            'facts' => $this->facts($scholarship),
-            'sections' => [
-                'overview' => $this->overview($scholarship),
-                'eligibility' => $this->eligibility($scholarship, $eligibility, $profileReadiness),
-                'requirements' => $this->requirements($scholarship, $documents),
-                'process' => $this->process($scholarship),
-                'provider' => $this->provider($scholarship, $user),
-            ],
+            'snapshot' => $this->facts($scholarship),
+            'navigation' => $this->navigation($scholarship, $view),
+            'content' => $content,
             'saved' => [
                 'is_saved' => $isSaved,
                 'label' => $isSaved ? 'Remove from saved' : 'Save scholarship',
@@ -133,9 +166,12 @@ class ApplicantScholarshipDetailService
                 'title' => 'Some eligibility rules do not match',
                 'description' => $eligibility['difference_summary'] ?? 'Review the eligibility comparison before applying.',
                 'action' => [
-                    'kind' => 'section',
+                    'kind' => 'link',
                     'label' => 'Review eligibility',
-                    'target' => 'eligibility',
+                    'href' => route('dashboard.scholarships.show.section', [
+                        'scholarship' => $scholarship,
+                        'section' => 'eligibility',
+                    ], false),
                 ],
             ],
             default => [
@@ -146,7 +182,7 @@ class ApplicantScholarshipDetailService
                 'action' => [
                     'kind' => 'link',
                     'label' => 'Start pre-screening',
-                    'href' => '/dashboard/applications?scholarship='.$scholarship->id,
+                    'href' => route('dashboard.applications.start', $scholarship, false),
                 ],
             ],
         };
@@ -183,21 +219,76 @@ class ApplicantScholarshipDetailService
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'program_cycle' => $scholarship->program_cycle,
-            'image_url' => filled($scholarship->image_path)
-                ? asset(ltrim($scholarship->image_path, '/'))
-                : asset('uploads/scholarship-default.jpg'),
+            'image_url' => $this->publicAssetUrl($scholarship->image_path, 'uploads/scholarship-default.jpg'),
             'provider' => [
                 'id' => $scholarship->provider?->id,
                 'name' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
                 'type' => $scholarship->provider?->provider_type,
-                'logo_url' => filled($scholarship->provider?->providerProfile?->logo_path)
-                    ? asset(ltrim($scholarship->provider->providerProfile->logo_path, '/'))
-                    : null,
+                'logo_url' => $this->publicAssetUrl($scholarship->provider?->providerProfile?->logo_path),
                 'href' => $scholarship->provider
                     ? route('dashboard.providers.show', $scholarship->provider, false)
                     : null,
+                'verified' => $scholarship->provider?->providerProfile?->isVerified() ?? false,
+                'verification_label' => $scholarship->provider?->providerProfile?->isVerified()
+                    ? 'Verified organization'
+                    : 'Verification pending',
             ],
         ];
+    }
+
+    private function page(string $view): array
+    {
+        return match ($view) {
+            'eligibility' => [
+                'eyebrow' => 'Eligibility',
+                'title' => 'Check how your profile compares',
+                'description' => 'Review the published rules and any details that still need attention.',
+            ],
+            'award' => [
+                'eyebrow' => 'Award and terms',
+                'title' => 'Understand the support before applying',
+                'description' => 'See what the scholarship provides and what recipients agree to do.',
+            ],
+            'application' => [
+                'eyebrow' => 'Application plan',
+                'title' => 'Prepare for each application step',
+                'description' => 'Check the files, review method, and selection stages in one place.',
+            ],
+            'provider' => [
+                'eyebrow' => 'Scholarship provider',
+                'title' => 'Know who manages the program',
+                'description' => 'Review the verified organization, public contact, and program location.',
+            ],
+            default => [
+                'eyebrow' => 'Scholarship brief',
+                'title' => 'Decide with the essentials',
+                'description' => 'Start with the award, your readiness, and the next action.',
+            ],
+        };
+    }
+
+    private function navigation(Scholarship $scholarship, string $activeView): array
+    {
+        return collect([
+            ['key' => 'summary', 'label' => 'Summary', 'icon' => 'fa-solid fa-compass'],
+            ['key' => 'eligibility', 'label' => 'Eligibility', 'icon' => 'fa-solid fa-list-check'],
+            ['key' => 'award', 'label' => 'Award & terms', 'icon' => 'fa-solid fa-gift'],
+            ['key' => 'application', 'label' => 'Application plan', 'icon' => 'fa-solid fa-route'],
+            ['key' => 'provider', 'label' => 'Provider', 'icon' => 'fa-solid fa-building-shield'],
+        ])->map(function (array $item) use ($scholarship, $activeView): array {
+            $href = $item['key'] === 'summary'
+                ? route('dashboard.scholarships.show', $scholarship, false)
+                : route('dashboard.scholarships.show.section', [
+                    'scholarship' => $scholarship,
+                    'section' => $item['key'],
+                ], false);
+
+            return [
+                ...$item,
+                'href' => $href,
+                'active' => $item['key'] === $activeView,
+            ];
+        })->all();
     }
 
     private function facts(Scholarship $scholarship): array
@@ -212,7 +303,7 @@ class ApplicantScholarshipDetailService
             [
                 'key' => 'benefit',
                 'label' => 'Benefit',
-                'value' => $scholarship->benefitSummary(),
+                'value' => $this->compactBenefitSummary($scholarship),
             ],
             [
                 'key' => 'deadline',
@@ -230,6 +321,119 @@ class ApplicantScholarshipDetailService
                 'key' => 'support_period',
                 'label' => 'Support period',
                 'value' => $supportPeriod ?: 'Not specified',
+            ],
+        ];
+    }
+
+    private function summary(
+        Scholarship $scholarship,
+        array $eligibility,
+        array $requirements,
+        array $process,
+        array $provider,
+        array $award,
+    ): array {
+        $profile = $eligibility['profile'] ?? [];
+        $blockers = $eligibility['blockers'] ?? [];
+        $readiness = $requirements['readiness'] ?? [];
+        $stages = $process['stages'] ?? [];
+        $providerVerified = (bool) ($scholarship->provider?->providerProfile?->isVerified() ?? false);
+
+        $eligibilityRow = match (true) {
+            ! ($profile['complete'] ?? false) => [
+                'state' => 'attention',
+                'status' => 'Profile needed',
+                'title' => 'Complete your eligibility check',
+                'description' => count($profile['missing'] ?? []).' profile detail(s) are still missing.',
+            ],
+            $blockers !== [] => [
+                'state' => 'blocked',
+                'status' => count($blockers).' to review',
+                'title' => 'Some published rules do not match',
+                'description' => 'Open the comparison to see the exact differences.',
+            ],
+            default => [
+                'state' => 'ready',
+                'status' => 'Matched',
+                'title' => 'Published rules match your profile',
+                'description' => 'The provider will still verify your information during review.',
+            ],
+        };
+
+        $fileRow = match ($readiness['state'] ?? 'not_required') {
+            'ready' => [
+                'state' => 'ready',
+                'status' => 'Ready',
+                'title' => 'Your required files are prepared',
+                'description' => ($readiness['ready_count'] ?? 0).' saved file(s) can be reused.',
+            ],
+            'needs_files' => [
+                'state' => 'attention',
+                'status' => ($readiness['missing_count'] ?? 0).' missing',
+                'title' => 'Prepare the required files',
+                'description' => 'Upload missing records in My Documents before submitting.',
+            ],
+            default => [
+                'state' => 'neutral',
+                'status' => 'Not required now',
+                'title' => 'Initial review uses your profile',
+                'description' => 'The provider may request proof after pre-screening.',
+            ],
+        };
+
+        return [
+            'description' => $scholarship->description,
+            'benefits' => collect($award['benefits'] ?? [])->take(3)->values()->all(),
+            'remaining_benefit_count' => max(0, count($award['benefits'] ?? []) - 3),
+            'readiness' => [
+                [
+                    'key' => 'eligibility',
+                    'label' => 'Eligibility',
+                    'icon' => 'fa-solid fa-list-check',
+                    'href' => route('dashboard.scholarships.show.section', [
+                        'scholarship' => $scholarship,
+                        'section' => 'eligibility',
+                    ], false),
+                    ...$eligibilityRow,
+                ],
+                [
+                    'key' => 'files',
+                    'label' => 'Application files',
+                    'icon' => 'fa-solid fa-folder-open',
+                    'href' => route('dashboard.scholarships.show.section', [
+                        'scholarship' => $scholarship,
+                        'section' => 'application',
+                    ], false),
+                    ...$fileRow,
+                ],
+                [
+                    'key' => 'process',
+                    'label' => 'Selection process',
+                    'icon' => 'fa-solid fa-route',
+                    'href' => route('dashboard.scholarships.show.section', [
+                        'scholarship' => $scholarship,
+                        'section' => 'application',
+                    ], false),
+                    'state' => 'neutral',
+                    'status' => count($stages).' step'.(count($stages) === 1 ? '' : 's'),
+                    'title' => $stages[0]['label'] ?? 'Provider review',
+                    'description' => 'Open the plan to see what happens after you apply.',
+                ],
+                [
+                    'key' => 'provider',
+                    'label' => 'Provider',
+                    'icon' => 'fa-solid fa-building-shield',
+                    'href' => route('dashboard.scholarships.show.section', [
+                        'scholarship' => $scholarship,
+                        'section' => 'provider',
+                    ], false),
+                    'state' => $providerVerified ? 'ready' : 'attention',
+                    'status' => $providerVerified ? 'Verified' : 'Check status',
+                    'title' => $provider['name'] ?? 'Scholarship provider',
+                    'description' => $providerVerified
+                        ? 'The organization passed platform verification.'
+                        : 'Review the organization before sharing information.',
+                ],
             ],
         ];
     }
@@ -258,6 +462,19 @@ class ApplicantScholarshipDetailService
         ])->filter(fn (array $term): bool => filled($term['value']))
             ->values()
             ->all();
+        $agreementRows = collect([
+            ['key' => 'responsibilities', 'label' => 'Recipient responsibilities', 'value' => $agreement['responsibilities'] ?? null],
+            ['key' => 'required_evidence', 'label' => 'Proof recipients submit', 'value' => $agreement['required_evidence'] ?? null],
+            ['key' => 'release_conditions', 'label' => 'Benefit release conditions', 'value' => $agreement['release_conditions'] ?? null],
+            ['key' => 'duration', 'label' => 'How long responsibilities apply', 'value' => $agreement['duration'] ?? null],
+            ['key' => 'noncompliance_consequence', 'label' => 'If a requirement is not completed', 'value' => $agreement['noncompliance_consequence'] ?? null],
+            ['key' => 'exit_or_exception_process', 'label' => 'Exceptions or withdrawal', 'value' => $agreement['exit_or_exception_process'] ?? null],
+            ['key' => 'renewal_policy', 'label' => 'Renewal policy', 'value' => $scholarship->renewal_policy],
+            ['key' => 'return_service_contract', 'label' => 'Return service', 'value' => $scholarship->return_service_contract],
+            ['key' => 'other_contract_terms', 'label' => 'Other terms', 'value' => $scholarship->other_contract_terms],
+        ])->filter(fn (array $row): bool => filled($row['value']))
+            ->values()
+            ->all();
 
         return [
             'description' => $scholarship->description,
@@ -265,6 +482,8 @@ class ApplicantScholarshipDetailService
             'provider_objectives' => $scholarship->provider_objectives ?? [],
             'provider_objective_notes' => $scholarship->provider_objective_notes,
             'terms_preview' => $termsPreview,
+            'commitment_type' => $agreement['commitment_type'] ?? null,
+            'terms' => $agreementRows,
             'has_full_terms' => $agreement !== []
                 || filled($scholarship->renewal_policy)
                 || filled($scholarship->return_service_contract)
@@ -484,13 +703,16 @@ class ApplicantScholarshipDetailService
         return [
             'name' => $provider?->provider_name ?? $provider?->name,
             'type_label' => Str::headline($provider?->provider_type ?: 'Scholarship provider'),
+            'verified' => $profile?->isVerified() ?? false,
+            'verification_label' => $profile?->isVerified()
+                ? 'Verified organization'
+                : 'Verification pending',
+            'verified_at' => $profile?->verified_at?->format('M d, Y'),
             'summary' => $profile?->mission ?: $provider?->provider_description,
             'year_established' => $profile?->year_established,
             'service_area' => $profile?->service_area,
             'website' => $provider?->provider_website,
-            'logo_url' => filled($profile?->logo_path)
-                ? asset(ltrim($profile->logo_path, '/'))
-                : null,
+            'logo_url' => $this->publicAssetUrl($profile?->logo_path),
             'profile_href' => $provider
                 ? route('dashboard.providers.show', $provider, false)
                 : null,
@@ -548,5 +770,46 @@ class ApplicantScholarshipDetailService
         $angle = min(1, max(0, $angle));
 
         return round(6371 * 2 * atan2(sqrt($angle), sqrt(1 - $angle)), 1);
+    }
+
+    private function compactBenefitSummary(Scholarship $scholarship): string
+    {
+        $benefits = collect($scholarship->benefitPayload());
+        $primary = $benefits->first();
+
+        if (! is_array($primary)) {
+            return 'Benefits not specified';
+        }
+
+        $amount = filled($primary['amount'] ?? null)
+            ? 'PHP '.number_format((float) $primary['amount'], 0)
+            : null;
+        $details = collect([$amount, $primary['frequency_label'] ?? null])
+            ->filter()
+            ->implode(' | ');
+        $summary = (string) ($primary['title'] ?? $primary['type_label'] ?? 'Scholarship support');
+
+        if ($details !== '') {
+            $summary .= ' - '.$details;
+        }
+
+        $remaining = $benefits->count() - 1;
+
+        return $remaining > 0 ? $summary.' + '.$remaining.' more' : $summary;
+    }
+
+    private function publicAssetUrl(?string $path, ?string $fallback = null): ?string
+    {
+        $path = filled($path) ? $path : $fallback;
+
+        if (blank($path)) {
+            return null;
+        }
+
+        if (Str::startsWith($path, ['http://', 'https://'])) {
+            return $path;
+        }
+
+        return '/'.ltrim($path, '/');
     }
 }

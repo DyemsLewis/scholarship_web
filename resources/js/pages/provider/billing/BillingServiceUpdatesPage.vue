@@ -55,21 +55,18 @@ async function addUpdate() {
         :directory-url="directoryUrl"
     >
         <section class="mt-4 border border-slate-200 bg-white shadow-sm">
-            <header class="border-b border-slate-200 px-6 py-4">
-                <h2 class="text-base font-bold text-slate-950">Service updates</h2>
-                <p class="mt-1 text-xs text-slate-500">Questions, responses, and delivery notices in one timeline.</p>
-            </header>
+            <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-message" aria-hidden="true"></i></span><div><h2 class="text-base font-bold text-slate-950">Service updates</h2><p class="mt-1 text-xs text-slate-500">Questions, responses, and delivery notices in one timeline.</p></div></header>
 
             <form v-if="canModify" class="border-b border-slate-200 bg-slate-50 px-6 py-5" @submit.prevent="addUpdate">
                 <label for="service-response" class="text-sm font-bold text-slate-800">Send a response</label>
                 <div class="mt-2 flex items-end gap-3">
                     <textarea id="service-response" v-model="updateMessage" rows="3" minlength="3" maxlength="2000" required class="min-h-20 flex-1 border border-slate-300 bg-white px-4 py-3 text-sm leading-6 outline-none focus:border-slate-950" placeholder="Add information or answer a platform question."></textarea>
-                    <button type="submit" :disabled="isSaving || !updateMessage.trim()" class="h-10 bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-40">Send response</button>
+                    <button type="submit" :disabled="isSaving || !updateMessage.trim()" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-40"><i :class="['fa-solid', isSaving ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>Send response</button>
                 </div>
             </form>
 
             <div v-if="!updates.length" class="min-h-80 px-6 py-14 text-center">
-                <i class="fa-regular fa-message text-2xl text-slate-300" aria-hidden="true"></i>
+                <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-message" aria-hidden="true"></i></span>
                 <p class="mt-3 text-sm font-bold text-slate-800">No updates have been recorded.</p>
             </div>
             <ol v-else class="divide-y divide-slate-200">

@@ -15,7 +15,8 @@ const configs = {
 const config = configs[queueKey] ?? configs.ready;
 const loading = ref(true);
 const errorMessage = ref('');
-const search = ref('');
+const query = new URLSearchParams(window.location.search);
+const search = ref(query.get('search') ?? '');
 const items = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
 let searchTimer;
@@ -48,10 +49,10 @@ onMounted(loadItems);
     <AdminWorkspacePage workspace="billing_officer">
         <AdminWorkspaceHeader eyebrow="Service delivery" :title="config.title" :description="config.description" :icon="config.icon" />
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
-        <AdminTableFrame title="Service requests" :description="resultLabel" class="mt-4">
+        <AdminTableFrame title="Service requests" :description="resultLabel" :icon="config.icon" class="mt-4">
             <template #filters><div class="flex items-center gap-3"><label class="relative block flex-1"><span class="sr-only">Search service requests</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" placeholder="Search provider, service, or reference" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label><a :href="exportUrl" class="inline-flex h-11 shrink-0 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950"><i class="fa-solid fa-download" aria-hidden="true"></i>Export CSV</a></div></template>
             <div v-if="loading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading service requests...</div>
-            <table v-else-if="items.length" class="w-full min-w-[64rem] border-collapse text-left">
+            <table v-else-if="items.length" class="portal-data-table min-w-[64rem]">
                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Service</th><th class="border-b border-slate-200 px-4 py-3">Provider</th><th class="border-b border-slate-200 px-4 py-3">Work state</th><th class="border-b border-slate-200 px-4 py-3">Assignment</th><th class="border-b border-slate-200 px-4 py-3">Paid</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
                 <tbody class="divide-y divide-slate-200 bg-white"><tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
                     <td class="px-5 py-3.5"><p class="max-w-xs truncate text-sm font-bold text-slate-950">{{ item.plan_name }}</p><p class="mt-1 text-xs text-slate-500">{{ item.reference_number }} · {{ money(item.amount, item.currency) }}</p></td>

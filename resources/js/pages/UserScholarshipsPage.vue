@@ -1191,7 +1191,7 @@ onBeforeUnmount(() => {
                                     </a>
                                     <a
                                         v-else-if="canStartApplication(scholarship)"
-                                        :href="`/dashboard/applications?scholarship=${scholarship.id}`"
+                                        :href="`/dashboard/applications/start/${scholarship.id}`"
                                         class="rounded-md bg-slate-900 px-3 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800"
                                     >
                                         Apply

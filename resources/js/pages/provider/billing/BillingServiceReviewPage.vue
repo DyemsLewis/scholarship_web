@@ -127,7 +127,7 @@ onMounted(async () => {
                     Back to services
                 </a>
 
-                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">Loading request review...</div>
+                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading request review...</p></div>
 
                 <div v-else-if="!plan || !serviceRequest" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-8 text-center text-sm font-semibold text-rose-800">
                     {{ errorMessage || 'This service request is not available.' }}
@@ -149,12 +149,8 @@ onMounted(async () => {
                         </div>
                     </div>
 
-                    <header class="mt-4 flex items-start justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Review before payment</p>
-                            <h1 id="review-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">Confirm the service details and contact before opening checkout.</p>
-                        </div>
+                    <header class="mt-4 flex items-center justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Review before payment</p><h1 id="review-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">Confirm the service details and contact before opening checkout.</p></div></div>
                         <a v-if="serviceRequest.editable" :href="serviceRequest.edit_url" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950">
                             <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
                             Edit details
@@ -168,7 +164,7 @@ onMounted(async () => {
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-                            <div><h2 class="text-lg font-bold text-slate-950">Request summary</h2><p class="mt-1 text-xs text-slate-500">These details become the starting brief after payment.</p></div>
+                            <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Request summary</h2><p class="mt-1 text-xs text-slate-500">These details become the starting brief after payment.</p></div></div>
                             <div class="text-right"><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">One-time fee</p><p class="mt-1 text-xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p></div>
                         </header>
 
@@ -193,10 +189,7 @@ onMounted(async () => {
                     </section>
 
                     <section class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
-                        <header class="border-b border-slate-200 px-6 py-5">
-                            <h2 class="text-lg font-bold text-slate-950">Payment</h2>
-                            <p class="mt-1 text-sm text-slate-600">The service enters the platform queue only after payment is confirmed.</p>
-                        </header>
+                        <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-credit-card" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Payment</h2><p class="mt-1 text-sm text-slate-600">The service enters the platform queue only after payment is confirmed.</p></div></header>
 
                         <div v-if="paymentConfirmed" class="flex items-center justify-between px-6 py-5">
                             <div><p class="text-sm font-bold text-emerald-800">Payment confirmed</p><p class="mt-1 text-xs text-slate-500">Your service request is ready for platform support.</p></div>
@@ -220,8 +213,8 @@ onMounted(async () => {
                                     <p class="mt-1 text-xs text-slate-500">{{ gateway.configured ? `Available methods: ${paymentMethods(gateway.payment_methods)}` : 'Online payment is temporarily unavailable.' }}</p>
                                 </div>
                                 <button type="button" :disabled="!canStartCheckout || isOpeningCheckout || isSyncing" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40" @click="startCheckout">
+                                    <i :class="['fa-solid text-xs', isOpeningCheckout || isSyncing ? 'fa-spinner fa-spin' : 'fa-arrow-up-right-from-square']" aria-hidden="true"></i>
                                     {{ isOpeningCheckout ? 'Opening checkout...' : 'Continue to PayMongo' }}
-                                    <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>

@@ -136,10 +136,13 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
             <div class="mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-start justify-between gap-8">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Application review</p>
-                            <h1 id="review-directory-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
+                        <div class="flex min-w-0 items-start gap-4">
+                            <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-file-circle-check" aria-hidden="true"></i></span>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Application review</p>
+                                <h1 id="review-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
+                                <p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
+                            </div>
                         </div>
                         <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Review scope</p>
@@ -210,10 +213,11 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
-                                <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center text-sm font-semibold text-slate-500">Loading applications...</td></tr>
+                                <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applications...</p></td></tr>
                                 <tr v-else-if="!applications.length">
                                     <td colspan="5" class="px-5 py-12 text-center">
-                                        <p class="font-semibold text-slate-800">{{ pageCopy.empty }}</p>
+                                        <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-circle-check text-sm" aria-hidden="true"></i></span>
+                                        <p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p>
                                         <p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram ? 'Clear the filters to check the full queue.' : 'New records will appear here automatically.' }}</p>
                                     </td>
                                 </tr>
@@ -242,8 +246,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                         <p class="mt-1 text-xs text-slate-500">{{ activeQueue === 'history' ? (application.reviewed_at || 'Reviewed') : `${application.waiting_days} day${application.waiting_days === 1 ? '' : 's'} waiting` }}</p>
                                     </td>
                                     <td class="px-5 py-4 text-right">
-                                        <button v-if="application.assignment.state === 'unassigned' && activeQueue !== 'history'" type="button" class="inline-flex h-9 items-center bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="claimingId === application.id" @click="claimAndOpen(application)">
-                                            {{ claimingId === application.id ? 'Claiming...' : 'Claim' }}
+                                        <button v-if="application.assignment.state === 'unassigned' && activeQueue !== 'history'" type="button" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="claimingId === application.id" @click="claimAndOpen(application)">
+                                            <i :class="['fa-solid text-[9px]', claimingId === application.id ? 'fa-spinner fa-spin' : 'fa-user-plus']" aria-hidden="true"></i>{{ claimingId === application.id ? 'Claiming...' : 'Claim' }}
                                         </button>
                                         <a v-else :href="reviewUrl(application)" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
                                     </td>
@@ -255,8 +259,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
                         <p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p>
                         <div class="flex gap-2">
-                            <button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadApplications(pagination.current_page - 1)">Previous</button>
-                            <button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadApplications(pagination.current_page + 1)">Next</button>
+                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadApplications(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button>
+                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadApplications(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button>
                         </div>
                     </footer>
                 </section>

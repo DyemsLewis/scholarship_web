@@ -44,7 +44,8 @@ const documentFileInput = ref(null);
 const activeUploadRequirement = ref('');
 const previewDocument = ref(null);
 const applicationUrlParams = new URLSearchParams(window.location.search);
-const requestedScholarshipId = applicationUrlParams.get('scholarship');
+const requestedScholarshipId = document.getElementById('app')?.dataset.scholarshipId
+    || applicationUrlParams.get('scholarship');
 const requestedApplicationView = applicationUrlParams.get('view');
 const applicationView = ['active', 'action', 'completed'].includes(requestedApplicationView)
     ? requestedApplicationView

@@ -65,12 +65,10 @@ onMounted(loadForm);
                 <a href="/provider/workspaces/support/platform" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to platform reports</a>
 
                 <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Platform support</p>
-                    <h1 id="platform-report-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">Report a platform issue</h1>
-                    <p class="mt-1.5 text-sm text-slate-600">Describe one issue so platform support can investigate it clearly.</p>
+                    <div class="flex items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Platform support</p><h1 id="platform-report-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Report a platform issue</h1><p class="mt-1 text-sm text-slate-600">Describe one issue so platform support can investigate it clearly.</p></div></div>
                 </header>
 
-                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center text-sm font-semibold text-slate-500 shadow-sm">Loading report form...</div>
+                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center shadow-sm"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading report form...</p></div>
 
                 <form v-else class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="submitReport">
                     <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-6 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
@@ -111,7 +109,7 @@ onMounted(loadForm);
 
                     <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
                         <p class="text-xs font-semibold text-slate-500">Sent as {{ workspace?.organization_name }}</p>
-                        <div class="flex gap-3"><a href="/provider/workspaces/support/platform" class="inline-flex h-11 items-center border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950">Cancel</a><button type="submit" :disabled="isSubmitting" class="h-11 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-40">{{ isSubmitting ? 'Sending...' : 'Send report' }}</button></div>
+                        <div class="flex gap-3"><a href="/provider/workspaces/support/platform" class="inline-flex h-11 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950"><i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>Cancel</a><button type="submit" :disabled="isSubmitting" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-40"><i :class="['fa-solid', isSubmitting ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>{{ isSubmitting ? 'Sending...' : 'Send report' }}</button></div>
                     </footer>
                 </form>
             </div>

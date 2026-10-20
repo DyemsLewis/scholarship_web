@@ -49,7 +49,8 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
         $this->actingAs($applicant)
             ->getJson("/dashboard/scholarships/{$scholarship->id}/data")
             ->assertOk()
-            ->assertJsonPath('scholarship.is_accepting_applications', false);
+            ->assertJsonPath('detail.decision.state', 'closed')
+            ->assertJsonPath('detail.decision.can_apply', false);
 
         $this->actingAs($applicant)
             ->postJson('/dashboard/applications', [
@@ -81,8 +82,9 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
         $this->actingAs($applicant)
             ->getJson("/dashboard/scholarships/{$scholarship->id}/data")
             ->assertOk()
-            ->assertJsonPath('scholarship.id', $scholarship->id)
-            ->assertJsonPath('scholarship.is_accepting_applications', false);
+            ->assertJsonPath('detail.identity.id', $scholarship->id)
+            ->assertJsonPath('detail.decision.state', 'upcoming')
+            ->assertJsonPath('detail.decision.can_apply', false);
 
         $this->actingAs($applicant)
             ->postJson('/dashboard/applications', [

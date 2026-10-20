@@ -12,7 +12,7 @@ class ApplicantScholarshipDetailContractTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_detail_contract_groups_the_page_into_a_single_decision_and_five_sections(): void
+    public function test_summary_contract_returns_one_decision_and_a_focused_readiness_brief(): void
     {
         $applicant = $this->completeApplicant();
         $scholarship = $this->publishedScholarship([
@@ -30,28 +30,30 @@ class ApplicantScholarshipDetailContractTest extends TestCase
         $this->actingAs($applicant)
             ->getJson(route('dashboard.scholarships.show.data', $scholarship))
             ->assertOk()
-            ->assertJsonPath('detail.version', 1)
+            ->assertJsonPath('detail.version', 2)
+            ->assertJsonPath('detail.view', 'summary')
             ->assertJsonPath('detail.identity.id', $scholarship->id)
             ->assertJsonPath('detail.identity.title', $scholarship->title)
             ->assertJsonPath('detail.decision.state', 'eligible')
             ->assertJsonPath('detail.decision.can_apply', true)
             ->assertJsonPath('detail.decision.action.label', 'Start pre-screening')
-            ->assertJsonCount(4, 'detail.facts')
-            ->assertJsonCount(5, 'detail.sections')
-            ->assertJsonCount(3, 'detail.sections.overview.terms_preview')
-            ->assertJsonPath('detail.sections.overview.has_full_terms', true)
-            ->assertJsonPath('detail.sections.eligibility.profile.complete', true)
-            ->assertJsonCount(0, 'detail.sections.eligibility.blockers')
-            ->assertJsonPath('detail.sections.eligibility.written_conditions', 'Applicant must remain enrolled.')
-            ->assertJsonPath('detail.sections.requirements.readiness.required_count', 2)
-            ->assertJsonPath('detail.sections.requirements.readiness.state', 'needs_files')
-            ->assertJsonPath('detail.sections.requirements.readiness.missing_count', 2)
-            ->assertJsonCount(2, 'detail.sections.requirements.readiness.items')
-            ->assertJsonCount(4, 'detail.sections.process.stages')
-            ->assertJsonPath('detail.sections.process.stages.0.timing.label', 'First step')
-            ->assertJsonPath('detail.sections.provider.name', $scholarship->provider->provider_name)
-            ->assertJsonPath('detail.sections.provider.profile_href', route('dashboard.providers.show', $scholarship->provider, false))
-            ->assertJsonPath('scholarship.id', $scholarship->id);
+            ->assertJsonPath('detail.decision.action.href', route('dashboard.applications.start', $scholarship, false))
+            ->assertJsonCount(4, 'detail.snapshot')
+            ->assertJsonCount(5, 'detail.navigation')
+            ->assertJsonCount(4, 'detail.content.readiness')
+            ->assertJsonPath('detail.content.readiness.0.key', 'eligibility')
+            ->assertJsonPath('detail.content.readiness.0.state', 'ready')
+            ->assertJsonPath('detail.content.readiness.1.key', 'files')
+            ->assertJsonPath('detail.content.readiness.1.state', 'attention')
+            ->assertJsonMissingPath('scholarship')
+            ->assertJsonMissingPath('detail.sections');
+
+        $this->actingAs($applicant)
+            ->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=award')
+            ->assertOk()
+            ->assertJsonPath('detail.view', 'award')
+            ->assertJsonPath('detail.content.has_full_terms', true)
+            ->assertJsonCount(3, 'detail.content.terms');
     }
 
     public function test_existing_application_takes_priority_over_every_other_detail_state(): void
@@ -120,9 +122,14 @@ class ApplicantScholarshipDetailContractTest extends TestCase
             ->assertOk()
             ->assertJsonPath('detail.decision.state', 'profile_incomplete')
             ->assertJsonPath('detail.decision.can_apply', false)
-            ->assertJsonPath('detail.sections.eligibility.profile.complete', false)
+            ->assertJsonPath('detail.content.readiness.0.state', 'attention');
+
+        $this->actingAs($applicant)
+            ->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=eligibility')
+            ->assertOk()
+            ->assertJsonPath('detail.content.profile.complete', false)
             ->assertJson(fn ($json) => $json
-                ->has('detail.sections.eligibility.profile.missing', fn ($json) => $json->etc())
+                ->has('detail.content.profile.missing', fn ($json) => $json->etc())
                 ->etc());
     }
 
@@ -138,10 +145,18 @@ class ApplicantScholarshipDetailContractTest extends TestCase
             ->assertOk()
             ->assertJsonPath('detail.decision.state', 'blocked')
             ->assertJsonPath('detail.decision.can_apply', false)
-            ->assertJsonPath('detail.decision.action.target', 'eligibility')
+            ->assertJsonPath('detail.decision.action.href', route('dashboard.scholarships.show.section', [
+                'scholarship' => $scholarship,
+                'section' => 'eligibility',
+            ], false))
             ->assertJsonCount(1, 'detail.decision.blockers')
-            ->assertJsonCount(1, 'detail.sections.eligibility.blockers')
-            ->assertJsonPath('detail.sections.eligibility.blockers.0.key', 'education_level');
+            ->assertJsonPath('detail.content.readiness.0.state', 'blocked');
+
+        $this->actingAs($applicant)
+            ->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=eligibility')
+            ->assertOk()
+            ->assertJsonCount(1, 'detail.content.blockers')
+            ->assertJsonPath('detail.content.blockers.0.key', 'education_level');
     }
 
     public function test_matching_profile_produces_the_eligible_state(): void
@@ -166,12 +181,12 @@ class ApplicantScholarshipDetailContractTest extends TestCase
         ]);
 
         $this->actingAs($applicant)
-            ->getJson(route('dashboard.scholarships.show.data', $scholarship))
+            ->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=application')
             ->assertOk()
-            ->assertJsonPath('detail.sections.requirements.readiness.state', 'not_required')
-            ->assertJsonPath('detail.sections.requirements.readiness.required_count', 0)
-            ->assertJsonCount(0, 'detail.sections.requirements.readiness.items')
-            ->assertJsonPath('detail.sections.requirements.review_method', 'provider_review');
+            ->assertJsonPath('detail.content.requirements.readiness.state', 'not_required')
+            ->assertJsonPath('detail.content.requirements.readiness.required_count', 0)
+            ->assertJsonCount(0, 'detail.content.requirements.readiness.items')
+            ->assertJsonPath('detail.content.requirements.review_method', 'provider_review');
     }
 
     public function test_process_and_provider_contracts_explain_scheduled_activity_and_public_contact(): void
@@ -195,14 +210,47 @@ class ApplicantScholarshipDetailContractTest extends TestCase
         ]);
 
         $this->actingAs($applicant)
-            ->getJson(route('dashboard.scholarships.show.data', $scholarship))
+            ->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=application')
             ->assertOk()
-            ->assertJsonPath('detail.sections.process.stages.2.key', 'interview')
-            ->assertJsonPath('detail.sections.process.stages.2.timing.state', 'scheduled')
-            ->assertJsonPath('detail.sections.process.stages.2.timing.note', 'Online')
-            ->assertJsonPath('detail.sections.provider.contact.email', 'scholarships@example.test')
-            ->assertJsonPath('detail.sections.provider.contact.department', 'Scholarship Office')
-            ->assertJsonPath('detail.sections.provider.location.has_map', true);
+            ->assertJsonPath('detail.content.process.stages.2.key', 'interview')
+            ->assertJsonPath('detail.content.process.stages.2.timing.state', 'scheduled')
+            ->assertJsonPath('detail.content.process.stages.2.timing.note', 'Online');
+
+        $this->actingAs($applicant)
+            ->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=provider')
+            ->assertOk()
+            ->assertJsonPath('detail.content.verified', true)
+            ->assertJsonPath('detail.content.contact.email', 'scholarships@example.test')
+            ->assertJsonPath('detail.content.contact.department', 'Scholarship Office')
+            ->assertJsonPath('detail.content.location.has_map', true);
+    }
+
+    public function test_each_detail_view_has_its_own_page_route(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship();
+
+        foreach (['eligibility', 'award', 'application', 'provider'] as $section) {
+            $this->actingAs($applicant)
+                ->get(route('dashboard.scholarships.show.section', [
+                    'scholarship' => $scholarship,
+                    'section' => $section,
+                ]))
+                ->assertOk()
+                ->assertViewHas('section', $section);
+        }
+    }
+
+    public function test_application_start_route_opens_the_wizard_with_the_scholarship_selected(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship();
+
+        $this->actingAs($applicant)
+            ->get(route('dashboard.applications.start', $scholarship))
+            ->assertOk()
+            ->assertViewIs('dashboard-applications')
+            ->assertViewHas('scholarship', fn (Scholarship $selected): bool => $selected->is($scholarship));
     }
 
     private function assertDecisionState(

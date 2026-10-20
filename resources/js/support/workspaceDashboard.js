@@ -6,6 +6,22 @@ export const DASHBOARD_LIMITS = Object.freeze({
 
 const allowedTones = new Set(['neutral', 'attention', 'positive']);
 
+const dashboardIcons = [
+    [['attention', 'needs', 'priority', 'issue', 'returned', 'setup'], 'fa-solid fa-triangle-exclamation'],
+    [['review', 'assigned', 'unassigned', 'application'], 'fa-solid fa-file-circle-check'],
+    [['selection', 'session', 'activity'], 'fa-solid fa-calendar-check'],
+    [['decision', 'pending', 'waitlist', 'selected', 'capacity'], 'fa-solid fa-gavel'],
+    [['recipient', 'agreement', 'onboarding'], 'fa-solid fa-award'],
+    [['monitoring', 'check-in', 'follow-up', 'awaiting'], 'fa-solid fa-chart-line'],
+    [['release', 'distribution'], 'fa-solid fa-hand-holding-dollar'],
+    [['support', 'report'], 'fa-solid fa-headset'],
+    [['billing', 'request', 'payment', 'service'], 'fa-solid fa-receipt'],
+    [['team', 'account', 'staff'], 'fa-solid fa-users-gear'],
+    [['profile', 'verification', 'identity'], 'fa-solid fa-building-shield'],
+    [['program'], 'fa-solid fa-graduation-cap'],
+    [['history', 'recent', 'closed', 'completed', 'recorded', 'updated'], 'fa-solid fa-clock-rotate-left'],
+];
+
 function cleanText(value, fallback = '') {
     const text = String(value ?? '').trim();
     return text || fallback;
@@ -22,6 +38,13 @@ function normalizeAction(action) {
         url,
         icon: cleanText(action?.icon, 'fa-solid fa-arrow-right'),
     };
+}
+
+function dashboardIcon(key, fallback) {
+    const normalizedKey = cleanText(key).toLowerCase();
+    const match = dashboardIcons.find(([terms]) => terms.some((term) => normalizedKey.includes(term)));
+
+    return match?.[1] ?? fallback;
 }
 
 export function normalizeWorkspaceDashboard(payload = {}) {
@@ -48,6 +71,7 @@ export function normalizeWorkspaceDashboard(payload = {}) {
             detail: cleanText(metric?.detail),
             tone: allowedTones.has(metric?.tone) ? metric.tone : 'neutral',
             url: cleanText(metric?.url) || null,
+            icon: cleanText(metric?.icon) || dashboardIcon(metric?.key, 'fa-solid fa-chart-simple'),
         })),
         sections: sections.slice(0, DASHBOARD_LIMITS.sections).map((section, index) => ({
             key: cleanText(section?.key, `section-${index + 1}`),
@@ -55,6 +79,7 @@ export function normalizeWorkspaceDashboard(payload = {}) {
             title: cleanText(section?.title, 'Work items'),
             description: cleanText(section?.description),
             empty_message: cleanText(section?.empty_message, 'Nothing needs attention here.'),
+            icon: cleanText(section?.icon) || dashboardIcon(section?.key, 'fa-solid fa-list-check'),
             action: normalizeAction(section?.action),
             items: (Array.isArray(section?.items) ? section.items : [])
                 .slice(0, DASHBOARD_LIMITS.sectionItems),

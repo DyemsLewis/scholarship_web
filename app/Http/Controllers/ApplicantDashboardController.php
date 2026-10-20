@@ -25,6 +25,7 @@ use App\Models\StudentDocument;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\AcademicRecordOcrService;
+use App\Services\ApplicantApplicationDetailService;
 use App\Services\ApplicantDashboardService;
 use App\Services\ApplicantDocumentLibraryService;
 use App\Services\ApplicantScholarshipDetailService;
@@ -64,6 +65,7 @@ class ApplicantDashboardController extends Controller
         private readonly ApplicantDocumentLibraryService $documentLibraryService,
         private readonly ApplicationWorkflowService $workflowService,
         private readonly AcademicRecordOcrService $academicRecordOcrService,
+        private readonly ApplicantApplicationDetailService $applicationDetailService,
     ) {}
 
     public function index(Request $request): View|RedirectResponse
@@ -175,16 +177,21 @@ class ApplicantDashboardController extends Controller
         ]);
     }
 
-    public function scholarshipDetail(Request $request, Scholarship $scholarship): View|RedirectResponse
-    {
+    public function scholarshipDetail(
+        Request $request,
+        Scholarship $scholarship,
+        string $section = 'summary',
+    ): View|RedirectResponse {
         if ($redirect = $this->ensureApplicant($request)) {
             return $redirect;
         }
 
         abort_unless($scholarship->isPubliclyVisible(), 404);
+        abort_unless(in_array($section, ['summary', 'eligibility', 'award', 'application', 'provider'], true), 404);
 
         return view('dashboard-scholarship-detail', [
             'scholarship' => $scholarship,
+            'section' => $section,
         ]);
     }
 
@@ -208,14 +215,16 @@ class ApplicantDashboardController extends Controller
             $scholarship->increment('views_count');
         }
 
-        $scholarship->load(['provider.providerProfile', 'events'])->loadCount(['bookmarks', 'applications']);
+        $view = (string) $request->query('section', 'summary');
+        $view = in_array($view, ['summary', 'eligibility', 'award', 'application', 'provider'], true)
+            ? $view
+            : 'summary';
+        $scholarship->load(['provider.providerProfile', 'benefits', 'events'])
+            ->loadCount(['bookmarks', 'applications']);
 
         return response()->json([
             'user' => $this->userPayload($request),
-            'profile_readiness' => $request->user()->applicantProfileReadiness(),
-            'stats' => $this->statsPayload($request),
-            'detail' => $detailService->build($scholarship, $request->user()),
-            'scholarship' => $this->scholarshipPayload($scholarship, $request->user()),
+            'detail' => $detailService->build($scholarship, $request->user(), $view),
         ]);
     }
 
@@ -256,6 +265,19 @@ class ApplicantDashboardController extends Controller
         return view('dashboard-applications');
     }
 
+    public function startApplication(Request $request, Scholarship $scholarship): View|RedirectResponse
+    {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        abort_unless($scholarship->isAcceptingApplications(), 404);
+
+        return view('dashboard-applications', [
+            'scholarship' => $scholarship,
+        ]);
+    }
+
     public function monitoring(Request $request): View|RedirectResponse
     {
         if ($redirect = $this->ensureApplicant($request)) {
@@ -287,8 +309,11 @@ class ApplicantDashboardController extends Controller
         return view('dashboard-documents');
     }
 
-    public function applicationDetail(Request $request, ScholarshipApplication $application): View|RedirectResponse
-    {
+    public function applicationDetail(
+        Request $request,
+        ScholarshipApplication $application,
+        string $section = 'summary',
+    ): View|RedirectResponse {
         if ($redirect = $this->ensureApplicant($request)) {
             return $redirect;
         }
@@ -297,6 +322,7 @@ class ApplicantDashboardController extends Controller
 
         return view('dashboard-application-detail', [
             'application' => $application,
+            'section' => $section,
         ]);
     }
 
@@ -445,6 +471,11 @@ class ApplicantDashboardController extends Controller
         return response()->json([
             'user' => $this->userPayload($request),
             'stats' => $this->statsPayload($request),
+            'detail' => $this->applicationDetailService->build(
+                $application,
+                $request->user(),
+                (string) $request->query('view', 'summary'),
+            ),
             'application' => $this->applicationPayload($application),
         ]);
     }

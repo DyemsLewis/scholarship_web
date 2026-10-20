@@ -47,12 +47,8 @@ onMounted(loadWorkspace);
         <section class="student-page" aria-labelledby="profile-readiness-title">
             <div class="mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                    <div class="flex items-start justify-between gap-8">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p>
-                            <h1 id="profile-readiness-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">Profile readiness</h1>
-                            <p class="mt-2 text-sm leading-6 text-slate-600">Keep the public profile accurate and the organization proof ready for review.</p>
-                        </div>
+                    <div class="flex items-center justify-between gap-8">
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-building-circle-check" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="profile-readiness-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Profile readiness</h1><p class="mt-1 text-sm leading-6 text-slate-600">Keep the public profile accurate and the organization proof ready for review.</p></div></div>
                         <span v-if="profile" :class="['inline-flex border px-3 py-2 text-[10px] font-bold uppercase tracking-wide', verificationClass(profile.verification_status)]">
                             {{ profile.verification_status_label }}
                         </span>
@@ -60,7 +56,7 @@ onMounted(loadWorkspace);
                 </header>
 
                 <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                <div v-else-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm font-semibold text-slate-500">Checking profile readiness...</div>
+                <div v-else-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Checking profile readiness...</p></div>
 
                 <template v-else>
                     <section v-if="nextTask" class="mt-4 border border-amber-300 border-l-4 border-l-amber-500 bg-amber-50 px-5 py-4 shadow-sm" aria-labelledby="next-profile-task">
@@ -112,7 +108,7 @@ onMounted(loadWorkspace);
                     </section>
 
                     <section v-if="documents.length" class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="recent-proof-title">
-                        <header class="border-b border-slate-200 px-5 py-4"><h2 id="recent-proof-title" class="text-base font-bold text-slate-950">Recent verification proof</h2></header>
+                        <header class="flex items-center gap-3 border-b border-slate-200 px-5 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><h2 id="recent-proof-title" class="text-base font-bold text-slate-950">Recent verification proof</h2></header>
                         <div class="divide-y divide-slate-200">
                             <div v-for="document in documents" :key="document.id" class="flex items-center gap-4 px-5 py-3.5">
                                 <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span>

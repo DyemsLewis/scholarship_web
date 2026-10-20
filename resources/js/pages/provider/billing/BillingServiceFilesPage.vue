@@ -57,19 +57,16 @@ async function uploadFile(event) {
     >
         <section class="mt-4 border border-slate-200 bg-white shadow-sm">
             <header class="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4">
-                <div>
-                    <h2 class="text-base font-bold text-slate-950">{{ workspace.filesTitle }}</h2>
-                    <p class="mt-1 text-xs text-slate-500">{{ workspace.filesDescription }}</p>
-                </div>
+                <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></span><div><h2 class="text-base font-bold text-slate-950">{{ workspace.filesTitle }}</h2><p class="mt-1 text-xs text-slate-500">{{ workspace.filesDescription }}</p></div></div>
                 <label v-if="canModify" class="inline-flex h-10 cursor-pointer items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">
-                    <i class="fa-solid fa-upload text-amber-300" aria-hidden="true"></i>
+                    <i :class="['fa-solid text-amber-300', isUploading ? 'fa-spinner fa-spin' : 'fa-upload']" aria-hidden="true"></i>
                     {{ isUploading ? 'Uploading...' : 'Upload file' }}
                     <input type="file" class="sr-only" :disabled="isUploading" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt" @change="uploadFile">
                 </label>
             </header>
 
             <div v-if="!files.length" class="min-h-96 px-6 py-14 text-center">
-                <i class="fa-regular fa-folder-open text-2xl text-slate-300" aria-hidden="true"></i>
+                <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></span>
                 <p class="mt-3 text-sm font-bold text-slate-800">No files have been shared.</p>
                 <p class="mt-1 text-xs text-slate-500">Supporting files and platform deliverables will appear together here.</p>
             </div>

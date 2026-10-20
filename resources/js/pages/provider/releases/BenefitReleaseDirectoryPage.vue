@@ -103,8 +103,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <section class="student-page" aria-labelledby="release-directory-title">
             <div class="mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                    <div class="flex items-start justify-between gap-8">
-                        <div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="release-directory-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div>
+                    <div class="flex items-center justify-between gap-8">
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="release-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
                         <div class="flex items-center gap-4"><div v-if="workspace" class="border-r border-slate-200 pr-5 text-right"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Release scope</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div><a href="/provider/workspaces/releases/schedule" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-plus text-amber-300" aria-hidden="true"></i>Schedule release</a></div>
                     </div>
                 </header>
@@ -120,8 +120,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     </div>
 
                     <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                    <div v-if="isLoading" class="px-6 py-16 text-center text-sm font-semibold text-slate-500">Loading benefit releases...</div>
-                    <div v-else-if="!releases.length" class="px-6 py-16 text-center"><i class="fa-solid fa-hand-holding-dollar text-3xl text-slate-300" aria-hidden="true"></i><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Scheduled distributions move here as their status changes.</p></div>
+                    <div v-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading benefit releases...</p></div>
+                    <div v-else-if="!releases.length" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Scheduled distributions move here as their status changes.</p></div>
 
                     <div v-else class="staff-table-viewport">
                         <table class="w-full min-w-[72rem] table-fixed border-collapse text-left">

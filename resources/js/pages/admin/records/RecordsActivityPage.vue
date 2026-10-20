@@ -8,7 +8,7 @@ import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 const query = new URLSearchParams(window.location.search);
 const loading = ref(true);
 const errorMessage = ref('');
-const search = ref('');
+const search = ref(query.get('search') ?? '');
 const categoryOptions = ['all', 'security', 'accounts', 'reviews', 'operations', 'exports'];
 const actorRoleOptions = ['all', 'admin', 'provider', 'applicant', 'system'];
 const periodOptions = ['today', 'week', 'month', 'all'];
@@ -88,14 +88,14 @@ onMounted(loadActivity);
 
         <section class="admin-panel mt-4 overflow-hidden">
             <dl class="grid grid-cols-4 divide-x divide-slate-200">
-                <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">All records</dt><dd class="mt-1 text-xl font-black text-slate-950">{{ summary.total }}</dd></div>
-                <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Recorded today</dt><dd class="mt-1 text-xl font-black text-slate-950">{{ summary.today }}</dd></div>
-                <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Failed sign-ins · 7 days</dt><dd class="mt-1 text-xl font-black text-slate-950">{{ summary.security_7_days }}</dd></div>
-                <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Exports · 30 days</dt><dd class="mt-1 text-xl font-black text-slate-950">{{ summary.exports_30_days }}</dd></div>
+                <div class="flex items-center gap-3 px-5 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-box-archive" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">All records</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ summary.total }}</dd></div></div>
+                <div class="flex items-center gap-3 px-5 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Recorded today</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ summary.today }}</dd></div></div>
+                <div class="flex items-center gap-3 px-5 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-amber-100 text-amber-800"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Failed sign-ins · 7 days</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ summary.security_7_days }}</dd></div></div>
+                <div class="flex items-center gap-3 px-5 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-export" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Exports · 30 days</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ summary.exports_30_days }}</dd></div></div>
             </dl>
         </section>
 
-        <AdminTableFrame title="Audit trail" :description="resultLabel" class="mt-4">
+        <AdminTableFrame title="Audit trail" :description="resultLabel" icon="fa-solid fa-clock-rotate-left" class="mt-4">
             <template #filters>
                 <div class="grid grid-cols-[minmax(22rem,1fr)_13rem_12rem_12rem] gap-3">
                     <label class="relative block"><span class="sr-only">Search activity records</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" placeholder="Search actor, action, description, or IP" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
@@ -106,7 +106,7 @@ onMounted(loadActivity);
             </template>
 
             <div v-if="loading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading activity records...</div>
-            <table v-else-if="items.length" class="w-full min-w-[68rem] border-collapse text-left">
+            <table v-else-if="items.length" class="portal-data-table min-w-[68rem]">
                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Event</th><th class="border-b border-slate-200 px-4 py-3">Actor</th><th class="border-b border-slate-200 px-4 py-3">Category</th><th class="border-b border-slate-200 px-4 py-3">Source</th><th class="border-b border-slate-200 px-4 py-3">Recorded</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
                     <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">

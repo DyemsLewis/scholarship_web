@@ -38,13 +38,13 @@ async function uploadDeliverable(event) {
     <AdminServiceWorkspaceShell :purchase="purchase" active-section="files" :loading="isLoading" :error-message="errorMessage" :success-message="successMessage" :queue-url="queueUrl">
         <section class="admin-panel mt-4 overflow-hidden">
             <header class="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4">
-                <div><h2 class="text-lg font-black text-slate-950">Service files</h2><p class="mt-1 text-sm text-slate-500">Review provider material and share final work in one list.</p></div>
+                <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></span><div><h2 class="text-lg font-black text-slate-950">Service files</h2><p class="mt-0.5 text-sm text-slate-500">Review provider material and share final work in one list.</p></div></div>
                 <label v-if="purchase.fulfillment_status !== 'completed'" class="inline-flex h-10 cursor-pointer items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white"><i class="fa-solid fa-upload text-amber-300" aria-hidden="true"></i>{{ isUploading ? 'Uploading...' : 'Upload deliverable' }}<input type="file" class="sr-only" :disabled="isUploading" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt" @change="uploadDeliverable"></label>
             </header>
 
             <div v-if="!files.length" class="min-h-96 px-6 py-16 text-center"><i class="fa-regular fa-folder-open text-2xl text-slate-300" aria-hidden="true"></i><p class="mt-3 text-sm font-bold text-slate-900">No files shared yet</p><p class="mt-1 text-sm text-slate-500">Provider uploads and platform deliverables will appear here.</p></div>
             <div v-else class="staff-table-viewport">
-                <table class="w-full min-w-[900px] table-fixed border-collapse text-left">
+                <table class="portal-data-table min-w-[900px] table-fixed">
                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="w-[38%] border-b border-slate-200 px-5 py-3">File</th><th class="w-[24%] border-b border-slate-200 px-5 py-3">Source</th><th class="w-[22%] border-b border-slate-200 px-5 py-3">Shared</th><th class="w-[16%] border-b border-slate-200 px-5 py-3 text-right">Actions</th></tr></thead>
                     <tbody class="divide-y divide-slate-200 bg-white"><tr v-for="file in files" :key="file.id" class="hover:bg-slate-50/70">
                         <td class="px-5 py-4"><p class="truncate text-sm font-bold text-slate-950">{{ file.original_name }}</p><p class="mt-1 text-xs text-slate-500">{{ formatAdminServiceFileSize(file.size) }}</p></td>

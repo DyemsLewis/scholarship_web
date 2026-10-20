@@ -18,9 +18,9 @@ const editingIndex = ref(-1);
 const form = ref(defaultPlan());
 
 const sections = [
-    { key: 'schedule', label: '1. Schedule' },
-    { key: 'requirements', label: '2. Requirements' },
-    { key: 'review', label: '3. Review' },
+    { key: 'schedule', label: '1. Schedule', icon: 'fa-solid fa-calendar-days' },
+    { key: 'requirements', label: '2. Requirements', icon: 'fa-solid fa-list-check' },
+    { key: 'review', label: '3. Review', icon: 'fa-solid fa-clipboard-check' },
 ];
 const activePlan = computed(() => savedPlan.value?.status === 'active');
 const availableTypes = computed(() => requirementTypes.value.filter((type) => (
@@ -200,15 +200,21 @@ onMounted(loadPlan);
 
         <section class="student-page" aria-labelledby="monitoring-plan-title">
             <div class="mx-auto max-w-[94rem]">
-                <div v-if="isLoading" class="border border-slate-200 bg-white px-6 py-16 text-center text-sm font-semibold text-slate-500">Loading monitoring plan...</div>
+                <div v-if="isLoading" class="border border-slate-200 bg-white px-6 py-16 text-center">
+                    <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
+                    <p class="mt-3 text-sm font-semibold text-slate-500">Loading monitoring plan...</p>
+                </div>
 
                 <template v-else-if="scholarship">
                     <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                         <div class="flex items-start justify-between gap-8">
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Recipient monitoring</p>
-                                <h1 id="monitoring-plan-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">Monitoring plan</h1>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">Set the schedule and records required for {{ scholarship.title }}.</p>
+                            <div class="flex min-w-0 items-start gap-4">
+                                <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span>
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Recipient monitoring</p>
+                                    <h1 id="monitoring-plan-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Monitoring plan</h1>
+                                    <p class="mt-2 text-sm leading-6 text-slate-600">Set the schedule and records required for {{ scholarship.title }}.</p>
+                                </div>
                             </div>
                             <div class="flex items-center gap-3">
                                 <span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', activePlan ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600']">{{ savedPlan?.status_label || 'Not saved' }}</span>
@@ -222,13 +228,13 @@ onMounted(loadPlan);
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <nav class="grid grid-cols-3 border-b border-slate-200" aria-label="Monitoring plan sections">
-                            <button v-for="section in sections" :key="section.key" type="button" :aria-current="activeSection === section.key ? 'step' : undefined" :class="['min-h-14 border-r border-slate-200 px-5 text-left text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'bg-white text-slate-600 hover:bg-slate-50']" @click="goTo(section.key)">{{ section.label }}</button>
+                            <button v-for="section in sections" :key="section.key" type="button" :aria-current="activeSection === section.key ? 'step' : undefined" :class="['flex min-h-14 items-center gap-3 border-r border-slate-200 px-5 text-left text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'bg-white text-slate-600 hover:bg-slate-50']" @click="goTo(section.key)"><i :class="[section.icon, activeSection === section.key ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>{{ section.label }}</button>
                         </nav>
 
                         <div v-if="activeSection === 'schedule'" class="p-7">
-                            <div class="border-b border-slate-200 pb-4">
-                                <h2 class="text-lg font-bold text-slate-950">Review timing</h2>
-                                <p class="mt-1 text-sm text-slate-500">Choose when recipient check-ins normally happen.</p>
+                            <div class="flex items-start gap-3 border-b border-slate-200 pb-4">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-calendar-days text-sm" aria-hidden="true"></i></span>
+                                <div><h2 class="text-lg font-bold text-slate-950">Review timing</h2><p class="mt-1 text-sm text-slate-500">Choose when recipient check-ins normally happen.</p></div>
                             </div>
                             <div class="mt-6 grid grid-cols-4 gap-5">
                                 <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Frequency</span><select v-model="form.frequency" :disabled="!canEdit" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"><option v-for="frequency in frequencies" :key="frequency.value" :value="frequency.value">{{ frequency.label }}</option></select></label>
@@ -238,32 +244,32 @@ onMounted(loadPlan);
                             </div>
                             <label class="mt-6 flex items-start gap-3 border border-slate-200 bg-slate-50 p-4"><input v-model="form.allow_exception_requests" :disabled="!canEdit" type="checkbox" class="mt-0.5 h-4 w-4"><span><strong class="block text-sm text-slate-900">Allow extension or exception requests</strong><span class="mt-1 block text-xs leading-5 text-slate-500">Recipients can explain a documented issue before a requirement is marked incomplete.</span></span></label>
                             <label class="mt-5 block"><span class="mb-2 block text-xs font-bold text-slate-700">Instructions <span class="font-normal text-slate-400">(optional)</span></span><textarea v-model="form.instructions" :disabled="!canEdit" rows="4" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm leading-6 disabled:bg-slate-100" placeholder="Add instructions that apply to every check-in."></textarea></label>
-                            <div class="mt-7 flex justify-end"><button type="button" class="h-10 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800" @click="goTo('requirements')">Continue</button></div>
+                            <div class="mt-7 flex justify-end"><button type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800" @click="goTo('requirements')">Continue<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></button></div>
                         </div>
 
                         <div v-else-if="activeSection === 'requirements'" class="p-7">
                             <div class="flex items-start justify-between gap-6 border-b border-slate-200 pb-4">
-                                <div><h2 class="text-lg font-bold text-slate-950">Recipient requirements</h2><p class="mt-1 text-sm text-slate-500">Only request records needed to continue support.</p></div>
+                                <div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-list-check text-sm" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Recipient requirements</h2><p class="mt-1 text-sm text-slate-500">Only request records needed to continue support.</p></div></div>
                                 <button v-if="canEdit" type="button" class="h-10 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800" @click="openRequirement()"><i class="fa-solid fa-plus mr-2 text-[10px]" aria-hidden="true"></i>Add requirement</button>
                             </div>
-                            <div v-if="!form.requirements.length" class="py-16 text-center"><i class="fa-solid fa-list-check text-3xl text-slate-300" aria-hidden="true"></i><p class="mt-3 text-sm font-bold text-slate-800">No requirements added</p><p class="mt-1 text-xs text-slate-500">Add the first record recipients must provide.</p></div>
+                            <div v-if="!form.requirements.length" class="py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-list-check text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">No requirements added</p><p class="mt-1 text-xs text-slate-500">Add the first record recipients must provide.</p></div>
                             <div v-else class="divide-y divide-slate-200">
                                 <article v-for="(requirement, index) in form.requirements" :key="requirement.id || `${requirement.type}-${index}`" class="flex min-h-24 items-center justify-between gap-8 py-5">
                                     <div class="min-w-0"><div class="flex items-center gap-2"><h3 class="truncate text-sm font-bold text-slate-950">{{ requirement.title }}</h3><span v-if="requirement.required" class="bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Required</span></div><p class="mt-1 line-clamp-2 text-sm text-slate-500">{{ requirement.evidence_description || requirement.description || 'No file required' }}</p><p v-if="requirement.type === 'academic_progress'" class="mt-2 text-xs font-bold text-amber-700">Minimum {{ requirement.minimum_grade }} {{ requirement.grading_scale === 'grade_point' ? 'grade point' : '%' }}</p></div>
-                                    <div v-if="canEdit" class="flex shrink-0 gap-2"><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" @click="openRequirement(index)">Edit</button><button type="button" class="grid h-9 w-9 place-items-center border border-rose-200 bg-white text-rose-700" aria-label="Remove requirement" @click="removeRequirement(index)"><i class="fa-solid fa-trash text-xs" aria-hidden="true"></i></button></div>
+                                    <div v-if="canEdit" class="flex shrink-0 gap-2"><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" @click="openRequirement(index)"><i class="fa-solid fa-pen text-[9px]" aria-hidden="true"></i>Edit</button><button type="button" class="grid h-9 w-9 place-items-center border border-rose-200 bg-white text-rose-700" aria-label="Remove requirement" @click="removeRequirement(index)"><i class="fa-solid fa-trash text-xs" aria-hidden="true"></i></button></div>
                                 </article>
                             </div>
-                            <div class="mt-7 flex justify-between border-t border-slate-200 pt-5"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="goTo('schedule')">Previous</button><button type="button" class="h-10 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800" @click="goTo('review')">Review plan</button></div>
+                            <div class="mt-7 flex justify-between border-t border-slate-200 pt-5"><button type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="goTo('schedule')"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>Previous</button><button type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800" @click="goTo('review')">Review plan<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></button></div>
                         </div>
 
                         <div v-else class="p-7">
-                            <div class="border-b border-slate-200 pb-4"><h2 class="text-lg font-bold text-slate-950">Confirm the plan</h2><p class="mt-1 text-sm text-slate-500">Review the essentials before saving.</p></div>
+                            <div class="flex items-start gap-3 border-b border-slate-200 pb-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-check text-sm" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Confirm the plan</h2><p class="mt-1 text-sm text-slate-500">Review the essentials before saving.</p></div></div>
                             <dl class="mt-6 divide-y divide-slate-200 border border-slate-200">
                                 <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Schedule</dt><dd><p class="text-sm font-bold text-slate-950">{{ frequencyLabel }}</p><p class="mt-1 text-xs text-slate-500">{{ dateRange }} · {{ form.grace_period_days }}-day grace period</p></dd></div>
                                 <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Requirements</dt><dd><p class="text-sm font-bold text-slate-950">{{ form.requirements.length }} item{{ form.requirements.length === 1 ? '' : 's' }}</p><p class="mt-1 text-xs text-slate-500">{{ form.requirements.map((item) => item.title).join(' · ') }}</p></dd></div>
                                 <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Exceptions</dt><dd class="text-sm font-bold text-slate-950">{{ form.allow_exception_requests ? 'Allowed' : 'Not enabled' }}</dd></div>
                             </dl>
-                            <div class="mt-7 flex items-center justify-between border-t border-slate-200 pt-5"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="goTo('requirements')">Previous</button><div v-if="canEdit" class="flex gap-2"><button type="button" :disabled="isSaving" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-50" @click="savePlan('draft')">Save draft</button><button type="button" :disabled="isSaving" class="h-10 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50" @click="savePlan('active')">{{ isSaving ? 'Saving...' : 'Activate plan' }}</button></div></div>
+                            <div class="mt-7 flex items-center justify-between border-t border-slate-200 pt-5"><button type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="goTo('requirements')"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>Previous</button><div v-if="canEdit" class="flex gap-2"><button type="button" :disabled="isSaving" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-50" @click="savePlan('draft')"><i class="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true"></i>Save draft</button><button type="button" :disabled="isSaving" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50" @click="savePlan('active')"><i :class="['fa-solid text-[10px]', isSaving ? 'fa-spinner fa-spin' : 'fa-circle-check']" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : 'Activate plan' }}</button></div></div>
                         </div>
                     </section>
                 </template>
@@ -282,7 +288,7 @@ onMounted(loadPlan);
                     <template v-if="requirementEditor.type === 'academic_progress'"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Minimum grade</span><input v-model.number="requirementEditor.minimum_grade" required type="number" step="0.01" class="h-11 w-full border border-slate-300 px-3 text-sm"></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Scale</span><select v-model="requirementEditor.grading_scale" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option value="percentage">Percentage</option><option value="grade_point">Grade point</option></select></label></template>
                     <div class="col-span-2 flex gap-6 border border-slate-200 bg-slate-50 p-4"><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_file" type="checkbox"> File required</label><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_original_verification" type="checkbox"> Original may be checked</label></div>
                 </div>
-                <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="requirementEditor = null">Cancel</button><button type="submit" class="h-10 bg-slate-950 px-5 text-sm font-bold text-white">Save requirement</button></footer>
+                <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="requirementEditor = null">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white"><i class="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true"></i>Save requirement</button></footer>
             </form>
         </div>
     </main>

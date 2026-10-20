@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import SelectionSessionFormModal from './components/SelectionSessionFormModal.vue';
 
 const queueByPath = {
     '/provider/workspaces/selection/active': 'active',
@@ -30,6 +31,8 @@ const selectedProgram = ref(new URLSearchParams(window.location.search).get('pro
 const selectedStage = ref(new URLSearchParams(window.location.search).get('stage_key') ?? '');
 const isLoading = ref(true);
 const errorMessage = ref('');
+const showSessionModal = ref(false);
+const sessionContext = ref({ programId: '', stageKey: '', applicationId: null });
 let requestVersion = 0;
 let searchTimer = null;
 
@@ -66,6 +69,24 @@ function statusClass(status) {
 function formatDate(value) {
     if (!value) return 'Date not set';
     return new Intl.DateTimeFormat('en-PH', { month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
+}
+
+function openSessionModal(context = {}) {
+    sessionContext.value = {
+        programId: context.programId ?? '',
+        stageKey: context.stageKey ?? '',
+        applicationId: context.applicationId ?? null,
+    };
+    showSessionModal.value = true;
+}
+
+function closeSessionModal() {
+    showSessionModal.value = false;
+}
+
+function handleSessionSaved(session) {
+    showSessionModal.value = false;
+    window.location.href = `/provider/workspaces/selection/sessions/${session.id}`;
 }
 
 async function loadRecords(page = 1) {
@@ -107,12 +128,15 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
             <div class="mx-auto max-w-[94rem]">
                 <header class="provider-hero task-page-header border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
                     <div class="flex items-center justify-between gap-8">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Selection workflow</p>
-                            <h1 id="selection-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
-                            <p class="mt-1 text-sm text-slate-600">{{ pageCopy.description }}</p>
+                        <div class="flex min-w-0 items-center gap-4">
+                            <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Selection workflow</p>
+                                <h1 id="selection-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
+                                <p class="mt-1 text-sm text-slate-600">{{ pageCopy.description }}</p>
+                            </div>
                         </div>
-                        <a href="/provider/workspaces/selection/sessions/create" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>Create session</a>
+                        <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800" @click="openSessionModal()"><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>Create session</button>
                     </div>
                 </header>
 
@@ -136,8 +160,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                             <caption class="sr-only">{{ pageCopy.title }}</caption>
                             <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><th class="w-[29%] px-5 py-3">Session</th><th class="w-[26%] px-5 py-3">Program</th><th class="w-[20%] px-5 py-3">Schedule</th><th class="w-[12%] px-5 py-3">Roster</th><th class="w-[8%] px-5 py-3">Status</th><th class="w-[5%] px-5 py-3 text-right"><span class="sr-only">Action</span></th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
-                                <tr v-if="isLoading && !sessions.length"><td colspan="6" class="px-5 py-12 text-center text-sm font-semibold text-slate-500">Loading sessions...</td></tr>
-                                <tr v-else-if="!sessions.length"><td colspan="6" class="px-5 py-12 text-center"><p class="font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Create a session when applicants reach a selection stage.' }}</p></td></tr>
+                                <tr v-if="isLoading && !sessions.length"><td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading sessions...</p></td></tr>
+                                <tr v-else-if="!sessions.length"><td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Create a session when applicants reach a selection stage.' }}</p></td></tr>
                                 <tr v-for="session in sessions" :key="session.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4"><p class="truncate text-sm font-bold text-slate-950">{{ session.title }}</p><p class="mt-1 text-xs text-slate-500">{{ labelize(session.stage_key) }} · {{ labelize(session.mode) }}</p></td>
                                     <td class="px-5 py-4"><p class="truncate text-sm font-semibold text-slate-800">{{ session.program?.title }}</p><p v-if="session.proof_required" class="mt-1 text-xs text-slate-500">Proof required</p></td>
@@ -153,14 +177,17 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                             <caption class="sr-only">{{ pageCopy.title }}</caption>
                             <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><th class="w-[34%] px-5 py-3">Applicant</th><th class="w-[31%] px-5 py-3">Program</th><th class="w-[18%] px-5 py-3">Stage</th><th class="w-[12%] px-5 py-3">Submitted</th><th class="w-[5%] px-5 py-3 text-right"><span class="sr-only">Action</span></th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
-                                <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center text-sm font-semibold text-slate-500">Loading applicants...</td></tr>
-                                <tr v-else-if="!applications.length"><td colspan="5" class="px-5 py-12 text-center"><p class="font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Records move here automatically as work is completed.' }}</p></td></tr>
+                                <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applicants...</p></td></tr>
+                                <tr v-else-if="!applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Records move here automatically as work is completed.' }}</p></td></tr>
                                 <tr v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4"><div class="flex min-w-0 items-center gap-3"><img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ application.applicant.education || 'Education not provided' }}</p></div></div></td>
                                     <td class="px-5 py-4"><p class="truncate text-sm font-semibold text-slate-800">{{ application.program.title }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage.label }}</p><p class="mt-1 text-xs text-slate-500">{{ activeQueue === 'results' ? 'Activity complete' : 'Needs a session' }}</p></td>
                                     <td class="px-5 py-4 text-sm text-slate-600">{{ application.submitted_at || 'Not available' }}</td>
-                                    <td class="px-5 py-4 text-right"><a :href="application.action.url" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${application.action.label} for ${application.applicant.name}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                                    <td class="px-5 py-4 text-right">
+                                        <button v-if="activeQueue === 'unassigned'" type="button" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${application.action.label} for ${application.applicant.name}`" @click="openSessionModal({ programId: application.program.id, stageKey: application.stage.key, applicationId: application.id })"><i class="fa-solid fa-calendar-plus text-xs" aria-hidden="true"></i></button>
+                                        <a v-else :href="application.action.url" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${application.action.label} for ${application.applicant.name}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -170,5 +197,14 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                 </section>
             </div>
         </section>
+
+        <SelectionSessionFormModal
+            :open="showSessionModal"
+            :program-id="sessionContext.programId"
+            :stage-key="sessionContext.stageKey"
+            :application-id="sessionContext.applicationId"
+            @close="closeSessionModal"
+            @saved="handleSessionSaved"
+        />
     </main>
 </template>

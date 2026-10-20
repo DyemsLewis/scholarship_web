@@ -26,7 +26,10 @@ return new class extends Migration
         Schema::create('provider_service_lifecycle_events', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('provider_service_purchase_id')
-                ->constrained('provider_service_purchases')
+                ->constrained(
+                    table: 'provider_service_purchases',
+                    indexName: 'ps_lifecycle_purchase_fk',
+                )
                 ->cascadeOnDelete();
             $table->foreignId('actor_id')->nullable()->constrained('users')->nullOnDelete();
             $table->string('event_type', 60);

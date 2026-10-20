@@ -131,14 +131,14 @@ onMounted(loadVerification);
         <section class="student-page" aria-labelledby="organization-verification-title">
             <div class="mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                    <div class="flex items-start justify-between gap-8">
-                        <div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="organization-verification-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">Legal verification</h1><p class="mt-2 text-sm leading-6 text-slate-600">Maintain the registered organization details and supporting proof.</p></div>
+                    <div class="flex items-center justify-between gap-8">
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-building-shield" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="organization-verification-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Legal verification</h1><p class="mt-1 text-sm leading-6 text-slate-600">Maintain the registered organization details and supporting proof.</p></div></div>
                         <span v-if="profile" :class="['inline-flex border px-3 py-2 text-[10px] font-bold uppercase tracking-wide', verificationClass(profile.verification_status)]">{{ profile.verification_status_label }}</span>
                     </div>
                 </header>
 
                 <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm font-semibold text-slate-500">Loading legal verification...</div>
+                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading legal verification...</p></div>
 
                 <template v-else>
                     <section v-if="profile?.verification_status === 'rejected'" class="mt-4 border border-rose-200 border-l-4 border-l-rose-600 bg-rose-50 px-5 py-4">
@@ -147,7 +147,7 @@ onMounted(loadVerification);
                     </section>
 
                     <form class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="saveLegalDetails">
-                        <header class="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-5"><div><h2 class="text-lg font-bold text-slate-950">Registered organization</h2><p class="mt-1 text-sm text-slate-500">Enter details exactly as they appear on the registration document.</p></div><button type="submit" :disabled="isSaving" class="h-10 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50">{{ isSaving ? 'Saving...' : 'Save legal details' }}</button></header>
+                        <header class="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-5"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-id-card" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Registered organization</h2><p class="mt-1 text-sm text-slate-500">Enter details exactly as they appear on the registration document.</p></div></div><button type="submit" :disabled="isSaving" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"><i :class="['fa-solid', isSaving ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : 'Save legal details' }}</button></header>
                         <div class="grid grid-cols-3 gap-5 px-6 py-6">
                             <label class="col-span-2"><span :class="labelClass">Legal organization name</span><input v-model="form.legal_name" type="text" :class="fieldClass"><span v-if="firstError('legal_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('legal_name') }}</span></label>
                             <label><span :class="labelClass">Registration authority</span><input v-model="form.registration_authority" type="text" :class="fieldClass" placeholder="SEC, DTI, DepEd"><span v-if="firstError('registration_authority')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('registration_authority') }}</span></label>
@@ -157,17 +157,17 @@ onMounted(loadVerification);
                     </form>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="verification-proof-title">
-                        <header class="border-b border-slate-200 px-6 py-5"><h2 id="verification-proof-title" class="text-lg font-bold text-slate-950">Verification proof</h2><p class="mt-1 text-sm text-slate-500">Upload readable organization evidence for administrator review.</p></header>
+                        <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><h2 id="verification-proof-title" class="text-lg font-bold text-slate-950">Verification proof</h2><p class="mt-1 text-sm text-slate-500">Upload readable organization evidence for administrator review.</p></div></header>
                         <form class="border-b border-slate-200 bg-slate-50 px-6 py-5" @submit.prevent="uploadProof">
                             <div class="grid grid-cols-[18rem_1fr_auto] items-end gap-4">
                                 <label><span :class="labelClass">Document type</span><select v-model="documentType" :class="fieldClass"><option value="organization_registration">Organization registration</option><option value="authorization_letter">Authorization letter</option><option value="valid_id">Authorized representative ID</option><option value="school_or_office_proof">School or office proof</option><option value="other">Other supporting proof</option></select></label>
                                 <label><span :class="labelClass">File</span><input ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="mt-2 block h-11 w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-bold" @change="chooseFile"></label>
-                                <button type="submit" :disabled="!canUpload" class="h-11 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">{{ isUploading ? 'Uploading...' : 'Upload proof' }}</button>
+                                <button type="submit" :disabled="!canUpload" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"><i :class="['fa-solid', isUploading ? 'fa-spinner fa-spin' : 'fa-cloud-arrow-up']" aria-hidden="true"></i>{{ isUploading ? 'Uploading...' : 'Upload proof' }}</button>
                             </div>
                             <label class="mt-4 flex items-start gap-3 text-sm text-slate-600"><input v-model="termsAccepted" type="checkbox" class="mt-0.5 h-4 w-4 accent-slate-950"><span>I confirm this file is authorized, accurate, and may be reviewed for organization verification.</span></label>
                         </form>
 
-                        <div v-if="!documents.length" class="px-6 py-14 text-center"><i class="fa-solid fa-file-circle-plus text-3xl text-slate-300" aria-hidden="true"></i><p class="mt-3 text-sm font-bold text-slate-800">No verification proof uploaded</p><p class="mt-1 text-xs text-slate-500">Add the organization registration or another accepted record.</p></div>
+                        <div v-if="!documents.length" class="px-6 py-14 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">No verification proof uploaded</p><p class="mt-1 text-xs text-slate-500">Add the organization registration or another accepted record.</p></div>
                         <div v-else class="staff-table-viewport">
                             <table class="w-full min-w-[68rem] table-fixed border-collapse text-left">
                                 <caption class="sr-only">Organization verification documents</caption>

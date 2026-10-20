@@ -175,13 +175,28 @@ class DemoReadinessWorkflowTest extends TestCase
         $this->actingAs($applicant)
             ->getJson("/dashboard/scholarships/{$scholarshipId}/data")
             ->assertOk()
-            ->assertJsonPath('scholarship.program_cycle', 'School Year 2026-2027')
-            ->assertJsonPath('scholarship.application_opens_at', $applicationOpensAtLabel)
-            ->assertJsonPath('scholarship.expected_results_at', $expectedResultsAtLabel)
-            ->assertJsonPath('scholarship.support_starts_at', $supportStartsAtLabel)
-            ->assertJsonPath('scholarship.support_ends_at', $supportEndsAtLabel)
-            ->assertJsonPath('scholarship.contact_person', 'Program Coordinator')
-            ->assertJsonPath('scholarship.benefits.0.duration', 'Current program cycle');
+            ->assertJsonPath('detail.identity.program_cycle', 'School Year 2026-2027')
+            ->assertJsonPath('detail.decision.state', 'eligible')
+            ->assertJsonPath('detail.snapshot.3.value', "{$supportStartsAtLabel} to {$supportEndsAtLabel}");
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/scholarships/{$scholarshipId}/data?section=application")
+            ->assertOk()
+            ->assertJsonFragment([
+                'label' => $expectedResultsAtLabel,
+                'note' => 'Expected result date',
+                'state' => 'scheduled',
+            ]);
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/scholarships/{$scholarshipId}/data?section=provider")
+            ->assertOk()
+            ->assertJsonPath('detail.content.contact.person', 'Program Coordinator');
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/scholarships/{$scholarshipId}/data?section=award")
+            ->assertOk()
+            ->assertJsonPath('detail.content.benefits.0.duration', 'Current program cycle');
 
         foreach (['Certificate of enrollment', 'Latest report card or grades'] as $documentName) {
             $path = "student-documents/{$applicant->id}/".str()->slug($documentName).'.pdf';

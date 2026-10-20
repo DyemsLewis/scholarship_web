@@ -56,7 +56,7 @@ onMounted(loadData);
 
         <template v-else>
             <section class="admin-panel mt-4 overflow-hidden">
-                <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-4"><div><h2 class="text-base font-black text-slate-950">Available datasets</h2><p class="mt-1 text-sm text-slate-500">Every download is added to the audit trail.</p></div><span class="inline-flex items-center gap-2 bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900"><i class="fa-solid fa-lock" aria-hidden="true"></i>Authorized use only</span></header>
+                <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-database" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Available datasets</h2><p class="mt-0.5 text-sm text-slate-500">Every download is added to the audit trail.</p></div></div><span class="inline-flex items-center gap-2 bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900"><i class="fa-solid fa-lock" aria-hidden="true"></i>Authorized use only</span></header>
                 <div class="divide-y divide-slate-200">
                     <article v-for="dataset in datasets" :key="dataset.key" class="grid grid-cols-[3rem_minmax(0,1fr)_9rem_minmax(13rem,auto)] items-center gap-4 px-6 py-5">
                         <span class="grid h-12 w-12 place-items-center bg-slate-950 text-amber-300"><i :class="datasetIcon(dataset.key)" aria-hidden="true"></i></span>
@@ -71,9 +71,9 @@ onMounted(loadData);
             </section>
 
             <section class="admin-panel mt-4 overflow-hidden">
-                <header class="border-b border-slate-200 px-6 py-4"><h2 class="text-base font-black text-slate-950">Recent exports</h2><p class="mt-1 text-sm text-slate-500">The latest sensitive-data downloads.</p></header>
+                <header class="border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Recent exports</h2><p class="mt-0.5 text-sm text-slate-500">The latest sensitive-data downloads.</p></div></div></header>
                 <div class="staff-table-viewport">
-                    <table v-if="recentExports.length" class="w-full min-w-[58rem] border-collapse text-left">
+                    <table v-if="recentExports.length" class="portal-data-table min-w-[58rem]">
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Dataset</th><th class="border-b border-slate-200 px-4 py-3">Downloaded by</th><th class="border-b border-slate-200 px-4 py-3">Source</th><th class="border-b border-slate-200 px-4 py-3">Recorded</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
                         <tbody class="divide-y divide-slate-200"><tr v-for="item in recentExports" :key="item.id" class="hover:bg-slate-50/70"><td class="px-5 py-3.5"><p class="text-sm font-bold text-slate-950">{{ item.description }}</p><p class="mt-0.5 text-xs text-slate-500">{{ item.action_label }}</p></td><td class="px-4 py-3.5 text-sm font-semibold text-slate-800">{{ item.actor_name }}</td><td class="px-4 py-3.5 font-mono text-xs text-slate-600">{{ item.ip_address || 'Not recorded' }}</td><td class="px-4 py-3.5 text-sm text-slate-600">{{ item.created_at }}</td><td class="px-5 py-3.5 text-right"><a :href="item.record_url" class="inline-grid h-9 w-9 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" aria-label="Open export activity" title="Open record"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td></tr></tbody>
                     </table>

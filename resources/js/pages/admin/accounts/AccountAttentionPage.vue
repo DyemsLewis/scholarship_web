@@ -82,21 +82,21 @@ onMounted(loadAccounts);
 
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
 
-        <AdminTableFrame title="Access queue" :description="`${pagination.total} account${pagination.total === 1 ? '' : 's'} in this view`" class="mt-4">
+        <AdminTableFrame title="Access queue" :description="`${pagination.total} account${pagination.total === 1 ? '' : 's'} in this view`" icon="fa-solid fa-shield-halved" class="mt-4">
             <template #filters>
                 <div class="grid gap-3">
-                    <div class="flex gap-2 overflow-x-auto">
+                    <div class="grid grid-cols-4 overflow-hidden border border-slate-300 bg-white">
                         <button
                             v-for="option in issueOptions"
                             :key="option.value"
                             type="button"
-                            :class="['shrink-0 border px-3 py-2 text-xs font-bold transition', issue === option.value ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 bg-white text-slate-600 hover:border-slate-500']"
+                            :class="['flex h-11 items-center justify-between border-r border-slate-200 px-4 text-xs font-bold transition last:border-r-0', issue === option.value ? 'bg-slate-950 text-white' : 'bg-white text-slate-600 hover:bg-slate-100']"
                             @click="selectIssue(option.value)"
                         >
                             {{ option.label }} <span :class="issue === option.value ? 'text-amber-300' : 'text-slate-400'">{{ issueCounts[option.value] }}</span>
                         </button>
                     </div>
-                    <label class="relative max-w-2xl">
+                    <label class="relative w-full">
                         <span class="sr-only">Search attention queue</span>
                         <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
                         <input v-model="search" type="search" maxlength="120" placeholder="Search name, email, or username" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950">

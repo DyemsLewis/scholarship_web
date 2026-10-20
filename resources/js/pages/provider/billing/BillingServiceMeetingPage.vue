@@ -45,10 +45,7 @@ async function requestMeeting() {
         :directory-url="directoryUrl"
     >
         <section class="mt-4 border border-slate-200 bg-white shadow-sm">
-            <header class="border-b border-slate-200 px-6 py-4">
-                <h2 class="text-base font-bold text-slate-950">{{ workspace.meetingTitle }}</h2>
-                <p class="mt-1 text-xs text-slate-500">{{ workspace.meetingDescription }}</p>
-            </header>
+            <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span><div><h2 class="text-base font-bold text-slate-950">{{ workspace.meetingTitle }}</h2><p class="mt-1 text-xs text-slate-500">{{ workspace.meetingDescription }}</p></div></header>
 
             <dl v-if="purchase.meeting_scheduled_for" class="grid grid-cols-3 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
                 <div class="px-6 py-4">
@@ -81,7 +78,7 @@ async function requestMeeting() {
                 </div>
                 <label class="mt-5 block text-sm font-bold text-slate-800">What should the meeting cover?<textarea v-model="meetingForm.meeting_purpose" rows="4" minlength="10" maxlength="1000" required class="mt-2 w-full border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-950"></textarea></label>
                 <div class="mt-4 flex justify-end">
-                    <button type="submit" :disabled="isSaving" class="h-10 bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-40">{{ purchase.meeting_scheduled_for ? 'Update request' : 'Request meeting' }}</button>
+                    <button type="submit" :disabled="isSaving" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-40"><i :class="['fa-solid', isSaving ? 'fa-spinner fa-spin' : 'fa-calendar-plus']" aria-hidden="true"></i>{{ purchase.meeting_scheduled_for ? 'Update request' : 'Request meeting' }}</button>
                 </div>
             </form>
             <p v-else class="px-6 py-8 text-sm text-slate-500">Meeting requests are closed for this service.</p>

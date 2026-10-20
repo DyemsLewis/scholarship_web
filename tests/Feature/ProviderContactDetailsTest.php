@@ -212,15 +212,15 @@ class ProviderContactDetailsTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
 
         $applicantResponse = $this->actingAs($applicant)
-            ->getJson("/dashboard/scholarships/{$scholarship->id}/data")
+            ->getJson("/dashboard/scholarships/{$scholarship->id}/data?section=provider")
             ->assertOk()
-            ->assertJsonPath('scholarship.provider.mission', 'Make education support easier to reach.')
-            ->assertJsonPath('scholarship.provider.year_established', 2015)
-            ->assertJsonPath('scholarship.provider.service_area', 'Rizal Province')
-            ->assertJsonPath('scholarship.provider.contact_department', 'Scholarship Desk');
+            ->assertJsonPath('detail.content.summary', 'Make education support easier to reach.')
+            ->assertJsonPath('detail.content.year_established', 2015)
+            ->assertJsonPath('detail.content.service_area', 'Rizal Province')
+            ->assertJsonPath('detail.content.contact.department', 'Scholarship Desk');
 
-        $this->assertArrayNotHasKey('registration_number', $applicantResponse->json('scholarship.provider'));
-        $this->assertArrayNotHasKey('legal_name', $applicantResponse->json('scholarship.provider'));
+        $this->assertArrayNotHasKey('registration_number', $applicantResponse->json('detail.content'));
+        $this->assertArrayNotHasKey('legal_name', $applicantResponse->json('detail.content'));
 
         $this->actingAs($admin)
             ->getJson("/admin/providers/{$provider->id}/review/data")

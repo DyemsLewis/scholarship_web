@@ -67,6 +67,12 @@ final class PortalManagerWorkspaceQuery
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => Str::headline($user->account_title ?: $user->role),
+                'image_url' => match (true) {
+                    $user->isApplicant() && filled($user->studentProfile?->profile_photo_path) => route('admin.workspaces.accounts.photo', $user, false),
+                    $user->isProvider() && filled($user->providerProfile?->logo_path) => asset(ltrim($user->providerProfile->logo_path, '/')),
+                    default => null,
+                },
+                'image_fit' => $user->isProvider() ? 'contain' : 'cover',
                 'issue' => collect([
                     $user->email_verified_at ? null : 'Email not verified',
                     $user->must_reset_password ? 'Password reset required' : null,

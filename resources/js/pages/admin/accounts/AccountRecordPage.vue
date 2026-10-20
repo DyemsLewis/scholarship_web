@@ -124,9 +124,9 @@ onMounted(loadAccount);
         <a href="/admin/workspaces/accounts" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to accounts</a>
 
         <AdminWorkspaceHeader
-            eyebrow="Account record"
-            :title="account?.name || 'Account details'"
-            :description="account ? `${roleLabel} · @${account.username}` : 'Review account access.'"
+            eyebrow="Account access"
+            title="Manage account"
+            description="Review identity and use only the access action needed."
             icon="fa-solid fa-user-gear"
         >
             <template v-if="account" #actions>
@@ -145,38 +145,38 @@ onMounted(loadAccount);
                         <img v-if="account.avatar_url" :src="account.avatar_url" alt="" class="absolute inset-0 h-full w-full object-cover" @error="$event.currentTarget.remove()">
                     </span>
                     <div class="min-w-0">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">{{ roleLabel }}</p>
                         <h2 class="truncate text-lg font-black text-slate-950">{{ account.name }}</h2>
-                        <p class="mt-1 truncate text-sm text-slate-500">{{ account.email }}</p>
+                        <p class="mt-1 truncate text-sm text-slate-500">{{ account.email }} · @{{ account.username }}</p>
                     </div>
                 </div>
                 <dl class="grid grid-cols-4 divide-x divide-slate-200">
                     <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Sign-in state</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ signInState }}</dd></div>
-                    <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Username</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ account.username }}</dd></div>
+                    <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Contact number</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ account.contact_number || 'Not provided' }}</dd></div>
                     <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Created</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ account.created_at }}</dd></div>
-                    <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ roleContext.label }}</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ roleContext.count }}</dd></div>
+                    <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ roleContext.label }}</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ roleContext.count }}<span v-if="roleContext.secondary_label" class="ml-2 text-xs font-semibold text-slate-500">{{ roleContext.secondary_count }} {{ roleContext.secondary_label.toLowerCase() }}</span></dd></div>
                 </dl>
             </section>
 
             <section class="admin-panel mt-4 overflow-hidden">
                 <header class="border-b border-slate-200 px-6 py-4">
-                    <h2 class="text-base font-black text-slate-950">Sign-in controls</h2>
-                    <p class="mt-1 text-sm text-slate-500">Use only the action needed for this account.</p>
+                    <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Sign-in controls</h2><p class="mt-0.5 text-sm text-slate-500">Use only the action needed for this account.</p></div></div>
                 </header>
 
                 <p v-if="actionError && !statusDialogOpen" class="border-b border-rose-200 bg-rose-50 px-6 py-3 text-sm font-semibold text-rose-800" role="alert">{{ actionError }}</p>
 
                 <div class="divide-y divide-slate-200">
                     <div class="flex items-center justify-between gap-6 px-6 py-5">
-                        <div><h3 class="text-sm font-bold text-slate-950">Email verification</h3><p class="mt-1 text-sm text-slate-500">{{ account.email_verified ? 'The email address is verified.' : 'Send a new verification link.' }}</p></div>
+                        <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-envelope" aria-hidden="true"></i></span><div><h3 class="text-sm font-bold text-slate-950">Email verification</h3><p class="mt-1 text-sm text-slate-500">{{ account.email_verified ? 'The email address is verified.' : 'Send a new verification link.' }}</p></div></div>
                         <span v-if="account.email_verified" class="text-xs font-bold text-emerald-700">Verified</span>
                         <button v-else type="button" :disabled="Boolean(actionBusy)" class="border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 disabled:opacity-40" @click="resendVerification">{{ actionBusy === 'verification' ? 'Sending...' : 'Resend verification' }}</button>
                     </div>
                     <div class="flex items-center justify-between gap-6 px-6 py-5">
-                        <div><h3 class="text-sm font-bold text-slate-950">Password access</h3><p class="mt-1 text-sm text-slate-500">Require a password change before the next sign-in.</p></div>
+                        <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-key" aria-hidden="true"></i></span><div><h3 class="text-sm font-bold text-slate-950">Password access</h3><p class="mt-1 text-sm text-slate-500">Require a password change before the next sign-in.</p></div></div>
                         <button type="button" :disabled="Boolean(actionBusy) || account.must_reset_password" class="border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 disabled:opacity-40" @click="requirePasswordReset">{{ account.must_reset_password ? 'Reset already required' : actionBusy === 'password' ? 'Preparing...' : 'Require password reset' }}</button>
                     </div>
                     <div class="flex items-center justify-between gap-6 px-6 py-5">
-                        <div><h3 class="text-sm font-bold text-slate-950">Account status</h3><p class="mt-1 text-sm text-slate-500">{{ isSuspended ? 'Restore sign-in access when the issue is resolved.' : 'Suspend access when an account should no longer sign in.' }}</p></div>
+                        <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-lock" aria-hidden="true"></i></span><div><h3 class="text-sm font-bold text-slate-950">Account status</h3><p class="mt-1 text-sm text-slate-500">{{ isSuspended ? 'Restore sign-in access when the issue is resolved.' : 'Suspend access when an account should no longer sign in.' }}</p></div></div>
                         <button type="button" :disabled="Boolean(actionBusy)" :class="['border px-3 py-2 text-xs font-bold disabled:opacity-40', isSuspended ? 'border-slate-950 bg-slate-950 text-white' : 'border-rose-300 bg-white text-rose-700']" @click="openStatusDialog">{{ isSuspended ? 'Reactivate account' : 'Suspend account' }}</button>
                     </div>
                 </div>

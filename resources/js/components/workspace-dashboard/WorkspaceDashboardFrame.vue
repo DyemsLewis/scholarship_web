@@ -19,7 +19,7 @@ defineProps({
 </script>
 
 <template>
-    <div class="mx-auto max-w-[94rem]">
+    <div class="workspace-dashboard-frame mx-auto w-full max-w-[94rem]">
         <WorkspaceDashboardHeader :workspace="dashboard.workspace" :primary-action="dashboard.primary_action">
             <template v-if="$slots.actions" #actions><slot name="actions"></slot></template>
         </WorkspaceDashboardHeader>

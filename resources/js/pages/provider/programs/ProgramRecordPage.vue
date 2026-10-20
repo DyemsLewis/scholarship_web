@@ -71,8 +71,9 @@ onMounted(loadProgram);
                     Back to programs
                 </a>
 
-                <div v-if="isLoading" class="mt-5 border border-slate-200 bg-white px-6 py-12 text-center text-sm font-semibold text-slate-500 shadow-sm">
-                    Loading program record...
+                <div v-if="isLoading" class="mt-5 border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
+                    <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-circle-notch animate-spin text-sm"></i></span>
+                    <p class="mt-2 text-sm font-semibold text-slate-500">Loading program record...</p>
                 </div>
 
                 <div v-else-if="errorMessage" class="mt-5 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">
@@ -81,13 +82,16 @@ onMounted(loadProgram);
 
                 <template v-else-if="program">
                     <header class="mt-5 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
-                        <div class="flex items-start justify-between gap-8 px-7 py-6">
-                            <div class="min-w-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Program record</p>
-                                <h1 id="program-record-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">{{ program.title }}</h1>
-                                <p class="mt-2 text-sm text-slate-600">
-                                    {{ program.category || 'Uncategorized' }}<template v-if="program.cycle"> · {{ program.cycle }}</template>
-                                </p>
+                        <div class="flex items-center justify-between gap-8 px-7 py-6">
+                            <div class="flex min-w-0 items-center gap-4">
+                                <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true"><i class="fa-solid fa-graduation-cap"></i></span>
+                                <div class="min-w-0">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Program record</p>
+                                    <h1 id="program-record-title" class="mt-1 truncate font-display text-3xl font-bold tracking-tight text-slate-950">{{ program.title }}</h1>
+                                    <p class="mt-2 text-sm text-slate-600">
+                                        {{ program.category || 'Uncategorized' }}<template v-if="program.cycle"> · {{ program.cycle }}</template>
+                                    </p>
+                                </div>
                             </div>
                             <div class="flex shrink-0 items-center gap-3">
                                 <span :class="['inline-flex border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide', statusClass(program.status.tone)]">
@@ -101,21 +105,21 @@ onMounted(loadProgram);
                         </div>
 
                         <div class="grid grid-cols-4 border-t border-slate-200 bg-slate-50">
-                            <div class="border-r border-slate-200 px-5 py-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Applications</p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">{{ program.capacity.applications }} received</p>
+                            <div class="flex items-center gap-3 border-r border-slate-200 px-5 py-4">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center bg-white text-slate-600" aria-hidden="true"><i class="fa-solid fa-file-lines text-sm"></i></span>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Applications</p><p class="mt-1 text-sm font-bold text-slate-950">{{ program.capacity.applications }} received</p></div>
                             </div>
-                            <div class="border-r border-slate-200 px-5 py-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Application limit</p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">{{ capacityValue(program.capacity.application_limit, 'applicants') }}</p>
+                            <div class="flex items-center gap-3 border-r border-slate-200 px-5 py-4">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center bg-white text-slate-600" aria-hidden="true"><i class="fa-solid fa-users-line text-sm"></i></span>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Application limit</p><p class="mt-1 text-sm font-bold text-slate-950">{{ capacityValue(program.capacity.application_limit, 'applicants') }}</p></div>
                             </div>
-                            <div class="border-r border-slate-200 px-5 py-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Recipient capacity</p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">{{ capacityValue(program.capacity.recipient_slots, 'slots') }}</p>
+                            <div class="flex items-center gap-3 border-r border-slate-200 px-5 py-4">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center bg-white text-slate-600" aria-hidden="true"><i class="fa-solid fa-award text-sm"></i></span>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Recipient capacity</p><p class="mt-1 text-sm font-bold text-slate-950">{{ capacityValue(program.capacity.recipient_slots, 'slots') }}</p></div>
                             </div>
-                            <div class="px-5 py-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Last updated</p>
-                                <p class="mt-1 text-sm font-bold text-slate-950">{{ program.updated_display || 'Not available' }}</p>
+                            <div class="flex items-center gap-3 px-5 py-4">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center bg-white text-slate-600" aria-hidden="true"><i class="fa-solid fa-clock-rotate-left text-sm"></i></span>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">Last updated</p><p class="mt-1 text-sm font-bold text-slate-950">{{ program.updated_display || 'Not available' }}</p></div>
                             </div>
                         </div>
                     </header>
@@ -171,7 +175,10 @@ onMounted(loadProgram);
                                     {{ stage }}
                                 </li>
                             </ol>
-                            <p v-else class="mt-4 text-sm text-slate-500">No selection stages are recorded.</p>
+                            <div v-else class="mt-4 flex items-center gap-3 border-y border-slate-200 py-4">
+                                <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-list-check text-sm"></i></span>
+                                <p class="text-sm text-slate-500">No selection stages are recorded.</p>
+                            </div>
                         </section>
 
                         <section class="px-7 py-6" aria-labelledby="program-support-heading">

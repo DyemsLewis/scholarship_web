@@ -87,14 +87,14 @@ onMounted(loadProfile);
         <section class="student-page" aria-labelledby="public-profile-title">
             <div class="mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                    <div class="flex items-start justify-between gap-8">
-                        <div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="public-profile-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">Public profile</h1><p class="mt-2 text-sm leading-6 text-slate-600">Control the organization identity applicants see across scholarship pages.</p></div>
-                        <button type="submit" form="public-profile-form" :disabled="isLoading || isSaving" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"><i class="fa-solid fa-floppy-disk text-amber-300" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : 'Save profile' }}</button>
+                    <div class="flex items-center justify-between gap-8">
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-building" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="public-profile-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Public profile</h1><p class="mt-1 text-sm leading-6 text-slate-600">Control the organization identity applicants see across scholarship pages.</p></div></div>
+                        <button type="submit" form="public-profile-form" :disabled="isLoading || isSaving" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"><i :class="['fa-solid text-amber-300', isSaving ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : 'Save profile' }}</button>
                     </div>
                 </header>
 
                 <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm font-semibold text-slate-500">Loading public profile...</div>
+                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading public profile...</p></div>
 
                 <form v-else id="public-profile-form" class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="saveProfile">
                     <section class="border-b border-slate-200 px-6 py-6" aria-labelledby="public-identity-title">
@@ -103,7 +103,7 @@ onMounted(loadProfile);
                             <span v-else class="grid h-20 w-20 place-items-center bg-slate-100 text-2xl text-slate-400"><i class="fa-solid fa-building" aria-hidden="true"></i></span>
                             <div class="flex-1"><h2 id="public-identity-title" class="text-lg font-bold text-slate-950">Organization identity</h2><p class="mt-1 text-sm text-slate-500">Use a clear logo and the registered public-facing name.</p></div>
                             <input ref="logoInput" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="uploadLogo">
-                            <button type="button" :disabled="isUploadingLogo" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950 disabled:opacity-50" @click="logoInput?.click()">{{ isUploadingLogo ? 'Uploading...' : 'Replace logo' }}</button>
+                            <button type="button" :disabled="isUploadingLogo" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950 disabled:opacity-50" @click="logoInput?.click()"><i :class="['fa-solid text-[10px]', isUploadingLogo ? 'fa-spinner fa-spin' : 'fa-arrow-up-from-bracket']" aria-hidden="true"></i>{{ isUploadingLogo ? 'Uploading...' : 'Replace logo' }}</button>
                         </div>
 
                         <div class="mt-6 grid grid-cols-3 gap-5">
@@ -115,12 +115,12 @@ onMounted(loadProfile);
                     </section>
 
                     <section class="px-6 py-6" aria-labelledby="organization-story-title">
-                        <div><h2 id="organization-story-title" class="text-lg font-bold text-slate-950">About the organization</h2><p class="mt-1 text-sm text-slate-500">Keep this concise so applicants can understand the provider quickly.</p></div>
+                        <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-align-left" aria-hidden="true"></i></span><div><h2 id="organization-story-title" class="text-lg font-bold text-slate-950">About the organization</h2><p class="mt-1 text-sm text-slate-500">Keep this concise so applicants can understand the provider quickly.</p></div></div>
                         <label class="mt-5 block"><span :class="labelClass">Public description</span><textarea v-model="form.provider_description" rows="4" class="mt-2 w-full border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-950" placeholder="Describe who you support and what the organization does."></textarea><div class="mt-1 flex justify-between text-xs"><span v-if="firstError('provider_description')" class="font-semibold text-rose-700">{{ firstError('provider_description') }}</span><span v-else></span><span class="text-slate-400">{{ form.provider_description.length }}/1500</span></div></label>
                         <label class="mt-5 block"><span :class="labelClass">Mission <span class="font-normal text-slate-400">(optional)</span></span><textarea v-model="form.provider_mission" rows="3" class="mt-2 w-full border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-950" placeholder="State the organization mission in one or two sentences."></textarea></label>
                     </section>
 
-                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4"><p class="text-xs font-semibold text-slate-500">Changes to verified identity details may require another administrator review.</p><button type="submit" :disabled="isSaving" class="h-10 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50">{{ isSaving ? 'Saving...' : 'Save public profile' }}</button></footer>
+                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4"><p class="text-xs font-semibold text-slate-500">Changes to verified identity details may require another administrator review.</p><button type="submit" :disabled="isSaving" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"><i :class="['fa-solid', isSaving ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : 'Save public profile' }}</button></footer>
                 </form>
             </div>
         </section>

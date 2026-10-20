@@ -10,31 +10,39 @@ const configs = {
     providers: {
         title: 'Provider verification', description: 'Confirm organization identity and submitted proof.', eyebrow: 'Organization review', icon: 'fa-solid fa-building-shield', endpoint: '/admin/workspaces/reviews/providers/data',
         statuses: [['pending', 'Pending'], ['approved', 'Approved'], ['rejected', 'Rejected'], ['all', 'All']], search: 'Search provider or registration number', empty: 'No provider records',
+        columns: ['Organization', 'Identity', 'Verification', 'Submitted proof'],
     },
     programs: {
         title: 'Program review', description: 'Check scholarship details before publication.', eyebrow: 'Publication review', icon: 'fa-solid fa-graduation-cap', endpoint: '/admin/workspaces/reviews/programs/data',
         statuses: [['pending_review', 'Pending'], ['published', 'Published'], ['rejected', 'Rejected'], ['all', 'All']], search: 'Search program or provider', empty: 'No program records',
+        columns: ['Program', 'Program details', 'Publication status', 'Applications'],
     },
     applicants: {
         title: 'Applicant verification', description: 'Compare academic claims with supporting evidence.', eyebrow: 'Profile evidence', icon: 'fa-solid fa-user-check', endpoint: '/admin/workspaces/reviews/applicants/data',
         statuses: [['pending', 'Pending'], ['approved', 'Verified'], ['rejected', 'Replacement needed'], ['unsubmitted', 'No proof'], ['all', 'All']], search: 'Search applicant, school, or email', empty: 'No applicant records',
+        columns: ['Applicant', 'Academic profile', 'Verification', 'Evidence'],
     },
     'selection-activities': {
         title: 'Selection activities', description: 'Review session readiness without changing provider records.', eyebrow: 'Application oversight', icon: 'fa-solid fa-calendar-check', endpoint: '/admin/workspaces/reviews/selection-activities/data',
         statuses: [['attention', 'Needs attention'], ['active', 'Active'], ['completed', 'Completed'], ['draft', 'Drafts'], ['cancelled', 'Cancelled'], ['all', 'All']], search: 'Search session, program, or provider', empty: 'No selection activities',
+        columns: ['Activity', 'Session details', 'Oversight', 'Attendance and proof'],
     },
     benefits: {
         title: 'Benefit evidence', description: 'Review releases with missing or disputed proof.', eyebrow: 'Release oversight', icon: 'fa-solid fa-receipt', endpoint: '/admin/workspaces/reviews/benefits/data',
         statuses: [['attention', 'Needs review'], ['documented', 'Documented'], ['released', 'Released'], ['scheduled', 'Scheduled'], ['all', 'All']], search: 'Search recipient, release, or program', empty: 'No benefit records',
+        columns: ['Recipient', 'Benefit release', 'Oversight', 'Receipt'],
     },
     monitoring: {
         title: 'Monitoring oversight', description: 'Track check-ins that need provider accountability.', eyebrow: 'Recipient oversight', icon: 'fa-solid fa-chart-line', endpoint: '/admin/workspaces/reviews/monitoring/data',
         statuses: [['attention', 'Needs attention'], ['open', 'Open cases'], ['reviewed', 'Reviewed'], ['closed', 'Closed'], ['all', 'All']], search: 'Search recipient, check-in, or program', empty: 'No monitoring cases',
+        columns: ['Recipient', 'Check-in', 'Oversight', 'Next action'],
     },
 };
 const config = configs[queueKey] ?? configs.providers;
-const search = ref('');
-const status = ref(config.statuses[0][0]);
+const query = new URLSearchParams(window.location.search);
+const allowedStatuses = config.statuses.map(([value]) => value);
+const search = ref(query.get('search') ?? '');
+const status = ref(allowedStatuses.includes(query.get('status')) ? query.get('status') : config.statuses[0][0]);
 const loading = ref(true);
 const errorMessage = ref('');
 const items = ref([]);
@@ -85,7 +93,7 @@ onMounted(loadItems);
         <AdminWorkspaceHeader :eyebrow="config.eyebrow" :title="config.title" :description="config.description" :icon="config.icon" />
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
 
-        <AdminTableFrame :title="config.title" :description="resultLabel" class="mt-4">
+        <AdminTableFrame :title="config.title" :description="resultLabel" :icon="config.icon" class="mt-4">
             <template #filters>
                 <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_14rem]">
                     <label class="relative"><span class="sr-only">Search queue</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" :placeholder="config.search" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
@@ -94,8 +102,8 @@ onMounted(loadItems);
             </template>
 
             <div v-if="loading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading review queue...</div>
-            <table v-else-if="items.length" class="w-full min-w-[60rem] border-collapse text-left">
-                <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Record</th><th class="border-b border-slate-200 px-4 py-3">Context</th><th class="border-b border-slate-200 px-4 py-3">Status</th><th class="border-b border-slate-200 px-4 py-3">{{ queueKey === 'monitoring' ? 'Next action' : 'Evidence' }}</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
+            <table v-else-if="items.length" class="portal-data-table min-w-[60rem]">
+                <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">{{ config.columns[0] }}</th><th class="border-b border-slate-200 px-4 py-3">{{ config.columns[1] }}</th><th class="border-b border-slate-200 px-4 py-3">{{ config.columns[2] }}</th><th class="border-b border-slate-200 px-4 py-3">{{ config.columns[3] }}</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
                     <tr v-for="item in items" :key="item.id ?? item.application_id" class="hover:bg-slate-50/70">
                         <td class="px-5 py-3.5">

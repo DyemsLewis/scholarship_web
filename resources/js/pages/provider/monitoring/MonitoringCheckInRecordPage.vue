@@ -280,15 +280,21 @@ onMounted(loadRecord);
                 <a :href="safeReturnUrl" class="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to monitoring</a>
                 <div v-if="errorMessage" class="mb-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
                 <div v-if="successMessage" class="mb-4 border-l-4 border-emerald-500 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800" role="status">{{ successMessage }}</div>
-                <div v-if="isLoading" class="border border-slate-200 bg-white px-6 py-16 text-center text-sm font-semibold text-slate-500">Loading monitoring check-in...</div>
+                <div v-if="isLoading" class="border border-slate-200 bg-white px-6 py-16 text-center">
+                    <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
+                    <p class="mt-3 text-sm font-semibold text-slate-500">Loading monitoring check-in...</p>
+                </div>
 
                 <template v-else-if="cycle">
                     <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                         <div class="flex items-start justify-between gap-8">
-                            <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Monitoring check-in</p>
-                                <h1 id="monitoring-record-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">Review recipient progress</h1>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">Decide one submitted requirement or follow-up at a time.</p>
+                            <div class="flex min-w-0 items-start gap-4">
+                                <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-user-check" aria-hidden="true"></i></span>
+                                <div>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Monitoring check-in</p>
+                                    <h1 id="monitoring-record-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Review recipient progress</h1>
+                                    <p class="mt-2 text-sm leading-6 text-slate-600">Decide one submitted requirement or follow-up at a time.</p>
+                                </div>
                             </div>
                             <span :class="['border px-3 py-2 text-[10px] font-bold uppercase tracking-wide', cycle.status === 'open' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-300 bg-slate-100 text-slate-700']">{{ cycle.status }}</span>
                         </div>
@@ -312,8 +318,8 @@ onMounted(loadRecord);
                     </nav>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
-                        <header class="border-b border-slate-200 px-6 py-5"><h2 class="text-xl font-bold text-slate-950">Recipient checklist</h2><p class="mt-1 text-sm text-slate-500">Select a recipient, then open only the requirement you need to handle.</p></header>
-                        <div v-if="!filteredRecipients.length" class="px-6 py-14 text-center text-sm text-slate-500">No recipients match this work state.</div>
+                        <header class="flex items-start gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-users-gear text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Recipient checklist</h2><p class="mt-1 text-sm text-slate-500">Select a recipient, then open only the requirement you need to handle.</p></div></header>
+                        <div v-if="!filteredRecipients.length" class="px-6 py-14 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-user-slash text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">No recipients match this work state.</p></div>
                         <template v-else>
                             <div class="flex flex-wrap gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3">
                                 <button v-for="recipient in filteredRecipients" :key="recipient.application_id" type="button" :class="['flex min-w-[14rem] items-center gap-3 border px-3 py-2 text-left', selectedRecipientId === recipient.application_id ? 'border-slate-950 bg-white' : 'border-slate-200 bg-slate-50 hover:border-slate-400']" @click="selectRecipient(recipient)">
@@ -336,10 +342,10 @@ onMounted(loadRecord);
                                         <p v-if="selectedRecipient.monitoring_case?.next_action" class="mt-2 max-w-xs text-xs font-bold text-slate-700">{{ selectedRecipient.monitoring_case.next_action.label }}</p>
                                         <p v-if="selectedRecipient.monitoring_case?.effective_due_label" class="mt-1 text-[10px] font-semibold text-slate-500">Due {{ selectedRecipient.monitoring_case.effective_due_label }}</p>
                                         <div class="mt-3 flex justify-end gap-2">
-                                            <button v-if="selectedRecipient.monitoring_case?.status === 'ready_to_close'" type="button" class="bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openCaseDecision('close')">Close check-in</button>
-                                            <button v-else-if="selectedRecipient.monitoring_case?.next_action?.key === 'resolve_overdue'" type="button" class="bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openCaseDecision('close')">Resolve overdue</button>
-                                            <button v-if="canWaiveCase(selectedRecipient)" type="button" class="border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openCaseDecision('waive')">Waive</button>
-                                            <button v-if="isTerminalCase(selectedRecipient) && selectedRecipient.monitoring_case?.status !== 'cancelled'" type="button" class="border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openCaseDecision('reopen')">Reopen</button>
+                                            <button v-if="selectedRecipient.monitoring_case?.status === 'ready_to_close'" type="button" class="inline-flex items-center gap-2 bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openCaseDecision('close')"><i class="fa-solid fa-circle-check text-[9px]" aria-hidden="true"></i>Close check-in</button>
+                                            <button v-else-if="selectedRecipient.monitoring_case?.next_action?.key === 'resolve_overdue'" type="button" class="inline-flex items-center gap-2 bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openCaseDecision('close')"><i class="fa-solid fa-circle-check text-[9px]" aria-hidden="true"></i>Resolve overdue</button>
+                                            <button v-if="canWaiveCase(selectedRecipient)" type="button" class="inline-flex items-center gap-2 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openCaseDecision('waive')"><i class="fa-solid fa-ban text-[9px]" aria-hidden="true"></i>Waive</button>
+                                            <button v-if="isTerminalCase(selectedRecipient) && selectedRecipient.monitoring_case?.status !== 'cancelled'" type="button" class="inline-flex items-center gap-2 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openCaseDecision('reopen')"><i class="fa-solid fa-rotate-left text-[9px]" aria-hidden="true"></i>Reopen</button>
                                         </div>
                                     </div>
                                 </div>
@@ -385,7 +391,7 @@ onMounted(loadRecord);
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <details>
-                            <summary class="flex cursor-pointer list-none items-center justify-between px-6 py-5"><span><span class="block text-base font-bold text-slate-950">Check-in details</span><span class="mt-1 block text-sm text-slate-500">Instructions and saved requirements for this monitoring period.</span></span><i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i></summary>
+                            <summary class="flex cursor-pointer list-none items-center justify-between px-6 py-5"><span class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-circle-info text-sm" aria-hidden="true"></i></span><span><span class="block text-base font-bold text-slate-950">Check-in details</span><span class="mt-1 block text-sm text-slate-500">Instructions and saved requirements for this monitoring period.</span></span></span><i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i></summary>
                             <div class="border-t border-slate-200 px-6 py-5"><p v-if="cycle.instructions" class="text-sm leading-6 text-slate-700">{{ cycle.instructions }}</p><dl class="mt-4 divide-y divide-slate-200 border-y border-slate-200"><div v-for="requirement in cycle.requirements" :key="requirement.id" class="grid grid-cols-[16rem_1fr] gap-6 py-4"><dt class="text-sm font-bold text-slate-900">{{ requirement.title }}</dt><dd class="text-sm leading-6 text-slate-600">{{ requirement.evidence_description || requirement.description || (requirement.requires_file ? 'Recipient file required.' : 'Provider confirmation required.') }}</dd></div></dl></div>
                         </details>
                     </section>
@@ -424,7 +430,7 @@ onMounted(loadRecord);
                     </div>
                     <footer class="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
                         <button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" :disabled="caseDecisionBusy" @click="closeCaseDecision">Cancel</button>
-                        <button type="submit" class="h-10 bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-60" :disabled="caseDecisionBusy">{{ caseDecisionBusy ? 'Saving...' : caseDecisionMode === 'reopen' ? 'Reopen check-in' : 'Save outcome' }}</button>
+                        <button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-60" :disabled="caseDecisionBusy"><i :class="['fa-solid text-[10px]', caseDecisionBusy ? 'fa-spinner fa-spin' : caseDecisionMode === 'reopen' ? 'fa-rotate-left' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ caseDecisionBusy ? 'Saving...' : caseDecisionMode === 'reopen' ? 'Reopen check-in' : 'Save outcome' }}</button>
                     </footer>
                 </form>
             </div>

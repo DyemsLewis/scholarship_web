@@ -24,7 +24,7 @@ class CompleteDemoSeederTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_it_builds_a_successful_only_demo_from_an_empty_database(): void
+    public function test_it_builds_a_positive_stage_by_stage_demo_from_an_empty_database(): void
     {
         Storage::fake('local');
 
@@ -34,7 +34,7 @@ class CompleteDemoSeederTest extends TestCase
         $this->assertSame(7, User::query()->where('role', 'admin')->whereNotNull('parent_account_id')->count());
         $this->assertSame(1, User::query()->where('role', 'provider')->whereNull('parent_account_id')->count());
         $this->assertSame(12, User::query()->where('role', 'provider')->whereNotNull('parent_account_id')->count());
-        $this->assertSame(1, User::query()->where('role', 'applicant')->count());
+        $this->assertSame(10, User::query()->where('role', 'applicant')->count());
         $this->assertSame('superadmin@findscholarship.test', User::query()->findOrFail(1)->email);
         $this->assertSame('programs@harborlight.test', User::query()->findOrFail(2)->email);
         $this->assertDatabaseMissing('users', ['username' => 'provider.pending']);
@@ -52,15 +52,19 @@ class CompleteDemoSeederTest extends TestCase
         $successfulApplication = ScholarshipApplication::query()
             ->where('applicant_id', $successfulApplicant->id)
             ->firstOrFail();
+        $screeningApplicant = User::query()->where('username', 'alyssamaereyes')->firstOrFail();
+        $activeMonitoringApplicant = User::query()->where('username', 'nicoleandreabautista')->firstOrFail();
+        $activeMonitoringApplication = ScholarshipApplication::query()
+            ->where('applicant_id', $activeMonitoringApplicant->id)
+            ->firstOrFail();
 
-        $this->assertSame(1, ScholarshipApplication::query()->count());
+        $this->assertSame(10, ScholarshipApplication::query()->count());
         $this->assertSame('awarded', $successfulApplication->status);
         $this->assertSame('complete', $successfulApplication->workflow_stage);
         $this->assertSame('closed', $successfulApplication->application_state);
         $this->assertSame('selected', $successfulApplication->final_outcome);
         $this->assertSame('accepted', $successfulApplication->student_response_status);
         $this->assertSame(0, ScholarshipApplication::query()->whereIn('status', [
-            'submitted',
             'rejected',
             'exam_failed',
             'interview_failed',
@@ -69,14 +73,42 @@ class CompleteDemoSeederTest extends TestCase
             'benefits_terminated',
         ])->count());
         $this->assertSame(0, ScholarshipApplication::query()->whereIn('application_state', [
-            'submitted',
             'needs_correction',
-            'in_provider_process',
-            'awaiting_decision',
             'withdrawn',
         ])->count());
 
-        $this->assertSame(0, ApplicationStageSession::query()->count());
+        $this->assertDatabaseHas('scholarship_applications', [
+            'applicant_id' => $screeningApplicant->id,
+            'status' => 'submitted',
+            'workflow_stage' => 'screening',
+        ]);
+        $this->assertDatabaseHas('scholarship_applications', [
+            'applicant_id' => User::query()->where('username', 'biancalouisenavarro')->value('id'),
+            'workflow_stage' => 'formal_application',
+            'application_state' => 'in_provider_process',
+        ]);
+        $this->assertDatabaseHas('scholarship_applications', [
+            'applicant_id' => User::query()->where('username', 'carlojaviermendoza')->value('id'),
+            'workflow_stage' => 'exam',
+        ]);
+        $this->assertDatabaseHas('scholarship_applications', [
+            'applicant_id' => User::query()->where('username', 'gabrielluisramos')->value('id'),
+            'workflow_stage' => 'interview',
+        ]);
+        $this->assertDatabaseHas('scholarship_applications', [
+            'applicant_id' => User::query()->where('username', 'trishaannegarcia')->value('id'),
+            'workflow_stage' => 'decision',
+            'application_state' => 'awaiting_decision',
+        ]);
+        $this->assertDatabaseHas('scholarship_applications', [
+            'applicant_id' => User::query()->where('username', 'danielpaoloaquino')->value('id'),
+            'final_outcome' => 'selected',
+            'student_response_status' => null,
+        ]);
+
+        $this->assertSame(4, ApplicationStageSession::query()->count());
+        $this->assertSame(2, ApplicationStageSession::query()->where('status', 'scheduled')->count());
+        $this->assertSame(2, ApplicationStageSession::query()->where('status', 'completed')->count());
         $this->assertSame(5, $successfulApplication->stageProgresses()->where('status', 'passed')->count());
         $this->assertSame(0, $successfulApplication->stageProgresses()->whereIn('status', [
             'pending',
@@ -85,9 +117,17 @@ class CompleteDemoSeederTest extends TestCase
         ])->count());
 
         $this->assertSame(1, RecipientMonitoringPlan::query()->where('status', 'active')->count());
-        $this->assertSame(1, RecipientMonitoringCycle::query()->where('status', 'closed')->count());
-        $this->assertSame(0, RecipientMonitoringCycle::query()->where('status', '!=', 'closed')->count());
+        $this->assertSame(1, RecipientMonitoringCycle::query()->where('status', 'open')->count());
+        $this->assertSame(0, RecipientMonitoringCycle::query()->where('status', '!=', 'open')->count());
         $this->assertSame(1, RecipientMonitoringCase::query()->where('status', 'closed')->count());
+        $this->assertSame(1, RecipientMonitoringCase::query()->where('status', 'under_review')->count());
+        $this->assertDatabaseHas('recipient_monitoring_cases', [
+            'scholarship_application_id' => $activeMonitoringApplication->id,
+            'status' => 'under_review',
+            'due_status' => 'open',
+            'next_action_role' => 'provider',
+            'next_action' => 'review_requirements',
+        ]);
         $this->assertDatabaseHas('recipient_monitoring_cases', [
             'scholarship_application_id' => $successfulApplication->id,
             'status' => 'closed',
@@ -103,10 +143,11 @@ class CompleteDemoSeederTest extends TestCase
         $this->assertDatabaseCount('recipient_monitoring_interventions', 0);
 
         $this->assertSame(2, RecipientBenefitRelease::query()->where('status', 'completed')->count());
-        $this->assertSame(0, RecipientBenefitRelease::query()->where('status', '!=', 'completed')->count());
-        $this->assertDatabaseCount('recipient_benefit_release_records', 2);
-        $this->assertDatabaseCount('recipient_benefit_receipt_responses', 2);
+        $this->assertSame(1, RecipientBenefitRelease::query()->where('status', 'scheduled')->count());
+        $this->assertDatabaseCount('recipient_benefit_release_records', 4);
+        $this->assertDatabaseCount('recipient_benefit_receipt_responses', 3);
         $this->assertSame(2, $successfulApplication->benefitReleaseRecords()->where('status', 'released')->count());
+        $this->assertSame(1, $activeMonitoringApplication->benefitReleaseRecords()->where('status', 'scheduled')->count());
         $this->assertSame(3, RecipientBenefitEntitlement::query()
             ->where('scholarship_application_id', $successfulApplication->id)
             ->where('status', 'fulfilled')
@@ -138,7 +179,10 @@ class CompleteDemoSeederTest extends TestCase
         Storage::disk('local')->assertExists(
             "demo-showcase/application-documents/{$successfulApplication->id}/certificate-of-enrollment.svg",
         );
-        Storage::disk('local')->assertMissing('demo-showcase/profile-photos/3/applicant-01.jpg');
+        Storage::disk('local')->assertExists(
+            "demo-showcase/profile-photos/{$screeningApplicant->id}/applicant-01.jpg",
+        );
+        Storage::disk('local')->assertMissing('demo-showcase/profile-photos/4/applicant-02.jpg');
 
         $this->actingAs(User::query()->findOrFail(1))
             ->get(route('admin.index'))

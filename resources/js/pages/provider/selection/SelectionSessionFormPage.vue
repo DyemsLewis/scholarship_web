@@ -169,15 +169,15 @@ onMounted(loadForm);
     <main class="student-shell">
         <ProviderSidebar />
         <section class="student-page provider-page" aria-labelledby="session-form-title">
-            <div class="mx-auto max-w-[86rem]">
+            <div class="mx-auto w-full max-w-[94rem]">
                 <a href="/provider/workspaces/selection/active" class="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to sessions</a>
 
                 <header class="provider-hero task-page-header border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
-                    <div><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Session setup</p><h1 id="session-form-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageTitle }}</h1><p class="mt-1 text-sm text-slate-600">Set the schedule first, then add the attendance instructions.</p></div>
+                    <div class="flex items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Session setup</p><h1 id="session-form-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageTitle }}</h1><p class="mt-1 text-sm text-slate-600">Set the schedule first, then add the attendance instructions.</p></div></div>
                 </header>
 
                 <div v-if="errorMessage" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm font-semibold text-slate-500">Loading session setup...</div>
+                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading session setup...</p></div>
 
                 <template v-else>
                     <nav class="mt-4 grid grid-cols-2 border border-slate-200 bg-white shadow-sm" aria-label="Session setup steps">
@@ -187,7 +187,7 @@ onMounted(loadForm);
 
                     <form class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="saveSession">
                         <section v-if="step === 1" class="px-7 py-6">
-                            <div class="border-b border-slate-200 pb-4"><h2 class="text-lg font-bold text-slate-950">Session schedule</h2><p class="mt-1 text-sm text-slate-500">Choose one program and one stage for this group.</p></div>
+                            <div class="flex items-center gap-3 border-b border-slate-200 pb-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-calendar-days" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Session schedule</h2><p class="mt-1 text-sm text-slate-500">Choose one program and one stage for this group.</p></div></div>
                             <div class="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
                                 <label class="text-sm font-semibold text-slate-700">Program<select v-model="form.program_id" required :disabled="Boolean(sessionId)" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950 disabled:bg-slate-100"><option value="" disabled>Select a program</option><option v-for="program in programs" :key="program.id" :value="String(program.id)">{{ program.title }}</option></select></label>
                                 <label class="text-sm font-semibold text-slate-700">Stage<select v-model="form.stage_key" required :disabled="Boolean(sessionId) || !form.program_id" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950 disabled:bg-slate-100"><option value="" disabled>Select a stage</option><option v-for="stage in availableStages" :key="stage.key" :value="stage.key">{{ stage.label }}</option></select></label>
@@ -200,7 +200,7 @@ onMounted(loadForm);
                         </section>
 
                         <section v-else class="px-7 py-6">
-                            <div class="border-b border-slate-200 pb-4"><h2 class="text-lg font-bold text-slate-950">Delivery details</h2><p class="mt-1 text-sm text-slate-500">Only add information applicants need to participate.</p></div>
+                            <div class="flex items-center gap-3 border-b border-slate-200 pb-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Delivery details</h2><p class="mt-1 text-sm text-slate-500">Only add information applicants need to participate.</p></div></div>
                             <div class="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
                                 <label class="text-sm font-semibold text-slate-700">Method<select v-model="form.mode" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="onsite">On-site</option><option value="online">Online</option><option value="hybrid">Hybrid</option><option value="provider_managed">Managed outside the portal</option></select></label>
                                 <label v-if="usesVenue" class="text-sm font-semibold text-slate-700">Venue<input v-model="form.venue" type="text" maxlength="500" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="Building or room"></label>
@@ -212,8 +212,8 @@ onMounted(loadForm);
                         </section>
 
                         <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-7 py-4">
-                            <button v-if="step === 2" type="button" class="h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="step = 1">Previous</button><a v-else href="/provider/workspaces/selection/active" class="inline-flex h-10 items-center border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950">Cancel</a>
-                            <button v-if="step === 1" type="button" class="h-10 bg-slate-950 px-5 text-xs font-bold text-white hover:bg-slate-800" @click="continueToDelivery">Continue</button><button v-else type="submit" class="h-10 bg-slate-950 px-5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="isSaving">{{ isSaving ? 'Saving...' : sessionId ? 'Save changes' : 'Save and open roster' }}</button>
+                            <button v-if="step === 2" type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="step = 1"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>Previous</button><a v-else href="/provider/workspaces/selection/active" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950"><i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>Cancel</a>
+                            <button v-if="step === 1" type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-xs font-bold text-white hover:bg-slate-800" @click="continueToDelivery">Continue<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></button><button v-else type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="isSaving"><i :class="['fa-solid', isSaving ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : sessionId ? 'Save changes' : 'Save and open roster' }}</button>
                         </footer>
                     </form>
                 </template>

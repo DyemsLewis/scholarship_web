@@ -103,7 +103,7 @@ class CompleteDemoSeeder extends Seeder
             throw new RuntimeException('Demo IDs did not restart at 1. Reset the database before running this seeder.');
         }
 
-        $this->command?->info('Successful demonstration created with role teams and a completed recipient lifecycle.');
+        $this->command?->info('Stage-by-stage demonstration created with role teams, actionable records, and a completed recipient lifecycle.');
     }
 
     private function seedAdmin(): User

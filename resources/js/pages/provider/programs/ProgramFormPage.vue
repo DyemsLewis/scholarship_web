@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AlertDialog from '../../../components/AlertDialog.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import LocationMapModal from '../../../components/LocationMapModal.vue';
@@ -32,7 +32,10 @@ const useProviderLogo = ref(!programId.value && Boolean(portalUser.provider_logo
 const showLocationMap = ref(false);
 const mapMessage = ref('');
 const benefitType = ref('');
-const editingBenefit = ref(null);
+const benefitDialogOpen = ref(false);
+const benefitDraft = ref(null);
+const editingBenefitIndex = ref(null);
+const benefitTitleInput = ref(null);
 const alert = ref({ open: false, title: '', message: '' });
 const { confirmation, requestConfirmation, confirmConfirmation, cancelConfirmation } = useConfirmationDialog();
 
@@ -291,21 +294,53 @@ function benefitLabel(type) {
     return benefitTypes.find(([value]) => value === type)?.[1] ?? 'Benefit';
 }
 
-function addBenefit() {
-    if (!benefitType.value || form.value.benefits.length >= 10) return;
-    const benefit = {
-        type: benefitType.value,
-        title: benefitLabel(benefitType.value),
+function emptyBenefit(type) {
+    return {
+        type,
+        title: benefitLabel(type),
         amount: '', coverage: '', frequency: 'one_time', duration: '', description: '',
     };
-    form.value.benefits.push(benefit);
-    editingBenefit.value = form.value.benefits.length - 1;
+}
+
+function openBenefitDialog(index = null) {
+    if (isReadOnly.value) return;
+    if (index === null) {
+        if (!benefitType.value || form.value.benefits.length >= 10) return;
+        benefitDraft.value = emptyBenefit(benefitType.value);
+    } else {
+        benefitDraft.value = normalizedBenefit(form.value.benefits[index]);
+    }
+
+    editingBenefitIndex.value = index;
+    benefitDialogOpen.value = true;
     benefitType.value = '';
+    nextTick(() => benefitTitleInput.value?.focus());
+}
+
+function closeBenefitDialog() {
+    benefitDialogOpen.value = false;
+    benefitDraft.value = null;
+    editingBenefitIndex.value = null;
+}
+
+function saveBenefit() {
+    if (!benefitDraft.value) return;
+    const benefit = normalizedBenefit({
+        ...benefitDraft.value,
+        title: benefitDraft.value.title.trim() || benefitLabel(benefitDraft.value.type),
+    });
+
+    if (editingBenefitIndex.value === null) {
+        if (form.value.benefits.length >= 10) return;
+        form.value.benefits.push(benefit);
+    } else {
+        form.value.benefits.splice(editingBenefitIndex.value, 1, benefit);
+    }
+    closeBenefitDialog();
 }
 
 function removeBenefit(index) {
     form.value.benefits.splice(index, 1);
-    if (editingBenefit.value === index) editingBenefit.value = null;
 }
 
 function benefitSummary(benefit) {
@@ -594,7 +629,7 @@ onBeforeUnmount(() => {
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="program-builder-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="mx-auto w-full max-w-[94rem]">
                 <a href="/provider/programs" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to programs
@@ -602,12 +637,15 @@ onBeforeUnmount(() => {
 
                 <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Program builder</p>
-                            <h1 id="program-builder-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">
-                                {{ isCreateMode ? 'Create a scholarship program' : form.title || 'Edit scholarship program' }}
-                            </h1>
-                            <p class="mt-2 text-sm text-slate-600">Complete one section at a time. Draft changes stay private until submission.</p>
+                        <div class="flex min-w-0 items-center gap-4">
+                            <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true"><i :class="isCreateMode ? 'fa-solid fa-plus' : 'fa-solid fa-pen-to-square'"></i></span>
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Program builder</p>
+                                <h1 id="program-builder-title" class="mt-1 truncate font-display text-3xl font-bold tracking-tight text-slate-950">
+                                    {{ isCreateMode ? 'Create a scholarship program' : form.title || 'Edit scholarship program' }}
+                                </h1>
+                                <p class="mt-2 text-sm text-slate-600">Complete one section at a time. Draft changes stay private until submission.</p>
+                            </div>
                         </div>
                         <div class="flex items-center gap-3">
                             <p v-if="savedMessage" class="text-xs font-semibold text-slate-500">{{ savedMessage }}</p>
@@ -618,17 +656,18 @@ onBeforeUnmount(() => {
                     </div>
                 </header>
 
-                <section v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-14 text-center text-sm font-semibold text-slate-500 shadow-sm">
-                    Loading program builder...
+                <section v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-14 text-center shadow-sm">
+                    <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-circle-notch animate-spin text-sm"></i></span>
+                    <p class="mt-2 text-sm font-semibold text-slate-500">Loading program builder...</p>
                 </section>
 
                 <template v-else>
                     <div v-if="isReadOnly" class="mt-4 flex items-center justify-between border-l-4 border-sky-600 bg-sky-50 px-5 py-4 text-sm text-sky-950">
-                        <div>
-                            <p class="font-bold">This program is under review.</p>
-                            <p class="mt-1 text-sky-800">Editing is paused until the administrator records a decision.</p>
+                        <div class="flex items-center gap-3">
+                            <span class="grid h-9 w-9 shrink-0 place-items-center bg-sky-100 text-sky-700" aria-hidden="true"><i class="fa-solid fa-lock text-sm"></i></span>
+                            <div><p class="font-bold">This program is under review.</p><p class="mt-1 text-sky-800">Editing is paused until the administrator records a decision.</p></div>
                         </div>
-                        <a :href="`/provider/programs/${programId}`" class="bg-slate-950 px-4 py-2.5 text-xs font-bold text-white">Open record</a>
+                        <a :href="`/provider/programs/${programId}`" class="inline-flex items-center gap-2 bg-slate-950 px-4 py-2.5 text-xs font-bold text-white"><i class="fa-solid fa-folder-open text-[10px] text-amber-300" aria-hidden="true"></i>Open record</a>
                     </div>
 
                     <nav class="mt-4 grid grid-cols-7 border border-slate-200 bg-white shadow-sm" aria-label="Program builder steps">
@@ -655,8 +694,8 @@ onBeforeUnmount(() => {
 
                     <form class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="nextStep">
                         <header class="flex items-center gap-4 border-b border-slate-200 px-7 py-5">
-                            <span class="grid h-11 w-11 place-items-center bg-slate-950 text-amber-300">
-                                <i :class="currentStep.icon" aria-hidden="true"></i>
+                            <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-950 text-amber-300">
+                                <i :class="[currentStep.icon, 'text-sm']" aria-hidden="true"></i>
                             </span>
                             <div>
                                 <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Step {{ activeStepIndex + 1 }} of {{ steps.length }}</p>
@@ -666,11 +705,11 @@ onBeforeUnmount(() => {
 
                         <fieldset :disabled="isReadOnly || isSaving" class="min-w-0">
                             <section v-if="activeStep === 'basics'" class="px-7 py-6">
-                                <div class="max-w-5xl">
+                                <div class="w-full">
                                     <h3 class="text-base font-bold text-slate-950">Identify the program</h3>
                                     <p class="mt-1 text-sm text-slate-500">Use a clear public title and a short summary applicants can scan.</p>
                                 </div>
-                                <div class="mt-6 grid max-w-6xl grid-cols-[minmax(0,1fr)_18rem] gap-8">
+                                <div class="mt-6 grid w-full grid-cols-[minmax(0,1fr)_18rem] gap-8">
                                     <div class="grid grid-cols-2 gap-5">
                                         <label class="col-span-2">
                                             <span :class="labelClass">Program title <span class="text-amber-700">Required</span></span>
@@ -720,13 +759,13 @@ onBeforeUnmount(() => {
                                     <span class="text-xs font-bold text-slate-500">{{ form.benefits.length }} of 10 benefits</span>
                                 </div>
 
-                                <div class="mt-6 max-w-5xl border border-slate-200">
+                                <div class="mt-6 w-full border border-slate-200">
                                     <div class="flex gap-3 border-b border-slate-200 bg-slate-50 p-4">
                                         <select v-model="benefitType" :class="inputClass" aria-label="Benefit type">
                                             <option value="">Choose a benefit to add</option>
                                             <option v-for="([value, label]) in benefitTypes" :key="value" :value="value">{{ label }}</option>
                                         </select>
-                                        <button type="button" class="shrink-0 bg-slate-950 px-5 text-xs font-bold text-white disabled:opacity-40" :disabled="!benefitType || form.benefits.length >= 10" @click="addBenefit">Add benefit</button>
+                                        <button type="button" class="inline-flex shrink-0 items-center gap-2 bg-slate-950 px-5 text-xs font-bold text-white disabled:opacity-40" :disabled="!benefitType || form.benefits.length >= 10" @click="openBenefitDialog()"><i class="fa-solid fa-plus text-[10px] text-amber-300" aria-hidden="true"></i>Add benefit</button>
                                     </div>
                                     <div v-if="!form.benefits.length" class="px-5 py-8 text-center text-sm text-slate-500">No benefits added yet.</div>
                                     <article v-for="(benefit, index) in form.benefits" :key="`${benefit.type}-${index}`" class="border-b border-slate-200 last:border-b-0">
@@ -736,21 +775,13 @@ onBeforeUnmount(() => {
                                                 <p class="font-bold text-slate-950">{{ benefit.title || benefitLabel(benefit.type) }}</p>
                                                 <p class="mt-1 text-xs text-slate-500">{{ benefitSummary(benefit) }}</p>
                                             </div>
-                                            <button type="button" class="border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700" @click="editingBenefit = editingBenefit === index ? null : index">{{ editingBenefit === index ? 'Close' : 'Edit' }}</button>
+                                            <button type="button" class="inline-flex items-center gap-2 border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700" @click="openBenefitDialog(index)"><i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>Edit</button>
                                             <button type="button" class="px-2 py-2 text-xs font-bold text-rose-700" @click="removeBenefit(index)">Remove</button>
-                                        </div>
-                                        <div v-if="editingBenefit === index" class="grid grid-cols-2 gap-4 border-t border-slate-200 bg-slate-50 px-5 py-5">
-                                            <label class="col-span-2"><span :class="labelClass">Display name</span><input v-model="benefit.title" type="text" maxlength="150" :class="inputClass"></label>
-                                            <label><span :class="labelClass">Amount or value <span class="font-normal text-slate-400">Optional</span></span><input v-model="benefit.amount" type="number" min="0" step="0.01" :class="inputClass"></label>
-                                            <label><span :class="labelClass">Frequency</span><select v-model="benefit.frequency" :class="inputClass"><option v-for="([value, label]) in frequencyOptions" :key="value" :value="value">{{ label }}</option></select></label>
-                                            <label><span :class="labelClass">Duration <span class="font-normal text-slate-400">Optional</span></span><input v-model="benefit.duration" type="text" maxlength="100" :class="inputClass" placeholder="Example: One school year"></label>
-                                            <label><span :class="labelClass">Coverage <span class="font-normal text-slate-400">Optional</span></span><select v-model="benefit.coverage" :class="inputClass"><option value="">Not specified</option><option value="full">Full</option><option value="partial">Partial</option><option value="fixed">Fixed value</option></select></label>
-                                            <label class="col-span-2"><span :class="labelClass">What is included? <span class="font-normal text-slate-400">Optional</span></span><textarea v-model="benefit.description" rows="2" maxlength="1000" :class="textareaClass"></textarea></label>
                                         </div>
                                     </article>
                                 </div>
 
-                                <div class="mt-6 grid max-w-5xl grid-cols-2 gap-5 border-t border-slate-200 pt-6">
+                                <div class="mt-6 grid w-full grid-cols-2 gap-5 border-t border-slate-200 pt-6">
                                     <label><span :class="labelClass">Recipient slots <span class="text-amber-700">Required</span></span><input v-model="form.slotsAvailable" type="number" min="1" max="1000000" :class="inputClass"></label>
                                     <label><span :class="labelClass">Application limit <span class="text-amber-700">Required</span></span><input v-model="form.applicationLimit" type="number" min="1" max="1000000" :class="inputClass"></label>
                                     <label><span :class="labelClass">Support starts <span class="text-amber-700">Required</span></span><input v-model="form.supportStartsAt" type="date" :class="inputClass"></label>
@@ -763,13 +794,13 @@ onBeforeUnmount(() => {
                                     <h3 class="text-base font-bold text-slate-950">Set the public schedule and contact point</h3>
                                     <p class="mt-1 text-sm text-slate-500">Applicants use these details before they submit.</p>
                                 </div>
-                                <div class="mt-6 grid max-w-6xl grid-cols-3 gap-5">
+                                <div class="mt-6 grid w-full grid-cols-3 gap-5">
                                     <label><span :class="labelClass">Applications open <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.applicationOpensAt" type="date" :class="inputClass"></label>
                                     <label><span :class="labelClass">Application deadline <span class="text-amber-700">Required</span></span><input v-model="form.deadline" type="date" :class="inputClass"></label>
                                     <label><span :class="labelClass">Expected results <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.expectedResultsAt" type="date" :class="inputClass"></label>
                                 </div>
 
-                                <div class="mt-7 max-w-6xl border-t border-slate-200 pt-6">
+                                <div class="mt-7 w-full border-t border-slate-200 pt-6">
                                     <div class="flex items-center justify-between gap-6">
                                         <div>
                                             <h4 class="text-sm font-bold text-slate-950">Program location</h4>
@@ -789,7 +820,7 @@ onBeforeUnmount(() => {
                                     </p>
                                 </div>
 
-                                <div class="mt-7 grid max-w-6xl grid-cols-2 gap-5 border-t border-slate-200 pt-6">
+                                <div class="mt-7 grid w-full grid-cols-2 gap-5 border-t border-slate-200 pt-6">
                                     <label><span :class="labelClass">Public email</span><input v-model="form.contactEmail" type="email" maxlength="255" :class="inputClass"></label>
                                     <label><span :class="labelClass">Public contact number</span><input v-model="form.contactNumber" type="text" maxlength="30" :class="inputClass"></label>
                                     <label><span :class="labelClass">Contact person <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.contactPerson" type="text" maxlength="150" :class="inputClass"></label>
@@ -803,7 +834,7 @@ onBeforeUnmount(() => {
                                     <h3 class="text-base font-bold text-slate-950">Describe who can apply</h3>
                                     <p class="mt-1 text-sm text-slate-500">Only add rules that the provider will actually verify.</p>
                                 </div>
-                                <div class="mt-6 max-w-6xl">
+                                <div class="mt-6 w-full">
                                     <label><span :class="labelClass">Eligibility summary <span class="text-amber-700">Required</span></span><textarea v-model="form.eligibility" rows="4" maxlength="5000" :class="textareaClass" placeholder="Example: Open to enrolled Grade 12 STEM students who meet the stated academic requirement."></textarea></label>
 
                                     <div class="mt-6 border-t border-slate-200 pt-6">
@@ -846,7 +877,7 @@ onBeforeUnmount(() => {
                                     <h3 class="text-base font-bold text-slate-950">Set the application handoff</h3>
                                     <p class="mt-1 text-sm text-slate-500">Separate portal pre-screening from the provider's formal process.</p>
                                 </div>
-                                <div class="mt-6 max-w-6xl">
+                                <div class="mt-6 w-full">
                                     <div class="grid grid-cols-3 border border-slate-200">
                                         <label v-for="option in [
                                             { value: 'online', label: 'Portal review', text: 'Review profile and uploaded files.' },
@@ -891,7 +922,7 @@ onBeforeUnmount(() => {
                                     <h3 class="text-base font-bold text-slate-950">Define the review process</h3>
                                     <p class="mt-1 text-sm text-slate-500">Choose optional activities and disclose the recipient agreement.</p>
                                 </div>
-                                <div class="mt-6 max-w-6xl divide-y divide-slate-200 border-y border-slate-200">
+                                <div class="mt-6 w-full divide-y divide-slate-200 border-y border-slate-200">
                                     <button v-for="(stage, index) in stageOptions" :key="stage.id" type="button" class="flex w-full items-center gap-4 px-3 py-4 text-left" :disabled="stage.locked" @click="toggleStage(stage)">
                                         <span :class="['grid h-8 w-8 place-items-center text-xs font-bold', form.selectionStages.includes(stage.id) ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-500']">{{ index + 1 }}</span>
                                         <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">{{ stage.label }}</span><span class="mt-1 block text-xs text-slate-500">{{ stage.detail }}</span></span>
@@ -900,7 +931,7 @@ onBeforeUnmount(() => {
                                     </button>
                                 </div>
 
-                                <div class="mt-7 max-w-6xl border-t border-slate-200 pt-6">
+                                <div class="mt-7 w-full border-t border-slate-200 pt-6">
                                     <div class="flex items-start justify-between gap-8">
                                         <div><p class="text-sm font-bold text-slate-950">Review scoring</p><p class="mt-1 text-xs text-slate-500">The standard rubric supports consistent review without making the final decision.</p></div>
                                         <span class="text-xs font-bold text-slate-500">100% total</span>
@@ -913,7 +944,7 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div class="mt-7 max-w-6xl border-t border-slate-200 pt-6">
+                                <div class="mt-7 w-full border-t border-slate-200 pt-6">
                                     <label><span :class="labelClass">Recipient commitment <span class="text-amber-700">Required</span></span><select v-model="form.recipientAgreement.commitment_type" :class="inputClass"><option value="provider_briefing" disabled>Choose the agreement type</option><option value="none">No ongoing recipient commitment</option><option value="renewal">Enrollment or renewal requirements</option><option value="service">Service or community commitment</option><option value="activities">Required program activities</option><option value="reporting">Progress or utilization reports</option><option value="custom">Custom commitment</option></select></label>
                                     <div class="mt-5 grid grid-cols-2 gap-5">
                                         <label :class="requiresAgreementDetails ? '' : 'col-span-2'"><span :class="labelClass">Conditions for receiving benefits <span class="text-amber-700">Required</span></span><textarea v-model="form.recipientAgreement.release_conditions" rows="3" :class="textareaClass" placeholder="State when and how support will be released."></textarea></label>
@@ -933,7 +964,7 @@ onBeforeUnmount(() => {
                                     <h3 class="text-base font-bold text-slate-950">Review the complete program</h3>
                                     <p class="mt-1 text-sm text-slate-500">Open only the section that still needs attention.</p>
                                 </div>
-                                <div class="mt-6 max-w-6xl border border-slate-200">
+                                <div class="mt-6 w-full border border-slate-200">
                                     <button v-for="(step, index) in steps.slice(0, -1)" :key="step.id" type="button" class="flex w-full items-center gap-4 border-b border-slate-200 px-5 py-4 text-left last:border-b-0 hover:bg-slate-50" @click="openStep(step.id)">
                                         <span :class="['grid h-8 w-8 place-items-center text-xs font-bold', stepChecks[step.id] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']"><i :class="stepChecks[step.id] ? 'fa-solid fa-check' : 'fa-solid fa-exclamation'" aria-hidden="true"></i></span>
                                         <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">{{ index + 1 }}. {{ step.label }}</span><span class="mt-1 block text-xs text-slate-500">{{ step.hint }}</span></span>
@@ -942,18 +973,18 @@ onBeforeUnmount(() => {
                                     </button>
                                 </div>
 
-                                <div class="mt-6 max-w-6xl border-l-4 border-amber-400 bg-amber-50 px-5 py-4">
+                                <div class="mt-6 w-full border-l-4 border-amber-400 bg-amber-50 px-5 py-4">
                                     <label class="flex items-start gap-3">
                                         <input v-model="form.termsAccepted" type="checkbox" class="mt-1 border-amber-400 text-slate-950 focus:ring-slate-700">
                                         <span><span class="block text-sm font-bold text-slate-950">Provider declaration</span><span class="mt-1 block text-xs leading-5 text-slate-600">I confirm that the published details, eligibility rules, benefits, and recipient terms are complete and accurate.</span></span>
                                     </label>
                                 </div>
 
-                                <div class="mt-6 flex max-w-6xl items-center justify-between border-t border-slate-200 pt-6">
+                                <div class="mt-6 flex w-full items-center justify-between border-t border-slate-200 pt-6">
                                     <p class="text-sm font-semibold text-slate-600">{{ completedStepCount }} of 6 sections complete</p>
                                     <div class="flex gap-3">
-                                        <button v-if="originalStatus === 'draft'" type="button" class="border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700" @click="saveDraft">Save draft</button>
-                                        <button type="button" class="bg-slate-950 px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40" :disabled="isSaving" @click="submitProgram">{{ originalStatus === 'published' ? 'Submit changes for review' : 'Submit for review' }}</button>
+                                        <button v-if="originalStatus === 'draft'" type="button" class="inline-flex items-center gap-2 border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700" @click="saveDraft"><i class="fa-regular fa-floppy-disk text-xs" aria-hidden="true"></i>Save draft</button>
+                                        <button type="button" class="inline-flex items-center gap-2 bg-slate-950 px-5 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40" :disabled="isSaving" @click="submitProgram"><i class="fa-solid fa-paper-plane text-xs text-amber-300" aria-hidden="true"></i>{{ originalStatus === 'published' ? 'Submit changes for review' : 'Submit for review' }}</button>
                                     </div>
                                 </div>
                             </section>
@@ -961,11 +992,11 @@ onBeforeUnmount(() => {
 
                         <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-7 py-4">
                             <div class="flex items-center gap-3">
-                                <button v-if="activeStepIndex > 0" type="button" class="border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-40" :disabled="isSaving" @click="previousStep">Previous</button>
-                                <button v-if="canDelete" type="button" class="px-3 py-2.5 text-sm font-bold text-rose-700 disabled:opacity-40" :disabled="isSaving" @click="deleteDraft">Delete draft</button>
+                                <button v-if="activeStepIndex > 0" type="button" class="inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-40" :disabled="isSaving" @click="previousStep"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Previous</button>
+                                <button v-if="canDelete" type="button" class="inline-flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-rose-700 disabled:opacity-40" :disabled="isSaving" @click="deleteDraft"><i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>Delete draft</button>
                             </div>
                             <div v-if="activeStep !== 'review'" class="flex items-center gap-3">
-                                <button v-if="programId && originalStatus === 'draft'" type="button" class="border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-40" :disabled="isSaving" @click="saveDraft">Save draft</button>
+                                <button v-if="programId && originalStatus === 'draft'" type="button" class="inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-40" :disabled="isSaving" @click="saveDraft"><i class="fa-regular fa-floppy-disk text-xs" aria-hidden="true"></i>Save draft</button>
                                 <button type="submit" class="bg-slate-950 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40" :disabled="isSaving || isReadOnly">{{ isSaving ? 'Saving...' : activeStepIndex === steps.length - 2 ? 'Review program' : 'Save and continue' }} <i class="fa-solid fa-arrow-right ml-2 text-xs" aria-hidden="true"></i></button>
                             </div>
                         </footer>
@@ -973,6 +1004,73 @@ onBeforeUnmount(() => {
                 </template>
             </div>
         </section>
+
+        <Teleport to="body">
+            <div
+                v-if="benefitDialogOpen && benefitDraft"
+                class="fixed inset-0 z-[2050] flex items-center justify-center bg-slate-950/55 p-6"
+                role="presentation"
+                @click.self="closeBenefitDialog"
+                @keydown.esc="closeBenefitDialog"
+            >
+                <section
+                    class="flex max-h-[calc(100vh-3rem)] w-full max-w-2xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="benefit-dialog-title"
+                    aria-describedby="benefit-dialog-description"
+                >
+                    <header class="flex items-start justify-between gap-6 border-b border-slate-200 px-6 py-5">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true"><i class="fa-solid fa-gift"></i></span>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Benefit details</p>
+                                <h2 id="benefit-dialog-title" class="mt-1 text-xl font-bold text-slate-950">{{ editingBenefitIndex === null ? 'Add benefit' : 'Edit benefit' }}</h2>
+                                <p id="benefit-dialog-description" class="mt-1 text-sm text-slate-500">Set what the recipient receives and how often.</p>
+                            </div>
+                        </div>
+                        <button type="button" class="grid h-9 w-9 shrink-0 place-items-center border border-slate-300 text-slate-600 hover:bg-slate-50 hover:text-slate-950" aria-label="Close benefit form" @click="closeBenefitDialog"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                    </header>
+
+                    <form class="min-h-0 overflow-y-auto" @submit.prevent="saveBenefit">
+                        <div class="grid grid-cols-2 gap-5 px-6 py-6">
+                            <div class="col-span-2 flex items-center justify-between border border-slate-200 bg-slate-50 px-4 py-3">
+                                <span class="text-xs font-bold uppercase tracking-wide text-slate-500">Benefit type</span>
+                                <span class="text-sm font-bold text-slate-950">{{ benefitLabel(benefitDraft.type) }}</span>
+                            </div>
+                            <label class="col-span-2">
+                                <span :class="labelClass">Display name <span class="text-amber-700">Required</span></span>
+                                <input ref="benefitTitleInput" v-model="benefitDraft.title" type="text" maxlength="150" required :class="inputClass">
+                            </label>
+                            <label>
+                                <span :class="labelClass">Amount or value <span class="font-normal text-slate-400">Optional</span></span>
+                                <input v-model="benefitDraft.amount" type="number" min="0" step="0.01" :class="inputClass" placeholder="0.00">
+                            </label>
+                            <label>
+                                <span :class="labelClass">Frequency</span>
+                                <select v-model="benefitDraft.frequency" :class="inputClass"><option v-for="([value, label]) in frequencyOptions" :key="value" :value="value">{{ label }}</option></select>
+                            </label>
+                            <label>
+                                <span :class="labelClass">Duration <span class="font-normal text-slate-400">Optional</span></span>
+                                <input v-model="benefitDraft.duration" type="text" maxlength="100" :class="inputClass" placeholder="Example: One school year">
+                            </label>
+                            <label>
+                                <span :class="labelClass">Coverage <span class="font-normal text-slate-400">Optional</span></span>
+                                <select v-model="benefitDraft.coverage" :class="inputClass"><option value="">Not specified</option><option value="full">Full</option><option value="partial">Partial</option><option value="fixed">Fixed value</option></select>
+                            </label>
+                            <label class="col-span-2">
+                                <span :class="labelClass">What is included? <span class="font-normal text-slate-400">Optional</span></span>
+                                <textarea v-model="benefitDraft.description" rows="3" maxlength="1000" :class="textareaClass" placeholder="Briefly describe what this benefit covers."></textarea>
+                            </label>
+                        </div>
+                        <footer class="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
+                            <button type="button" class="border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeBenefitDialog">Cancel</button>
+                            <button type="submit" class="inline-flex items-center gap-2 bg-slate-950 px-5 py-2.5 text-sm font-bold text-white"><i class="fa-solid fa-check text-xs text-amber-300" aria-hidden="true"></i>{{ editingBenefitIndex === null ? 'Add benefit' : 'Save changes' }}</button>
+                        </footer>
+                    </form>
+                </section>
+            </div>
+        </Teleport>
 
         <LocationMapModal
             :open="showLocationMap"

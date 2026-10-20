@@ -112,7 +112,7 @@ onMounted(loadIntake);
                     Back to service
                 </a>
 
-                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm text-slate-500">Loading request form...</div>
+                <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading request form...</p></div>
 
                 <div v-else-if="!plan" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-8 text-center text-sm font-semibold text-rose-800">
                     {{ errorMessage || 'This request form is not available.' }}
@@ -134,12 +134,8 @@ onMounted(loadIntake);
                         </div>
                     </div>
 
-                    <header class="mt-4 flex items-start justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Service request</p>
-                            <h1 id="intake-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1>
-                            <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.intake.description }}</p>
-                        </div>
+                    <header class="mt-4 flex items-center justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Service request</p><h1 id="intake-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.intake.description }}</p></div></div>
                         <div class="shrink-0 text-right">
                             <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">One-time fee</p>
                             <p class="mt-1 text-xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p>
@@ -150,10 +146,7 @@ onMounted(loadIntake);
                     <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
                     <form class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="continueToReview">
-                        <header class="border-b border-slate-200 px-6 py-5">
-                            <h2 class="text-lg font-bold text-slate-950">{{ plan.intake.title }}</h2>
-                            <p class="mt-1 text-sm text-slate-600">Only information needed to prepare this service is requested.</p>
-                        </header>
+                        <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">{{ plan.intake.title }}</h2><p class="mt-1 text-sm text-slate-600">Only information needed to prepare this service is requested.</p></div></header>
 
                         <div class="grid grid-cols-2 gap-x-6 gap-y-5 px-6 py-6">
                             <div v-for="field in plan.intake.fields" :key="field.key" :class="field.type === 'textarea' || field.type === 'checkboxes' || field.type === 'program' ? 'col-span-2' : ''">
@@ -191,8 +184,7 @@ onMounted(loadIntake);
                         </div>
 
                         <div class="border-t border-slate-200 px-6 py-5">
-                            <h2 class="text-base font-bold text-slate-950">Service contact</h2>
-                            <p class="mt-1 text-xs text-slate-500">The platform team will use this contact for questions about the request.</p>
+                            <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-address-book" aria-hidden="true"></i></span><div><h2 class="text-base font-bold text-slate-950">Service contact</h2><p class="mt-1 text-xs text-slate-500">The platform team will use this contact for questions about the request.</p></div></div>
                             <div class="mt-4 grid grid-cols-2 gap-6">
                                 <div>
                                     <label for="service-contact-name" class="text-sm font-bold text-slate-800">Contact person</label>
@@ -210,8 +202,8 @@ onMounted(loadIntake);
                         <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-5">
                             <p class="text-xs font-semibold text-slate-500">You will review these details before payment.</p>
                             <button type="submit" :disabled="isSaving" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+                                <i :class="['fa-solid text-xs', isSaving ? 'fa-spinner fa-spin' : 'fa-arrow-right']" aria-hidden="true"></i>
                                 {{ isSaving ? 'Saving...' : 'Continue to review' }}
-                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                             </button>
                         </footer>
                     </form>

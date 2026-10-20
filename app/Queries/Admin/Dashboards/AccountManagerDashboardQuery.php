@@ -39,20 +39,21 @@ final class AccountManagerDashboardQuery
             workspace: [
                 'key' => 'account-manager',
                 'eyebrow' => 'Account access',
-                'title' => 'Account management dashboard',
-                'description' => 'Resolve access issues first, then manage applicant and provider accounts.',
+                'title' => 'Account dashboard',
+                'description' => 'Resolve access issues and manage portal accounts.',
                 'icon' => 'fa-solid fa-user-shield',
                 'access_scope' => $manager->isManagedAccount() ? 'Applicant and provider accounts' : 'All portal accounts',
             ],
             primaryAction: [
                 'label' => $attentionCount > 0 ? 'Open attention queue' : 'Create account',
                 'url' => $attentionCount > 0 ? '/admin/workspaces/accounts/attention' : '/admin/workspaces/accounts/create',
+                'icon' => $attentionCount > 0 ? 'fa-solid fa-arrow-right' : 'fa-solid fa-user-plus',
             ],
             metrics: [
-                ['key' => 'attention', 'label' => 'Need attention', 'value' => $attentionCount, 'detail' => 'Access issues', 'tone' => 'attention', 'url' => '/admin/workspaces/accounts/attention'],
-                ['key' => 'active', 'label' => 'Active accounts', 'value' => (clone $visibleUsers)->where('account_status', '!=', 'suspended')->count(), 'detail' => 'Sign-in enabled', 'tone' => 'positive', 'url' => '/admin/workspaces/accounts/directory'],
-                ['key' => 'applicants', 'label' => 'Applicants', 'value' => (clone $visibleUsers)->where('role', 'applicant')->count(), 'detail' => 'Learner accounts', 'url' => '/admin/workspaces/accounts/directory?role=applicant'],
-                ['key' => 'providers', 'label' => 'Providers', 'value' => (clone $visibleUsers)->where('role', 'provider')->count(), 'detail' => 'Organization accounts', 'url' => '/admin/workspaces/accounts/directory?role=provider'],
+                ['key' => 'attention', 'label' => 'Need attention', 'value' => $attentionCount, 'detail' => 'Access issues', 'tone' => 'attention', 'url' => '/admin/workspaces/accounts/attention', 'icon' => 'fa-solid fa-triangle-exclamation'],
+                ['key' => 'active', 'label' => 'Active accounts', 'value' => (clone $visibleUsers)->where('account_status', '!=', 'suspended')->count(), 'detail' => 'Sign-in enabled', 'tone' => 'positive', 'url' => '/admin/workspaces/accounts/directory', 'icon' => 'fa-solid fa-user-check'],
+                ['key' => 'applicants', 'label' => 'Applicants', 'value' => (clone $visibleUsers)->where('role', 'applicant')->count(), 'detail' => 'Learner accounts', 'url' => '/admin/workspaces/accounts/directory?role=applicant', 'icon' => 'fa-solid fa-user-graduate'],
+                ['key' => 'providers', 'label' => 'Providers', 'value' => (clone $visibleUsers)->where('role', 'provider')->count(), 'detail' => 'Organization accounts', 'url' => '/admin/workspaces/accounts/directory?role=provider', 'icon' => 'fa-solid fa-building-columns'],
             ],
             sections: [
                 [
@@ -61,7 +62,8 @@ final class AccountManagerDashboardQuery
                     'title' => 'Access issues to resolve',
                     'description' => 'Suspended, unverified, and password-reset accounts appear here.',
                     'empty_message' => 'No account access issue needs attention.',
-                    'action' => ['label' => 'Open attention queue', 'url' => '/admin/workspaces/accounts/attention'],
+                    'icon' => 'fa-solid fa-shield-halved',
+                    'action' => ['label' => 'Open attention queue', 'url' => '/admin/workspaces/accounts/attention', 'icon' => 'fa-solid fa-arrow-right'],
                     'items' => $attention,
                 ],
                 [
@@ -70,7 +72,8 @@ final class AccountManagerDashboardQuery
                     'title' => 'Recently added accounts',
                     'description' => 'A short list of new accounts not already shown above.',
                     'empty_message' => 'No additional recent account is available.',
-                    'action' => ['label' => 'Open account directory', 'url' => '/admin/workspaces/accounts/directory'],
+                    'icon' => 'fa-solid fa-clock-rotate-left',
+                    'action' => ['label' => 'Open account directory', 'url' => '/admin/workspaces/accounts/directory', 'icon' => 'fa-solid fa-arrow-right'],
                     'items' => $recent,
                 ],
             ],

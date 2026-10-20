@@ -7,9 +7,9 @@ import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
 const slug = window.location.pathname.split('/').filter(Boolean).pop();
 const configs = {
-    'needs-response': { queue: 'needs_response', eyebrow: 'Support inbox', title: 'Needs response', description: 'Review cases waiting for platform support.', empty: 'No cases need a response', icon: 'fa-solid fa-inbox' },
-    waiting: { queue: 'waiting', eyebrow: 'Coordination', title: 'Waiting for provider', description: 'Track cases completed by platform support.', empty: 'No cases are waiting for a provider', icon: 'fa-solid fa-clock' },
-    resolved: { queue: 'resolved', eyebrow: 'Case history', title: 'Resolved cases', description: 'Open completed records when follow-up is needed.', empty: 'No resolved cases yet', icon: 'fa-solid fa-circle-check' },
+    'needs-response': { queue: 'needs_response', eyebrow: 'Support inbox', title: 'Needs response', description: 'Cases waiting for a platform response.', empty: 'No cases need a response', icon: 'fa-solid fa-inbox' },
+    waiting: { queue: 'waiting', eyebrow: 'Coordination', title: 'Waiting for provider', description: 'Platform work is complete; provider follow-up remains.', empty: 'No cases are waiting for a provider', icon: 'fa-solid fa-clock' },
+    resolved: { queue: 'resolved', eyebrow: 'Case history', title: 'Resolved cases', description: 'Completed support records.', empty: 'No resolved cases yet', icon: 'fa-solid fa-circle-check' },
 };
 const config = configs[slug] ?? configs['needs-response'];
 const query = new URLSearchParams(window.location.search);
@@ -56,7 +56,7 @@ onMounted(loadCases);
         <AdminWorkspaceHeader :eyebrow="config.eyebrow" :title="config.title" :description="config.description" :icon="config.icon" />
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
 
-        <AdminTableFrame title="Support cases" :description="resultLabel" class="mt-4">
+        <AdminTableFrame title="Support cases" :description="resultLabel" :icon="config.icon" class="mt-4">
             <template #filters>
                 <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_16rem]">
                     <label class="relative"><span class="sr-only">Search support cases</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" placeholder="Search subject, reporter, or program" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
@@ -65,7 +65,7 @@ onMounted(loadCases);
             </template>
 
             <div v-if="loading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading support cases...</div>
-            <table v-else-if="items.length" class="w-full min-w-[62rem] border-collapse text-left">
+            <table v-else-if="items.length" class="portal-data-table min-w-[62rem]">
                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Case</th><th class="border-b border-slate-200 px-4 py-3">Reporter</th><th class="border-b border-slate-200 px-4 py-3">Coordination</th><th class="border-b border-slate-200 px-4 py-3">Submitted</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
                     <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">

@@ -34,8 +34,8 @@ onMounted(loadRecord);
 
         <AdminWorkspaceHeader
             eyebrow="Audit entry"
-            :title="entry?.action_label || 'Activity record'"
-            description="Immutable platform activity record."
+            title="Activity record"
+            :description="entry?.action_label || 'Immutable platform activity record.'"
             icon="fa-solid fa-file-shield"
         />
 
@@ -60,7 +60,10 @@ onMounted(loadRecord);
                 <p v-else class="mt-2 text-sm text-slate-500">No additional details were recorded.</p>
             </section>
 
-            <section class="px-6 py-5"><h3 class="text-sm font-black text-slate-950">Client information</h3><p class="mt-2 break-words font-mono text-xs leading-6 text-slate-600">{{ entry.user_agent || 'User agent not recorded.' }}</p></section>
+            <details class="group">
+                <summary class="flex cursor-pointer list-none items-center justify-between px-6 py-4 text-sm font-bold text-slate-800 hover:bg-slate-50"><span class="flex items-center gap-3"><span class="grid h-8 w-8 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-desktop text-xs" aria-hidden="true"></i></span>Client information</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i></summary>
+                <p class="break-words border-t border-slate-200 bg-slate-50 px-6 py-4 font-mono text-xs leading-6 text-slate-600">{{ entry.user_agent || 'User agent not recorded.' }}</p>
+            </details>
         </section>
     </AdminWorkspacePage>
 </template>

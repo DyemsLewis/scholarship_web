@@ -30,19 +30,20 @@ final class ReviewOfficerDashboardQuery
                 'key' => 'review-officer',
                 'eyebrow' => 'Platform verification',
                 'title' => 'Review dashboard',
-                'description' => 'Open one review queue at a time and keep verification work separate from oversight.',
+                'description' => 'Work through verification and oversight queues separately.',
                 'icon' => 'fa-solid fa-clipboard-check',
                 'access_scope' => 'Provider, program, applicant, and recipient review',
             ],
             primaryAction: [
                 'label' => ($priority['count'] ?? 0) > 0 ? 'Open highest-priority queue' : 'Open provider reviews',
                 'url' => ($priority['count'] ?? 0) > 0 ? $priority['action']['url'] : '/admin/workspaces/reviews/providers',
+                'icon' => 'fa-solid fa-arrow-right',
             ],
             metrics: [
-                ['key' => 'organizations', 'label' => 'Organization review', 'value' => $summary['provider_pending'] + $summary['program_pending'], 'detail' => 'Providers and programs', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/providers'],
-                ['key' => 'applicants', 'label' => 'Applicant review', 'value' => $summary['applicant_pending'], 'detail' => 'Academic verification', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/applicants'],
-                ['key' => 'selection', 'label' => 'Selection activity', 'value' => $summary['selection_activity_attention'], 'detail' => 'Session exceptions', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/selection-activities'],
-                ['key' => 'recipients', 'label' => 'Recipient oversight', 'value' => $summary['benefit_attention'] + $summary['monitoring_attention'], 'detail' => 'Benefits and monitoring', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/monitoring'],
+                ['key' => 'organizations', 'label' => 'Organization review', 'value' => $summary['provider_pending'] + $summary['program_pending'], 'detail' => 'Providers and programs', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/providers', 'icon' => 'fa-solid fa-building-shield'],
+                ['key' => 'applicants', 'label' => 'Applicant review', 'value' => $summary['applicant_pending'], 'detail' => 'Academic verification', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/applicants', 'icon' => 'fa-solid fa-user-check'],
+                ['key' => 'selection', 'label' => 'Selection activity', 'value' => $summary['selection_activity_attention'], 'detail' => 'Session exceptions', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/selection-activities', 'icon' => 'fa-solid fa-calendar-check'],
+                ['key' => 'recipients', 'label' => 'Recipient oversight', 'value' => $summary['benefit_attention'] + $summary['monitoring_attention'], 'detail' => 'Benefits and monitoring', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/monitoring', 'icon' => 'fa-solid fa-chart-line'],
             ],
             sections: [
                 [
@@ -51,6 +52,7 @@ final class ReviewOfficerDashboardQuery
                     'title' => 'Identity and program review',
                     'description' => 'Choose the record type you are ready to verify.',
                     'empty_message' => 'All verification queues are clear.',
+                    'icon' => 'fa-solid fa-clipboard-check',
                     'items' => $verification,
                 ],
                 [
@@ -59,6 +61,7 @@ final class ReviewOfficerDashboardQuery
                     'title' => 'Selection and recipient records',
                     'description' => 'Review exceptions without mixing them into identity verification.',
                     'empty_message' => 'No operational record needs review.',
+                    'icon' => 'fa-solid fa-binoculars',
                     'items' => $oversight,
                 ],
             ],
@@ -79,7 +82,7 @@ final class ReviewOfficerDashboardQuery
                 'tone' => $count > 0 ? 'attention' : 'positive',
             ],
             'meta' => [$count > 0 ? 'Records are waiting for review' : 'No record is waiting'],
-            'action' => ['label' => 'Open queue', 'url' => $url],
+            'action' => ['label' => 'Open queue', 'url' => $url, 'icon' => 'fa-solid fa-arrow-right'],
         ];
     }
 }

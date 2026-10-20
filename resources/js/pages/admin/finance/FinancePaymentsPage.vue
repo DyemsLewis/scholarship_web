@@ -9,7 +9,7 @@ const query = new URLSearchParams(window.location.search);
 const loading = ref(true);
 const errorMessage = ref('');
 const search = ref(query.get('search') ?? '');
-const period = ref(['today', 'month', 'all'].includes(query.get('period')) ? query.get('period') : 'month');
+const period = ref(['today', 'month', 'year', 'all'].includes(query.get('period')) ? query.get('period') : 'month');
 const items = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
 let searchTimer;
@@ -63,7 +63,7 @@ onMounted(loadPayments);
 
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
 
-        <AdminTableFrame title="Payment records" :description="resultLabel" class="mt-4">
+        <AdminTableFrame title="Payment records" :description="resultLabel" icon="fa-solid fa-receipt" class="mt-4">
             <template #filters>
                 <div class="grid grid-cols-[minmax(24rem,1fr)_14rem] gap-3">
                     <label class="relative block">
@@ -84,7 +84,7 @@ onMounted(loadPayments);
             </template>
 
             <div v-if="loading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading confirmed payments...</div>
-            <table v-else-if="items.length" class="w-full min-w-[68rem] border-collapse text-left">
+            <table v-else-if="items.length" class="portal-data-table min-w-[68rem]">
                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">
                     <tr><th class="border-b border-slate-200 px-5 py-3">Receipt</th><th class="border-b border-slate-200 px-4 py-3">Provider</th><th class="border-b border-slate-200 px-4 py-3">Service</th><th class="border-b border-slate-200 px-4 py-3">Payment</th><th class="border-b border-slate-200 px-4 py-3">Amount</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr>
                 </thead>

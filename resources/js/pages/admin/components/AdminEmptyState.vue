@@ -16,7 +16,7 @@ defineProps({
 </script>
 
 <template>
-    <div class="px-6 py-12 text-center">
+    <div class="flex min-h-72 flex-col items-center justify-center px-6 py-12 text-center">
         <span class="mx-auto grid h-11 w-11 place-items-center rounded-sm bg-slate-100 text-slate-500">
             <i :class="icon" aria-hidden="true"></i>
         </span>

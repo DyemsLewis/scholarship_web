@@ -26,7 +26,7 @@ The complete demo uses fictional identities and synthetic applicant portraits. L
 | Support staff | `harborlight.support` | `harborlight.support@scholarship.test` |
 | Billing staff | `harborlight.billing` | `harborlight.billing@scholarship.test` |
 
-Program-scoped staff are assigned to the Harborlight Senior Scholars Program. The role workspaces share one completed recipient record, resolved support history, and a completed optional-service purchase without unfinished queues.
+Program-scoped staff are assigned to the Harborlight Senior Scholars Program. Their workspaces share the stage-by-stage applications below, an active monitoring review, one completed recipient lifecycle, resolved support history, and a completed optional-service purchase.
 
 ## Admin Team Accounts
 
@@ -44,15 +44,26 @@ Program-scoped staff are assigned to the Harborlight Senior Scholars Program. Th
 
 | Demonstration | Username | Email |
 | --- | --- | --- |
+| Pre-screening review ready | `alyssamaereyes` | `alyssa-maereyes@demo.test` |
+| Formal application ready | `biancalouisenavarro` | `bianca-louisenavarro@demo.test` |
+| Exam scheduled | `markangelodelacruz` | `mark-angelodela-cruz@demo.test` |
+| Exam result ready to record | `carlojaviermendoza` | `carlo-javiermendoza@demo.test` |
+| Interview scheduled | `sofiamarievillanueva` | `sofia-marievillanueva@demo.test` |
+| Interview result ready to record | `gabrielluisramos` | `gabriel-luisramos@demo.test` |
+| Final decision ready to record | `trishaannegarcia` | `trisha-annegarcia@demo.test` |
+| Recipient agreement ready to accept | `danielpaoloaquino` | `daniel-paoloaquino@demo.test` |
+| Monitoring submission ready to review | `nicoleandreabautista` | `nicole-andreabautista@demo.test` |
 | Completed monitoring and support | `vincentrafaeltorres` | `vincent-rafaeltorres@demo.test` |
 
-This applicant has a selected and accepted application, five passed stages, an approved and closed monitoring check-in, two confirmed benefit releases, fulfilled benefits, and a completed support decision.
+The scheduled exam and interview accounts let applicants review upcoming activity details. The completed exam and interview accounts let provider staff record the next result. The pre-screening, formal application, final decision, agreement, and monitoring records are also positioned for their next valid action. Vincent remains the read-only completed path with five passed stages, a closed monitoring case, confirmed releases, fulfilled benefits, and a completed support decision.
+
+Local demo accounts use `password123` unless `DEMO_PASSWORD` or `DEMO_ADMIN_PASSWORD` is configured. Hosted passwords remain environment-managed and are not stored in this document.
 
 ## Program Lifecycle Examples
 
 | Program | State |
 | --- | --- |
-| Harborlight Senior Scholars Program | Published with one completed recipient lifecycle |
+| Harborlight Senior Scholars Program | Published with staged applications, active monitoring, and one completed recipient lifecycle |
 | Ready-to-Learn Essentials Fund 2025-2026 | Closed prior cycle |
 | College Launch One-Time Grant | Published one-time grant |
 
@@ -64,4 +75,4 @@ Run only against a database intentionally prepared for the demonstration:
 php artisan migrate:fresh --seeder=CompleteDemoSeeder --force
 ```
 
-The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, and the Harborlight Senior Scholars Program as ID `1`. It removes unsuccessful and unfinished synthetic scenarios after building the successful demonstration.
+The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, and the Harborlight Senior Scholars Program as ID `1`. It removes failed, rejected, correction, overdue, and issue scenarios while retaining positive workflow records that demonstrate each next action.
