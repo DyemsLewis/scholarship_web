@@ -34,6 +34,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    compact: {
+        type: Boolean,
+        default: false,
+    },
 });
 </script>
 
@@ -48,6 +52,7 @@ const props = defineProps({
         :action-label="props.actionLabel"
         :secondary-href="props.secondaryHref"
         :secondary-label="props.secondaryLabel"
+        :compact="props.compact"
     >
         <template v-if="$slots.actions" #actions>
             <slot name="actions"></slot>

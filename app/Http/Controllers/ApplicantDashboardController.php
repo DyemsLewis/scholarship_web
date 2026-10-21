@@ -1143,8 +1143,26 @@ class ApplicantDashboardController extends Controller
             ], true);
         $ocrManagedGrades = $this->academicRecordOcrService->configured() && ! $manualAcademicEntryAllowed;
         $gradeMaximum = $request->input('grading_scale') === AcademicRequirement::SCALE_GRADE_POINT ? 5 : 100;
-
-        $validated = $request->validate([
+        $profileSection = $request->input('profile_section');
+        $sectionFields = [
+            'personal' => [
+                'first_name', 'last_name', 'middle_initial', 'suffix', 'gender', 'contact_number',
+                'account_managed_by', 'citizenship_status', 'birthdate',
+            ],
+            'academic' => [
+                'education_level', 'school', 'school_type', 'learner_reference_number',
+                'course_or_strand', 'year_level', 'enrollment_status', 'academic_year',
+                'academic_term', 'gwa', 'grading_scale',
+            ],
+            'household' => [
+                'income_bracket', 'household_size', 'current_scholarship_status',
+                'current_scholarship_details', 'guardian_name', 'guardian_relationship',
+                'guardian_contact', 'guardian_email', 'guardian_is_account_owner',
+            ],
+            'location' => ['address', 'barangay', 'city', 'province', 'region', 'latitude', 'longitude'],
+            'verification' => ['gwa', 'grading_scale'],
+        ];
+        $validationRules = [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
@@ -1188,21 +1206,35 @@ class ApplicantDashboardController extends Controller
             'guardian_contact' => ['nullable', 'string', 'max:30', new PhoneNumber],
             'guardian_email' => ['nullable', 'email', 'max:255'],
             'guardian_is_account_owner' => ['nullable', 'boolean'],
-        ]);
+        ];
+
+        if ($profileSection !== null) {
+            $validationRules = array_intersect_key(
+                $validationRules,
+                array_flip($sectionFields[is_string($profileSection) ? $profileSection : ''] ?? []),
+            );
+            $validationRules['profile_section'] = ['required', Rule::in(array_keys($sectionFields))];
+        }
+
+        $validated = $request->validate($validationRules);
+        unset($validated['profile_section']);
 
         if ($ocrManagedGrades) {
             unset($validated['gwa'], $validated['grading_scale']);
-        } elseif (! AcademicRequirement::requiresNumeric($validated['grading_scale'] ?? null)) {
+        } elseif (array_key_exists('grading_scale', $validated)
+            && ! AcademicRequirement::requiresNumeric($validated['grading_scale'])) {
             $validated['gwa'] = null;
         }
 
-        if (! in_array($validated['current_scholarship_status'] ?? null, ['receiving', 'pending'], true)) {
+        if (array_key_exists('current_scholarship_status', $validated)
+            && ! in_array($validated['current_scholarship_status'], ['receiving', 'pending'], true)) {
             $validated['current_scholarship_details'] = null;
         }
 
-        $submittedAchievements = trim((string) ($validated['achievements'] ?? ''));
+        $submittedAchievements = trim((string) ($validated['achievements'] ?? $user->studentProfile?->achievements ?? ''));
         $savedAchievements = trim((string) ($user->studentProfile?->achievements ?? ''));
-        $achievementChanged = $submittedAchievements !== $savedAchievements;
+        $achievementChanged = array_key_exists('achievements', $validated)
+            && $submittedAchievements !== $savedAchievements;
 
         if ($achievementChanged
             && $submittedAchievements !== ''
@@ -1212,11 +1244,17 @@ class ApplicantDashboardController extends Controller
             ]);
         }
 
-        $profileValues = [
-            ...$validated,
-            'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
-            'guardian_is_account_owner' => (bool) ($validated['guardian_is_account_owner'] ?? false),
-        ];
+        $profileValues = $validated;
+
+        if (array_key_exists('middle_initial', $profileValues)) {
+            $profileValues['middle_initial'] = filled($profileValues['middle_initial'])
+                ? strtoupper($profileValues['middle_initial'])
+                : null;
+        }
+
+        if (array_key_exists('guardian_is_account_owner', $profileValues)) {
+            $profileValues['guardian_is_account_owner'] = (bool) $profileValues['guardian_is_account_owner'];
+        }
         $studentProfile = $user->studentProfile()->firstOrNew(['user_id' => $user->id]);
         $studentProfile->fill($profileValues);
         $manualAcademicResultChanged = $manualAcademicEntryAllowed
@@ -1314,6 +1352,7 @@ class ApplicantDashboardController extends Controller
             [
                 'verification_reset' => $verificationReset,
                 'manual_academic_result_entered' => $manualAcademicResultChanged,
+                'profile_section' => $profileSection,
             ],
         );
 

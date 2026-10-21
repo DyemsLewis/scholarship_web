@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
+import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
@@ -47,18 +48,71 @@ const capacity = computed(() => {
 const slotsFull = computed(() => capacity.value.remaining === 0);
 const acceptedDocuments = computed(() => application.value?.documents?.filter((document) => document.status === 'accepted').length ?? 0);
 const requiredDocuments = computed(() => readiness.value.required ?? application.value?.document_checklist?.length ?? 0);
-const profileFields = computed(() => [
-    ['Age', applicant.value.age ? `${applicant.value.age} years old` : null],
-    ['Contact number', applicant.value.contact_number],
-    ['Account managed by', applicant.value.account_managed_by],
-    ['Parent or guardian', applicant.value.guardian_name],
-    ['School', applicant.value.school],
-    ['Education', [applicant.value.education_level, applicant.value.course_or_strand, applicant.value.year_level].filter(Boolean).join(' - ')],
-    ['Academic result', applicant.value.gwa ? `${applicant.value.gwa} · ${labelize(applicant.value.grading_scale)}` : null],
-    ['Enrollment', applicant.value.enrollment_status],
-    ['Income bracket', applicant.value.income_bracket],
-    ['Household size', applicant.value.household_size ? `${applicant.value.household_size} members` : null],
-].filter(([, value]) => value));
+const applicantProfileRecord = computed(() => ({
+    name: applicant.value.name || 'Applicant record',
+    initials: String(applicant.value.name || 'AP')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join(''),
+    photoUrl: applicant.value.profile_photo_url,
+    educationSummary: [applicant.value.education_level, applicant.value.course_or_strand, applicant.value.year_level]
+        .filter(Boolean)
+        .join(' - '),
+}));
+const applicantProfileSections = computed(() => [
+    {
+        id: 'personal',
+        title: 'Personal and contact',
+        icon: 'fa-solid fa-address-card',
+        description: 'Identity and contact details reviewed during screening.',
+        items: [
+            { label: 'Age', value: applicant.value.age ? `${applicant.value.age} years old` : null },
+            { label: 'Gender', value: applicant.value.gender ? labelize(applicant.value.gender) : null },
+            { label: 'Contact number', value: applicant.value.contact_number },
+            { label: 'Email address', value: applicant.value.email },
+            { label: 'Account managed by', value: applicant.value.account_managed_by ? labelize(applicant.value.account_managed_by) : null },
+            { label: 'Citizenship', value: applicant.value.citizenship_status ? labelize(applicant.value.citizenship_status) : null },
+        ],
+    },
+    {
+        id: 'academic',
+        title: 'Learning record',
+        icon: 'fa-solid fa-graduation-cap',
+        description: 'Verified academic information used in the application review.',
+        items: [
+            { label: 'School', value: applicant.value.school },
+            { label: 'Education', value: [applicant.value.education_level, applicant.value.course_or_strand, applicant.value.year_level].filter(Boolean).join(' - ') },
+            { label: 'Academic result', value: applicant.value.gwa ? `${applicant.value.gwa} - ${labelize(applicant.value.grading_scale)}` : null },
+            { label: 'Enrollment', value: applicant.value.enrollment_status },
+            { label: 'Academic year', value: applicant.value.academic_year },
+            { label: 'Record period', value: applicant.value.academic_term ? labelize(applicant.value.academic_term) : null },
+        ],
+    },
+    {
+        id: 'household',
+        title: 'Household and guardian',
+        icon: 'fa-solid fa-house-chimney-user',
+        description: 'Household context retained from the reviewed application.',
+        items: [
+            { label: 'Income bracket', value: applicant.value.income_bracket },
+            { label: 'Household size', value: applicant.value.household_size ? `${applicant.value.household_size} members` : null },
+            { label: 'Current scholarship', value: applicant.value.current_scholarship_status ? labelize(applicant.value.current_scholarship_status) : null },
+            { label: 'Parent or guardian', value: applicant.value.guardian_name },
+        ],
+    },
+    {
+        id: 'location',
+        title: 'Location',
+        icon: 'fa-solid fa-location-dot',
+        description: 'General residence used for location-based eligibility.',
+        items: [
+            { label: 'Home location', value: applicant.value.location, wide: true },
+            { label: 'Street / home address', value: applicant.value.address, wide: true },
+        ],
+    },
+]);
 const responseRows = computed(() => normalizeAnswers(application.value?.application_answers));
 const rejectionReasons = decisionReasonOptions.filter((option) => [
     'funds_limited',
@@ -290,13 +344,26 @@ onMounted(loadApplication);
                         </div>
                     </section>
 
-                    <section v-else-if="activeSection === 'applicant'" class="mt-4 border border-slate-200 bg-white shadow-sm">
-                        <header class="flex items-start gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-id-card text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Applicant profile</h2><p class="mt-1 text-sm text-slate-500">Saved information used for the application review.</p></div></header>
-                        <dl class="grid grid-cols-3">
-                            <div v-for="([label, value], index) in profileFields" :key="label" :class="['px-6 py-5', index % 3 !== 2 ? 'border-r border-slate-200' : '', index >= 3 ? 'border-t border-slate-200' : '']"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{{ label }}</dt><dd class="mt-2 whitespace-pre-line text-sm font-bold leading-6 text-slate-900">{{ value }}</dd></div>
-                        </dl>
-                        <div class="border-t border-slate-200 px-6 py-5"><h3 class="text-base font-bold text-slate-950">Application responses</h3><p v-if="!responseRows.length" class="mt-3 text-sm text-slate-500">No additional responses were collected.</p><dl v-else class="mt-4 divide-y divide-slate-200 border-y border-slate-200"><div v-for="response in responseRows" :key="response.label" class="grid grid-cols-[18rem_1fr] gap-6 py-4"><dt class="text-sm font-semibold text-slate-500">{{ response.label }}</dt><dd class="whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">{{ response.value }}</dd></div></dl></div>
-                    </section>
+                    <div v-else-if="activeSection === 'applicant'" class="mt-4 space-y-4">
+                        <ApplicantProfileRecord
+                            :record="applicantProfileRecord"
+                            :sections="applicantProfileSections"
+                            :verification-status="applicant.profile_verification_status"
+                            :verification-label="labelize(applicant.profile_verification_status)"
+                            :show-trust-notice="false"
+                        />
+                        <section class="border border-slate-200 bg-white px-6 py-5 shadow-sm">
+                            <h3 class="text-base font-bold text-slate-950">Application responses</h3>
+                            <p class="mt-1 text-sm text-slate-500">Answers submitted specifically for this scholarship.</p>
+                            <p v-if="!responseRows.length" class="mt-4 text-sm text-slate-500">No additional responses were collected.</p>
+                            <dl v-else class="mt-4 divide-y divide-slate-200 border-y border-slate-200">
+                                <div v-for="response in responseRows" :key="response.label" class="grid grid-cols-[18rem_1fr] gap-6 py-4">
+                                    <dt class="text-sm font-semibold text-slate-500">{{ response.label }}</dt>
+                                    <dd class="whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">{{ response.value }}</dd>
+                                </div>
+                            </dl>
+                        </section>
+                    </div>
 
                     <section v-else class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-start gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clock-rotate-left text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Decision history</h2><p class="mt-1 text-sm text-slate-500">Recorded application changes in chronological order.</p></div></header>

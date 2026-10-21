@@ -182,6 +182,13 @@ class CompleteDemoSeederTest extends TestCase
         Storage::disk('local')->assertExists(
             "demo-showcase/profile-photos/{$screeningApplicant->id}/applicant-01.jpg",
         );
+        $this->assertSame(
+            hash_file('sha256', public_path('images/demo/applicants/applicant-01.jpg')),
+            hash('sha256', Storage::disk('local')->get(
+                "demo-showcase/profile-photos/{$screeningApplicant->id}/applicant-01.jpg",
+            )),
+            'The demo seeder should retain each applicant photo instead of copying the generic avatar.',
+        );
         Storage::disk('local')->assertMissing('demo-showcase/profile-photos/4/applicant-02.jpg');
 
         $this->actingAs(User::query()->findOrFail(1))

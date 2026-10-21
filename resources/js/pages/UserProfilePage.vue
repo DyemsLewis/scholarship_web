@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ApplicantProfileRecord from '../components/profile/ApplicantProfileRecord.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
@@ -37,11 +38,14 @@ const form = ref(emptyForm());
 const profileSearchParams = new URLSearchParams(window.location.search);
 const requestedProfileSection = profileSearchParams.get('section');
 const editableProfileSectionIds = ['personal', 'academic', 'household', 'location', 'verification'];
-const profileView = ref(editableProfileSectionIds.includes(requestedProfileSection) ? 'edit' : 'overview');
+const showProfileEditorModal = ref(editableProfileSectionIds.includes(requestedProfileSection));
 const activeSection = ref(editableProfileSectionIds.includes(requestedProfileSection)
     ? requestedProfileSection
     : 'personal');
-const showProviderPreview = ref(false);
+const profileEditorCloseButton = ref(null);
+let profileEditorTrigger = null;
+let allowUnsavedNavigation = false;
+let isHandlingUnsavedNavigation = false;
 const isUploadingProfilePhoto = ref(false);
 const isDeletingProfilePhoto = ref(false);
 const showProfileCamera = ref(false);
@@ -386,8 +390,6 @@ const hasGuardianDetails = computed(() => [
     form.value.guardian_contact,
     form.value.guardian_email,
 ].some(hasValue) || form.value.guardian_is_account_owner);
-const visibleProfileSections = computed(() => profileSections
-    .filter((section) => section.id !== 'review'));
 const requiredProfileFields = computed(() => profileSections.flatMap((section) => sectionRequiredFields(section)));
 const requiredFieldData = computed(() => requiredProfileFields.value.map((key) => ({
     key,
@@ -479,75 +481,6 @@ const profileEducationSummary = computed(() => [
     form.value.course_or_strand,
     form.value.year_level,
 ].filter(hasValue).join(' - ') || 'Learning details not completed');
-const profileLocationSummary = computed(() => [form.value.city, form.value.province, form.value.region]
-    .filter(hasValue)
-    .join(', ') || 'Location not completed');
-const applicationSetupItems = computed(() => [
-    {
-        id: 'profile',
-        label: 'Required profile details',
-        detail: profileComplete.value
-            ? 'Ready for scholarship applications.'
-            : `${missingProfileFields.value.length} required detail${missingProfileFields.value.length === 1 ? '' : 's'} remaining.`,
-        state: profileComplete.value ? 'complete' : 'action',
-        section: recommendedSection.value,
-    },
-    {
-        id: 'verification',
-        label: 'Supporting evidence',
-        detail: profileVerificationStatus.value === 'approved'
-            ? 'Academic information is supported and ready for provider review.'
-            : profileVerificationStatus.value === 'pending'
-                ? 'Records submitted and waiting for review.'
-                : profileVerificationStatus.value === 'rejected'
-                    ? 'Replace the file using the reviewer note.'
-                    : 'Add records that support your academic and enrollment information.',
-        state: profileVerificationStatus.value === 'approved'
-            ? 'complete'
-            : profileVerificationStatus.value === 'pending'
-                ? 'pending'
-                : profileVerificationStatus.value === 'rejected' || needsVerificationUpload.value
-                    ? 'action'
-                    : 'optional',
-        section: 'verification',
-    },
-    {
-        id: 'documents',
-        label: 'Prepared documents',
-        detail: preparedDocumentsCount.value
-            ? `${preparedDocumentsCount.value} reusable file${preparedDocumentsCount.value === 1 ? '' : 's'} saved.`
-            : 'Add reusable files as scholarship requirements become clear.',
-        state: preparedDocumentsCount.value ? 'complete' : 'optional',
-        href: '/dashboard/documents',
-    },
-]);
-const profileQuality = computed(() => {
-    if (profileComplete.value) {
-        return {
-            label: 'Application-ready',
-            detail: 'Required details are complete.',
-        };
-    }
-
-    if (profileCompletion.value >= 70) {
-        return {
-            label: 'Ready to match',
-            detail: 'Add the remaining details before applying.',
-        };
-    }
-
-    if (profileCompletion.value >= 40) {
-        return {
-            label: 'Basic profile',
-            detail: 'Enough to explore scholarships.',
-        };
-    }
-
-    return {
-        label: 'Starting profile',
-        detail: 'Add learner details to improve matching.',
-    };
-});
 const profileRecommendedAction = computed(() => {
     const nextMissing = missingProfileFields.value[0];
 
@@ -625,34 +558,6 @@ const overviewProfileAction = computed(() => {
     };
 });
 const activeProfileSection = computed(() => profileSections.find((section) => section.id === activeSection.value) ?? profileSections[0]);
-const visibleActiveSectionIndex = computed(() => visibleProfileSections.value.findIndex((section) => section.id === activeProfileSection.value.id));
-const profileNavigationSteps = computed(() => visibleProfileSections.value.map((section, index) => {
-    const progress = sectionProgress(section);
-    const hasErrors = sectionHasErrors(section);
-    const isVerification = section.id === 'verification';
-    const isReview = section.id === 'review';
-    const complete = isVerification
-        ? !needsVerificationUpload.value && profileVerificationStatus.value === 'approved'
-        : isReview
-            ? profileComplete.value
-            : section.required
-                ? progress.complete
-                : progress.completed > 0;
-
-    return {
-        ...section,
-        number: index + 1,
-        complete,
-        attention: hasErrors || (isVerification && (profileVerificationStatus.value === 'rejected' || needsVerificationUpload.value)),
-        status: hasErrors
-            ? 'Needs attention'
-            : isVerification
-                ? needsVerificationUpload.value
-                    ? 'Files needed'
-                    : verificationStatusLabel(profileVerificationStatus.value)
-                : sectionStatusLabel(section),
-    };
-}));
 const recommendedSection = computed(() => {
     if (academicOcrActive.value && missingProfileFields.value.some((field) => ['gwa', 'grading_scale'].includes(field.key))) {
         return 'verification';
@@ -860,52 +765,6 @@ function sectionProgress(section) {
     };
 }
 
-function sectionMissingFields(section) {
-    return sectionRequiredFields(section)
-        .filter((field) => !hasValue(profileFieldValue(field)))
-        .map((field) => fieldLabel(field));
-}
-
-function sectionStatusLabel(section) {
-    if (!section.fields.length) {
-        return profileComplete.value ? 'Ready' : 'Review';
-    }
-
-    const progress = sectionProgress(section);
-
-    if (!section.required) {
-        return progress.completed > 0 ? 'Added' : 'Optional';
-    }
-
-    if (progress.complete) {
-        return 'Complete';
-    }
-
-    return progress.completed > 0 ? 'In progress' : 'Needs details';
-}
-
-function sectionStatusClass(section) {
-    if (!section.fields.length) {
-        return profileComplete.value
-            ? 'bg-emerald-100 text-emerald-800'
-            : 'bg-slate-100 text-slate-600';
-    }
-
-    const progress = sectionProgress(section);
-
-    if (!section.required) {
-        return progress.completed > 0
-            ? 'bg-slate-100 text-slate-700'
-            : 'bg-slate-100 text-slate-600';
-    }
-
-    if (progress.complete) {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
 function optionButtonClass(isSelected) {
     return [
         optionButtonBaseClass,
@@ -913,10 +772,6 @@ function optionButtonClass(isSelected) {
             ? 'border-slate-900 bg-slate-900 text-white'
             : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400',
     ];
-}
-
-function profileSection(sectionId) {
-    return profileSections.find((section) => section.id === sectionId) ?? profileSections[0];
 }
 
 function sectionForField(field) {
@@ -927,75 +782,92 @@ function sectionForField(field) {
     return profileSections.find((section) => section.fields.includes(field))?.id ?? 'personal';
 }
 
-function sectionHasErrors(section) {
-    return Object.keys(fieldErrors.value).some((field) => section.fields.includes(field));
-}
-
 function openSection(sectionId) {
     activeSection.value = sectionId;
     errorMessage.value = '';
+
+    if (showProfileEditorModal.value && editableProfileSectionIds.includes(sectionId)) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('section', sectionId);
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    }
 }
 
 function openProfileEditor(sectionId = profileRecommendedAction.value.section) {
     if (sectionId === 'review') {
-        profileView.value = 'overview';
         return;
     }
 
-    profileView.value = 'edit';
+    profileEditorTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     openSection(sectionId);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showProfileEditorModal.value = true;
+    const url = new URL(window.location.href);
+    url.searchParams.set('section', sectionId);
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    void nextTick(() => profileEditorCloseButton.value?.focus());
 }
 
 function openVerificationRecords() {
-    profileView.value = 'edit';
-    openSection('verification');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    openProfileEditor('verification');
 }
 
-async function openProfileOverview() {
+async function closeProfileEditor() {
     if (hasUnsavedChanges.value) {
-        const saved = await saveProfile(false);
+        const confirmed = await requestConfirmation({
+            eyebrow: 'Unsaved profile changes',
+            title: 'Discard unsaved changes?',
+            message: 'Your updates have not been saved. Keep editing to preserve them, or discard them and close the profile editor.',
+            confirmLabel: 'Discard changes',
+            cancelLabel: 'Keep editing',
+            tone: 'danger',
+        });
 
-        if (!saved) {
+        if (!confirmed) {
             return;
         }
+
+        form.value = JSON.parse(savedFormSnapshot.value);
+        fieldErrors.value = {};
+        errorMessage.value = '';
+        await loadApplicantLocationHierarchy();
     }
 
-    profileView.value = 'overview';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    showProfileEditorModal.value = false;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('section');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    await nextTick();
+    profileEditorTrigger?.focus?.();
+    profileEditorTrigger = null;
 }
 
-function goToPreviousSection() {
-    const previous = visibleProfileSections.value[visibleActiveSectionIndex.value - 1];
-
-    if (previous) {
-        openSection(previous.id);
-    }
-}
-
-async function goToNextSection() {
-    const next = visibleProfileSections.value[visibleActiveSectionIndex.value + 1];
-
-    if (!next) {
-        if (hasUnsavedChanges.value) {
-            const saved = await saveProfile(false);
-
-            if (!saved) {
-                return;
-            }
-        }
-
-        await openProfileOverview();
+async function saveAndCloseProfileEditor() {
+    if (!hasUnsavedChanges.value) {
+        await closeProfileEditor();
         return;
     }
 
-    if (hasUnsavedChanges.value) {
-        await saveProfile(false, next.id);
+    const saved = await saveProfile(false);
+
+    if (saved) {
+        showProfileEditorModal.value = false;
+        const url = new URL(window.location.href);
+        url.searchParams.delete('section');
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+        showPortalToast({ message: 'Profile section saved.' });
+        await nextTick();
+        profileEditorTrigger?.focus?.();
+        profileEditorTrigger = null;
+    }
+}
+
+async function finishProfileEditor() {
+    if (activeSection.value === 'verification' && !hasUnsavedChanges.value) {
+        await closeProfileEditor();
         return;
     }
 
-    openSection(next.id);
+    await saveAndCloseProfileEditor();
 }
 
 function gradingScaleLabel(value) {
@@ -1176,57 +1048,64 @@ const guardianRequirementText = computed(() => {
         ? 'Younger education levels or adult-managed accounts need a guardian contact for scholarship follow-ups.'
         : 'Add a trusted contact if someone else helps with applications.';
 });
-const reviewGroups = computed(() => [
+const applicantProfileRecord = computed(() => ({
+    name: profileDisplayName.value,
+    initials: profileInitials.value,
+    photoUrl: profilePhotoUrl.value,
+    educationSummary: profileEducationSummary.value,
+}));
+const applicantProfileSections = computed(() => [
     {
         id: 'personal',
         title: 'Personal and contact',
         icon: 'fa-solid fa-address-card',
+        description: 'Identity and contact details available during application review.',
         items: [
-            ['Name', [form.value.first_name, form.value.middle_initial ? `${form.value.middle_initial}.` : '', form.value.last_name, form.value.suffix].filter(Boolean).join(' ')],
-            ['Gender', genderLabel(form.value.gender)],
-            ['Birthdate', form.value.birthdate],
-            ['Contact', form.value.contact_number],
-            ['Account managed by', accountManagerLabel(form.value.account_managed_by)],
-            ['Citizenship', citizenshipLabel(form.value.citizenship_status)],
+            { label: 'Age', value: applicantAge.value !== null ? `${applicantAge.value} years old` : '' },
+            { label: 'Gender', value: genderLabel(form.value.gender) },
+            { label: 'Contact number', value: form.value.contact_number },
+            { label: 'Email address', value: user.value?.email },
+            { label: 'Account managed by', value: accountManagerLabel(form.value.account_managed_by) },
+            { label: 'Citizenship', value: citizenshipLabel(form.value.citizenship_status) },
+        ],
+    },
+    {
+        id: 'academic',
+        title: 'Learning record',
+        icon: 'fa-solid fa-graduation-cap',
+        description: 'Current education and academic information used for eligibility review.',
+        items: [
+            { label: 'School', value: form.value.school },
+            { label: 'Education', value: profileEducationSummary.value },
+            { label: 'Academic result', value: form.value.gwa ? `${form.value.gwa} - ${gradingScaleLabel(form.value.grading_scale)}` : '' },
+            { label: 'Enrollment', value: form.value.enrollment_status },
+            { label: 'Academic year', value: form.value.academic_year },
+            { label: 'Record period', value: academicTermLabel(form.value.academic_term) },
         ],
     },
     {
         id: 'household',
         title: 'Household and guardian',
         icon: 'fa-solid fa-house-chimney-user',
+        description: 'Household context considered by programs with financial or guardian requirements.',
         items: [
-            ['Income bracket', form.value.income_bracket],
-            ['Household size', form.value.household_size],
-            ['Outside scholarship', currentScholarshipLabel(form.value.current_scholarship_status)],
-            ...(form.value.current_scholarship_details ? [['Outside scholarship details', form.value.current_scholarship_details]] : []),
-            ...((needsGuardianContext.value || hasGuardianDetails.value) ? [
-                ['Guardian name', form.value.guardian_name],
-                ['Guardian relationship', relationshipLabel(form.value.guardian_relationship)],
-                ['Guardian contact', form.value.guardian_contact],
-                ['Guardian email', form.value.guardian_email],
-            ] : []),
-        ],
-    },
-    {
-        id: 'academic',
-        title: 'Learning',
-        icon: 'fa-solid fa-book-open-reader',
-        items: [
-            ['Level', educationLevelLabel(form.value.education_level)],
-            ['School', form.value.school],
-            [yearLabel.value, form.value.year_level],
-            ['Academic year', form.value.academic_year],
-            ['Record period', academicTermLabel(form.value.academic_term)],
-            ...(isFieldRelevant('course_or_strand') ? [[courseLabel.value, form.value.course_or_strand]] : []),
-            ...(isFieldRelevant('gwa') ? [[gwaLabel.value, form.value.gwa], ['Grading scale', gradingScaleLabel(form.value.grading_scale)]] : []),
+            { label: 'Income bracket', value: form.value.income_bracket },
+            { label: 'Household size', value: form.value.household_size ? `${form.value.household_size} members` : '' },
+            { label: 'Current scholarship', value: currentScholarshipLabel(form.value.current_scholarship_status) },
+            { label: 'Parent or guardian', value: (needsGuardianContext.value || hasGuardianDetails.value) ? form.value.guardian_name : 'Not required' },
         ],
     },
     {
         id: 'location',
         title: 'Location',
         icon: 'fa-solid fa-location-dot',
+        description: 'General residence used for location and distance eligibility rules.',
         items: [
-            ['Address', [form.value.address, form.value.barangay, form.value.city, form.value.province, form.value.region].filter(Boolean).join(', ')],
+            { label: 'Region', value: form.value.region },
+            { label: 'Province', value: form.value.province },
+            { label: 'City / municipality', value: form.value.city },
+            { label: 'Barangay', value: form.value.barangay },
+            { label: 'Street / home address', value: form.value.address, wide: true },
         ],
     },
 ]);
@@ -1558,9 +1437,12 @@ function handleProfileEscape(event) {
     if (event.key === 'Escape') {
         if (showProfileCamera.value) {
             closeProfileCamera();
+            return;
         }
 
-        showProviderPreview.value = false;
+        if (showProfileEditorModal.value && !showProfileMapModal.value) {
+            void closeProfileEditor();
+        }
     }
 }
 
@@ -1973,7 +1855,10 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
     fieldErrors.value = {};
 
     try {
-        const response = await window.axios.patch('/dashboard/profile', form.value);
+        const response = await window.axios.patch('/dashboard/profile', {
+            ...form.value,
+            profile_section: activeSection.value,
+        });
 
         user.value = response.data.user;
         fillForm(response.data.user);
@@ -1982,7 +1867,7 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
         platformActiveScholarships.value = response.data.platform_active_scholarships ?? platformActiveScholarships.value;
         markFormSaved();
         if (requireComplete) {
-            profileView.value = 'overview';
+            showProfileEditorModal.value = false;
         }
         if (nextSectionId) {
             openSection(nextSectionId);
@@ -2004,7 +1889,7 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
 }
 
 function handleBeforeUnload(event) {
-    if (!hasUnsavedChanges.value) {
+    if (!hasUnsavedChanges.value || allowUnsavedNavigation) {
         return;
     }
 
@@ -2012,9 +1897,60 @@ function handleBeforeUnload(event) {
     event.returnValue = '';
 }
 
+async function handleUnsavedNavigation(event) {
+    if (
+        !hasUnsavedChanges.value
+        || allowUnsavedNavigation
+        || isHandlingUnsavedNavigation
+        || event.defaultPrevented
+        || event.button !== 0
+        || event.metaKey
+        || event.ctrlKey
+        || event.shiftKey
+        || event.altKey
+    ) {
+        return;
+    }
+
+    const eventTarget = event.target instanceof Element ? event.target : event.target?.parentElement;
+    const link = eventTarget?.closest?.('a[href]');
+
+    if (!link || link.target === '_blank' || link.hasAttribute('download')) {
+        return;
+    }
+
+    const destination = new URL(link.href, window.location.href);
+
+    if (destination.href === window.location.href) {
+        return;
+    }
+
+    event.preventDefault();
+    isHandlingUnsavedNavigation = true;
+
+    const confirmed = await requestConfirmation({
+        eyebrow: 'Unsaved profile changes',
+        title: 'Leave without saving?',
+        message: 'You changed information in this profile section. If you leave now, those updates will be lost.',
+        confirmLabel: 'Discard and leave',
+        cancelLabel: 'Keep editing',
+        tone: 'danger',
+    });
+
+    isHandlingUnsavedNavigation = false;
+
+    if (!confirmed) {
+        return;
+    }
+
+    allowUnsavedNavigation = true;
+    window.location.assign(destination.href);
+}
+
 onMounted(async () => {
     window.addEventListener('beforeunload', handleBeforeUnload);
     window.addEventListener('keydown', handleProfileEscape);
+    document.addEventListener('click', handleUnsavedNavigation);
     await loadProfile();
 
     if (requestedProfileSection === 'verification') {
@@ -2022,12 +1958,20 @@ onMounted(async () => {
     } else if (['personal', 'academic', 'household', 'location'].includes(requestedProfileSection)) {
         openProfileEditor(requestedProfileSection);
     }
+
+    document.body.style.overflow = showProfileEditorModal.value ? 'hidden' : '';
 });
 
 onBeforeUnmount(() => {
     stopProfileCamera();
     window.removeEventListener('beforeunload', handleBeforeUnload);
     window.removeEventListener('keydown', handleProfileEscape);
+    document.removeEventListener('click', handleUnsavedNavigation);
+    document.body.style.overflow = '';
+});
+
+watch(showProfileEditorModal, (isOpen) => {
+    document.body.style.overflow = isOpen ? 'hidden' : '';
 });
 
 watch(() => form.value.grading_scale, (scale) => {
@@ -2111,363 +2055,50 @@ watch(() => form.value.grading_scale, (scale) => {
             </div>
         </Teleport>
 
-        <Teleport to="body">
-            <div
-                v-if="showProviderPreview"
-                class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 p-3 sm:p-6"
-                role="presentation"
-                @click.self="showProviderPreview = false"
-            >
-                <section
-                    class="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-md bg-slate-50 shadow-2xl"
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="provider-preview-title"
-                >
-                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
-                        <div class="flex min-w-0 items-start gap-3">
-                            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-eye" aria-hidden="true"></i></span>
-                            <div>
-                                <p class="student-kicker">Provider view</p>
-                                <h2 id="provider-preview-title" class="mt-1 text-xl font-bold text-slate-950">Applicant profile preview</h2>
-                                <p class="mt-1 text-sm text-slate-500">Review what a provider can see after you apply.</p>
-                            </div>
-                        </div>
-                        <button
-                            type="button"
-                            class="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100"
-                            aria-label="Close provider preview"
-                            @click="showProviderPreview = false"
-                        >
-                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                        </button>
-                    </header>
-
-                    <div class="overflow-y-auto p-4 sm:p-6">
-                        <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-                            <div class="flex min-w-0 items-start gap-4 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-5 sm:p-6">
-                                    <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-sm bg-slate-950 text-xl font-bold text-white ring-1 ring-slate-200">
-                                        <img
-                                            v-if="profilePhotoUrl"
-                                            :src="profilePhotoUrl"
-                                            :alt="`${profileDisplayName} applicant photo`"
-                                            class="h-full w-full object-cover"
-                                        >
-                                        <span v-else>{{ profileInitials }}</span>
-                                    </div>
-                                    <div class="min-w-0">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant record</p>
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <h3 class="mt-1 text-xl font-bold text-slate-950">{{ profileDisplayName }}</h3>
-                                            <span :class="['rounded-sm px-2 py-1 text-[10px] font-bold uppercase', verificationStatusClass(profileVerificationStatus)]">
-                                                {{ verificationStatusLabel(profileVerificationStatus) }}
-                                            </span>
-                                        </div>
-                                        <p class="mt-1 text-sm font-semibold text-slate-600">{{ profileEducationSummary }}</p>
-                                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                                            <span><i class="fa-solid fa-envelope mr-1.5 text-slate-400" aria-hidden="true"></i>{{ user?.email || 'Email not provided' }}</span>
-                                            <span><i class="fa-solid fa-phone mr-1.5 text-slate-400" aria-hidden="true"></i>{{ form.contact_number || 'Contact not provided' }}</span>
-                                        </div>
-                                    </div>
-                            </div>
-
-                            <div v-if="profileVerificationStatus !== 'approved'" class="flex items-start gap-3 border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm leading-5 text-amber-950 sm:px-6">
-                                <i class="fa-solid fa-shield-halved mt-0.5 text-amber-700" aria-hidden="true"></i>
-                                <p><strong>Unverified profile.</strong> Providers see these details as self-declared and may give them less weight until the supporting evidence is reviewed.</p>
-                            </div>
-                        </section>
-
-                        <div class="mt-4 divide-y divide-slate-200 overflow-hidden rounded-md border border-slate-300 bg-white">
-                            <section class="p-4 sm:p-5">
-                                <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-address-card text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Personal information</h3></div>
-                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
-                                    <div>
-                                        <dt class="text-slate-500">Birthdate</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">
-                                            {{ form.birthdate || 'Not provided' }}<span v-if="applicantAge !== null" class="font-semibold text-slate-500"> - Age {{ applicantAge }}</span>
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Gender</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ genderLabel(form.gender) || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Account managed by</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ accountManagerLabel(form.account_managed_by) || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Citizenship</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ citizenshipLabel(form.citizenship_status) || 'Not provided' }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
-
-                            <section class="p-4 sm:p-5">
-                                <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-graduation-cap text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Learning record</h3></div>
-                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
-                                    <div>
-                                        <dt class="text-slate-500">Education level</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ educationLevelLabel(form.education_level) || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Enrollment</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.enrollment_status || 'Not provided' }}</dd>
-                                    </div>
-                                    <div class="xl:col-span-2">
-                                        <dt class="text-slate-500">School</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Institution type</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ schoolTypeLabel(form.school_type) || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Grade / year</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.year_level || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Track / course</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.course_or_strand || 'Not applicable or not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Academic result</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">
-                                            {{ form.gwa ? `${form.gwa} - ${gradingScaleLabel(form.grading_scale)}` : gradingScaleLabel(form.grading_scale) || 'Not provided' }}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Academic year</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.academic_year || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Record period</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ academicTermLabel(form.academic_term) || 'Not provided' }}</dd>
-                                    </div>
-                                    <div class="xl:col-span-2">
-                                        <dt class="text-slate-500">Learner / student ID</dt>
-                                        <dd class="mt-1 break-words font-bold text-slate-950">{{ form.learner_reference_number || 'Not provided' }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
-
-                            <section class="p-4 sm:p-5">
-                                <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-house-chimney-user text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Household and address</h3></div>
-                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
-                                    <div>
-                                        <dt class="text-slate-500">Income bracket</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.income_bracket || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Household size</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.household_size || 'Not provided' }}</dd>
-                                    </div>
-                                    <div class="xl:col-span-2">
-                                        <dt class="text-slate-500">Outside-platform scholarship declaration</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ currentScholarshipLabel(form.current_scholarship_status) || 'Not provided' }}</dd>
-                                    </div>
-                                    <div class="sm:col-span-2 xl:col-span-4">
-                                        <dt class="text-slate-500">Active awards detected in this portal</dt>
-                                        <dd v-if="platformActiveScholarships.length" class="mt-2 flex flex-wrap gap-2">
-                                            <span v-for="record in platformActiveScholarships" :key="record.application_id" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">
-                                                {{ record.title }}
-                                            </span>
-                                        </dd>
-                                        <dd v-else class="mt-1 font-bold text-slate-950">No active portal award detected</dd>
-                                    </div>
-                                    <div class="sm:col-span-2 xl:col-span-4">
-                                        <dt class="text-slate-500">Location</dt>
-                                        <dd class="mt-1 font-bold leading-6 text-slate-950">{{ profileLocationSummary }}</dd>
-                                    </div>
-                                    <div v-if="form.current_scholarship_details" class="sm:col-span-2 xl:col-span-4">
-                                        <dt class="text-slate-500">Scholarship details</dt>
-                                        <dd class="mt-1 font-bold leading-6 text-slate-950">{{ form.current_scholarship_details }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
-
-                            <section v-if="needsGuardianContext || hasGuardianDetails" class="p-4 sm:p-5">
-                                <div class="flex min-h-9 items-center gap-2"><i class="fa-solid fa-people-roof text-amber-700" aria-hidden="true"></i><h3 class="font-bold text-slate-950">Parent or guardian</h3></div>
-                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500 xl:[&_dt]:min-h-8">
-                                    <div>
-                                        <dt class="text-slate-500">Name</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.guardian_name || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Relationship</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.guardian_relationship || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Contact</dt>
-                                        <dd class="mt-1 font-bold text-slate-950">{{ form.guardian_contact || 'Not provided' }}</dd>
-                                    </div>
-                                    <div>
-                                        <dt class="text-slate-500">Email</dt>
-                                        <dd class="mt-1 break-words font-bold text-slate-950">{{ form.guardian_email || 'Not provided' }}</dd>
-                                    </div>
-                                </dl>
-                            </section>
-                        </div>
-                    </div>
-
-                    <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                        <p class="text-xs leading-5 text-slate-500">Save profile changes before a provider can receive them.</p>
-                        <button
-                            type="button"
-                            class="shrink-0 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                            @click="showProviderPreview = false"
-                        >
-                            Close preview
-                        </button>
-                    </footer>
-                </section>
-            </div>
-        </Teleport>
 
         <section class="student-page">
-            <div class="student-container">
+            <div class="student-container space-y-4">
                 <ApplicantPageHeader
-                    eyebrow="Applicant Profile"
-                    title="Your applicant profile"
-                    description="Keep your personal, education, household, and location details current."
+                    eyebrow="Applicant account"
+                    title="My profile"
+                    description="Review and update the record shared with scholarship providers."
                     icon="fa-solid fa-id-card"
-                    action-href="/dashboard/scholarships"
-                    action-label="Browse scholarships"
+                    compact
                 />
 
-                <PrivacyNoticeCard context="profile" compact />
-
-                <div v-if="isLoading" class="student-card mt-6 p-6 text-sm text-slate-500">
+                <div v-if="isLoading" class="student-card p-6 text-sm text-slate-500">
                     Loading profile...
                 </div>
 
-                <div v-else-if="profileView === 'overview'" class="mt-6 space-y-5">
+                <div v-else class="space-y-5">
                     <div v-if="errorMessage" class="student-card p-4">
                         <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
                     </div>
 
-                    <section class="student-card overflow-hidden rounded-md border-slate-300 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
-                        <div class="flex flex-col gap-4 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="flex min-w-0 items-start gap-3.5">
-                                <div class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-sm bg-slate-950 text-lg font-bold text-white ring-1 ring-slate-200">
-                                    <img v-if="profilePhotoUrl" :src="profilePhotoUrl" :alt="`${profileDisplayName} applicant photo`" class="h-full w-full object-cover">
-                                    <span v-else>{{ profileInitials }}</span>
-                                </div>
-                                <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant record</p>
-                                    <div class="mt-1 flex flex-wrap items-center gap-2">
-                                        <h2 class="truncate text-xl font-bold text-slate-950">{{ profileDisplayName }}</h2>
-                                        <span v-if="profileVerificationStatus === 'approved'" class="rounded-sm bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase text-emerald-800"><i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>Evidence reviewed</span>
-                                    </div>
-                                    <p class="mt-1 text-sm font-semibold text-slate-600">{{ profileEducationSummary }}</p>
-                                </div>
-                            </div>
-
-                            <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                                <button type="button" class="w-full rounded-sm border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto" @click="showProviderPreview = true"><i class="fa-solid fa-eye mr-2" aria-hidden="true"></i>Provider preview</button>
-                                <button type="button" class="w-full rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto" @click="openProfileEditor(profileComplete ? 'personal' : profileRecommendedAction.section)"><i class="fa-solid fa-pen mr-2" aria-hidden="true"></i>{{ profileComplete ? 'Edit profile' : 'Continue setup' }}</button>
-                            </div>
-                        </div>
-
-                        <div v-if="profileVerificationStatus !== 'approved'" class="flex flex-col gap-3 border-t border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-                            <div class="flex min-w-0 items-start gap-3">
-                                <i class="fa-solid fa-shield-halved mt-0.5 text-amber-700" aria-hidden="true"></i>
-                                <p class="text-sm leading-5 text-amber-950">
-                                    <strong>Profile not yet verified.</strong> Providers may give self-declared details less weight until your supporting evidence is reviewed.
-                                </p>
-                            </div>
-                            <button type="button" class="w-fit shrink-0 text-xs font-bold text-amber-900 underline decoration-amber-400 underline-offset-4 hover:text-slate-950" @click="openVerificationRecords">
-                                Review supporting evidence
+                    <ApplicantProfileRecord
+                        :record="applicantProfileRecord"
+                        :sections="applicantProfileSections"
+                        :verification-status="profileVerificationStatus"
+                        :verification-label="verificationStatusLabel(profileVerificationStatus)"
+                        primary
+                        editable
+                        @edit="openProfileEditor"
+                    >
+                        <template #actions>
+                            <button type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800" @click="openProfileEditor(profileComplete ? 'personal' : profileRecommendedAction.section)">
+                                <i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
+                                {{ profileComplete ? 'Edit profile' : 'Continue setup' }}
                             </button>
-                        </div>
-                    </section>
+                        </template>
+                    </ApplicantProfileRecord>
 
-                    <section :class="['rounded-md border border-l-4 p-4 shadow-sm sm:p-5', overviewProfileAction.actionable ? 'border-amber-200 border-l-amber-400 bg-amber-50' : 'border-emerald-200 border-l-emerald-500 bg-emerald-50/60']">
+                    <section :class="['border border-l-4 p-4 shadow-sm sm:p-5', overviewProfileAction.actionable ? 'border-amber-200 border-l-amber-400 bg-amber-50' : 'border-emerald-200 border-l-emerald-500 bg-emerald-50/60']">
                         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex min-w-0 items-start gap-3">
-                                <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-sm', overviewProfileAction.actionable ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800']"><i :class="overviewProfileAction.actionable ? 'fa-solid fa-arrow-right' : 'fa-solid fa-check'" aria-hidden="true"></i></span>
-                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ overviewProfileAction.eyebrow }}</p><h3 class="mt-1 font-bold text-slate-950">{{ overviewProfileAction.label }}</h3><p class="mt-1 text-sm text-slate-600">{{ overviewProfileAction.detail }}</p></div>
+                                <span :class="['grid h-10 w-10 shrink-0 place-items-center', overviewProfileAction.actionable ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800']"><i :class="overviewProfileAction.actionable ? 'fa-solid fa-arrow-right' : 'fa-solid fa-check'" aria-hidden="true"></i></span>
+                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ overviewProfileAction.eyebrow }}</p><h2 class="mt-1 font-bold text-slate-950">{{ overviewProfileAction.label }}</h2><p class="mt-1 text-sm text-slate-600">{{ overviewProfileAction.detail }}</p></div>
                             </div>
-                            <button v-if="overviewProfileAction.actionable" type="button" class="shrink-0 rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openProfileEditor(overviewProfileAction.section)">Continue</button>
-                        </div>
-                    </section>
-
-                    <section class="student-card overflow-hidden rounded-md border-slate-300">
-                        <header class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50/70 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-                            <div class="flex min-w-0 items-start gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-eye" aria-hidden="true"></i></span>
-                                <div>
-                                    <p class="student-kicker">Applicant details</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">Your saved information</h3>
-                                    <p class="mt-1 text-sm text-slate-500">These details support matching and are shared with a provider only after you apply.</p>
-                                </div>
-                            </div>
-                            <button type="button" class="inline-flex w-fit items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100" @click="showProviderPreview = true">
-                                Provider preview<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
-                            </button>
-                        </header>
-
-                        <div class="divide-y divide-slate-200">
-                            <section class="bg-white p-4 sm:p-5">
-                                <div class="flex min-h-9 items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-address-card w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Personal and contact</h4></div>
-                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('personal')">Edit</button>
-                                </div>
-                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
-                                    <div><dt class="text-xs text-slate-500">Age</dt><dd class="mt-1 font-bold text-slate-950">{{ applicantAge !== null ? `${applicantAge} years old` : 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Gender</dt><dd class="mt-1 font-bold text-slate-950">{{ genderLabel(form.gender) || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Contact number</dt><dd class="mt-1 font-bold text-slate-950">{{ form.contact_number || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Email address</dt><dd class="mt-1 break-words font-bold text-slate-950">{{ user?.email || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Account managed by</dt><dd class="mt-1 font-bold text-slate-950">{{ accountManagerLabel(form.account_managed_by) || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Citizenship</dt><dd class="mt-1 font-bold text-slate-950">{{ citizenshipLabel(form.citizenship_status) || 'Not provided' }}</dd></div>
-                                </dl>
-                            </section>
-
-                            <section class="bg-white p-4 sm:p-5">
-                                <div class="flex min-h-9 items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-graduation-cap w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Learning record</h4></div>
-                                    <div class="flex items-center gap-3">
-                                        <span class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
-                                        <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('academic')">Edit</button>
-                                    </div>
-                                </div>
-                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
-                                    <div><dt class="text-xs text-slate-500">School</dt><dd class="mt-1 font-bold text-slate-950">{{ form.school || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Education</dt><dd class="mt-1 font-bold text-slate-950">{{ profileEducationSummary }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Academic result</dt><dd class="mt-1 font-bold text-slate-950">{{ form.gwa ? `${form.gwa} - ${gradingScaleLabel(form.grading_scale)}` : 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Enrollment</dt><dd class="mt-1 font-bold text-slate-950">{{ form.enrollment_status || 'Not provided' }}</dd></div>
-                                </dl>
-                            </section>
-
-                            <section class="bg-white p-4 sm:p-5">
-                                <div class="flex min-h-9 items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-house-chimney-user w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Household details</h4></div>
-                                    <div class="flex items-center gap-3">
-                                        <span class="rounded-sm bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Applicant-declared</span>
-                                        <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('household')">Edit</button>
-                                    </div>
-                                </div>
-                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
-                                    <div><dt class="text-xs text-slate-500">Income bracket</dt><dd class="mt-1 font-bold text-slate-950">{{ form.income_bracket || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Household size</dt><dd class="mt-1 font-bold text-slate-950">{{ form.household_size ? `${form.household_size} members` : 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Current scholarship</dt><dd class="mt-1 font-bold text-slate-950">{{ currentScholarshipLabel(form.current_scholarship_status) || 'Not provided' }}</dd></div>
-                                    <div><dt class="text-xs text-slate-500">Parent or guardian</dt><dd class="mt-1 font-bold text-slate-950">{{ (needsGuardianContext || hasGuardianDetails) ? (form.guardian_name || 'Not provided') : 'Not required' }}</dd></div>
-                                </dl>
-                            </section>
-
-                            <section class="bg-white p-4 sm:p-5">
-                                <div class="flex min-h-9 items-center justify-between gap-3">
-                                    <div class="flex items-center gap-2"><i class="fa-solid fa-location-dot w-4 text-center text-amber-700" aria-hidden="true"></i><h4 class="font-bold text-slate-950">Location</h4></div>
-                                    <button type="button" class="text-xs font-bold text-slate-500 hover:text-slate-950" @click="openProfileEditor('location')">Edit</button>
-                                </div>
-                                <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 xl:grid-cols-4 [&>div]:min-w-0 [&_dt]:min-h-5 [&_dt]:text-xs [&_dt]:font-semibold [&_dt]:text-slate-500">
-                                    <div><dt>Region</dt><dd class="mt-1 font-bold text-slate-950">{{ form.region || 'Not provided' }}</dd></div>
-                                    <div><dt>Province</dt><dd class="mt-1 font-bold text-slate-950">{{ form.province || 'Not provided' }}</dd></div>
-                                    <div><dt>City / municipality</dt><dd class="mt-1 font-bold text-slate-950">{{ form.city || 'Not provided' }}</dd></div>
-                                    <div><dt>Barangay</dt><dd class="mt-1 font-bold text-slate-950">{{ form.barangay || 'Not provided' }}</dd></div>
-                                    <div v-if="form.address" class="sm:col-span-2 xl:col-span-4"><dt>Street / home address</dt><dd class="mt-1 font-bold leading-5 text-slate-950">{{ form.address }}</dd></div>
-                                </dl>
-                            </section>
-
+                            <button v-if="overviewProfileAction.actionable" type="button" class="shrink-0 bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openProfileEditor(overviewProfileAction.section)">Continue</button>
                         </div>
                     </section>
 
@@ -2500,31 +2131,41 @@ watch(() => form.value.grading_scale, (scale) => {
                             </a>
                         </div>
                     </section>
+
+                    <PrivacyNoticeCard context="profile" compact />
                 </div>
 
-                <div v-else :class="['applicant-profile-editor mt-6 space-y-5', showProfileGuidance ? 'show-guidance' : '']">
-                    <section class="student-card overflow-hidden">
+                <Teleport to="body">
+                    <div
+                        v-if="showProfileEditorModal"
+                        class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-2 sm:p-5"
+                        role="presentation"
+                        @click.self="closeProfileEditor"
+                    >
+                    <section :class="['applicant-profile-editor flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden bg-slate-50 shadow-2xl sm:max-h-[92vh]', showProfileGuidance ? 'show-guidance' : '']" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title" aria-describedby="profile-editor-description">
+                    <section class="shrink-0 overflow-hidden border-b border-slate-200 bg-white">
                         <div class="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
                             <div class="flex min-w-0 items-start gap-3">
                                 <button
                                     type="button"
+                                    ref="profileEditorCloseButton"
                                     class="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-slate-300 text-slate-600 transition hover:bg-slate-100"
-                                    title="Back to profile overview"
-                                    aria-label="Back to profile overview"
-                                    @click="openProfileOverview"
+                                    title="Close profile editor"
+                                    aria-label="Close profile editor"
+                                    @click="closeProfileEditor"
                                 >
-                                    <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+                                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                                 </button>
                                 <div class="min-w-0">
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
                                         {{ activeSection === 'verification' ? 'Supporting records' : 'Edit applicant profile' }}
                                     </p>
-                                    <h2 class="mt-1 truncate text-xl font-bold text-slate-950">{{ activeProfileSection.label }}</h2>
-                                    <p class="mt-1 text-sm text-slate-500">{{ activeProfileSection.impact }}</p>
+                                    <h2 id="profile-editor-title" class="mt-1 truncate text-xl font-bold text-slate-950">{{ activeProfileSection.label }}</h2>
+                                    <p id="profile-editor-description" class="mt-1 text-sm text-slate-500">{{ activeProfileSection.impact }}</p>
                                 </div>
                             </div>
 
-                            <div v-if="profileView === 'edit'" class="flex items-center gap-3">
+                            <div class="flex items-center gap-3">
                                 <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950" @click="showProfileGuidance = !showProfileGuidance">
                                     <i :class="['fa-solid mr-1.5 text-[10px]', showProfileGuidance ? 'fa-eye-slash' : 'fa-circle-question']" aria-hidden="true"></i>
                                     {{ showProfileGuidance ? 'Hide guidance' : 'Show guidance' }}
@@ -2535,45 +2176,17 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <button
                                     type="button"
                                     class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="isSaving || !hasUnsavedChanges"
-                                    @click="saveProfile(false)"
+                                    :disabled="isSaving || (activeSection !== 'verification' && !hasUnsavedChanges)"
+                                    @click="finishProfileEditor"
                                 >
-                                    {{ isSaving ? 'Saving...' : 'Save changes' }}
+                                    {{ isSaving ? 'Saving...' : activeSection === 'verification' && !hasUnsavedChanges ? 'Close' : 'Save changes' }}
                                 </button>
                             </div>
                         </div>
 
-                        <div v-if="profileView === 'edit'" class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
-                            <p class="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Choose information to edit</p>
-                            <nav aria-label="Profile sections">
-                                <ol class="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-                                    <li v-for="step in profileNavigationSteps" :key="step.id" class="min-w-0">
-                                        <button
-                                            type="button"
-                                            :class="[
-                                                'flex min-h-12 w-full items-center gap-2.5 rounded-md px-3 py-2 text-left transition',
-                                                activeSection === step.id
-                                                    ? 'bg-slate-900 text-white shadow-sm'
-                                                    : step.attention
-                                                        ? 'bg-rose-50 text-rose-950 ring-1 ring-inset ring-rose-200 hover:bg-rose-100'
-                                                        : 'bg-white text-slate-950 ring-1 ring-inset ring-slate-200 hover:ring-slate-400',
-                                            ]"
-                                            :aria-current="activeSection === step.id ? 'step' : undefined"
-                                            @click="openSection(step.id)"
-                                        >
-                                            <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs', activeSection === step.id ? 'bg-amber-300 text-slate-950' : step.attention ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600']">
-                                                <i v-if="step.attention" class="fa-solid fa-exclamation" aria-hidden="true"></i>
-                                                <i v-else :class="step.icon" aria-hidden="true"></i>
-                                            </span>
-                                            <span class="block min-w-0 truncate text-xs font-bold sm:text-sm">{{ step.label }}</span>
-                                        </button>
-                                    </li>
-                                </ol>
-                            </nav>
-                        </div>
                     </section>
 
-                    <section class="space-y-5">
+                    <section class="min-h-0 flex-1 space-y-5 overflow-y-auto p-3 sm:p-5">
                         <div v-if="errorMessage || validationErrorEntries.length" class="student-card p-4">
                             <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
                                 {{ errorMessage }}
@@ -3356,217 +2969,30 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </section>
 
-                        <section v-if="activeSection === 'review'" id="profile-review" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">Final check</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Check before applying</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Confirm that your saved information is current and ready to share with a provider.</p>
-                                </div>
-                                <span
-                                    :class="[
-                                        sectionStatusPillClass,
-                                        profileComplete ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
-                                    ]"
-                                >
-                                    {{ profileQuality.label }}
-                                </span>
-                            </div>
 
-                            <div :class="[sectionBodyClass, 'space-y-5']">
-                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                    <div
-                                        :class="[
-                                            'grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center',
-                                            profileComplete ? 'bg-slate-950 text-white' : 'bg-amber-50 text-slate-950',
-                                        ]"
-                                    >
-                                        <div class="flex min-w-0 items-start gap-4">
-                                            <span
-                                                :class="[
-                                                    'grid h-12 w-12 shrink-0 place-items-center rounded-md text-lg',
-                                                    profileComplete ? 'bg-amber-400 text-slate-950' : 'bg-amber-200 text-amber-900',
-                                                ]"
-                                            >
-                                                <i :class="profileComplete ? 'fa-solid fa-check' : 'fa-solid fa-list-check'" aria-hidden="true"></i>
-                                            </span>
-                                            <div class="min-w-0 flex-1">
-                                                <p :class="['text-xs font-bold uppercase tracking-[0.16em]', profileComplete ? 'text-amber-300' : 'text-amber-800']">Application readiness</p>
-                                                <div class="mt-1 flex flex-wrap items-end justify-between gap-2">
-                                                    <h4 class="text-lg font-bold">
-                                                        {{ profileComplete ? 'Profile ready for applications' : `${missingProfileFields.length} required detail${missingProfileFields.length === 1 ? '' : 's'} remaining` }}
-                                                    </h4>
-                                                    <span class="text-sm font-bold">{{ profileCompletion }}%</span>
-                                                </div>
-                                                <div :class="['mt-3 h-1.5 overflow-hidden rounded-full', profileComplete ? 'bg-white/15' : 'bg-amber-200']">
-                                                    <div :class="['h-full rounded-full', profileComplete ? 'bg-amber-400' : 'bg-amber-600']" :style="{ width: `${profileCompletion}%` }"></div>
-                                                </div>
-                                                <p :class="['mt-2 text-sm leading-5', profileComplete ? 'text-slate-300' : 'text-slate-600']">{{ profileQuality.detail }}</p>
-                                            </div>
-                                        </div>
-
-                                        <button
-                                            v-if="!profileComplete"
-                                            type="button"
-                                            class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                            @click="openSection(profileRecommendedAction.section)"
-                                        >
-                                            Complete next detail
-                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                        </button>
-                                        <a
-                                            v-else
-                                            href="/dashboard/scholarships"
-                                            class="inline-flex w-fit items-center justify-center gap-2 rounded-md bg-amber-400 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-amber-300"
-                                        >
-                                            Browse scholarships
-                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                        </a>
-                                    </div>
-
-                                    <div class="grid divide-y divide-slate-200 bg-white sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                                        <button
-                                            type="button"
-                                            class="flex items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50"
-                                            @click="openSection(profileComplete ? 'personal' : recommendedSection)"
-                                        >
-                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', profileComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']">
-                                                <i :class="profileComplete ? 'fa-solid fa-check' : 'fa-solid fa-pen'" aria-hidden="true"></i>
-                                            </span>
-                                            <span class="min-w-0 flex-1">
-                                                <span class="block text-xs font-semibold text-slate-500">Profile details</span>
-                                                <span class="mt-0.5 block truncate text-sm font-bold text-slate-950">{{ profileComplete ? 'Complete' : `${missingProfileFields.length} remaining` }}</span>
-                                            </span>
-                                            <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            class="flex items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50"
-                                            @click="openVerificationRecords"
-                                        >
-                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', profileVerificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : profileVerificationStatus === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">
-                                                <i class="fa-solid fa-shield-check" aria-hidden="true"></i>
-                                            </span>
-                                            <span class="min-w-0 flex-1">
-                                                <span class="block text-xs font-semibold text-slate-500">Academic record</span>
-                                                <span class="mt-0.5 block truncate text-sm font-bold text-slate-950">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
-                                            </span>
-                                            <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
-                                        </button>
-                                        <a href="/dashboard/documents" class="flex items-center gap-3 px-4 py-4 text-left transition hover:bg-slate-50">
-                                            <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', preparedDocumentsCount ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600']">
-                                                <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
-                                            </span>
-                                            <span class="min-w-0 flex-1">
-                                                <span class="block text-xs font-semibold text-slate-500">Prepared files</span>
-                                                <span class="mt-0.5 block truncate text-sm font-bold text-slate-950">{{ preparedDocumentsCount }} saved</span>
-                                            </span>
-                                            <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
-                                        </a>
-                                    </div>
-
-                                    <div v-if="missingProfileFields.length" class="border-t border-amber-200 bg-amber-50 px-4 py-3 sm:px-5">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <span class="mr-1 text-xs font-bold text-amber-900">Still needed:</span>
-                                            <button
-                                                v-for="field in missingProfileFields"
-                                                :key="field.key"
-                                                type="button"
-                                                class="rounded-md bg-white px-2.5 py-1.5 text-xs font-bold text-amber-800 ring-1 ring-amber-200 transition hover:ring-amber-300"
-                                                @click="openSection(sectionForField(field.key))"
-                                            >
-                                                {{ field.label }}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                <section class="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                                    <div class="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <h4 class="text-base font-bold text-slate-950">Information providers will see</h4>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">Review the details shared after you submit an application.</p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            class="inline-flex w-fit items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                            @click="showProviderPreview = true"
-                                        >
-                                            <i class="fa-solid fa-eye" aria-hidden="true"></i>
-                                            Preview provider view
-                                        </button>
-                                    </div>
-
-                                    <div class="divide-y divide-slate-200">
-                                        <article
-                                            v-for="group in reviewGroups"
-                                            :key="group.id"
-                                            class="grid gap-4 px-5 py-5 lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-6"
-                                        >
-                                            <div>
-                                                <div class="flex items-center gap-2.5">
-                                                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-white">
-                                                        <i :class="group.icon" aria-hidden="true"></i>
-                                                    </span>
-                                                    <div class="min-w-0">
-                                                        <h5 class="truncate text-sm font-bold text-slate-950">{{ group.title }}</h5>
-                                                        <p class="mt-0.5 text-[11px] font-semibold text-slate-500">{{ sectionStatusLabel(profileSection(group.id)) }}</p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    class="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 transition hover:text-slate-950"
-                                                    @click="openSection(group.id)"
-                                                >
-                                                    <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
-                                                    Edit section
-                                                </button>
-                                            </div>
-
-                                            <dl class="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-                                                <div v-for="item in group.items" :key="`${group.title}-${item[0]}`" class="min-w-0">
-                                                    <dt class="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">{{ item[0] }}</dt>
-                                                    <dd :class="['mt-1 break-words text-sm font-semibold leading-5', hasValue(item[1]) ? 'text-slate-900' : 'text-slate-400']">
-                                                        {{ hasValue(item[1]) ? item[1] : 'Not provided' }}
-                                                    </dd>
-                                                </div>
-                                            </dl>
-                                        </article>
-                                    </div>
-                                </section>
-                            </div>
-                        </section>
-
-                        <div v-if="profileView === 'edit'" class="student-card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div class="sticky bottom-0 flex flex-col gap-3 border border-slate-200 bg-white p-3 shadow-[0_-8px_20px_rgba(15,23,42,0.06)] sm:flex-row sm:items-center sm:justify-end">
                             <button
                                 type="button"
                                 class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                                 :disabled="isSaving"
-                                @click="visibleActiveSectionIndex <= 0 ? openProfileOverview() : goToPreviousSection()"
+                                @click="closeProfileEditor"
                             >
-                                {{ visibleActiveSectionIndex <= 0 ? 'Back to profile' : 'Previous' }}
+                                Cancel
                             </button>
-
-                            <p class="text-center text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                                {{ activeProfileSection.label }}
-                            </p>
-
                             <button
                                 type="button"
                                 class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                :disabled="isSaving"
-                                @click="goToNextSection"
+                                :disabled="isSaving || (activeSection !== 'verification' && !hasUnsavedChanges)"
+                                @click="finishProfileEditor"
                             >
-                                {{ isSaving
-                                    ? 'Saving...'
-                                    : visibleActiveSectionIndex >= visibleProfileSections.length - 1
-                                        ? (hasUnsavedChanges ? 'Save and return' : 'Return to profile')
-                                        : (hasUnsavedChanges ? 'Save and continue' : 'Next') }}
+                                {{ isSaving ? 'Saving...' : activeSection === 'verification' && !hasUnsavedChanges ? 'Close' : 'Save changes' }}
                             </button>
                         </div>
                     </section>
 
-                </div>
+                    </section>
+                    </div>
+                </Teleport>
 
             </div>
         </section>

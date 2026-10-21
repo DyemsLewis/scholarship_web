@@ -365,7 +365,13 @@
     }
 
     .student-hero-icon {
-        @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-amber-300 text-slate-950 shadow-sm;
+        @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-amber-300 text-slate-950 shadow-sm;
+    }
+
+    .student-hero-icon > i,
+    .student-page header :is(span, button)[class*='place-items-center'] > i {
+        display: block;
+        line-height: 1;
     }
 
     .student-card {

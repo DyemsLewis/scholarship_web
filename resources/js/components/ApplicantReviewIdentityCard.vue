@@ -9,6 +9,7 @@ const props = defineProps({
     facts: { type: Array, default: () => [] },
     stackFacts: { type: Boolean, default: false },
     canReviewPhoto: { type: Boolean, default: true },
+    triggerOnly: { type: Boolean, default: false },
     busy: { type: Boolean, default: false },
     error: { type: String, default: '' },
 });
@@ -83,7 +84,7 @@ watch(() => props.applicant?.profile_photo_review_status, () => {
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.04)]">
+    <section v-if="!triggerOnly" class="overflow-hidden rounded-sm border border-slate-300 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.04)]">
         <div class="flex flex-col gap-4 p-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex min-w-0 items-start gap-4">
                 <button
@@ -144,6 +145,16 @@ watch(() => props.applicant?.profile_photo_review_status, () => {
             <span v-if="applicant.profile_photo_review_note" class="ml-1">{{ applicant.profile_photo_review_note }}</span>
         </div>
     </section>
+
+    <button
+        v-else
+        type="button"
+        class="inline-flex h-10 shrink-0 items-center justify-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50"
+        @click="openPhotoReview"
+    >
+        <i class="fa-regular fa-image text-amber-700" aria-hidden="true"></i>
+        Review 2x2 photo
+    </button>
 
     <Teleport to="body">
         <div v-if="showPhotoReview" class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-4" @click.self="closePhotoReview">

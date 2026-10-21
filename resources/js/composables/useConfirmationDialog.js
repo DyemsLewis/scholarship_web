@@ -6,6 +6,8 @@ export function useConfirmationDialog() {
         title: '',
         message: '',
         confirmLabel: 'Confirm',
+        cancelLabel: 'Cancel',
+        eyebrow: 'Confirmation required',
         tone: 'warning',
     });
     let resolver = null;
@@ -20,6 +22,8 @@ export function useConfirmationDialog() {
             title: options.title ?? 'Confirm action',
             message: options.message ?? 'Please confirm that you want to continue.',
             confirmLabel: options.confirmLabel ?? 'Confirm',
+            cancelLabel: options.cancelLabel ?? 'Cancel',
+            eyebrow: options.eyebrow ?? 'Confirmation required',
             tone: options.tone ?? 'warning',
         });
 

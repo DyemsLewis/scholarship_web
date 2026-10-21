@@ -6,6 +6,7 @@ import FilePreviewModal from '../components/FilePreviewModal.vue';
 import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import ReviewOfficerSidebar from '../components/ReviewOfficerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
+import ApplicantProfileRecord from '../components/profile/ApplicantProfileRecord.vue';
 import { formatFileSize } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -71,18 +72,84 @@ const reviewedAcademicResultReady = computed(() => {
 
     return reviewedAcademicResult.value !== '' && Number.isFinite(result) && result > 0 && result <= maximum;
 });
-const applicantIdentityFacts = computed(() => [
-    { label: 'Education', value: statusLabel(applicant.value?.education_level || 'not provided') },
-    { label: 'School', value: applicant.value?.school || 'Not provided' },
-    { label: 'Saved result', value: savedAcademicResult.value },
-    { label: 'Academic evidence', value: academicRecord.value ? 'Submitted' : 'Not submitted' },
+const applicantProfileRecord = computed(() => ({
+    name: applicant.value?.name || applicant.value?.username || 'Applicant record',
+    initials: String(applicant.value?.name || applicant.value?.username || 'AP')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join(''),
+    photoUrl: applicant.value?.profile_photo_url,
+    educationSummary: [
+        applicant.value?.education_level ? statusLabel(applicant.value.education_level) : null,
+        applicant.value?.course_or_strand,
+        applicant.value?.year_level,
+    ].filter(Boolean).join(' - '),
+}));
+const applicantProfileSections = computed(() => [
+    {
+        id: 'personal',
+        title: 'Personal and contact',
+        icon: 'fa-solid fa-address-card',
+        description: 'Identity and contact information available during verification.',
+        items: [
+            { label: 'Birthdate', value: applicant.value?.birthdate },
+            { label: 'Age', value: applicant.value?.age !== null && applicant.value?.age !== undefined ? `${applicant.value.age} years old` : null },
+            { label: 'Gender', value: applicant.value?.gender ? statusLabel(applicant.value.gender) : null },
+            { label: 'Contact number', value: applicant.value?.contact_number },
+            { label: 'Email address', value: applicant.value?.email },
+            { label: 'Account managed by', value: applicant.value?.account_managed_by ? statusLabel(applicant.value.account_managed_by) : null },
+            { label: 'Citizenship', value: applicant.value?.citizenship_status ? statusLabel(applicant.value.citizenship_status) : null },
+        ],
+    },
+    {
+        id: 'academic',
+        title: 'Learning record',
+        icon: 'fa-solid fa-graduation-cap',
+        description: 'Academic information to compare with the submitted records.',
+        items: [
+            { label: 'Education level', value: applicant.value?.education_level ? statusLabel(applicant.value.education_level) : null },
+            { label: 'Grade / year / level', value: applicant.value?.year_level },
+            { label: 'Enrollment', value: applicant.value?.enrollment_status ? statusLabel(applicant.value.enrollment_status) : null },
+            { label: 'Institution type', value: applicant.value?.school_type ? statusLabel(applicant.value.school_type) : null },
+            { label: 'School / institution', value: applicant.value?.school, wide: true },
+            { label: 'Track / strand / course', value: applicant.value?.course_or_strand, wide: true },
+            { label: 'Learner / student ID', value: applicant.value?.learner_reference_number },
+            { label: 'Academic year', value: applicant.value?.academic_year },
+            { label: 'Record period', value: applicant.value?.academic_term ? statusLabel(applicant.value.academic_term) : null },
+            { label: 'Saved result', value: savedAcademicResult.value },
+        ],
+    },
+    {
+        id: 'household',
+        title: 'Household and guardian',
+        icon: 'fa-solid fa-house-chimney-user',
+        description: 'Self-declared household and guardian context.',
+        items: [
+            { label: 'Income bracket', value: applicant.value?.income_bracket },
+            { label: 'Household size', value: applicant.value?.household_size ? `${applicant.value.household_size} members` : null },
+            { label: 'Current scholarship', value: applicant.value?.current_scholarship_status ? statusLabel(applicant.value.current_scholarship_status) : null },
+            { label: 'Guardian name', value: applicant.value?.guardian_name },
+            { label: 'Relationship', value: applicant.value?.guardian_relationship ? statusLabel(applicant.value.guardian_relationship) : null },
+            { label: 'Guardian contact', value: applicant.value?.guardian_contact },
+            { label: 'Guardian email', value: applicant.value?.guardian_email },
+        ],
+    },
+    {
+        id: 'location',
+        title: 'Location',
+        icon: 'fa-solid fa-location-dot',
+        description: 'Residence information retained for eligibility checks.',
+        items: [
+            { label: 'Region', value: applicant.value?.region },
+            { label: 'Province', value: applicant.value?.province },
+            { label: 'City / municipality', value: applicant.value?.city },
+            { label: 'Barangay', value: applicant.value?.barangay },
+            { label: 'Street / home address', value: applicant.value?.address, wide: true },
+        ],
+    },
 ]);
-const hasGuardianDetails = computed(() => Boolean(
-    applicant.value?.guardian_name
-    || applicant.value?.guardian_relationship
-    || applicant.value?.guardian_contact
-    || applicant.value?.guardian_email,
-));
 const reviewFocus = computed(() => {
     const status = applicantReviewStatus(applicant.value);
 
@@ -427,10 +494,6 @@ onMounted(loadApplicant);
                     description="Compare the profile with its supporting records, then record the verification decision."
                     icon="fa-solid fa-user-check"
                 >
-                    <template v-if="applicant" #meta>
-                        <span>{{ applicant.email || 'Email not provided' }}</span>
-                        <span>{{ statusLabel(applicant.education_level || 'Education not provided') }}</span>
-                    </template>
                     <template v-if="applicant" #actions>
                             <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
                                 {{ applicantReviewStatusLabel(applicant) }}
@@ -488,18 +551,6 @@ onMounted(loadApplicant);
                             </nav>
                         </section>
 
-                        <ApplicantReviewIdentityCard
-                            :applicant="applicant"
-                            eyebrow="Admin applicant review"
-                            :status-label="applicantReviewStatusLabel(applicant)"
-                            :status-class="statusClass(applicantReviewStatus(applicant))"
-                            :facts="applicantIdentityFacts"
-                            :busy="isReviewingPhoto"
-                            :error="photoReviewError"
-                            @approve-photo="updatePhotoReview('approve')"
-                            @request-photo-replacement="updatePhotoReview('request_replacement', $event)"
-                        />
-
                         <section class="admin-panel flex flex-col gap-3 border-l-4 border-l-slate-950 p-4 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex min-w-0 items-center gap-3">
                                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-amber-300"><i :class="reviewFocus.icon" aria-hidden="true"></i></span>
@@ -513,146 +564,25 @@ onMounted(loadApplicant);
                             <span v-else class="w-fit shrink-0 rounded-md bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Waiting for evidence</span>
                         </section>
 
-                        <article v-if="activeReviewSection === 'profile'" id="applicant-details" class="admin-panel scroll-mt-6 overflow-hidden">
-                            <div class="flex items-start gap-3 border-b border-slate-200 p-5">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                    <i class="fa-solid fa-user-graduate" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Applicant record</p>
-                                    <h3 class="mt-1 text-xl font-bold text-slate-950">Profile used for verification</h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">Confirm the saved school result against the submitted academic evidence. Other profile details provide identification context only.</p>
-                                </div>
-                            </div>
-
-                            <div class="space-y-5 p-5">
-                                <section>
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Applicant context</p>
-                                            <h4 class="mt-1 text-base font-bold text-slate-950">Identity and account responsibility</h4>
-                                        </div>
-                                        <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Applicant-declared</span>
-                                    </div>
-                                    <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                                        <div class="rounded-md bg-slate-50 p-3">
-                                            <dt class="font-semibold text-slate-500">Birthdate</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ applicant.birthdate || 'Not provided' }}</dd>
-                                            <dd v-if="applicant.age !== null && applicant.age !== undefined" class="mt-1 text-xs text-slate-500">Age {{ applicant.age }}</dd>
-                                        </div>
-                                        <div class="rounded-md bg-slate-50 p-3">
-                                            <dt class="font-semibold text-slate-500">Gender</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.gender || 'not provided') }}</dd>
-                                        </div>
-                                        <div class="rounded-md bg-slate-50 p-3">
-                                            <dt class="font-semibold text-slate-500">Account managed by</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.account_managed_by || 'learner') }}</dd>
-                                        </div>
-                                        <div class="rounded-md bg-slate-50 p-3">
-                                            <dt class="font-semibold text-slate-500">Citizenship</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.citizenship_status || 'not provided') }}</dd>
-                                        </div>
-                                    </dl>
-                                </section>
-
-                                <section class="border-t border-slate-200 pt-5">
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Academic details</p>
-                                            <h4 class="mt-1 text-base font-bold text-slate-950">Record to compare with evidence</h4>
-                                        </div>
-                                        <span :class="['rounded-md px-2.5 py-1 text-xs font-bold', academicRecord ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">
-                                            {{ academicRecord ? 'Evidence submitted' : 'No evidence submitted' }}
-                                        </span>
-                                    </div>
-
-                                    <dl class="mt-4 grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Education level</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.education_level || 'not provided') }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Grade / year / level</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ applicant.year_level || 'Not provided' }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Enrollment status</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.enrollment_status || 'not provided') }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Institution type</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.school_type || 'not provided') }}</dd>
-                                        </div>
-                                        <div class="sm:col-span-2">
-                                            <dt class="font-semibold text-slate-500">School / learning institution</dt>
-                                            <dd class="mt-1 break-words font-bold text-slate-950">{{ applicant.school || 'Not provided' }}</dd>
-                                        </div>
-                                        <div class="sm:col-span-2">
-                                            <dt class="font-semibold text-slate-500">Track / strand / course</dt>
-                                            <dd class="mt-1 break-words font-bold text-slate-950">{{ applicant.course_or_strand || 'Not applicable' }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Learner / student ID</dt>
-                                            <dd class="mt-1 break-words font-bold text-slate-950">{{ applicant.learner_reference_number || 'Not provided' }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Academic year</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ applicant.academic_year || 'Not provided' }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Record period</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.academic_term || 'not provided') }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Grading system</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ statusLabel(applicant.grading_scale || 'not provided') }}</dd>
-                                        </div>
-                                    </dl>
-
-                                </section>
-
-                                <section v-if="hasGuardianDetails" class="border-t border-slate-200 pt-5">
-                                    <div class="flex flex-wrap items-center justify-between gap-2">
-                                        <div>
-                                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Parent or guardian</p>
-                                            <h4 class="mt-1 text-base font-bold text-slate-950">Contact for a supported applicant</h4>
-                                        </div>
-                                        <span v-if="applicant.guardian_is_account_owner" class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Manages applicant account</span>
-                                    </div>
-                                    <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Name</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ applicant.guardian_name || 'Not provided' }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Relationship</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ applicant.guardian_relationship || 'Not provided' }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Contact</dt>
-                                            <dd class="mt-1 font-bold text-slate-950">{{ applicant.guardian_contact || 'Not provided' }}</dd>
-                                        </div>
-                                        <div>
-                                            <dt class="font-semibold text-slate-500">Email</dt>
-                                            <dd class="mt-1 break-words font-bold text-slate-950">{{ applicant.guardian_email || 'Not provided' }}</dd>
-                                        </div>
-                                    </dl>
-                                </section>
-                            </div>
-                        </article>
-
-                        <article v-if="activeReviewSection === 'profile'" class="admin-panel flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="flex items-center gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
-                                    <i class="fa-solid fa-chart-line" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <p class="text-xs font-bold uppercase tracking-[0.12em] text-amber-800">Saved academic result</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-600">Applicant-provided value to compare with the academic evidence.</p>
-                                </div>
-                            </div>
-                            <p class="text-xl font-black text-slate-950">{{ savedAcademicResult }}</p>
-                        </article>
+                        <ApplicantProfileRecord
+                            v-if="activeReviewSection === 'profile'"
+                            :record="applicantProfileRecord"
+                            :sections="applicantProfileSections"
+                            :verification-status="applicantReviewStatus(applicant)"
+                            :verification-label="applicantReviewStatusLabel(applicant)"
+                            :show-trust-notice="false"
+                        >
+                            <template #actions>
+                                <ApplicantReviewIdentityCard
+                                    :applicant="applicant"
+                                    trigger-only
+                                    :busy="isReviewingPhoto"
+                                    :error="photoReviewError"
+                                    @approve-photo="updatePhotoReview('approve')"
+                                    @request-photo-replacement="updatePhotoReview('request_replacement', $event)"
+                                />
+                            </template>
+                        </ApplicantProfileRecord>
 
                         <article v-if="activeReviewSection === 'profile'" id="verification-files" class="admin-panel scroll-mt-6 p-5">
                             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

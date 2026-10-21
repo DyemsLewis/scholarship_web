@@ -78,6 +78,66 @@ class ApplicantProfileWorkflowTest extends TestCase
             ->assertJsonValidationErrors('birthdate');
     }
 
+    public function test_applicant_can_save_one_profile_section_before_other_sections_are_complete(): void
+    {
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                'profile_section' => 'personal',
+                'first_name' => 'Ana',
+                'last_name' => 'Santos',
+                'contact_number' => '09171234567',
+                'birthdate' => '2004-06-15',
+                'account_managed_by' => 'learner',
+                'citizenship_status' => 'filipino',
+            ])
+            ->assertOk()
+            ->assertJsonPath('user.first_name', 'Ana')
+            ->assertJsonPath('profile_readiness.complete', false);
+
+        $this->assertDatabaseHas('student_profiles', [
+            'user_id' => $applicant->id,
+            'first_name' => 'Ana',
+            'last_name' => 'Santos',
+            'contact_number' => '09171234567',
+        ]);
+    }
+
+    public function test_profile_section_save_preserves_values_owned_by_other_sections(): void
+    {
+        $applicant = $this->completeAdultApplicant();
+        $applicant->studentProfile()->update([
+            'current_scholarship_status' => 'receiving',
+            'current_scholarship_details' => 'Existing community grant',
+            'guardian_name' => 'Maria Applicant',
+            'guardian_is_account_owner' => true,
+        ]);
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                'profile_section' => 'personal',
+                'first_name' => 'Updated',
+                'last_name' => $applicant->last_name,
+                'contact_number' => $applicant->contact_number,
+                'gwa' => 12,
+                'grading_scale' => 'percentage',
+                'current_scholarship_status' => 'none',
+                'guardian_name' => null,
+                'guardian_is_account_owner' => false,
+            ])
+            ->assertOk();
+
+        $profile = $applicant->fresh()->studentProfile;
+
+        $this->assertSame('Updated', $profile->first_name);
+        $this->assertSame(90.0, (float) $profile->gwa);
+        $this->assertSame('receiving', $profile->current_scholarship_status);
+        $this->assertSame('Existing community grant', $profile->current_scholarship_details);
+        $this->assertSame('Maria Applicant', $profile->guardian_name);
+        $this->assertTrue($profile->guardian_is_account_owner);
+    }
+
     public function test_account_household_and_enrollment_context_are_required_for_profile_readiness(): void
     {
         $applicant = $this->completeAdultApplicant();

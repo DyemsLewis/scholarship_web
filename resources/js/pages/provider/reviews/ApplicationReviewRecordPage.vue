@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
+import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
@@ -55,20 +56,71 @@ const assignmentLabel = computed(() => {
 });
 const acceptedDocuments = computed(() => application.value?.documents?.filter((document) => document.status === 'accepted').length ?? 0);
 const requiredDocuments = computed(() => readiness.value.required ?? application.value?.document_checklist?.length ?? 0);
-const profileFields = computed(() => [
-    ['Age', applicant.value.age ? `${applicant.value.age} years old` : null],
-    ['Contact number', applicant.value.contact_number],
-    ['Account managed by', applicant.value.account_managed_by],
-    ['Parent or guardian', applicant.value.guardian_name],
-    ['School', applicant.value.school],
-    ['Education', [applicant.value.education_level, applicant.value.course_or_strand, applicant.value.year_level].filter(Boolean).join(' - ')],
-    ['Academic result', applicant.value.gwa ? `${applicant.value.gwa} · ${labelize(applicant.value.grading_scale)}` : null],
-    ['Enrollment', applicant.value.enrollment_status],
-    ['Income bracket', applicant.value.income_bracket],
-    ['Household size', applicant.value.household_size ? `${applicant.value.household_size} members` : null],
-    ['Current scholarship', applicant.value.current_scholarship_status],
-    ['Citizenship', applicant.value.citizenship_status],
-].filter(([, value]) => value));
+const applicantProfileRecord = computed(() => ({
+    name: applicant.value.name || 'Applicant record',
+    initials: String(applicant.value.name || 'AP')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join(''),
+    photoUrl: applicant.value.profile_photo_url,
+    educationSummary: [applicant.value.education_level, applicant.value.course_or_strand, applicant.value.year_level]
+        .filter(Boolean)
+        .join(' - '),
+}));
+const applicantProfileSections = computed(() => [
+    {
+        id: 'personal',
+        title: 'Personal and contact',
+        icon: 'fa-solid fa-address-card',
+        description: 'Identity and contact details submitted for this applicant record.',
+        items: [
+            { label: 'Age', value: applicant.value.age ? `${applicant.value.age} years old` : null },
+            { label: 'Gender', value: applicant.value.gender ? labelize(applicant.value.gender) : null },
+            { label: 'Contact number', value: applicant.value.contact_number },
+            { label: 'Email address', value: applicant.value.email },
+            { label: 'Account managed by', value: applicant.value.account_managed_by ? labelize(applicant.value.account_managed_by) : null },
+            { label: 'Citizenship', value: applicant.value.citizenship_status ? labelize(applicant.value.citizenship_status) : null },
+        ],
+    },
+    {
+        id: 'academic',
+        title: 'Learning record',
+        icon: 'fa-solid fa-graduation-cap',
+        description: 'Academic information used for eligibility and evidence review.',
+        items: [
+            { label: 'School', value: applicant.value.school },
+            { label: 'Education', value: [applicant.value.education_level, applicant.value.course_or_strand, applicant.value.year_level].filter(Boolean).join(' - ') },
+            { label: 'Academic result', value: applicant.value.gwa ? `${applicant.value.gwa} - ${labelize(applicant.value.grading_scale)}` : null },
+            { label: 'Enrollment', value: applicant.value.enrollment_status },
+            { label: 'Academic year', value: applicant.value.academic_year },
+            { label: 'Record period', value: applicant.value.academic_term ? labelize(applicant.value.academic_term) : null },
+        ],
+    },
+    {
+        id: 'household',
+        title: 'Household and guardian',
+        icon: 'fa-solid fa-house-chimney-user',
+        description: 'Household information relevant to financial and guardian requirements.',
+        items: [
+            { label: 'Income bracket', value: applicant.value.income_bracket },
+            { label: 'Household size', value: applicant.value.household_size ? `${applicant.value.household_size} members` : null },
+            { label: 'Current scholarship', value: applicant.value.current_scholarship_status ? labelize(applicant.value.current_scholarship_status) : null },
+            { label: 'Parent or guardian', value: applicant.value.guardian_name },
+        ],
+    },
+    {
+        id: 'location',
+        title: 'Location',
+        icon: 'fa-solid fa-location-dot',
+        description: 'General residence used for location-based program rules.',
+        items: [
+            { label: 'Home location', value: applicant.value.location, wide: true },
+            { label: 'Street / home address', value: applicant.value.address, wide: true },
+        ],
+    },
+]);
 const rejectionReasons = decisionReasonOptions.filter((option) => [
     'missing_documents',
     'academic_requirement_not_met',
@@ -368,17 +420,21 @@ onMounted(loadApplication);
                         </div>
                     </section>
 
-                    <section v-else-if="activeSection === 'applicant'" class="mt-4 border border-slate-200 bg-white shadow-sm">
-                        <header class="flex items-center gap-4 border-b border-slate-200 px-6 py-5">
-                            <img v-if="applicant.profile_photo_url" :src="applicant.profile_photo_url" :alt="`${applicant.name} profile`" class="h-20 w-20 border border-slate-200 object-cover">
-                            <span v-else class="grid h-20 w-20 place-items-center border border-slate-200 bg-slate-100 text-xl text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
-                            <div class="min-w-0 flex-1"><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Applicant profile</p><h2 class="mt-1 text-2xl font-bold text-slate-950">{{ applicant.name }}</h2><p class="mt-1 text-sm text-slate-500">{{ applicant.school || 'School not provided' }}</p></div>
-                            <div v-if="canEditReview && applicant.profile_photo_url" class="flex gap-2"><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700" :disabled="actionBusy" @click="reviewPhoto('approve')"><i class="fa-solid fa-check text-[9px]" aria-hidden="true"></i>Accept photo</button><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700" @click="showPhotoReplacementForm = true"><i class="fa-solid fa-rotate text-[9px]" aria-hidden="true"></i>Replace photo</button></div>
-                        </header>
-                        <div class="grid grid-cols-4 gap-x-8 gap-y-6 border-b border-slate-200 px-6 py-6">
-                            <div v-for="field in profileFields" :key="field[0]"><p class="text-xs text-slate-500">{{ field[0] }}</p><p class="mt-1 text-sm font-bold text-slate-900">{{ field[1] }}</p></div>
-                        </div>
-                        <div class="px-6 py-5">
+                    <div v-else-if="activeSection === 'applicant'" class="mt-4 space-y-4">
+                        <ApplicantProfileRecord
+                            :record="applicantProfileRecord"
+                            :sections="applicantProfileSections"
+                            :verification-status="applicant.profile_verification_status"
+                            :verification-label="labelize(applicant.profile_verification_status)"
+                            :show-trust-notice="false"
+                        >
+                            <template v-if="canEditReview && applicant.profile_photo_url" #actions>
+                                <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700" :disabled="actionBusy" @click="reviewPhoto('approve')"><i class="fa-solid fa-check text-[9px]" aria-hidden="true"></i>Accept photo</button>
+                                <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700" @click="showPhotoReplacementForm = true"><i class="fa-solid fa-rotate text-[9px]" aria-hidden="true"></i>Replace photo</button>
+                            </template>
+                        </ApplicantProfileRecord>
+
+                        <section class="border border-slate-200 bg-white px-6 py-5 shadow-sm">
                             <div class="flex items-center justify-between"><div><h3 class="font-bold text-slate-950">Profile evidence</h3><p class="mt-1 text-sm text-slate-500">Academic record and identity evidence saved in the applicant profile.</p></div><span :class="['border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(applicant.profile_verification_status)]">{{ labelize(applicant.profile_verification_status) }}</span></div>
                             <div class="mt-4 divide-y divide-slate-200 border border-slate-200">
                                 <div v-for="proof in applicant.profile_proofs" :key="proof.id" class="flex items-center gap-4 px-4 py-3"><i class="fa-regular fa-file-lines text-slate-400" aria-hidden="true"></i><div class="min-w-0 flex-1"><p class="truncate text-sm font-bold text-slate-900">{{ labelize(proof.document_type) }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ proof.original_name }} · {{ proof.uploaded_at }}</p></div><a :href="proof.view_url" target="_blank" rel="noopener" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">Open<i class="fa-solid fa-arrow-up-right-from-square text-[9px]" aria-hidden="true"></i></a></div>
@@ -389,8 +445,8 @@ onMounted(loadApplication);
                                 <label v-if="['percentage', 'grade_point'].includes(academicForm.academic_grading_scale)" class="w-44"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Verified result</span><input v-model="academicForm.academic_result" type="number" step="0.01" class="h-10 w-full border border-slate-300 px-3 text-sm"></label>
                                 <button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-shield-circle-check']" aria-hidden="true"></i>Verify academic record</button>
                             </form>
-                        </div>
-                    </section>
+                        </section>
+                    </div>
 
                     <section v-else-if="activeSection === 'decision'" class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Screening result</h2><p class="mt-1 text-sm text-slate-500">Score the published rubric, then record one result.</p></div></div><button v-if="canEditReview" type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 px-4 text-xs font-bold text-slate-700" @click="showCorrectionForm = true"><i class="fa-solid fa-pen-to-square text-[10px]" aria-hidden="true"></i>Request correction</button></header>

@@ -520,11 +520,13 @@ class CompleteDemoSeeder extends Seeder
         ]);
         $applicant->forceFill(['email_verified_at' => now()->subMonths(2)])->save();
 
-        $photoSource = public_path('images/demo/default-applicant-avatar.jpg');
+        $photoFilename = sprintf('applicant-%02d.jpg', $number);
+        $photoSourceFilename = sprintf('applicant-%02d.jpg', (($number - 1) % 12) + 1);
+        $photoSource = public_path("images/demo/applicants/{$photoSourceFilename}");
         if (! is_file($photoSource)) {
-            throw new RuntimeException("Missing default demo applicant avatar: {$photoSource}");
+            throw new RuntimeException("Missing demo applicant photo: {$photoSource}");
         }
-        $photoPath = sprintf('demo-showcase/profile-photos/%d/applicant-%02d.jpg', $applicant->id, $number);
+        $photoPath = "demo-showcase/profile-photos/{$applicant->id}/{$photoFilename}";
         Storage::disk('local')->put($photoPath, file_get_contents($photoSource));
         $verificationPending = $record['scenario'] === 'screening_review';
 
@@ -573,7 +575,7 @@ class CompleteDemoSeeder extends Seeder
             'guardian_email' => 'guardian'.$number.'@demo.test',
             'guardian_is_account_owner' => false,
             'profile_photo_path' => $photoPath,
-            'profile_photo_original_name' => 'default-applicant-avatar.jpg',
+            'profile_photo_original_name' => $photoFilename,
             'profile_photo_mime_type' => 'image/jpeg',
             'profile_photo_size' => filesize($photoSource),
             'profile_photo_updated_at' => now()->subMonths(2),

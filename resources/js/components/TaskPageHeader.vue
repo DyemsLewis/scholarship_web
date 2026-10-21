@@ -44,6 +44,10 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    compact: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const isApplicant = computed(() => props.theme === 'applicant');
@@ -83,28 +87,28 @@ const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props
         </template>
     </ProviderPageHeader>
 
-    <header v-else :class="headerClass">
-        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div class="flex min-w-0 items-start gap-3">
+    <header v-else :class="[headerClass, compact ? '!min-h-0 !px-4 !py-3' : '']">
+        <div :class="['flex flex-col lg:flex-row lg:items-center lg:justify-between', compact ? 'gap-3' : 'gap-4']">
+            <div :class="['flex min-w-0 gap-3', isApplicant ? 'items-center' : 'items-start']">
                 <span
                     :class="[
-                        'grid h-11 w-11 shrink-0 place-items-center rounded-md shadow-sm',
+                        'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md shadow-sm',
                         isApplicant ? 'student-hero-icon' : 'bg-slate-950 text-amber-300',
                     ]"
                 >
-                    <i :class="[icon, 'text-base']" aria-hidden="true"></i>
+                    <i :class="[icon, 'block w-4 text-center text-base leading-none']" aria-hidden="true"></i>
                 </span>
 
                 <div class="min-w-0">
                     <p :class="['text-[11px] font-bold uppercase tracking-[0.18em]', isApplicant ? 'text-amber-200' : 'text-amber-700']">
                         {{ eyebrow }}
                     </p>
-                    <h1 :class="['mt-1 font-display text-xl font-bold leading-tight sm:text-2xl', isApplicant ? 'text-white' : 'text-slate-950']">
+                    <h1 :class="['mt-1 font-display font-bold leading-tight', compact ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl', isApplicant ? 'text-white' : 'text-slate-950']">
                         {{ title }}
                     </h1>
                     <p
                         v-if="description"
-                        :class="['mt-1.5 max-w-2xl text-sm leading-5 sm:line-clamp-2', isApplicant ? 'text-slate-300' : 'text-slate-600']"
+                        :class="['max-w-2xl leading-5 sm:line-clamp-2', compact ? 'mt-1 text-xs sm:text-sm' : 'mt-1.5 text-sm', isApplicant ? 'text-slate-300' : 'text-slate-600']"
                     >
                         {{ description }}
                     </p>

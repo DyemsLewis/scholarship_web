@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
 
 const applicantId = window.location.pathname.match(/applicants\/(\d+)/)?.[1];
 const loading = ref(true);
@@ -16,6 +17,74 @@ const gradingScale = ref('percentage');
 const academicResult = ref('');
 const photoReason = ref('');
 const verificationStatus = computed(() => applicant.value?.verification_oversight?.status || applicant.value?.applicant_verification_status || 'pending');
+const applicantProfileRecord = computed(() => ({
+    name: applicant.value?.name || 'Applicant record',
+    initials: String(applicant.value?.name || 'AP')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join(''),
+    photoUrl: applicant.value?.profile_photo_url,
+    educationSummary: [applicant.value?.education_level, applicant.value?.course_or_strand, applicant.value?.year_level]
+        .filter(Boolean)
+        .join(' - '),
+}));
+const applicantProfileSections = computed(() => [
+    {
+        id: 'personal',
+        title: 'Personal and contact',
+        icon: 'fa-solid fa-address-card',
+        description: 'Identity and contact information available during profile verification.',
+        items: [
+            { label: 'Age', value: applicant.value?.age ? `${applicant.value.age} years old` : null },
+            { label: 'Gender', value: applicant.value?.gender ? documentLabel(applicant.value.gender) : null },
+            { label: 'Contact number', value: applicant.value?.contact_number },
+            { label: 'Email address', value: applicant.value?.email },
+            { label: 'Account managed by', value: applicant.value?.account_managed_by ? documentLabel(applicant.value.account_managed_by) : null },
+            { label: 'Citizenship', value: applicant.value?.citizenship_status ? documentLabel(applicant.value.citizenship_status) : null },
+        ],
+    },
+    {
+        id: 'academic',
+        title: 'Learning record',
+        icon: 'fa-solid fa-graduation-cap',
+        description: 'Academic information that must agree with the submitted evidence.',
+        items: [
+            { label: 'School', value: applicant.value?.school },
+            { label: 'Education', value: [applicant.value?.education_level, applicant.value?.course_or_strand, applicant.value?.year_level].filter(Boolean).map(documentLabel).join(' - ') },
+            { label: 'Academic result', value: applicant.value?.gwa ? `${applicant.value.gwa} - ${documentLabel(applicant.value.grading_scale)}` : null },
+            { label: 'Enrollment', value: applicant.value?.enrollment_status },
+            { label: 'Academic year', value: applicant.value?.academic_year },
+            { label: 'Record period', value: applicant.value?.academic_term ? documentLabel(applicant.value.academic_term) : null },
+        ],
+    },
+    {
+        id: 'household',
+        title: 'Household and guardian',
+        icon: 'fa-solid fa-house-chimney-user',
+        description: 'Self-declared household information retained for application context.',
+        items: [
+            { label: 'Income bracket', value: applicant.value?.income_bracket },
+            { label: 'Household size', value: applicant.value?.household_size ? `${applicant.value.household_size} members` : null },
+            { label: 'Current scholarship', value: applicant.value?.current_scholarship_status ? documentLabel(applicant.value.current_scholarship_status) : null },
+            { label: 'Parent or guardian', value: applicant.value?.guardian_name },
+        ],
+    },
+    {
+        id: 'location',
+        title: 'Location',
+        icon: 'fa-solid fa-location-dot',
+        description: 'General residence saved in the applicant profile.',
+        items: [
+            { label: 'Region', value: applicant.value?.region },
+            { label: 'Province', value: applicant.value?.province },
+            { label: 'City / municipality', value: applicant.value?.city },
+            { label: 'Barangay', value: applicant.value?.barangay },
+            { label: 'Street / home address', value: applicant.value?.address, wide: true },
+        ],
+    },
+]);
 
 async function loadRecord() {
     loading.value = true;
@@ -72,10 +141,14 @@ onMounted(loadRecord);
         <p v-else-if="errorMessage && !applicant" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{{ errorMessage }}</p>
         <template v-else-if="applicant">
             <p v-if="successMessage" class="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{{ successMessage }}</p><p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{{ errorMessage }}</p>
-            <section class="admin-panel mt-4 overflow-hidden">
-                <div class="flex items-center gap-4 border-b border-slate-200 px-6 py-5"><span class="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user-graduate text-2xl"></i><img v-if="applicant.profile_photo_url" :src="applicant.profile_photo_url" alt="Applicant photo" class="absolute inset-0 h-full w-full object-cover"></span><div class="min-w-0 flex-1"><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Applicant record</p><h2 class="mt-1 truncate text-xl font-black text-slate-950">{{ applicant.name }}</h2><p class="mt-1 text-sm text-slate-500">{{ applicant.email }}</p></div><span class="bg-slate-100 px-3 py-1.5 text-xs font-bold uppercase text-slate-700">{{ verificationStatus }}</span></div>
-                <dl class="grid grid-cols-4 divide-x divide-slate-200"><div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">School</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ applicant.school || 'Not provided' }}</dd></div><div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Education</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ applicant.education_level || 'Not provided' }}<span v-if="applicant.year_level"> - {{ applicant.year_level }}</span></dd></div><div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Course / strand</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ applicant.course_or_strand || 'Not provided' }}</dd></div><div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Academic result</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ applicant.gwa ?? 'Not provided' }} <span v-if="applicant.grading_scale" class="text-xs font-semibold text-slate-500">({{ applicant.grading_scale.replaceAll('_', ' ') }})</span></dd></div></dl>
-            </section>
+            <ApplicantProfileRecord
+                class="mt-4"
+                :record="applicantProfileRecord"
+                :sections="applicantProfileSections"
+                :verification-status="verificationStatus"
+                :verification-label="documentLabel(verificationStatus)"
+                :show-trust-notice="false"
+            />
 
             <section class="admin-panel mt-4 overflow-hidden"><header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Supporting evidence</h2><p class="mt-0.5 text-sm text-slate-500">Open the record that supports each saved claim.</p></div></header><div v-if="applicant.verification_documents?.length" class="staff-table-viewport"><table class="portal-data-table min-w-[58rem]"><thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><tr><th class="px-6 py-3">Evidence</th><th class="px-4 py-3">Review state</th><th class="px-4 py-3">Extracted result</th><th class="px-6 py-3 text-right">Preview</th></tr></thead><tbody class="divide-y divide-slate-200"><tr v-for="document in applicant.verification_documents" :key="document.id"><td class="px-6 py-4"><p class="text-sm font-bold text-slate-950">{{ documentLabel(document.document_type) }}</p><p class="mt-0.5 text-xs text-slate-500" data-file-name>{{ document.original_name }}</p></td><td class="px-4 py-4 text-sm font-semibold capitalize text-slate-700">{{ document.status }}</td><td class="px-4 py-4 text-sm text-slate-600">{{ document.ocr_grade ?? 'Not extracted' }}</td><td class="px-6 py-4 text-right"><a :href="document.view_url" data-file-preview="true" :data-file-name="document.original_name" class="inline-grid h-9 w-9 place-items-center border border-slate-300 text-slate-700 hover:bg-slate-950 hover:text-white" aria-label="Preview evidence" title="Preview evidence"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a></td></tr></tbody></table></div><p v-else class="px-6 py-10 text-center text-sm font-semibold text-slate-500">No supporting evidence has been uploaded.</p></section>
 
