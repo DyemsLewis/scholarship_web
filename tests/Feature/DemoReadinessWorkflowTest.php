@@ -177,7 +177,13 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('detail.identity.program_cycle', 'School Year 2026-2027')
             ->assertJsonPath('detail.decision.state', 'eligible')
-            ->assertJsonPath('detail.snapshot.3.value', "{$supportStartsAtLabel} to {$supportEndsAtLabel}");
+            ->assertJsonCount(3, 'detail.snapshot')
+            ->assertJsonPath('detail.snapshot.2.key', 'capacity');
+
+        $this->actingAs($applicant)
+            ->getJson("/dashboard/scholarships/{$scholarshipId}/data?section=award")
+            ->assertOk()
+            ->assertJsonPath('detail.content.support_period', "{$supportStartsAtLabel} to {$supportEndsAtLabel}");
 
         $this->actingAs($applicant)
             ->getJson("/dashboard/scholarships/{$scholarshipId}/data?section=application")

@@ -14,6 +14,10 @@ const summary = ref({ providers: 0, programs: 0 });
 const search = ref('');
 const selectedType = ref('all');
 const failedLogos = ref(new Set());
+const providerHero = {
+    image: '/images/filipino-campus.jpg',
+    alt: 'Filipino students walking together on a university campus',
+};
 
 const providerTypes = computed(() => [
     'all',
@@ -88,6 +92,29 @@ function programTimingClass(program) {
         : 'bg-sky-100 text-sky-800';
 }
 
+function programVisual(program) {
+    const subject = `${program?.title ?? ''} ${program?.category ?? ''}`.toLowerCase();
+
+    if (/(stem|science|technology|engineering)/.test(subject)) {
+        return {
+            image: '/images/filipino-students-science-experiment.jpg',
+            alt: 'Filipino students conducting a classroom science activity',
+        };
+    }
+
+    if (/(college|university|tertiary|graduate)/.test(subject)) {
+        return {
+            image: '/images/filipino-graduates.jpg',
+            alt: 'Filipino graduates celebrating an education milestone',
+        };
+    }
+
+    return {
+        image: '/images/filipino-students-group-study.jpg',
+        alt: 'Filipino students working together during class',
+    };
+}
+
 function resetFilters() {
     search.value = '';
     selectedType.value = 'all';
@@ -131,6 +158,7 @@ onMounted(loadPage);
                 </a>
 
                 <ApplicantPageHeader
+                    v-if="!isDetail"
                     :eyebrow="isDetail ? 'Scholarship provider' : 'Provider directory'"
                     :title="isDetail ? (provider?.name || 'Provider profile') : 'Find a scholarship provider'"
                     :description="isDetail ? (provider?.mission || 'Review this organization and its current scholarship programs.') : 'Browse verified organizations and the programs they currently offer.'"
@@ -199,74 +227,126 @@ onMounted(loadPage);
                 </template>
 
                 <template v-else-if="provider">
-                    <section class="student-card mt-5 overflow-hidden">
-                        <div class="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-center">
-                            <img v-if="hasLogo(provider)" :src="provider.logo_url" :alt="`${provider.name} logo`" class="h-20 w-20 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200" @error="markLogoFailed(provider)">
-                            <div v-else class="grid h-20 w-20 shrink-0 place-items-center rounded-md bg-slate-950 text-lg font-black tracking-[0.08em] text-white">{{ providerInitials(provider) }}</div>
-                            <div class="min-w-0 flex-1">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{{ typeLabel(provider.type) }}</p>
-                                    <span class="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-800"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Verified provider</span>
+                    <section class="student-card overflow-hidden rounded-md border-slate-300 border-t-4 border-t-amber-400 shadow-[0_8px_24px_rgba(15,23,42,0.06)]" data-provider-detail-hero>
+                        <div class="grid lg:min-h-[390px] lg:grid-cols-[minmax(0,1.08fr)_minmax(25rem,0.92fr)]">
+                            <div class="flex flex-col p-5 sm:p-7 lg:p-9">
+                                <div class="flex min-w-0 items-start gap-4">
+                                    <img v-if="hasLogo(provider)" :src="provider.logo_url" :alt="`${provider.name} logo`" class="h-16 w-16 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200 sm:h-20 sm:w-20" @error="markLogoFailed(provider)">
+                                    <div v-else class="grid h-16 w-16 shrink-0 place-items-center rounded-md bg-slate-950 text-base font-black tracking-[0.08em] text-white sm:h-20 sm:w-20">{{ providerInitials(provider) }}</div>
+                                    <div class="min-w-0">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <p class="student-kicker">{{ typeLabel(provider.type) }}</p>
+                                            <span class="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-800"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Verified</span>
+                                        </div>
+                                        <h1 class="mt-2 font-display text-3xl font-bold leading-[1.08] text-slate-950 sm:text-4xl">{{ provider.name }}</h1>
+                                    </div>
                                 </div>
-                                <h2 class="mt-1 font-display text-2xl font-bold text-slate-950">{{ provider.name }}</h2>
-                                <p v-if="provider.year_established" class="mt-1 text-sm font-semibold text-slate-500">Established {{ provider.year_established }}</p>
+
+                                <p class="mt-6 max-w-3xl text-base font-semibold leading-7 text-slate-700">{{ provider.mission || provider.description || 'Supporting learners through current scholarship opportunities.' }}</p>
+
+                                <dl class="mt-6 grid border-y border-slate-200 sm:grid-cols-3">
+                                    <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:pr-4">
+                                        <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Current programs</dt>
+                                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.programs_count }} available</dd>
+                                    </div>
+                                    <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:px-4">
+                                        <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Service area</dt>
+                                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.service_area || 'Not listed' }}</dd>
+                                    </div>
+                                    <div class="py-3 sm:pl-4">
+                                        <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Established</dt>
+                                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.year_established || 'Not listed' }}</dd>
+                                    </div>
+                                </dl>
+
+                                <div class="mt-auto flex flex-wrap gap-2 pt-6">
+                                    <a v-if="provider.contact_email" :href="`mailto:${provider.contact_email}`" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                        Email provider
+                                        <i class="fa-regular fa-envelope text-xs" aria-hidden="true"></i>
+                                    </a>
+                                    <a v-if="websiteUrl(provider.website)" :href="websiteUrl(provider.website)" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                        Visit website
+                                        <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
+                                    </a>
+                                </div>
                             </div>
+
+                            <figure class="relative order-first h-56 overflow-hidden bg-slate-900 lg:order-last lg:h-auto">
+                                <img :src="providerHero.image" :alt="providerHero.alt" class="absolute inset-0 h-full w-full object-cover">
+                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-slate-950/5 to-transparent"></div>
+                                <figcaption class="absolute inset-x-0 bottom-0 p-5 text-sm font-bold text-white sm:p-6">Verified organizations publish and manage their own scholarship programs.</figcaption>
+                            </figure>
+                        </div>
+                    </section>
+
+                    <section class="student-card mt-4 overflow-hidden rounded-md border-slate-300" data-provider-detail-record>
+                        <header class="border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+                            <p class="student-kicker">Organization record</p>
+                            <h2 class="mt-1 text-xl font-bold text-slate-950">About and public contact</h2>
+                        </header>
+
+                        <div v-if="provider.description" class="px-5 py-5 sm:px-6">
+                            <p class="max-w-5xl whitespace-pre-line text-sm leading-7 text-slate-700">{{ provider.description }}</p>
                         </div>
 
-                        <dl class="divide-y divide-slate-200">
-                            <div v-if="provider.description" class="p-5">
-                                <dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">About</dt>
-                                <dd class="mt-2 max-w-5xl whitespace-pre-line text-sm leading-6 text-slate-700">{{ provider.description }}</dd>
+                        <dl class="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-4">
+                            <div class="border-b border-slate-200 px-5 py-4 sm:border-r lg:border-b-0">
+                                <dt class="text-xs font-semibold text-slate-500">Public contact</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.contact_department || 'Scholarship office' }}</dd>
                             </div>
-                            <div v-if="provider.service_area" class="grid gap-2 p-5 sm:grid-cols-[11rem_minmax(0,1fr)]">
-                                <dt class="font-bold text-slate-950"><i class="fa-solid fa-map-location-dot mr-2 text-amber-700" aria-hidden="true"></i>Service area</dt>
-                                <dd class="text-sm leading-6 text-slate-600">{{ provider.service_area }}</dd>
+                            <div class="border-b border-slate-200 px-5 py-4 lg:border-b-0 lg:border-r">
+                                <dt class="text-xs font-semibold text-slate-500">Phone</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.contact_number || 'Not listed' }}</dd>
                             </div>
-                            <div class="grid gap-2 p-5 sm:grid-cols-[11rem_minmax(0,1fr)]">
-                                <dt class="font-bold text-slate-950"><i class="fa-solid fa-address-card mr-2 text-amber-700" aria-hidden="true"></i>Public contact</dt>
-                                <dd class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
-                                    <span v-if="provider.contact_department" class="font-bold text-slate-800">{{ provider.contact_department }}</span>
-                                    <a v-if="provider.contact_email" :href="`mailto:${provider.contact_email}`" class="hover:text-slate-950">{{ provider.contact_email }}</a>
-                                    <a v-if="provider.contact_number" :href="`tel:${provider.contact_number}`" class="hover:text-slate-950">{{ provider.contact_number }}</a>
-                                    <span v-if="provider.office_hours">{{ provider.office_hours }}</span>
-                                    <span v-if="!provider.contact_department && !provider.contact_email && !provider.contact_number && !provider.office_hours">No public contact details listed.</span>
-                                </dd>
+                            <div class="border-b border-slate-200 px-5 py-4 sm:border-r lg:border-b-0">
+                                <dt class="text-xs font-semibold text-slate-500">Office hours</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.office_hours || 'Not listed' }}</dd>
                             </div>
-                            <div v-if="provider.website || provider.address" class="grid gap-2 p-5 sm:grid-cols-[11rem_minmax(0,1fr)]">
-                                <dt class="font-bold text-slate-950"><i class="fa-solid fa-building mr-2 text-amber-700" aria-hidden="true"></i>Organization</dt>
-                                <dd class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600">
-                                    <a v-if="websiteUrl(provider.website)" :href="websiteUrl(provider.website)" target="_blank" rel="noopener noreferrer" class="font-bold text-sky-700 hover:text-sky-900">Visit website <i class="fa-solid fa-arrow-up-right-from-square ml-1 text-[10px]" aria-hidden="true"></i></a>
-                                    <span v-if="provider.address">{{ provider.address }}</span>
-                                </dd>
+                            <div class="px-5 py-4">
+                                <dt class="text-xs font-semibold text-slate-500">Office address</dt>
+                                <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.address || 'Not listed' }}</dd>
                             </div>
                         </dl>
                     </section>
 
-                    <section class="mt-6">
+                    <section class="mt-7" data-provider-programs>
                         <div class="flex flex-wrap items-end justify-between gap-3">
-                            <div><p class="student-kicker">Current opportunities</p><h2 class="mt-1 font-display text-2xl font-bold text-slate-950">Scholarships from this provider</h2></div>
+                            <div>
+                                <p class="student-kicker">Current opportunities</p>
+                                <h2 class="mt-1 font-display text-2xl font-bold text-slate-950">Scholarships from this provider</h2>
+                            </div>
                             <span class="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{{ provider.programs_count }} program{{ provider.programs_count === 1 ? '' : 's' }}</span>
                         </div>
 
                         <div v-if="!provider.programs?.length" class="student-card mt-4 p-6 text-sm text-slate-600">This provider has no current public programs.</div>
 
-                        <div v-else class="mt-4 space-y-3">
-                            <article v-for="program in provider.programs" :key="program.id" class="student-card overflow-hidden">
-                                <div class="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
-                                    <img :src="program.image_url" :alt="program.title" class="h-16 w-16 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200">
-                                    <div class="min-w-0 flex-1">
+                        <div v-else class="mt-4 space-y-4">
+                            <article v-for="program in provider.programs" :key="program.id" class="student-card overflow-hidden rounded-md border-slate-300">
+                                <div class="grid lg:min-h-56 lg:grid-cols-[20rem_minmax(0,1fr)]">
+                                    <figure class="relative h-52 overflow-hidden bg-slate-900 lg:h-auto">
+                                        <img :src="programVisual(program).image" :alt="programVisual(program).alt" class="absolute inset-0 h-full w-full object-cover">
+                                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-transparent"></div>
+                                        <img :src="program.image_url" :alt="`${program.title} program mark`" class="absolute bottom-4 left-4 h-16 w-16 rounded-md bg-white object-contain p-2 shadow-lg ring-1 ring-white/70">
+                                    </figure>
+
+                                    <div class="flex flex-col p-5 sm:p-6">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">{{ program.category || 'Scholarship program' }}</span>
                                             <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', programTimingClass(program)]">{{ programTiming(program) }}</span>
                                         </div>
-                                        <h3 class="mt-1 font-display text-lg font-bold text-slate-950">{{ program.title }}</h3>
-                                        <p v-if="program.description" class="mt-1 line-clamp-1 text-sm text-slate-600">{{ program.description }}</p>
-                                        <div class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs font-semibold text-slate-500">
-                                            <span>{{ program.eligibility_match?.score ?? 0 }}% profile match</span>
-                                            <span>{{ program.benefit_summary || 'Benefits listed in program' }}</span>
+                                        <h3 class="mt-2 font-display text-2xl font-bold text-slate-950">{{ program.title }}</h3>
+                                        <p v-if="program.description" class="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-slate-600">{{ program.description }}</p>
+
+                                        <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-4 text-xs font-semibold text-slate-500">
+                                            <span><strong class="text-slate-950">{{ program.eligibility_match?.score ?? 0 }}%</strong> profile match</span>
+                                            <span><strong class="text-slate-950">{{ program.benefit_summary || 'Support listed' }}</strong></span>
                                         </div>
+
+                                        <a :href="`/dashboard/scholarships/${program.id}`" class="mt-5 inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                            View scholarship
+                                            <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                        </a>
                                     </div>
-                                    <a :href="`/dashboard/scholarships/${program.id}`" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">View scholarship <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
                                 </div>
                             </article>
                         </div>

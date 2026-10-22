@@ -40,21 +40,18 @@ function groupIcon(group) {
 </script>
 
 <template>
-    <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-        <header class="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+    <details class="group overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-5 hover:bg-slate-50 sm:px-6 [&::-webkit-details-marker]:hidden">
             <div>
-                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Submitted information</p>
-                <h2 class="mt-1 text-lg font-bold text-slate-950">Profile snapshot</h2>
-                <p class="mt-1 text-sm text-slate-600">These details were saved when you applied.</p>
+                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Reference</p>
+                <h2 class="mt-1 font-display text-lg font-bold text-slate-950">Review submitted information</h2>
+                <p class="mt-1 text-sm text-slate-600">Profile details and answers saved when you applied.</p>
             </div>
-            <a :href="profileHref" class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                Open current profile
-                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-            </a>
-        </header>
+            <i class="fa-solid fa-chevron-down shrink-0 text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+        </summary>
 
-        <div v-if="groups.length" class="divide-y divide-slate-200">
-            <section v-for="group in groups" :key="group.label" class="px-4 py-4 sm:px-5">
+        <div v-if="groups.length" class="divide-y divide-slate-200 border-t border-slate-200">
+            <section v-for="group in groups" :key="group.label" class="px-4 py-5 sm:px-6">
                 <h3 class="flex items-center gap-2 text-sm font-bold text-slate-950">
                     <i :class="[groupIcon(group.label), 'w-4 text-center text-amber-700']" aria-hidden="true"></i>
                     {{ group.label }}
@@ -85,5 +82,12 @@ function groupIcon(group) {
                 </li>
             </ol>
         </section>
-    </section>
+
+        <footer class="flex justify-end border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+            <a :href="profileHref" class="inline-flex min-h-10 items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">
+                Open current profile
+                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+            </a>
+        </footer>
+    </details>
 </template>

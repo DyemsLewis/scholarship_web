@@ -59,6 +59,11 @@ Route::get('/dashboard/applications', [ApplicantDashboardController::class, 'app
 Route::get('/dashboard/applications/start/{scholarship}', [ApplicantDashboardController::class, 'startApplication'])->middleware('auth')->name('dashboard.applications.start');
 Route::get('/dashboard/monitoring', [ApplicantDashboardController::class, 'monitoring'])->middleware('auth')->name('dashboard.monitoring');
 Route::get('/dashboard/monitoring/{application}', [ApplicantDashboardController::class, 'monitoringDetail'])->middleware('auth')->whereNumber('application')->name('dashboard.monitoring.show');
+Route::get('/dashboard/monitoring/{application}/data', [ApplicantDashboardController::class, 'monitoringDetailData'])->middleware('auth')->whereNumber('application')->name('dashboard.monitoring.show.data');
+Route::get('/dashboard/monitoring/{application}/check-ins/{record}', [ApplicantDashboardController::class, 'monitoringCheckInDetail'])->middleware('auth')->whereNumber('application')->where('record', '(check-in|academic)-[0-9]+')->name('dashboard.monitoring.check-ins.show');
+Route::get('/dashboard/monitoring/{application}/benefits/{record}', [ApplicantDashboardController::class, 'monitoringBenefitDetail'])->middleware('auth')->whereNumber('application')->where('record', 'release-[0-9]+')->name('dashboard.monitoring.benefits.show');
+Route::get('/dashboard/monitoring/{application}/history/{record}', [ApplicantDashboardController::class, 'monitoringSupportOutcomeDetail'])->middleware('auth')->whereNumber('application')->where('record', 'outcome-[0-9]+')->name('dashboard.monitoring.history.show');
+Route::get('/dashboard/monitoring/{application}/{section}', [ApplicantDashboardController::class, 'monitoringDetail'])->middleware('auth')->whereNumber('application')->where('section', 'check-ins|benefits|history')->name('dashboard.monitoring.show.section');
 Route::get('/dashboard/documents', [ApplicantDashboardController::class, 'documents'])->middleware('auth')->name('dashboard.documents');
 Route::get('/dashboard/profile', [ApplicantDashboardController::class, 'profile'])->middleware('auth')->name('dashboard.profile');
 Route::get('/dashboard/reports', fn () => redirect('/dashboard'))->middleware('auth')->name('dashboard.reports');

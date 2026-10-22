@@ -6,6 +6,7 @@
         "build": "vite build",
         "dev": "vite",
         "test:browser:provider": "node tests/Browser/providerWorkspaceSmoke.mjs",
+        "test:browser:applicant-monitoring": "node tests/Browser/applicantMonitoringSmoke.mjs",
         "test:frontend": "node --test tests/Frontend/**/*.test.js"
     },
     "devDependencies": {

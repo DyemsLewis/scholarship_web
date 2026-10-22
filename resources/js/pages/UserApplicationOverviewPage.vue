@@ -39,7 +39,7 @@ onMounted(loadOverview);
         <section class="student-page">
             <div class="mx-auto w-full max-w-[90rem]">
                 <div class="h-5 w-36 animate-pulse rounded bg-slate-200"></div>
-                <div class="mt-5 h-44 animate-pulse rounded-md border border-slate-200 bg-white"></div>
+                <div class="mt-5 h-96 animate-pulse rounded-md border border-slate-200 bg-white"></div>
                 <div class="mt-4 h-28 animate-pulse rounded-md border border-slate-200 bg-white"></div>
                 <div class="mt-4 h-72 animate-pulse rounded-md border border-slate-200 bg-white"></div>
             </div>
@@ -72,11 +72,11 @@ onMounted(loadOverview);
         <div class="mt-4 space-y-4">
             <ApplicationProgressRecord :progress="detail.progress" />
 
-            <section v-if="overview.upcoming_activity" class="rounded-md border border-slate-300 bg-white px-4 py-4 shadow-sm sm:px-5">
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <section v-if="overview.upcoming_activity && detail.decision?.state !== 'action_required'" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+                <div class="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
                     <div class="flex min-w-0 items-start gap-3">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-700">
-                            <i class="fa-regular fa-calendar" aria-hidden="true"></i>
+                        <span class="grid min-h-16 w-16 shrink-0 place-items-center rounded-sm bg-slate-950 text-center text-white">
+                            <span class="px-1 text-xs font-bold leading-4 text-amber-300">NEXT<br>DATE</span>
                         </span>
                         <div class="min-w-0">
                             <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Upcoming activity</p>
@@ -87,7 +87,7 @@ onMounted(loadOverview);
                             </p>
                         </div>
                     </div>
-                    <a :href="detail.navigation.find((item) => item.key === 'activities')?.href" class="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                    <a :href="detail.navigation.find((item) => item.key === 'activities')?.href" class="inline-flex min-h-10 items-center justify-center gap-2 rounded-sm border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
                         View activity
                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                     </a>
@@ -95,44 +95,37 @@ onMounted(loadOverview);
             </section>
 
             <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-                <header class="border-b border-slate-200 px-4 py-4 sm:px-5">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Application overview</p>
-                    <h2 class="mt-1 text-lg font-bold text-slate-950">Record information</h2>
-                    <p class="mt-1 text-sm text-slate-600">The essential details saved with this application.</p>
+                <header class="flex flex-col gap-4 border-b border-slate-200 px-4 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+                    <div class="flex min-w-0 items-start gap-4">
+                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
+                            <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
+                        </span>
+                        <div class="min-w-0">
+                            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Latest provider update</p>
+                            <h2 class="mt-1 font-display text-lg font-bold text-slate-950">{{ overview.latest_update.title }}</h2>
+                            <p class="mt-1 max-w-4xl text-sm leading-6 text-slate-600">{{ overview.latest_update.description }}</p>
+                        </div>
+                    </div>
+                    <span class="shrink-0 text-xs font-semibold text-slate-500">{{ overview.latest_update.occurred_at }}</span>
                 </header>
 
-                <dl class="grid sm:grid-cols-3">
+                <dl class="grid bg-slate-50/70 sm:grid-cols-3">
                     <div
                         v-for="(row, index) in recordRows"
                         :key="row.label"
-                        :class="['px-4 py-4 sm:px-5', index ? 'border-t border-slate-200 sm:border-l sm:border-t-0' : '']"
+                        :class="['px-4 py-4 sm:px-6', index ? 'border-t border-slate-200 sm:border-l sm:border-t-0' : '']"
                     >
                         <dt class="text-xs font-semibold text-slate-500">{{ row.label }}</dt>
                         <dd class="mt-1 text-sm font-bold text-slate-950">{{ row.value }}</dd>
                     </div>
                 </dl>
 
-                <div class="border-t border-slate-200 px-4 py-4 sm:px-5">
-                    <div class="flex items-start gap-3">
-                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
-                            <i class="fa-solid fa-clock-rotate-left text-sm" aria-hidden="true"></i>
-                        </span>
-                        <div class="min-w-0">
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                <h3 class="text-sm font-bold text-slate-950">{{ overview.latest_update.title }}</h3>
-                                <span class="text-xs text-slate-500">{{ overview.latest_update.occurred_at }}</span>
-                            </div>
-                            <p class="mt-1 text-sm leading-5 text-slate-600">{{ overview.latest_update.description }}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <footer class="flex flex-col gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:px-5">
-                    <a :href="overview.links.scholarship" class="inline-flex min-h-10 items-center gap-2 rounded px-3 py-2 text-sm font-bold text-slate-700 hover:bg-white hover:text-slate-950">
+                <footer class="flex flex-col gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:px-6">
+                    <a :href="overview.links.scholarship" class="inline-flex min-h-10 items-center gap-2 rounded-sm px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">
                         <i class="fa-solid fa-graduation-cap w-4 text-center text-amber-700" aria-hidden="true"></i>
                         Scholarship details
                     </a>
-                    <a v-if="overview.links.provider" :href="overview.links.provider" class="inline-flex min-h-10 items-center gap-2 rounded px-3 py-2 text-sm font-bold text-slate-700 hover:bg-white hover:text-slate-950">
+                    <a v-if="overview.links.provider" :href="overview.links.provider" class="inline-flex min-h-10 items-center gap-2 rounded-sm px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">
                         <i class="fa-solid fa-building w-4 text-center text-amber-700" aria-hidden="true"></i>
                         Provider profile
                     </a>

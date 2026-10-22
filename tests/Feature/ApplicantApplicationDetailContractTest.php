@@ -35,8 +35,12 @@ class ApplicantApplicationDetailContractTest extends TestCase
             ->assertJsonPath('detail.identity.provider.verified', true)
             ->assertJsonPath('detail.decision.state', 'action_required')
             ->assertJsonPath('detail.decision.actor', 'applicant')
+            ->assertJsonPath('detail.decision.due_label', 'Program deadline '.$application->scholarship->deadline->format('M d, Y'))
             ->assertJsonPath('detail.progress.current_stage', 'screening')
             ->assertJsonCount(5, 'detail.navigation')
+            ->assertJsonPath('detail.navigation.1.label', 'Requirements')
+            ->assertJsonPath('detail.navigation.2.label', 'Schedule')
+            ->assertJsonPath('detail.navigation.3.label', 'Decision')
             ->assertJsonCount(4, 'detail.snapshot')
             ->assertJsonPath('application.status', 'submitted')
             ->assertJsonMissingPath('detail.identity.id');
@@ -181,6 +185,9 @@ class ApplicantApplicationDetailContractTest extends TestCase
             ->assertJsonPath('detail.content.active.0.type', 'exam')
             ->assertJsonPath('detail.content.active.0.online_url', 'https://meet.example.test/exam-room')
             ->assertJsonPath('detail.content.active.0.requires_applicant_acknowledgment', true)
+            ->assertJsonPath('detail.content.active.0.proof_required', true)
+            ->assertJsonPath('detail.content.active.0.provider_evidence_count', 0)
+            ->assertJsonPath('detail.content.active.0.verification_label', 'Recorded after the activity')
             ->assertJsonPath('detail.decision.action.href', route('dashboard.applications.show.section', [
                 'application' => $application,
                 'section' => 'activities',

@@ -25,6 +25,17 @@ const isSendingCorrection = ref(false);
 const submission = computed(() => detail.value?.content ?? {});
 const correction = computed(() => submission.value.correction ?? {});
 const canRespondToCorrection = computed(() => Boolean(detail.value?.permissions?.can_respond_to_correction));
+const orderedDocuments = computed(() => [...(submission.value.documents ?? [])].sort((left, right) => {
+    if (Boolean(left.needs_attention) !== Boolean(right.needs_attention)) {
+        return left.needs_attention ? -1 : 1;
+    }
+
+    if (Boolean(left.required) !== Boolean(right.required)) {
+        return left.required ? -1 : 1;
+    }
+
+    return left.requirement.localeCompare(right.requirement);
+}));
 const shellDetail = computed(() => {
     if (!detail.value) {
         return null;
@@ -182,7 +193,7 @@ onMounted(loadSubmission);
         <section class="student-page">
             <div class="mx-auto w-full max-w-[90rem]">
                 <div class="h-5 w-36 animate-pulse rounded bg-slate-200"></div>
-                <div class="mt-5 h-44 animate-pulse rounded-md border border-slate-200 bg-white"></div>
+                <div class="mt-5 h-96 animate-pulse rounded-md border border-slate-200 bg-white"></div>
                 <div class="mt-4 h-72 animate-pulse rounded-md border border-slate-200 bg-white"></div>
             </div>
         </section>
@@ -227,9 +238,16 @@ onMounted(loadSubmission);
             <section v-if="canRespondToCorrection" id="correction-request" class="scroll-mt-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-4 shadow-sm sm:px-5">
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div class="min-w-0">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-800">Provider request</p>
-                        <h2 class="mt-1 text-base font-bold text-slate-950">Update requested</h2>
-                        <p class="mt-1 max-w-4xl text-sm leading-5 text-slate-700">{{ correction.message }}</p>
+                        <div class="flex items-center gap-2">
+                            <span class="grid h-8 w-8 shrink-0 place-items-center rounded bg-amber-200 text-amber-900">
+                                <i class="fa-solid fa-pen-to-square text-xs" aria-hidden="true"></i>
+                            </span>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-800">Provider request</p>
+                                <h2 class="text-base font-bold text-slate-950">Update requested</h2>
+                            </div>
+                        </div>
+                        <p class="mt-3 max-w-4xl text-sm leading-5 text-slate-700">{{ correction.message }}</p>
                         <div v-if="correction.targets?.length" class="mt-2 flex flex-wrap gap-2">
                             <span v-for="target in correction.targets" :key="target.key" class="rounded bg-white/80 px-2 py-1 text-xs font-bold text-slate-700">
                                 {{ target.label }}
@@ -242,14 +260,8 @@ onMounted(loadSubmission);
                 </div>
             </section>
 
-            <ApplicationSubmissionSnapshot
-                :profile-rows="submission.profile_snapshot"
-                :questions="submission.questions"
-                :profile-href="submission.actions.profile_href"
-            />
-
             <ApplicationDocumentList
-                :documents="submission.documents"
+                :documents="orderedDocuments"
                 :summary="submission.document_summary"
                 :can-edit="submission.actions.can_edit_files"
                 :uploading-requirement="uploadRequirement"
@@ -260,6 +272,12 @@ onMounted(loadSubmission);
                     <TermsAgreement v-model="documentTermsAccepted" context="document" />
                 </template>
             </ApplicationDocumentList>
+
+            <ApplicationSubmissionSnapshot
+                :profile-rows="submission.profile_snapshot"
+                :questions="submission.questions"
+                :profile-href="submission.actions.profile_href"
+            />
 
             <input
                 ref="fileInput"

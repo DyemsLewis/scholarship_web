@@ -18,7 +18,6 @@ const providerImageFailed = ref(false);
 
 const identity = computed(() => detail.value?.identity ?? {});
 const decision = computed(() => detail.value?.decision ?? {});
-const page = computed(() => detail.value?.page ?? {});
 const content = computed(() => detail.value?.content ?? {});
 const snapshot = computed(() => detail.value?.snapshot ?? []);
 const navigation = computed(() => detail.value?.navigation ?? []);
@@ -29,6 +28,61 @@ const process = computed(() => content.value?.process ?? {});
 const provider = computed(() => activeView.value === 'provider' ? content.value : {});
 const providerLocation = computed(() => provider.value?.location ?? {});
 const scholarshipImage = computed(() => identity.value?.image_url || identity.value?.provider?.logo_url);
+const scholarshipVisual = computed(() => {
+    const subject = `${identity.value?.title ?? ''} ${identity.value?.category ?? ''}`.toLowerCase();
+
+    if (/(stem|science|technology|engineering)/.test(subject)) {
+        return {
+            hero: '/images/filipino-students-science-class.jpg',
+            heroAlt: 'Filipino students taking part in a science class',
+            overview: '/images/filipino-students-science-experiment.jpg',
+            overviewAlt: 'Filipino students learning through a classroom science activity',
+        };
+    }
+
+    if (/(college|university|tertiary|graduate)/.test(subject)) {
+        return {
+            hero: '/images/filipino-graduates.jpg',
+            heroAlt: 'Filipino graduates celebrating their education milestone',
+            overview: '/images/filipino-campus.jpg',
+            overviewAlt: 'Students walking through a campus in the Philippines',
+        };
+    }
+
+    return {
+        hero: '/images/filipino-students-studying.jpg',
+        heroAlt: 'Filipino students studying together in a classroom',
+        overview: '/images/filipino-students-group-study.jpg',
+        overviewAlt: 'Filipino students working together during class',
+    };
+});
+const sectionVisual = computed(() => ({
+    summary: {
+        image: scholarshipVisual.value.overview,
+        alt: scholarshipVisual.value.overviewAlt,
+        caption: 'Support built around a learner\'s education.',
+    },
+    eligibility: {
+        image: '/images/filipino-senior-high.jpg',
+        alt: 'Senior high school students in the Philippines',
+        caption: 'Compare only the requirements that matter.',
+    },
+    award: {
+        image: '/images/filipino-home-study.jpg',
+        alt: 'A Filipino learner studying at home',
+        caption: 'Know the support before you commit.',
+    },
+    application: {
+        image: '/images/application-documents.jpg',
+        alt: 'A student preparing scholarship application documents',
+        caption: 'Prepare once, then follow each stage.',
+    },
+    provider: {
+        image: '/images/filipino-campus.jpg',
+        alt: 'Students on a campus in the Philippines',
+        caption: 'Learn who will manage your application.',
+    },
+}[activeView.value]));
 
 const eligibilityVerdict = computed(() => {
     const profile = content.value?.profile ?? {};
@@ -112,27 +166,6 @@ function stateStyle(state) {
         icon: 'bg-slate-100 text-slate-700',
         badge: 'bg-slate-100 text-slate-700 ring-slate-200',
     };
-}
-
-function decisionIcon(state) {
-    return {
-        applied: 'fa-solid fa-arrow-up-right-from-square',
-        eligible: 'fa-solid fa-arrow-right',
-        profile_incomplete: 'fa-solid fa-user-pen',
-        blocked: 'fa-solid fa-list-check',
-        upcoming: 'fa-regular fa-clock',
-        full: 'fa-solid fa-users-slash',
-        closed: 'fa-solid fa-lock',
-    }[state] ?? 'fa-solid fa-circle-info';
-}
-
-function factIcon(key) {
-    return {
-        benefit: 'fa-solid fa-hand-holding-heart',
-        deadline: 'fa-regular fa-calendar-check',
-        capacity: 'fa-solid fa-users',
-        support_period: 'fa-solid fa-calendar-days',
-    }[key] ?? 'fa-solid fa-circle-info';
 }
 
 function benefitIcon(type) {
@@ -279,24 +312,13 @@ onMounted(loadScholarship);
                 </div>
 
                 <div v-else-if="detail" class="mt-5 space-y-4">
-                    <header class="overflow-hidden border border-slate-300 border-t-[3px] border-t-amber-400 bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)]">
-                        <div class="flex flex-col gap-5 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
-                            <div class="flex min-w-0 items-start gap-4">
-                                <div class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-50 p-2 sm:h-[72px] sm:w-[72px]">
-                                    <img
-                                        v-if="scholarshipImage && !imageFailed"
-                                        :src="scholarshipImage"
-                                        :alt="identity.title"
-                                        class="h-full w-full object-contain"
-                                        @error="imageFailed = true"
-                                    >
-                                    <i v-else class="fa-solid fa-graduation-cap text-xl text-slate-400" aria-hidden="true"></i>
-                                </div>
-
+                    <header class="student-card overflow-hidden rounded-md border-slate-300 border-t-4 border-t-amber-400 shadow-[0_8px_24px_rgba(15,23,42,0.06)]" data-scholarship-detail-header>
+                        <div class="grid lg:min-h-[390px] lg:grid-cols-[minmax(0,1.1fr)_minmax(25rem,0.9fr)]">
+                            <div class="flex flex-col p-5 sm:p-7 lg:p-9">
                                 <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Scholarship program</p>
-                                    <h1 class="mt-1 text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">{{ identity.title }}</h1>
-                                    <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
+                                    <p class="student-kicker">Scholarship program</p>
+                                    <h1 class="mt-2 max-w-3xl text-3xl font-bold leading-[1.08] text-slate-950 sm:text-4xl">{{ identity.title }}</h1>
+                                    <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
                                         <a v-if="identity.provider?.href" :href="identity.provider.href" class="font-bold text-slate-800 hover:text-slate-950 hover:underline">
                                             {{ identity.provider.name }}
                                         </a>
@@ -310,68 +332,76 @@ onMounted(loadScholarship);
                                         {{ [identity.category, identity.program_cycle].filter(Boolean).join(' | ') }}
                                     </p>
                                 </div>
-                            </div>
 
-                            <div class="flex shrink-0 items-center gap-2 self-stretch lg:self-auto">
-                                <button
-                                    v-if="decision.action?.kind !== 'save'"
-                                    type="button"
-                                    class="inline-flex min-h-11 flex-1 items-center justify-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 lg:flex-none"
-                                    :disabled="isSaving"
-                                    @click="toggleSave"
-                                >
-                                    <i :class="detail.saved?.is_saved ? 'fa-solid fa-bookmark text-amber-600' : 'fa-regular fa-bookmark'" aria-hidden="true"></i>
-                                    {{ isSaving ? 'Saving...' : (detail.saved?.is_saved ? 'Saved' : 'Save') }}
-                                </button>
-                            </div>
-                        </div>
+                                <div class="mt-6 border-l-4 border-amber-400 bg-amber-50 px-4 py-3.5">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-800">{{ decision.eyebrow }}</p>
+                                    <h2 class="mt-1 text-lg font-bold text-slate-950">{{ decision.title }}</h2>
+                                    <p class="mt-1 text-sm leading-5 text-slate-600">{{ decision.description }}</p>
+                                </div>
 
-                        <div class="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-5">
-                            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                                <div class="flex min-w-0 items-start gap-3">
-                                    <span :class="['grid h-10 w-10 shrink-0 place-items-center', stateStyle(decision.tone).icon]">
-                                        <i :class="decisionIcon(decision.state)" aria-hidden="true"></i>
-                                    </span>
-                                    <div class="min-w-0">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ decision.eyebrow }}</p>
-                                        <h2 class="mt-1 text-lg font-bold text-slate-950">{{ decision.title }}</h2>
-                                        <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ decision.description }}</p>
+                                <dl class="mt-6 grid border-y border-slate-200 sm:grid-cols-3">
+                                    <div v-for="fact in snapshot" :key="fact.key" class="min-w-0 border-b border-slate-200 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:px-4 sm:first:pl-0 sm:last:border-r-0">
+                                        <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{{ fact.label }}</dt>
+                                        <dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ fact.value }}</dd>
                                     </div>
-                                </div>
+                                </dl>
 
-                                <a
-                                    v-if="decision.action?.kind === 'link'"
-                                    :href="decision.action.href"
-                                    class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800"
-                                >
-                                    {{ decision.action.label }}
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </a>
-                                <button
-                                    v-else-if="decision.action"
-                                    type="button"
-                                    class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                                    :disabled="isSaving"
-                                    @click="handlePrimaryAction"
-                                >
-                                    {{ isSaving ? 'Saving...' : decision.action.label }}
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </button>
+                                <div class="mt-auto flex flex-wrap items-center gap-2 pt-6">
+                                    <button
+                                        v-if="decision.action?.kind !== 'save'"
+                                        type="button"
+                                        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                        :disabled="isSaving"
+                                        @click="toggleSave"
+                                    >
+                                        <i :class="detail.saved?.is_saved ? 'fa-solid fa-bookmark text-amber-600' : 'fa-regular fa-bookmark'" aria-hidden="true"></i>
+                                        {{ isSaving ? 'Saving...' : (detail.saved?.is_saved ? 'Saved' : 'Save') }}
+                                    </button>
+                                    <a
+                                        v-if="decision.action?.kind === 'link'"
+                                        :href="decision.action.href"
+                                        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                    >
+                                        {{ decision.action.label }}
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </a>
+                                    <button
+                                        v-else-if="decision.action"
+                                        type="button"
+                                        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                        :disabled="isSaving"
+                                        @click="handlePrimaryAction"
+                                    >
+                                        {{ isSaving ? 'Saving...' : decision.action.label }}
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </button>
+                                </div>
                             </div>
+
+                            <figure class="relative order-first h-56 overflow-hidden bg-slate-900 lg:order-last lg:h-auto">
+                                <img :src="scholarshipVisual.hero" :alt="scholarshipVisual.heroAlt" class="absolute inset-0 h-full w-full object-cover">
+                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/10 to-transparent"></div>
+                                <figcaption class="absolute inset-x-0 bottom-0 flex items-end gap-3 p-5 sm:p-6">
+                                    <span class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-white p-2.5 shadow-xl ring-1 ring-white/70 sm:h-20 sm:w-20">
+                                        <img
+                                            v-if="scholarshipImage && !imageFailed"
+                                            :src="scholarshipImage"
+                                            :alt="`${identity.title} program mark`"
+                                            class="h-full w-full object-contain"
+                                            @error="imageFailed = true"
+                                        >
+                                        <i v-else class="fa-solid fa-graduation-cap text-xl text-slate-500" aria-hidden="true"></i>
+                                    </span>
+                                    <div class="min-w-0 pb-1 text-white">
+                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">Education opportunity</p>
+                                        <p class="mt-1 text-sm font-bold leading-5">{{ identity.provider?.name }}</p>
+                                    </div>
+                                </figcaption>
+                            </figure>
                         </div>
-
-                        <dl class="grid border-t border-slate-200 sm:grid-cols-2 xl:grid-cols-4">
-                            <div v-for="fact in snapshot" :key="fact.key" class="flex min-w-0 items-start gap-3 border-b border-slate-200 px-4 py-3 last:border-b-0 sm:border-r sm:[&:nth-child(2n)]:border-r-0 xl:border-b-0 xl:[&:nth-child(2n)]:border-r xl:last:border-r-0">
-                                <i :class="[factIcon(fact.key), 'mt-1 w-4 shrink-0 text-center text-amber-700']" aria-hidden="true"></i>
-                                <div class="min-w-0">
-                                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{{ fact.label }}</dt>
-                                    <dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ fact.value }}</dd>
-                                </div>
-                            </div>
-                        </dl>
                     </header>
 
-                    <nav class="overflow-x-auto border border-slate-200 bg-white shadow-sm" aria-label="Scholarship details">
+                    <nav class="student-card overflow-x-auto rounded-md border-slate-300 p-1.5" aria-label="Scholarship details" data-scholarship-detail-navigation>
                         <div class="flex min-w-max lg:min-w-0">
                             <a
                                 v-for="item in navigation"
@@ -379,11 +409,10 @@ onMounted(loadScholarship);
                                 :href="item.href"
                                 :aria-current="item.active ? 'page' : undefined"
                                 :class="[
-                                    'relative flex min-h-14 items-center justify-center gap-2 border-r border-slate-200 px-5 text-sm font-bold transition last:border-r-0 lg:flex-1',
-                                    item.active ? 'bg-slate-950 text-white' : 'bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                                    'relative flex min-h-12 items-center justify-center rounded-md px-5 text-sm font-bold transition lg:flex-1',
+                                    item.active ? 'bg-slate-950 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950',
                                 ]"
                             >
-                                <i :class="[item.icon, item.active ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>
                                 {{ item.label }}
                             </a>
                         </div>
@@ -393,85 +422,78 @@ onMounted(loadScholarship);
                         {{ errorMessage }}
                     </p>
 
-                    <section class="px-1 py-2">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">{{ page.eyebrow }}</p>
-                        <h2 class="mt-1 text-2xl font-bold text-slate-950">{{ page.title }}</h2>
-                        <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ page.description }}</p>
-                    </section>
-
                     <template v-if="activeView === 'summary'">
-                        <section class="border border-slate-200 bg-white shadow-sm">
-                            <div class="border-b border-slate-200 p-5 sm:p-6">
-                                <div class="flex items-start gap-3">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center bg-amber-100 text-amber-800">
-                                        <i class="fa-solid fa-book-open" aria-hidden="true"></i>
-                                    </span>
-                                    <div>
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">About the program</p>
-                                        <h3 class="mt-1 text-xl font-bold text-slate-950">What this scholarship supports</h3>
-                                    </div>
-                                </div>
-                                <p class="mt-4 max-w-4xl whitespace-pre-line text-sm leading-7 text-slate-600">{{ content.description || 'The provider has not added a program description.' }}</p>
-                            </div>
+                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-overview>
+                            <div class="grid lg:grid-cols-[minmax(0,1fr)_24rem]">
+                                <div class="flex flex-col px-5 py-6 sm:px-7 sm:py-7">
+                                    <p class="student-kicker">Program overview</p>
+                                    <h3 class="mt-1 text-2xl font-bold text-slate-950">What this scholarship provides</h3>
+                                    <p class="mt-4 max-w-3xl whitespace-pre-line text-sm leading-7 text-slate-600">{{ content.description || 'The provider has not added a program description.' }}</p>
 
-                            <div v-if="content.benefits?.length" class="divide-y divide-slate-200">
-                                <article v-for="benefit in content.benefits" :key="benefit.id || `${benefit.type}-${benefit.title}`" class="flex items-start gap-4 p-4 sm:px-6">
-                                    <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-700">
-                                        <i :class="benefitIcon(benefit.type)" aria-hidden="true"></i>
-                                    </span>
-                                    <div class="min-w-0 flex-1">
-                                        <h4 class="text-sm font-bold text-slate-950">{{ benefit.title }}</h4>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ benefit.description || benefitDetails(benefit) || benefit.display_summary }}</p>
-                                        <p v-if="benefit.description && benefitDetails(benefit)" class="mt-1 text-xs font-semibold text-slate-500">{{ benefitDetails(benefit) }}</p>
+                                    <div v-if="content.primary_benefit" class="mt-5 border-l-4 border-amber-400 pl-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Primary benefit</p>
+                                            <span v-if="content.additional_benefit_count" class="text-xs font-bold text-amber-900">+{{ content.additional_benefit_count }} more</span>
+                                        </div>
+                                        <h4 class="mt-1 text-lg font-bold text-slate-950">{{ content.primary_benefit.title }}</h4>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ benefitDetails(content.primary_benefit) || content.primary_benefit.display_summary }}</p>
                                     </div>
-                                </article>
-                                <a v-if="content.remaining_benefit_count" :href="navigation.find((item) => item.key === 'award')?.href" class="flex items-center justify-between px-6 py-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                                    See {{ content.remaining_benefit_count }} more benefit{{ content.remaining_benefit_count === 1 ? '' : 's' }}
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </a>
+
+                                    <a :href="navigation.find((item) => item.key === 'award')?.href" class="mt-6 inline-flex w-fit items-center gap-2 text-sm font-bold text-slate-800 hover:text-slate-950 hover:underline">
+                                        See benefits and terms
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </a>
+                                </div>
+
+                                <figure class="relative min-h-56 overflow-hidden bg-slate-900 lg:min-h-full">
+                                    <img :src="sectionVisual.image" :alt="sectionVisual.alt" class="absolute inset-0 h-full w-full object-cover">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-transparent"></div>
+                                    <figcaption class="absolute inset-x-0 bottom-0 p-5 text-sm font-bold text-white">{{ sectionVisual.caption }}</figcaption>
+                                </figure>
                             </div>
                         </section>
 
-                        <section class="border border-slate-200 bg-white shadow-sm">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Before you apply</p>
-                                <h3 class="mt-1 text-xl font-bold text-slate-950">Your readiness</h3>
+                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-readiness>
+                            <header class="border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-5">
+                                <p class="student-kicker">Before you apply</p>
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">Your readiness</h3>
                             </header>
                             <div class="divide-y divide-slate-200">
-                                <a v-for="item in content.readiness" :key="item.key" :href="item.href" class="group flex items-start gap-4 p-4 transition hover:bg-slate-50 sm:px-6">
-                                    <span :class="['grid h-10 w-10 shrink-0 place-items-center', stateStyle(item.state).icon]">
+                                <a v-for="item in content.readiness" :key="item.key" :href="item.href" class="group flex items-start gap-3 px-4 py-3.5 transition hover:bg-slate-50 sm:px-5">
+                                    <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', stateStyle(item.state).icon]">
                                         <i :class="item.icon" aria-hidden="true"></i>
                                     </span>
                                     <div class="min-w-0 flex-1">
                                         <div class="flex flex-wrap items-center justify-between gap-2">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ item.label }}</p>
+                                            <p class="text-sm font-bold text-slate-950">{{ item.title }}</p>
                                             <span :class="['px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(item.state).badge]">{{ item.status }}</span>
                                         </div>
-                                        <h4 class="mt-1 text-base font-bold text-slate-950">{{ item.title }}</h4>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ item.description }}</p>
+                                        <p class="mt-1 text-sm leading-5 text-slate-600">{{ item.description }}</p>
                                     </div>
-                                    <i class="fa-solid fa-chevron-right mt-3 shrink-0 text-xs text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
+                                    <i class="fa-solid fa-chevron-right mt-2.5 shrink-0 text-xs text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
                                 </a>
                             </div>
                         </section>
                     </template>
 
                     <template v-else-if="activeView === 'eligibility'">
-                        <section class="border border-slate-200 bg-white shadow-sm">
-                            <header class="flex items-start gap-4 border-b border-slate-200 p-5 sm:p-6">
-                                <span :class="['grid h-11 w-11 shrink-0 place-items-center', stateStyle(eligibilityVerdict.state).icon]">
-                                    <i :class="eligibilityVerdict.icon" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ eligibilityVerdict.eyebrow }}</p>
-                                    <h3 class="mt-1 text-xl font-bold text-slate-950">{{ eligibilityVerdict.title }}</h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">{{ eligibilityVerdict.description }}</p>
+                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-eligibility>
+                            <header class="grid border-b border-slate-200 bg-slate-50/70 lg:grid-cols-[minmax(0,1fr)_22rem]">
+                                <div class="px-5 py-6 sm:px-7 sm:py-7">
+                                    <p class="student-kicker">{{ eligibilityVerdict.eyebrow }}</p>
+                                    <h3 class="mt-1 text-2xl font-bold text-slate-950">{{ eligibilityVerdict.title }}</h3>
+                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ eligibilityVerdict.description }}</p>
                                 </div>
+                                <figure class="relative h-44 overflow-hidden bg-slate-900 lg:h-auto">
+                                    <img :src="sectionVisual.image" :alt="sectionVisual.alt" class="absolute inset-0 h-full w-full object-cover">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent"></div>
+                                    <figcaption class="absolute inset-x-0 bottom-0 p-4 text-sm font-bold text-white">{{ sectionVisual.caption }}</figcaption>
+                                </figure>
                             </header>
 
                             <div v-if="content.criteria?.length" class="divide-y divide-slate-200">
-                                <article v-for="criterion in content.criteria" :key="criterion.key" class="p-4 sm:px-6 sm:py-5">
-                                    <div class="grid gap-3 lg:grid-cols-[minmax(13rem,1.2fr)_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] lg:items-start lg:gap-6">
+                                <article v-for="criterion in content.criteria" :key="criterion.key" class="px-4 py-3.5 sm:px-5">
+                                    <div class="grid gap-3 lg:grid-cols-[minmax(13rem,1.2fr)_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] lg:items-center lg:gap-6">
                                         <div>
                                             <p class="text-sm font-bold text-slate-950">{{ displayValue(criterion.label, 'Eligibility requirement') }}</p>
                                             <p v-if="criterion.comparison || criterion.note" class="mt-1 text-xs leading-5 text-slate-500">{{ criterion.comparison || criterion.note }}</p>
@@ -490,69 +512,87 @@ onMounted(loadScholarship);
                                     </div>
                                 </article>
                             </div>
-                            <p v-else class="p-6 text-sm text-slate-600">This program has no structured eligibility restrictions.</p>
+                            <p v-else class="p-5 text-sm text-slate-600">This program has no structured eligibility restrictions.</p>
                         </section>
 
-                        <section v-if="content.written_conditions || content.provider_review?.length" class="border border-slate-200 bg-white shadow-sm">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Provider review</p>
-                                <h3 class="mt-1 text-lg font-bold text-slate-950">Conditions checked by a person</h3>
-                            </header>
-                            <p v-if="content.written_conditions" class="whitespace-pre-line px-5 py-4 text-sm leading-7 text-slate-700 sm:px-6">{{ content.written_conditions }}</p>
-                            <div v-if="content.provider_review?.length" class="divide-y divide-slate-200 border-t border-slate-200">
-                                <div v-for="condition in content.provider_review" :key="condition.key || condition.label" class="px-5 py-4 sm:px-6">
-                                    <p class="text-sm font-bold text-slate-900">{{ condition.label || 'Provider condition' }}</p>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">{{ condition.note || condition.comparison || 'The provider confirms this during review.' }}</p>
+                        <details v-if="content.written_conditions || content.provider_review?.length" class="group student-card overflow-hidden rounded-md border-slate-300">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden">
+                                <div>
+                                    <p class="student-kicker">Provider review</p>
+                                    <h3 class="mt-1 text-base font-bold text-slate-950">Conditions checked by a person</h3>
+                                </div>
+                                <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                            </summary>
+                            <div class="border-t border-slate-200">
+                                <p v-if="content.written_conditions" class="whitespace-pre-line px-4 py-4 text-sm leading-7 text-slate-700 sm:px-5">{{ content.written_conditions }}</p>
+                                <div v-if="content.provider_review?.length" class="divide-y divide-slate-200 border-t border-slate-200">
+                                    <div v-for="condition in content.provider_review" :key="condition.key || condition.label" class="px-4 py-3.5 sm:px-5">
+                                        <p class="text-sm font-bold text-slate-900">{{ condition.label || 'Provider condition' }}</p>
+                                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ condition.note || condition.comparison || 'The provider confirms this during review.' }}</p>
+                                    </div>
                                 </div>
                             </div>
-                        </section>
+                        </details>
                     </template>
 
                     <template v-else-if="activeView === 'award'">
-                        <section class="border border-slate-200 bg-white shadow-sm">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Provider support</p>
-                                <h3 class="mt-1 text-xl font-bold text-slate-950">What recipients receive</h3>
+                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-benefits>
+                            <header class="grid border-b border-slate-200 bg-slate-50/70 lg:grid-cols-[minmax(0,1fr)_22rem]">
+                                <div class="px-5 py-6 sm:px-7 sm:py-7">
+                                    <p class="student-kicker">Benefits</p>
+                                    <h3 class="mt-1 text-2xl font-bold text-slate-950">What recipients receive</h3>
+                                    <p class="mt-2 text-sm font-semibold text-slate-500">Support period: {{ content.support_period }}</p>
+                                </div>
+                                <figure class="relative h-44 overflow-hidden bg-slate-900 lg:h-auto">
+                                    <img :src="sectionVisual.image" :alt="sectionVisual.alt" class="absolute inset-0 h-full w-full object-cover">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent"></div>
+                                    <figcaption class="absolute inset-x-0 bottom-0 p-4 text-sm font-bold text-white">{{ sectionVisual.caption }}</figcaption>
+                                </figure>
                             </header>
                             <div v-if="content.benefits?.length" class="divide-y divide-slate-200">
-                                <article v-for="benefit in content.benefits" :key="benefit.id || `${benefit.type}-${benefit.title}`" class="flex items-start gap-4 p-5 sm:px-6">
-                                    <span class="grid h-10 w-10 shrink-0 place-items-center bg-amber-100 text-amber-800">
+                                <article v-for="benefit in content.benefits" :key="benefit.id || `${benefit.type}-${benefit.title}`" class="flex items-start gap-3 px-4 py-4 sm:px-5">
+                                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
                                         <i :class="benefitIcon(benefit.type)" aria-hidden="true"></i>
                                     </span>
                                     <div class="min-w-0 flex-1">
                                         <h4 class="text-base font-bold text-slate-950">{{ benefit.title }}</h4>
                                         <p class="mt-1 text-sm font-semibold leading-6 text-slate-800">{{ benefitDetails(benefit) || benefit.display_summary }}</p>
-                                        <p v-if="benefit.description" class="mt-2 text-sm leading-6 text-slate-600">{{ benefit.description }}</p>
+                                        <p v-if="benefit.description" class="mt-1 text-sm leading-6 text-slate-600">{{ benefit.description }}</p>
                                     </div>
                                 </article>
                             </div>
-                            <p v-else class="p-6 text-sm text-slate-600">The provider has not published a detailed benefit package.</p>
+                            <p v-else class="p-5 text-sm text-slate-600">The provider has not published a detailed benefit package.</p>
                         </section>
 
-                        <section class="border border-slate-200 bg-white shadow-sm">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recipient agreement</p>
-                                <h3 class="mt-1 text-xl font-bold text-slate-950">What recipients agree to</h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">Review these terms before starting the application.</p>
+                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-terms>
+                            <header class="border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-5">
+                                <p class="student-kicker">Recipient terms</p>
+                                <h3 class="mt-1 text-lg font-bold text-slate-950">What recipients agree to</h3>
                             </header>
                             <div v-if="content.terms?.length" class="divide-y divide-slate-200">
-                                <article v-for="term in content.terms" :key="term.key" class="grid gap-2 px-5 py-4 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-6 sm:px-6">
-                                    <h4 class="text-sm font-bold text-slate-900">{{ term.label }}</h4>
-                                    <p class="whitespace-pre-line text-sm leading-7 text-slate-600">{{ term.value }}</p>
-                                </article>
+                                <details v-for="term in content.terms" :key="term.key" class="group">
+                                    <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3.5 text-sm font-bold text-slate-900 hover:bg-slate-50 sm:px-5 [&::-webkit-details-marker]:hidden">
+                                        {{ term.label }}
+                                        <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                                    </summary>
+                                    <p class="whitespace-pre-line border-t border-slate-100 bg-slate-50/60 px-4 py-4 text-sm leading-7 text-slate-600 sm:px-5">{{ term.value }}</p>
+                                </details>
                             </div>
-                            <p v-else class="p-6 text-sm text-slate-600">No additional recipient responsibilities were published.</p>
-                            <footer class="border-t border-slate-200 bg-slate-50 px-5 py-3 text-xs leading-5 text-slate-500 sm:px-6">
+                            <p v-else class="p-5 text-sm text-slate-600">No additional recipient responsibilities were published.</p>
+                            <footer class="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500 sm:px-5">
                                 Ask the provider about anything unclear before accepting an award.
                             </footer>
                         </section>
 
-                        <section v-if="content.provider_objectives?.length || content.provider_objective_notes" class="border border-slate-200 bg-white shadow-sm">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Program purpose</p>
-                                <h3 class="mt-1 text-lg font-bold text-slate-950">Why the provider offers this support</h3>
-                            </header>
-                            <div class="px-5 py-4 sm:px-6">
+                        <details v-if="content.provider_objectives?.length || content.provider_objective_notes" class="group student-card overflow-hidden rounded-md border-slate-300">
+                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden">
+                                <div>
+                                    <p class="student-kicker">Program purpose</p>
+                                    <h3 class="mt-1 text-base font-bold text-slate-950">Why the provider offers this support</h3>
+                                </div>
+                                <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                            </summary>
+                            <div class="border-t border-slate-200 px-4 py-4 sm:px-5">
                                 <ul v-if="content.provider_objectives?.length" class="grid gap-2">
                                     <li v-for="objective in content.provider_objectives" :key="objective" class="flex items-start gap-2 text-sm leading-6 text-slate-700">
                                         <i class="fa-solid fa-check mt-1.5 text-xs text-amber-700" aria-hidden="true"></i>
@@ -561,27 +601,27 @@ onMounted(loadScholarship);
                                 </ul>
                                 <p v-if="content.provider_objective_notes" class="mt-3 whitespace-pre-line text-sm leading-6 text-slate-600">{{ content.provider_objective_notes }}</p>
                             </div>
-                        </section>
+                        </details>
                     </template>
 
                     <template v-else-if="activeView === 'application'">
-                        <section class="border border-slate-200 bg-white shadow-sm">
-                            <header class="flex flex-col gap-4 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-application-files>
+                            <header class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
                                 <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Application files</p>
-                                    <h3 class="mt-1 text-xl font-bold text-slate-950">{{ requirementReadiness.title }}</h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">{{ requirementReadiness.description }}</p>
+                                    <p class="student-kicker">Application files</p>
+                                    <h3 class="mt-1 text-lg font-bold text-slate-950">{{ requirementReadiness.title }}</h3>
+                                    <p class="mt-1 text-sm leading-5 text-slate-600">{{ requirementReadiness.description }}</p>
                                 </div>
-                                <a :href="requirements.manage_files_href" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                <a :href="requirements.manage_files_href" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
                                     <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
                                     My Documents
                                 </a>
                             </header>
 
-                            <div class="grid gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-6">
+                            <div class="grid gap-3 border-b border-slate-200 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5">
                                 <div>
                                     <p class="text-sm font-bold text-slate-900">{{ requirements.review_method_label }}</p>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">{{ requirements.review_method_note }}</p>
+                                    <p class="mt-1 text-sm leading-5 text-slate-600">{{ requirements.review_method_note }}</p>
                                 </div>
                                 <span :class="['w-fit px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(requirementReadiness.state === 'ready' ? 'ready' : requirementReadiness.state === 'needs_files' ? 'attention' : 'neutral').badge]">
                                     {{ requirementReadiness.ready_count || 0 }} of {{ requirementReadiness.required_count || 0 }} ready
@@ -589,19 +629,19 @@ onMounted(loadScholarship);
                             </div>
 
                             <div v-if="requirementReadiness.items?.length" class="divide-y divide-slate-200">
-                                <div v-for="item in requirementReadiness.items" :key="item.name" class="flex items-center gap-3 px-5 py-4 sm:px-6">
-                                    <span :class="['grid h-8 w-8 shrink-0 place-items-center', item.status === 'ready' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
+                                <div v-for="item in requirementReadiness.items" :key="item.name" class="flex items-center gap-3 px-4 py-3.5 sm:px-5">
+                                    <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md', item.status === 'ready' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
                                         <i :class="item.status === 'ready' ? 'fa-solid fa-check' : 'fa-solid fa-upload'" aria-hidden="true"></i>
                                     </span>
                                     <p class="min-w-0 flex-1 text-sm font-bold text-slate-900">{{ item.name }}</p>
                                     <span class="text-xs font-bold text-slate-500">{{ item.status_label }}</span>
                                 </div>
                             </div>
-                            <p v-else class="px-5 py-4 text-sm text-slate-600 sm:px-6">No files are required before the initial review.</p>
+                            <p v-else class="px-4 py-4 text-sm text-slate-600 sm:px-5">No files are required before the initial review.</p>
 
                             <details v-if="requirements.optional_documents?.length || requirements.post_qualification_documents?.length" class="border-t border-slate-200">
-                                <summary class="cursor-pointer px-5 py-4 text-sm font-bold text-slate-800 hover:bg-slate-50 sm:px-6">Files that may be requested later</summary>
-                                <div class="border-t border-slate-200 px-5 py-4 text-sm text-slate-600 sm:px-6">
+                                <summary class="cursor-pointer px-4 py-4 text-sm font-bold text-slate-800 hover:bg-slate-50 sm:px-5">Files that may be requested later</summary>
+                                <div class="border-t border-slate-200 px-4 py-4 text-sm text-slate-600 sm:px-5">
                                     <p v-for="item in [...(requirements.optional_documents || []), ...(requirements.post_qualification_documents || [])]" :key="item" class="flex items-start gap-2 py-1.5">
                                         <i class="fa-regular fa-file mt-1 text-slate-400" aria-hidden="true"></i>
                                         {{ item }}
@@ -610,15 +650,22 @@ onMounted(loadScholarship);
                             </details>
                         </section>
 
-                        <section class="border border-slate-200 bg-white shadow-sm">
-                            <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Selection journey</p>
-                                <h3 class="mt-1 text-xl font-bold text-slate-950">What happens after you apply</h3>
-                                <p class="mt-1 text-sm leading-6 text-slate-600">{{ process.intro }}</p>
+                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-application-process>
+                            <header class="grid border-b border-slate-200 bg-slate-50/70 lg:grid-cols-[minmax(0,1fr)_22rem]">
+                                <div class="px-5 py-6 sm:px-7 sm:py-7">
+                                    <p class="student-kicker">Application process</p>
+                                    <h3 class="mt-1 text-2xl font-bold text-slate-950">What happens after you apply</h3>
+                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ process.intro }}</p>
+                                </div>
+                                <figure class="relative h-44 overflow-hidden bg-slate-900 lg:h-auto">
+                                    <img :src="sectionVisual.image" :alt="sectionVisual.alt" class="absolute inset-0 h-full w-full object-cover">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent"></div>
+                                    <figcaption class="absolute inset-x-0 bottom-0 p-4 text-sm font-bold text-white">{{ sectionVisual.caption }}</figcaption>
+                                </figure>
                             </header>
                             <ol class="divide-y divide-slate-200">
-                                <li v-for="stage in process.stages" :key="stage.key" class="grid gap-3 p-5 sm:grid-cols-[3rem_minmax(0,1fr)_minmax(11rem,auto)] sm:items-start sm:gap-4 sm:px-6">
-                                    <span class="grid h-10 w-10 place-items-center bg-slate-950 text-sm font-bold text-amber-300">{{ stage.step }}</span>
+                                <li v-for="stage in process.stages" :key="stage.key" class="grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_minmax(11rem,auto)] sm:items-center sm:gap-4 sm:px-5">
+                                    <span class="grid h-9 w-9 place-items-center rounded-md bg-slate-950 text-sm font-bold text-amber-300">{{ stage.step }}</span>
                                     <div>
                                         <div class="flex items-center gap-2">
                                             <i :class="[stage.icon, 'w-4 text-center text-amber-700']" aria-hidden="true"></i>
@@ -636,29 +683,38 @@ onMounted(loadScholarship);
                     </template>
 
                     <template v-else-if="activeView === 'provider'">
-                        <section class="border border-slate-200 bg-white shadow-sm">
-                            <header class="flex flex-col gap-5 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:px-6">
-                                <div class="flex min-w-0 items-start gap-4">
-                                    <span class="grid h-14 w-14 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-50 p-2">
-                                        <img v-if="provider.logo_url && !providerImageFailed" :src="provider.logo_url" :alt="provider.name" class="h-full w-full object-contain" @error="providerImageFailed = true">
-                                        <i v-else class="fa-solid fa-building-columns text-lg text-slate-400" aria-hidden="true"></i>
-                                    </span>
-                                    <div>
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <h3 class="text-xl font-bold text-slate-950">{{ provider.name }}</h3>
-                                            <span :class="['inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(provider.verified ? 'ready' : 'attention').badge]">
-                                                <i :class="provider.verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-info'" aria-hidden="true"></i>
-                                                {{ provider.verification_label }}
-                                            </span>
+                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-provider>
+                            <header class="grid border-b border-slate-200 bg-slate-50/70 lg:grid-cols-[minmax(0,1fr)_24rem]">
+                                <div class="flex flex-col px-5 py-6 sm:px-7 sm:py-7">
+                                    <div class="flex min-w-0 items-start gap-4">
+                                        <span class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden rounded-md border border-slate-200 bg-white p-2.5">
+                                            <img v-if="provider.logo_url && !providerImageFailed" :src="provider.logo_url" :alt="provider.name" class="h-full w-full object-contain" @error="providerImageFailed = true">
+                                            <i v-else class="fa-solid fa-building-columns text-lg text-slate-400" aria-hidden="true"></i>
+                                        </span>
+                                        <div>
+                                            <p class="student-kicker">Scholarship provider</p>
+                                            <div class="mt-1 flex flex-wrap items-center gap-2">
+                                                <h3 class="text-2xl font-bold text-slate-950">{{ provider.name }}</h3>
+                                                <span :class="['inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(provider.verified ? 'ready' : 'attention').badge]">
+                                                    <i :class="provider.verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-info'" aria-hidden="true"></i>
+                                                    {{ provider.verification_label }}
+                                                </span>
+                                            </div>
+                                            <p class="mt-1 text-sm font-semibold text-slate-500">{{ provider.type_label }}</p>
                                         </div>
-                                        <p class="mt-1 text-sm font-semibold text-slate-500">{{ provider.type_label }}</p>
-                                        <p v-if="provider.summary" class="mt-3 max-w-3xl whitespace-pre-line text-sm leading-7 text-slate-600">{{ provider.summary }}</p>
                                     </div>
+                                    <p v-if="provider.summary" class="mt-4 max-w-3xl whitespace-pre-line text-sm leading-7 text-slate-600">{{ provider.summary }}</p>
+                                    <a v-if="provider.profile_href" :href="provider.profile_href" class="mt-5 inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                        Provider page
+                                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                    </a>
                                 </div>
-                                <a v-if="provider.profile_href" :href="provider.profile_href" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                                    Provider page
-                                    <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                </a>
+
+                                <figure class="relative h-52 overflow-hidden bg-slate-900 lg:h-auto">
+                                    <img :src="sectionVisual.image" :alt="sectionVisual.alt" class="absolute inset-0 h-full w-full object-cover">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent"></div>
+                                    <figcaption class="absolute inset-x-0 bottom-0 p-5 text-sm font-bold text-white">{{ sectionVisual.caption }}</figcaption>
+                                </figure>
                             </header>
 
                             <dl class="grid border-b border-slate-200 sm:grid-cols-3">
@@ -712,7 +768,7 @@ onMounted(loadScholarship);
                                             <p v-if="provider.location.distance_label" class="mt-1 text-xs font-bold text-slate-500">{{ provider.location.distance_label }} from your saved location</p>
                                         </div>
                                     </div>
-                                    <button type="button" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="showMapModal = true">
+                                    <button type="button" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="showMapModal = true">
                                         <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
                                         View map
                                     </button>
@@ -720,11 +776,11 @@ onMounted(loadScholarship);
 
                                 <section v-if="provider.website || provider.official_program_url" class="px-5 py-5 sm:px-6">
                                     <div class="flex flex-wrap gap-3">
-                                        <a v-if="provider.official_program_url" :href="provider.official_program_url" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                        <a v-if="provider.official_program_url" :href="provider.official_program_url" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
                                             Official program page
                                             <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                         </a>
-                                        <a v-if="provider.website" :href="provider.website" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                        <a v-if="provider.website" :href="provider.website" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
                                             Organization website
                                             <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                         </a>

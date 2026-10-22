@@ -28,6 +28,7 @@ use App\Services\AcademicRecordOcrService;
 use App\Services\ApplicantApplicationDetailService;
 use App\Services\ApplicantDashboardService;
 use App\Services\ApplicantDocumentLibraryService;
+use App\Services\ApplicantMonitoringDetailService;
 use App\Services\ApplicantScholarshipDetailService;
 use App\Services\ApplicationStageOperationsService;
 use App\Services\ApplicationWorkflowService;
@@ -56,6 +57,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use InvalidArgumentException;
 use Throwable;
 
 class ApplicantDashboardController extends Controller
@@ -66,6 +68,7 @@ class ApplicantDashboardController extends Controller
         private readonly ApplicationWorkflowService $workflowService,
         private readonly AcademicRecordOcrService $academicRecordOcrService,
         private readonly ApplicantApplicationDetailService $applicationDetailService,
+        private readonly ApplicantMonitoringDetailService $monitoringDetailService,
     ) {}
 
     public function index(Request $request): View|RedirectResponse
@@ -287,8 +290,54 @@ class ApplicantDashboardController extends Controller
         return view('dashboard-monitoring');
     }
 
-    public function monitoringDetail(Request $request, ScholarshipApplication $application): View|RedirectResponse
-    {
+    public function monitoringDetail(
+        Request $request,
+        ScholarshipApplication $application,
+        string $section = 'overview',
+    ): View|RedirectResponse {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+        abort_unless(in_array($section, ['overview', 'check-ins', 'benefits', 'history'], true), 404);
+
+        return view('dashboard-monitoring-detail', [
+            'application' => $application,
+            'section' => $section,
+        ]);
+    }
+
+    public function monitoringDetailData(
+        Request $request,
+        ScholarshipApplication $application,
+    ): JsonResponse {
+        abort_unless($request->user()?->isApplicant(), 403);
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        try {
+            $detail = $this->monitoringDetailService->build(
+                $application,
+                $request->user(),
+                $this->recipientMonitoringPayload($application),
+                (string) $request->query('view', 'overview'),
+                $request->filled('record') ? (string) $request->query('record') : null,
+            );
+        } catch (InvalidArgumentException) {
+            abort(404);
+        }
+
+        return response()->json([
+            'user' => $this->userPayload($request),
+            'detail' => $detail,
+        ]);
+    }
+
+    public function monitoringCheckInDetail(
+        Request $request,
+        ScholarshipApplication $application,
+        string $record,
+    ): View|RedirectResponse {
         if ($redirect = $this->ensureApplicant($request)) {
             return $redirect;
         }
@@ -297,6 +346,44 @@ class ApplicantDashboardController extends Controller
 
         return view('dashboard-monitoring-detail', [
             'application' => $application,
+            'section' => 'check-ins',
+            'record' => $record,
+        ]);
+    }
+
+    public function monitoringBenefitDetail(
+        Request $request,
+        ScholarshipApplication $application,
+        string $record,
+    ): View|RedirectResponse {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        return view('dashboard-monitoring-detail', [
+            'application' => $application,
+            'section' => 'benefits',
+            'record' => $record,
+        ]);
+    }
+
+    public function monitoringSupportOutcomeDetail(
+        Request $request,
+        ScholarshipApplication $application,
+        string $record,
+    ): View|RedirectResponse {
+        if ($redirect = $this->ensureApplicant($request)) {
+            return $redirect;
+        }
+
+        abort_unless($application->applicant_id === $request->user()->id, 403);
+
+        return view('dashboard-monitoring-detail', [
+            'application' => $application,
+            'section' => 'history',
+            'record' => $record,
         ]);
     }
 
@@ -4239,6 +4326,7 @@ class ApplicantDashboardController extends Controller
             'reason_category' => $decision->reason_category,
             'reason_category_label' => $decision->reason_category ? Str::headline($decision->reason_category) : null,
             'effective_label' => $decision->effective_on?->format('M d, Y'),
+            'effective_on' => $decision->effective_on?->toDateString(),
             'support_ends_label' => $decision->support_ends_on?->format('M d, Y'),
             'next_review_label' => $decision->next_review_on?->format('M d, Y'),
             'notice_given_label' => $decision->notice_given_on?->format('M d, Y'),
@@ -4246,6 +4334,7 @@ class ApplicantDashboardController extends Controller
             'next_period_terms' => $decision->next_period_terms,
             'decided_by' => $decision->decider?->name,
             'decided_at' => $decision->decided_at?->format('M d, Y h:i A'),
+            'decided_at_iso' => $decision->decided_at?->toIso8601String(),
             'can_respond' => blank($decision->applicant_response_type),
             'applicant_response_type' => $decision->applicant_response_type,
             'applicant_response_label' => match ($decision->applicant_response_type) {

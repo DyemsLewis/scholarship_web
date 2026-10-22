@@ -60,6 +60,7 @@ onMounted(loadDashboard);
                     :title="`Welcome back, ${firstName}`"
                     :description="headerDescription"
                     icon="fa-solid fa-compass"
+                    compact
                 />
 
                 <div v-if="isLoading" class="mt-5 space-y-4" aria-live="polite" aria-label="Loading dashboard">

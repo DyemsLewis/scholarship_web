@@ -39,6 +39,7 @@ class ApplicantApplicationDetailService
             'stageProgresses',
             'stageAssignments.session',
             'stageAssignments.attendance',
+            'stageAssignments.evidence',
             'statusHistories.actor',
             'scholarship.provider.providerProfile',
             'scholarship.benefits',
@@ -87,6 +88,7 @@ class ApplicantApplicationDetailService
         return [
             'program' => [
                 'title' => $scholarship?->title ?? 'Scholarship application',
+                'category' => $scholarship?->category,
                 'image_url' => $this->publicAssetUrl($scholarship?->image_path, 'uploads/scholarship-default.jpg'),
                 'deadline' => $scholarship?->deadline?->format('M d, Y'),
                 'review_method' => $this->applicationModeLabel($scholarship?->application_mode),
@@ -125,7 +127,7 @@ class ApplicantApplicationDetailService
                     ?: 'Review the provider request, update the affected information, and send your response.',
                 'actor' => 'applicant',
                 'actor_label' => 'You',
-                'due_label' => null,
+                'due_label' => $this->programDeadlineLabel($application),
                 'action' => [
                     'kind' => 'link',
                     'label' => 'Review requested update',
@@ -198,7 +200,7 @@ class ApplicantApplicationDetailService
                 'description' => 'Open the submission record to review the provider feedback and upload a replacement.',
                 'actor' => 'applicant',
                 'actor_label' => 'You',
-                'due_label' => null,
+                'due_label' => $this->programDeadlineLabel($application),
                 'action' => [
                     'kind' => 'link',
                     'label' => 'Review files',
@@ -241,7 +243,7 @@ class ApplicantApplicationDetailService
             'description' => $nextAction['description'] ?? 'Open the application record for the latest update.',
             'actor' => $actor,
             'actor_label' => $actor === 'applicant' ? 'You' : ($nextAction['actor_label'] ?? 'Scholarship provider'),
-            'due_label' => null,
+            'due_label' => $actor === 'applicant' ? $this->programDeadlineLabel($application) : null,
             'action' => ($actor === 'applicant' || $isClosed)
                 ? [
                     'kind' => 'link',
@@ -275,6 +277,13 @@ class ApplicantApplicationDetailService
         ];
     }
 
+    private function programDeadlineLabel(ScholarshipApplication $application): ?string
+    {
+        $deadline = $application->scholarship?->deadline;
+
+        return $deadline ? 'Program deadline '.$deadline->format('M d, Y') : null;
+    }
+
     private function snapshot(
         ScholarshipApplication $application,
         array $workflow,
@@ -290,9 +299,9 @@ class ApplicantApplicationDetailService
                 'value' => $workflow['current_stage_label'] ?? 'Application review',
             ],
             [
-                'key' => 'progress',
-                'label' => 'Process progress',
-                'value' => ($workflow['percent'] ?? 0).'%',
+                'key' => 'deadline',
+                'label' => 'Program deadline',
+                'value' => $application->scholarship?->deadline?->format('M d, Y') ?? 'Not listed',
             ],
             [
                 'key' => 'files',
@@ -302,9 +311,9 @@ class ApplicantApplicationDetailService
                     : "{$accepted} of {$required->count()} accepted",
             ],
             [
-                'key' => 'submitted',
-                'label' => 'Submitted',
-                'value' => $application->submitted_at?->format('M d, Y') ?? 'Not recorded',
+                'key' => 'review',
+                'label' => 'Review method',
+                'value' => $this->applicationModeLabel($application->scholarship?->application_mode),
             ],
         ];
     }
@@ -769,7 +778,13 @@ class ApplicantApplicationDetailService
                 }
 
                 return $this->activityRow(
-                    $payload,
+                    [
+                        ...$payload,
+                        'proof_required' => (bool) $assignment->session?->proof_required,
+                        'provider_evidence_count' => $assignment->evidence
+                            ->where('is_current', true)
+                            ->count(),
+                    ],
                     route('dashboard.applications.stage-activities.acknowledge', [
                         'application' => $application,
                         'assignment' => $assignment,
@@ -827,6 +842,14 @@ class ApplicantApplicationDetailService
             'status' => $status,
             'status_label' => $this->activityStatusLabel($status),
             'attendance_status' => $payload['attendance_status'] ?? null,
+            'proof_required' => (bool) ($payload['proof_required'] ?? false),
+            'provider_evidence_count' => (int) ($payload['provider_evidence_count'] ?? 0),
+            'verification_label' => match (true) {
+                (int) ($payload['provider_evidence_count'] ?? 0) > 0 => 'Provider proof recorded',
+                (bool) ($payload['proof_required'] ?? false) && $active => 'Recorded after the activity',
+                (bool) ($payload['proof_required'] ?? false) => 'Provider proof pending',
+                default => 'No provider proof required',
+            },
             'requires_applicant_acknowledgment' => (bool) ($payload['requires_applicant_acknowledgment'] ?? false),
             'applicant_acknowledged' => (bool) ($payload['applicant_acknowledged'] ?? false),
             'applicant_acknowledged_at' => $payload['applicant_acknowledged_at'] ?? null,
@@ -918,9 +941,9 @@ class ApplicantApplicationDetailService
 
         return collect([
             ['key' => 'summary', 'label' => 'Overview', 'icon' => 'fa-solid fa-compass'],
-            ['key' => 'submission', 'label' => 'Submission', 'icon' => 'fa-solid fa-folder-open'],
-            ['key' => 'activities', 'label' => 'Activities', 'icon' => 'fa-regular fa-calendar'],
-            ['key' => 'outcome', 'label' => 'Outcome', 'icon' => 'fa-solid fa-award'],
+            ['key' => 'submission', 'label' => 'Requirements', 'icon' => 'fa-solid fa-folder-open'],
+            ['key' => 'activities', 'label' => 'Schedule', 'icon' => 'fa-regular fa-calendar'],
+            ['key' => 'outcome', 'label' => 'Decision', 'icon' => 'fa-solid fa-award'],
             ['key' => 'history', 'label' => 'History', 'icon' => 'fa-solid fa-clock-rotate-left'],
         ])->map(fn (array $item): array => [
             ...$item,
@@ -934,29 +957,29 @@ class ApplicantApplicationDetailService
     {
         return match ($view) {
             'submission' => [
-                'eyebrow' => 'Submitted record',
-                'title' => 'What you sent',
-                'description' => 'Review the saved profile details, answers, and application files.',
+                'eyebrow' => 'Requirements and files',
+                'title' => 'Your submitted requirements',
+                'description' => 'Check file decisions first, then open your saved answers only when needed.',
             ],
             'activities' => [
-                'eyebrow' => 'Provider activities',
-                'title' => 'Schedules and instructions',
-                'description' => 'See formal application, exam, and interview details published for you.',
+                'eyebrow' => 'Schedule and activities',
+                'title' => 'Dates, places, and instructions',
+                'description' => 'Keep the next provider activity in view and open older records only when needed.',
             ],
             'outcome' => [
-                'eyebrow' => 'Application outcome',
-                'title' => 'Result and next handoff',
-                'description' => 'Review the recorded result, provider feedback, and recipient terms.',
+                'eyebrow' => 'Decision and support',
+                'title' => 'Your recorded result',
+                'description' => 'See the provider decision, awarded support, and any agreement that needs a response.',
             ],
             'history' => [
                 'eyebrow' => 'Application history',
-                'title' => 'How the record changed',
-                'description' => 'Follow the important application events in chronological order.',
+                'title' => 'Important application changes',
+                'description' => 'Review meaningful milestones without reopening every section.',
             ],
             default => [
-                'eyebrow' => 'Application record',
-                'title' => 'Current step and next action',
-                'description' => 'Start with what is happening now, then open only the details you need.',
+                'eyebrow' => 'Application overview',
+                'title' => 'Where your application stands',
+                'description' => 'Start with the next action, then check progress or the latest provider update.',
             ],
         };
     }

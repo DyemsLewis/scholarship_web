@@ -553,6 +553,12 @@ class ApplicantDashboardService
                     'status_tone' => $action
                         ? 'attention'
                         : ($isRecipient ? 'positive' : (($workflow['is_closed'] ?? false) ? 'muted' : 'neutral')),
+                    'progress_percent' => (int) ($workflow['percent'] ?? 0),
+                    'progress_label' => sprintf(
+                        '%d of %d stages complete',
+                        (int) ($workflow['completed_steps'] ?? 0),
+                        (int) ($workflow['total_steps'] ?? 0),
+                    ),
                     'needs_action' => $action !== null,
                     'next_step' => $action['title']
                         ?? data_get($workflow, 'next_action.label')

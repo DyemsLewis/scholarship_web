@@ -9,6 +9,13 @@ const props = defineProps({
     applicationId: { type: [Number, String], required: true },
     programTitle: { type: String, default: 'Scholarship program' },
     showHeader: { type: Boolean, default: true },
+    showGuide: { type: Boolean, default: true },
+    showNavigation: { type: Boolean, default: true },
+    initialPanel: {
+        type: String,
+        default: 'requirements',
+        validator: (value) => ['requirements', 'benefits', 'status'].includes(value),
+    },
 });
 const emit = defineEmits(['application-updated']);
 const fileInput = ref(null);
@@ -18,7 +25,7 @@ const savingManualCycleId = ref(null);
 const acceptedTerms = ref({});
 const manualForms = ref({});
 const previewFile = ref(null);
-const activePanel = ref('requirements');
+const activePanel = ref(props.initialPanel);
 const today = new Date().toISOString().slice(0, 10);
 const receiptResponseTarget = ref(null);
 const isSavingReceiptResponse = ref(false);
@@ -327,7 +334,7 @@ async function saveManualGrade(cycle) {
             <span :class="['inline-flex w-fit shrink-0 items-center gap-2 rounded-md border px-3 py-2 text-xs font-bold', supportStatusClass(monitoring.support_status)]"><i :class="supportStatusIcon(monitoring.support_status)" aria-hidden="true"></i>{{ monitoring.support_status_label }}</span>
         </header>
 
-        <div class="p-4 sm:p-5">
+        <div v-if="showGuide" class="p-4 sm:p-5">
             <div :class="['flex flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center sm:justify-between', nextStepClass(nextStep.tone)]">
                 <div class="flex min-w-0 items-start gap-3">
                     <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white/80"><i :class="nextStep.icon" aria-hidden="true"></i></span>
@@ -337,7 +344,7 @@ async function saveManualGrade(cycle) {
             </div>
         </div>
 
-        <nav class="grid grid-cols-3 border-y border-slate-200 bg-slate-50 p-1" aria-label="Recipient monitoring sections">
+        <nav v-if="showNavigation" class="grid grid-cols-3 border-y border-slate-200 bg-slate-50 p-1" aria-label="Recipient monitoring sections">
             <button v-for="tab in monitoringTabs" :key="tab.key" type="button" :class="['flex min-w-0 items-center justify-center gap-2 rounded px-2 py-2.5 text-xs font-bold transition sm:text-sm', activePanel === tab.key ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-950']" @click="activePanel = tab.key"><i :class="[tab.icon, 'text-xs']" aria-hidden="true"></i><span class="truncate">{{ tab.label }}</span></button>
         </nav>
 

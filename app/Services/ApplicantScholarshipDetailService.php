@@ -52,7 +52,7 @@ class ApplicantScholarshipDetailService
         $processContent = in_array($view, ['summary', 'application'], true)
             ? $this->process($scholarship)
             : null;
-        $providerContent = in_array($view, ['summary', 'provider'], true)
+        $providerContent = $view === 'provider'
             ? $this->provider($scholarship, $user)
             : null;
         $awardContent = in_array($view, ['summary', 'award'], true)
@@ -72,13 +72,12 @@ class ApplicantScholarshipDetailService
                 $eligibilityContent,
                 $requirementsContent ?? [],
                 $processContent ?? [],
-                $providerContent ?? [],
                 $awardContent ?? [],
             ),
         };
 
         return [
-            'version' => 2,
+            'version' => 3,
             'view' => $view,
             'page' => $this->page($view),
             'identity' => $this->identity($scholarship),
@@ -241,18 +240,18 @@ class ApplicantScholarshipDetailService
         return match ($view) {
             'eligibility' => [
                 'eyebrow' => 'Eligibility',
-                'title' => 'Check how your profile compares',
-                'description' => 'Review the published rules and any details that still need attention.',
+                'title' => 'Compare your profile with the rules',
+                'description' => 'See what matches and what the provider still needs to verify.',
             ],
             'award' => [
-                'eyebrow' => 'Award and terms',
-                'title' => 'Understand the support before applying',
-                'description' => 'See what the scholarship provides and what recipients agree to do.',
+                'eyebrow' => 'Benefits and terms',
+                'title' => 'Understand the complete offer',
+                'description' => 'Review the support and recipient responsibilities before applying.',
             ],
             'application' => [
-                'eyebrow' => 'Application plan',
-                'title' => 'Prepare for each application step',
-                'description' => 'Check the files, review method, and selection stages in one place.',
+                'eyebrow' => 'How to apply',
+                'title' => 'Prepare for the application process',
+                'description' => 'Check your files and the stages that follow submission.',
             ],
             'provider' => [
                 'eyebrow' => 'Scholarship provider',
@@ -260,9 +259,9 @@ class ApplicantScholarshipDetailService
                 'description' => 'Review the verified organization, public contact, and program location.',
             ],
             default => [
-                'eyebrow' => 'Scholarship brief',
-                'title' => 'Decide with the essentials',
-                'description' => 'Start with the award, your readiness, and the next action.',
+                'eyebrow' => 'Overview',
+                'title' => 'Review the essentials',
+                'description' => 'See the offer, your readiness, and the next action.',
             ],
         };
     }
@@ -270,10 +269,10 @@ class ApplicantScholarshipDetailService
     private function navigation(Scholarship $scholarship, string $activeView): array
     {
         return collect([
-            ['key' => 'summary', 'label' => 'Summary', 'icon' => 'fa-solid fa-compass'],
+            ['key' => 'summary', 'label' => 'Overview', 'icon' => 'fa-solid fa-compass'],
             ['key' => 'eligibility', 'label' => 'Eligibility', 'icon' => 'fa-solid fa-list-check'],
-            ['key' => 'award', 'label' => 'Award & terms', 'icon' => 'fa-solid fa-gift'],
-            ['key' => 'application', 'label' => 'Application plan', 'icon' => 'fa-solid fa-route'],
+            ['key' => 'award', 'label' => 'Benefits & terms', 'icon' => 'fa-solid fa-gift'],
+            ['key' => 'application', 'label' => 'How to apply', 'icon' => 'fa-solid fa-route'],
             ['key' => 'provider', 'label' => 'Provider', 'icon' => 'fa-solid fa-building-shield'],
         ])->map(function (array $item) use ($scholarship, $activeView): array {
             $href = $item['key'] === 'summary'
@@ -294,11 +293,6 @@ class ApplicantScholarshipDetailService
     private function facts(Scholarship $scholarship): array
     {
         $remainingCapacity = $scholarship->remainingApplicationCapacity();
-        $supportPeriod = collect([
-            $scholarship->support_starts_at?->format('M d, Y'),
-            $scholarship->support_ends_at?->format('M d, Y'),
-        ])->filter()->implode(' to ');
-
         return [
             [
                 'key' => 'benefit',
@@ -317,11 +311,6 @@ class ApplicantScholarshipDetailService
                     ? 'No application limit'
                     : ($remainingCapacity === 0 ? 'Full' : $remainingCapacity.' remaining'),
             ],
-            [
-                'key' => 'support_period',
-                'label' => 'Support period',
-                'value' => $supportPeriod ?: 'Not specified',
-            ],
         ];
     }
 
@@ -330,14 +319,12 @@ class ApplicantScholarshipDetailService
         array $eligibility,
         array $requirements,
         array $process,
-        array $provider,
         array $award,
     ): array {
         $profile = $eligibility['profile'] ?? [];
         $blockers = $eligibility['blockers'] ?? [];
         $readiness = $requirements['readiness'] ?? [];
         $stages = $process['stages'] ?? [];
-        $providerVerified = (bool) ($scholarship->provider?->providerProfile?->isVerified() ?? false);
 
         $eligibilityRow = match (true) {
             ! ($profile['complete'] ?? false) => [
@@ -383,8 +370,8 @@ class ApplicantScholarshipDetailService
 
         return [
             'description' => $scholarship->description,
-            'benefits' => collect($award['benefits'] ?? [])->take(3)->values()->all(),
-            'remaining_benefit_count' => max(0, count($award['benefits'] ?? []) - 3),
+            'primary_benefit' => collect($award['benefits'] ?? [])->first(),
+            'additional_benefit_count' => max(0, count($award['benefits'] ?? []) - 1),
             'readiness' => [
                 [
                     'key' => 'eligibility',
@@ -418,21 +405,6 @@ class ApplicantScholarshipDetailService
                     'status' => count($stages).' step'.(count($stages) === 1 ? '' : 's'),
                     'title' => $stages[0]['label'] ?? 'Provider review',
                     'description' => 'Open the plan to see what happens after you apply.',
-                ],
-                [
-                    'key' => 'provider',
-                    'label' => 'Provider',
-                    'icon' => 'fa-solid fa-building-shield',
-                    'href' => route('dashboard.scholarships.show.section', [
-                        'scholarship' => $scholarship,
-                        'section' => 'provider',
-                    ], false),
-                    'state' => $providerVerified ? 'ready' : 'attention',
-                    'status' => $providerVerified ? 'Verified' : 'Check status',
-                    'title' => $provider['name'] ?? 'Scholarship provider',
-                    'description' => $providerVerified
-                        ? 'The organization passed platform verification.'
-                        : 'Review the organization before sharing information.',
                 ],
             ],
         ];
@@ -479,6 +451,10 @@ class ApplicantScholarshipDetailService
         return [
             'description' => $scholarship->description,
             'benefits' => $scholarship->benefitPayload(),
+            'support_period' => collect([
+                $scholarship->support_starts_at?->format('M d, Y'),
+                $scholarship->support_ends_at?->format('M d, Y'),
+            ])->filter()->implode(' to ') ?: 'Not specified',
             'provider_objectives' => $scholarship->provider_objectives ?? [],
             'provider_objective_notes' => $scholarship->provider_objective_notes,
             'terms_preview' => $termsPreview,

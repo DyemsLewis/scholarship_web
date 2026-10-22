@@ -45,16 +45,17 @@ function stepClass(step) {
 
 <template>
     <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-        <div class="border-b border-slate-200 px-4 py-4 sm:px-5">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div class="border-b border-slate-200 px-4 py-5 sm:px-6">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Application progress</p>
-                    <h2 class="mt-1 text-lg font-bold text-slate-950">{{ progress.current_stage_label }}</h2>
-                    <p class="mt-1 text-sm text-slate-600">
-                        {{ progress.completed_steps }} of {{ progress.total_steps }} stages completed
-                    </p>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Your application path</p>
+                    <h2 class="mt-1 font-display text-xl font-bold text-slate-950">{{ progress.current_stage_label }}</h2>
+                    <p class="mt-1 text-sm text-slate-600">{{ progress.completed_steps }} of {{ progress.total_steps }} stages complete</p>
                 </div>
-                <p class="text-2xl font-bold text-slate-950">{{ progress.percent }}%</p>
+                <div class="flex items-baseline gap-2">
+                    <p class="text-3xl font-bold leading-none text-slate-950">{{ progress.percent }}%</p>
+                    <span class="text-xs font-semibold text-slate-500">complete</span>
+                </div>
             </div>
 
             <div class="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-200" aria-hidden="true">
@@ -62,11 +63,11 @@ function stepClass(step) {
             </div>
         </div>
 
-        <ol class="grid gap-px bg-slate-200 sm:grid-flow-col sm:auto-cols-fr">
+        <ol class="grid gap-px bg-slate-200 lg:grid-flow-col lg:auto-cols-fr">
             <li
                 v-for="step in progress.steps"
                 :key="step.key"
-                class="flex min-w-0 items-center gap-3 bg-white px-4 py-3"
+                :class="['relative flex min-w-0 items-center gap-3 bg-white px-4 py-4', step.current ? 'after:absolute after:inset-x-0 after:bottom-0 after:h-1 after:bg-amber-400' : '']"
             >
                 <span :class="['grid h-7 w-7 shrink-0 place-items-center rounded border text-[11px] font-bold', stepClass(step)]">
                     <i v-if="String(stepIcon(step)).startsWith('fa-')" :class="stepIcon(step)" aria-hidden="true"></i>

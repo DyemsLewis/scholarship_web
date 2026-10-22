@@ -13,6 +13,8 @@ const errorMessage = ref('');
 const selectedEvent = ref(null);
 
 const history = computed(() => detail.value?.content ?? { events: [], summary: {} });
+const latestEvent = computed(() => history.value.events?.[0] ?? null);
+const earlierEvents = computed(() => history.value.events?.slice(1) ?? []);
 
 async function loadHistory() {
     isLoading.value = true;
@@ -40,7 +42,7 @@ onMounted(loadHistory);
         <section class="student-page">
             <div class="mx-auto w-full max-w-[90rem]">
                 <div class="h-5 w-36 animate-pulse rounded bg-slate-200"></div>
-                <div class="mt-5 h-44 animate-pulse rounded-md border border-slate-200 bg-white"></div>
+                <div class="mt-5 h-96 animate-pulse rounded-md border border-slate-200 bg-white"></div>
                 <div class="mt-4 h-96 animate-pulse rounded-md border border-slate-200 bg-white"></div>
             </div>
         </section>
@@ -71,11 +73,11 @@ onMounted(loadHistory);
         />
 
         <section class="mt-4 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-            <header class="flex flex-col gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
+            <header class="flex flex-col gap-3 border-b border-slate-200 px-4 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
                 <div>
                     <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Application history</p>
-                    <h2 class="mt-1 text-lg font-bold text-slate-950">Important milestones</h2>
-                    <p class="mt-1 text-sm text-slate-600">Only updates that changed your application are shown.</p>
+                    <h2 class="mt-1 font-display text-xl font-bold text-slate-950">Application timeline</h2>
+                    <p class="mt-1 text-sm text-slate-600">Latest milestone first. Open a record only when you need more detail.</p>
                 </div>
                 <p v-if="history.summary?.event_count" class="text-xs font-semibold text-slate-500">
                     {{ history.summary.event_count }} {{ history.summary.event_count === 1 ? 'milestone' : 'milestones' }}
@@ -83,12 +85,30 @@ onMounted(loadHistory);
             </header>
 
             <ApplicationHistoryTimeline
-                v-if="history.events?.length"
-                :events="history.events"
+                v-if="latestEvent"
+                :events="[latestEvent]"
+                featured
                 @select="selectedEvent = $event"
             />
 
-            <div v-else class="px-5 py-10 text-center">
+            <details v-if="earlierEvents.length" class="group border-t border-slate-200">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 bg-slate-50 px-4 py-3 hover:bg-slate-100 sm:px-5 [&::-webkit-details-marker]:hidden">
+                    <div>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Earlier changes</p>
+                        <h3 class="mt-0.5 text-sm font-bold text-slate-950">
+                            {{ earlierEvents.length }} earlier {{ earlierEvents.length === 1 ? 'milestone' : 'milestones' }}
+                        </h3>
+                    </div>
+                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                </summary>
+                <ApplicationHistoryTimeline
+                    :events="earlierEvents"
+                    compact
+                    @select="selectedEvent = $event"
+                />
+            </details>
+
+            <div v-else-if="!latestEvent" class="px-5 py-10 text-center">
                 <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500">
                     <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
                 </span>
@@ -96,9 +116,6 @@ onMounted(loadHistory);
                 <p class="mt-1 text-sm text-slate-600">New application updates will appear here.</p>
             </div>
 
-            <footer v-if="history.events?.length" class="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-500 sm:px-5">
-                Schedule details and submitted files remain in their focused sections above.
-            </footer>
         </section>
     </ApplicantApplicationShell>
 </template>

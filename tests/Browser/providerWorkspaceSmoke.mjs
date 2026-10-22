@@ -294,6 +294,7 @@ async function main() {
                     || responseUrl.pathname.startsWith('/provider/applications/')
                     || responseUrl.pathname.startsWith('/admin/workspaces/')
                     || responseUrl.pathname.startsWith('/admin/governance/')
+                    || responseUrl.pathname.startsWith('/dashboard/monitoring/')
                     || responseUrl.pathname === '/provider/profile/data'
                     || responseUrl.pathname === '/provider/applications/data'
                     || responseUrl.pathname === '/provider/dashboard/data'

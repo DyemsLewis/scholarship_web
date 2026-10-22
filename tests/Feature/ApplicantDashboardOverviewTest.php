@@ -55,6 +55,8 @@ class ApplicantDashboardOverviewTest extends TestCase
             ->assertJsonPath('dashboard.primary_action.title', 'Update your application')
             ->assertJsonPath('dashboard.primary_action.context', $scholarship->title)
             ->assertJsonPath('dashboard.applications.0.id', $application->id)
+            ->assertJsonPath('dashboard.applications.0.progress_percent', 0)
+            ->assertJsonPath('dashboard.applications.0.progress_label', '0 of 3 stages complete')
             ->assertJsonPath('dashboard.applications.0.needs_action', true);
     }
 

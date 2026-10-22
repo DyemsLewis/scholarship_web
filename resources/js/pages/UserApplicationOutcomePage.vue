@@ -122,7 +122,7 @@ onMounted(loadOutcome);
         <section class="student-page">
             <div class="mx-auto w-full max-w-[90rem]">
                 <div class="h-5 w-36 animate-pulse rounded bg-slate-200"></div>
-                <div class="mt-5 h-44 animate-pulse rounded-md border border-slate-200 bg-white"></div>
+                <div class="mt-5 h-96 animate-pulse rounded-md border border-slate-200 bg-white"></div>
                 <div class="mt-4 h-72 animate-pulse rounded-md border border-slate-200 bg-white"></div>
             </div>
         </section>
@@ -159,17 +159,26 @@ onMounted(loadOutcome);
         />
 
         <div class="mt-4 space-y-4">
-            <section v-if="outcome.pending" id="application-result" class="scroll-mt-4 rounded-md border border-slate-300 bg-white px-5 py-10 text-center shadow-sm">
-                <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-600">
+            <section v-if="outcome.pending" id="application-result" class="scroll-mt-4 rounded-md border border-slate-300 bg-white px-4 py-5 shadow-sm sm:px-5">
+                <div class="flex items-start gap-3">
+                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-slate-600">
                     <i class="fa-regular fa-clock" aria-hidden="true"></i>
                 </span>
-                <h2 class="mt-3 text-lg font-bold text-slate-950">{{ outcome.pending.title }}</h2>
-                <p class="mx-auto mt-1 max-w-2xl text-sm leading-6 text-slate-600">{{ outcome.pending.description }}</p>
+                    <div>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Final decision</p>
+                        <h2 class="mt-1 text-lg font-bold text-slate-950">{{ outcome.pending.title }}</h2>
+                        <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ outcome.pending.description }}</p>
+                    </div>
+                </div>
             </section>
 
             <ApplicationOutcomeRecord v-if="outcome.available" :outcome="outcome" />
 
-            <section v-if="agreement" id="recipient-agreement" class="scroll-mt-4 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+            <section
+                v-if="agreement"
+                id="recipient-agreement"
+                :class="['scroll-mt-4 overflow-hidden rounded-md border bg-white shadow-sm', agreement.can_respond ? 'border-amber-300' : 'border-slate-300']"
+            >
                 <div class="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                     <div class="flex min-w-0 items-start gap-3">
                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800">
@@ -183,7 +192,7 @@ onMounted(loadOutcome);
                                 </span>
                             </div>
                             <p class="mt-1 text-sm leading-5 text-slate-600">
-                                {{ agreement.can_respond ? 'Review the full support and responsibilities before responding.' : 'The terms and your recorded response remain available here.' }}
+                                {{ agreement.can_respond ? 'Read the complete terms, then accept or decline the support.' : 'Your response is recorded. You can reopen the terms at any time.' }}
                             </p>
                         </div>
                     </div>
@@ -193,24 +202,6 @@ onMounted(loadOutcome);
                 </div>
             </section>
 
-            <section v-if="outcome.recipient_support" class="rounded-md border border-emerald-300 bg-emerald-50/70 px-4 py-4 shadow-sm sm:px-5">
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div class="flex min-w-0 items-start gap-3">
-                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700">
-                            <i class="fa-solid fa-heart-pulse" aria-hidden="true"></i>
-                        </span>
-                        <div>
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700">Next workspace</p>
-                            <h2 class="mt-1 text-base font-bold text-slate-950">{{ outcome.recipient_support.title }}</h2>
-                            <p class="mt-1 text-sm leading-5 text-slate-600">{{ outcome.recipient_support.description }}</p>
-                        </div>
-                    </div>
-                    <a :href="outcome.recipient_support.href" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">
-                        Open recipient support
-                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                    </a>
-                </div>
-            </section>
         </div>
     </ApplicantApplicationShell>
 </template>

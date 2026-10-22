@@ -16,6 +16,9 @@ const acknowledgingId = ref(null);
 const mapPreview = ref(null);
 
 const activities = computed(() => detail.value?.content ?? {});
+const primaryActivity = computed(() => activities.value.active?.[0] ?? null);
+const additionalActivities = computed(() => activities.value.active?.slice(1) ?? []);
+const formalApplicationIsCurrent = computed(() => detail.value?.progress?.current_stage === 'formal_application');
 const shellDetail = computed(() => {
     if (!detail.value) {
         return null;
@@ -118,7 +121,7 @@ onMounted(loadActivities);
         <section class="student-page">
             <div class="mx-auto w-full max-w-[90rem]">
                 <div class="h-5 w-36 animate-pulse rounded bg-slate-200"></div>
-                <div class="mt-5 h-44 animate-pulse rounded-md border border-slate-200 bg-white"></div>
+                <div class="mt-5 h-96 animate-pulse rounded-md border border-slate-200 bg-white"></div>
                 <div class="mt-4 h-80 animate-pulse rounded-md border border-slate-200 bg-white"></div>
             </div>
         </section>
@@ -155,29 +158,52 @@ onMounted(loadActivities);
 
         <div class="mt-4 space-y-4">
             <FormalApplicationHandoff
-                v-if="activities.formal_application"
+                v-if="activities.formal_application && formalApplicationIsCurrent"
                 :handoff="activities.formal_application"
                 @map="openHandoffMap"
             />
 
-            <section v-if="activities.active?.length" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-                <header class="border-b border-slate-200 px-4 py-4 sm:px-5">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Current schedule</p>
-                    <h2 class="mt-1 text-lg font-bold text-slate-950">Upcoming activities</h2>
-                    <p class="mt-1 text-sm text-slate-600">Use the date and instructions assigned specifically to you.</p>
+            <section v-if="primaryActivity" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+                <header class="border-b border-slate-200 px-4 py-5 sm:px-6">
+                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Your schedule</p>
+                    <h2 class="mt-1 font-display text-xl font-bold text-slate-950">Next activity</h2>
+                    <p class="mt-1 text-sm text-slate-600">Check the date, method, and instructions before attending.</p>
                 </header>
-                <div class="divide-y divide-slate-300">
+                <ApplicationActivityRecord
+                    :key="activityKey(primaryActivity)"
+                    :activity="primaryActivity"
+                    primary
+                    :acknowledging="acknowledgingId === activityKey(primaryActivity)"
+                    @acknowledge="acknowledgeActivity"
+                    @map="openActivityMap"
+                />
+            </section>
+
+            <details v-if="additionalActivities.length" class="group overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 hover:bg-slate-50 sm:px-5 [&::-webkit-details-marker]:hidden">
+                    <div>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Later</p>
+                        <h2 class="mt-1 text-base font-bold text-slate-950">Other scheduled activities ({{ additionalActivities.length }})</h2>
+                    </div>
+                    <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
+                </summary>
+                <div class="divide-y divide-slate-200 border-t border-slate-200">
                     <ApplicationActivityRecord
-                        v-for="(activity, index) in activities.active"
+                        v-for="activity in additionalActivities"
                         :key="activityKey(activity)"
                         :activity="activity"
-                        :primary="index === 0"
                         :acknowledging="acknowledgingId === activityKey(activity)"
                         @acknowledge="acknowledgeActivity"
                         @map="openActivityMap"
                     />
                 </div>
-            </section>
+            </details>
+
+            <FormalApplicationHandoff
+                v-if="activities.formal_application && !formalApplicationIsCurrent"
+                :handoff="activities.formal_application"
+                @map="openHandoffMap"
+            />
 
             <section v-if="!activities.active?.length && !activities.formal_application" class="rounded-md border border-slate-300 bg-white px-5 py-10 text-center shadow-sm">
                 <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500">
