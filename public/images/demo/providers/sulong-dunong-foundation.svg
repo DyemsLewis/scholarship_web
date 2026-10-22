@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
+  <title id="title">Sulong Dunong Education Foundation</title>
+  <rect width="240" height="240" rx="18" fill="#f8fafc"/>
+  <path d="M120 30 42 73l78 43 78-43z" fill="#07142d"/>
+  <path d="M67 101v52c25 23 81 23 106 0v-52l-53 29z" fill="#f5b700"/>
+  <path d="M193 81v65" stroke="#07142d" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="193" cy="161" r="12" fill="#f5b700"/>
+  <path d="M92 165h56v16H92z" fill="#07142d"/>
+</svg>

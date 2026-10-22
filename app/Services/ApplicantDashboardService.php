@@ -873,8 +873,6 @@ class ApplicantDashboardService
 
     private function scholarshipImageUrl(?Scholarship $scholarship): string
     {
-        return filled($scholarship?->image_path)
-            ? asset(ltrim($scholarship->image_path, '/'))
-            : asset('uploads/scholarship-default.jpg');
+        return $scholarship?->coverImageUrl() ?? asset('images/filipino-students-group-study.jpg');
     }
 }

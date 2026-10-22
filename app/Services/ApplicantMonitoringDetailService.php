@@ -107,10 +107,7 @@ class ApplicantMonitoringDetailService
         return [
             'program' => [
                 'title' => $scholarship?->title ?? 'Scholarship program',
-                'image_url' => $this->publicAssetUrl(
-                    $scholarship?->image_path,
-                    'uploads/scholarship-default.jpg',
-                ),
+                'image_url' => $scholarship?->coverImageUrl(),
             ],
             'provider' => [
                 'name' => $provider?->provider_name ?? $provider?->name ?? 'Scholarship provider',

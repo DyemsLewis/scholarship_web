@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AlertDialog from '../../../components/AlertDialog.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
+import CoverImagePickerModal from '../../../components/CoverImagePickerModal.vue';
 import LocationMapModal from '../../../components/LocationMapModal.vue';
 import { useConfirmationDialog } from '../../../composables/useConfirmationDialog';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -25,10 +26,14 @@ const isSaving = ref(false);
 const savedMessage = ref('');
 const originalStatus = ref('draft');
 const applicationsCount = ref(0);
-const hasExistingImage = ref(false);
-const imageFile = ref(null);
-const imagePreviewUrl = ref('');
-const useProviderLogo = ref(!programId.value && Boolean(portalUser.provider_logo_url));
+const coverPickerOpen = ref(false);
+const coverImages = ref([]);
+const coverSource = ref('default');
+const coverKey = ref('');
+const coverFile = ref(null);
+const coverPreviewUrl = ref('');
+const recommendedCoverKey = ref('learning-together');
+const providerCoverUrl = ref(portalUser.provider_cover_url ?? '');
 const showLocationMap = ref(false);
 const mapMessage = ref('');
 const benefitType = ref('');
@@ -123,6 +128,7 @@ function emptyForm() {
             release_conditions: '', duration: '', noncompliance_consequence: '', exit_or_exception_process: '',
         },
         termsAccepted: false,
+        coverUrl: '',
     };
 }
 
@@ -132,10 +138,21 @@ const currentStep = computed(() => steps[activeStepIndex.value] ?? steps[0]);
 const isCreateMode = computed(() => !programId.value);
 const isReadOnly = computed(() => originalStatus.value === 'pending_review');
 const canDelete = computed(() => originalStatus.value === 'draft' && applicationsCount.value === 0);
-const programImage = computed(() => imagePreviewUrl.value
-    || (useProviderLogo.value ? portalUser.provider_logo_url : '')
-    || form.value.imageUrl
-    || '');
+const selectedSystemCover = computed(() => coverImages.value.find((image) => image.key === (coverKey.value || recommendedCoverKey.value)) ?? null);
+const programImage = computed(() => {
+    if (coverPreviewUrl.value) return coverPreviewUrl.value;
+    if (coverSource.value === 'provider') return providerCoverUrl.value;
+    if (coverSource.value === 'system') return selectedSystemCover.value?.url ?? '';
+    if (coverSource.value === 'upload') return form.value.coverUrl;
+    return form.value.coverUrl || selectedSystemCover.value?.url || '';
+});
+const coverSourceLabel = computed(() => ({
+    default: 'Recommended image',
+    legacy: 'Current program image',
+    system: 'System image',
+    provider: 'Organization background',
+    upload: 'Uploaded image',
+}[coverSource.value] ?? 'Program background'));
 const mapAddress = computed(() => form.value.locationAddress.trim());
 const requiresAgreementDetails = computed(() => !['provider_briefing', 'none'].includes(form.value.recipientAgreement.commitment_type));
 const selectedStages = computed(() => stageOptions.filter((stage) => form.value.selectionStages.includes(stage.id)));
@@ -146,7 +163,7 @@ const stepChecks = computed(() => ({
         && form.value.category
         && form.value.programCycle.trim()
         && form.value.description.trim()
-        && (hasExistingImage.value || imageFile.value || useProviderLogo.value)
+        && Boolean(programImage.value || ['default', 'system', 'provider'].includes(coverSource.value))
     ),
     support: Boolean(
         form.value.benefits.length
@@ -352,19 +369,40 @@ function benefitSummary(benefit) {
     return parts.join(' | ') || 'Details optional';
 }
 
-function handleImage(event) {
-    const file = event.target.files?.[0] ?? null;
-    if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value);
-    imageFile.value = file;
-    imagePreviewUrl.value = file ? URL.createObjectURL(file) : '';
-    if (file) useProviderLogo.value = false;
+function clearCoverUpload() {
+    coverFile.value = null;
+    if (coverPreviewUrl.value) URL.revokeObjectURL(coverPreviewUrl.value);
+    coverPreviewUrl.value = '';
 }
 
-function selectProviderLogo() {
-    if (!useProviderLogo.value) return;
-    imageFile.value = null;
-    if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value);
-    imagePreviewUrl.value = '';
+function selectSystemCover(image) {
+    clearCoverUpload();
+    coverSource.value = 'system';
+    coverKey.value = image.key;
+    coverPickerOpen.value = false;
+}
+
+function selectProviderCover() {
+    clearCoverUpload();
+    coverSource.value = 'provider';
+    coverKey.value = '';
+    coverPickerOpen.value = false;
+}
+
+function selectUploadedCover(file) {
+    clearCoverUpload();
+    coverFile.value = file;
+    coverPreviewUrl.value = URL.createObjectURL(file);
+    coverSource.value = 'upload';
+    coverKey.value = '';
+    coverPickerOpen.value = false;
+}
+
+function resetCover() {
+    clearCoverUpload();
+    coverSource.value = 'default';
+    coverKey.value = recommendedCoverKey.value;
+    coverPickerOpen.value = false;
 }
 
 function handleMapResolved(location) {
@@ -442,15 +480,13 @@ function fillForm(program) {
             ...(program.recipient_agreement ?? {}),
         },
         termsAccepted: false,
-        imageUrl: program.image_url ?? '',
+        coverUrl: program.cover_image_url ?? program.image_url ?? '',
     };
     originalStatus.value = program.status ?? 'draft';
     applicationsCount.value = Number(program.applications_count ?? 0);
-    hasExistingImage.value = Boolean(program.image_path);
-    useProviderLogo.value = false;
-    imageFile.value = null;
-    if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value);
-    imagePreviewUrl.value = '';
+    coverSource.value = program.cover_image_source ?? (program.image_path ? 'legacy' : 'default');
+    coverKey.value = program.cover_image_key ?? '';
+    clearCoverUpload();
 }
 
 function append(payload, key, value) {
@@ -483,10 +519,14 @@ function createPayload(status, termsAccepted = false) {
         handoff_location_address: form.value.handoffLocationAddress.trim(), handoff_url: form.value.handoffUrl.trim(),
         selection_stages: JSON.stringify(form.value.selectionStages), review_rubric: JSON.stringify(form.value.reviewRubric),
         recipient_agreement: JSON.stringify(form.value.recipientAgreement), status,
-        use_provider_logo: useProviderLogo.value ? 1 : 0, terms_accepted: termsAccepted ? 1 : 0,
+        terms_accepted: termsAccepted ? 1 : 0,
     };
+    if (coverSource.value !== 'legacy') {
+        fields.cover_source = coverSource.value;
+        fields.cover_key = coverKey.value;
+    }
     Object.entries(fields).forEach(([key, value]) => append(payload, key, value));
-    if (imageFile.value) payload.append('image_file', imageFile.value);
+    if (coverFile.value) payload.append('cover_file', coverFile.value);
     if (programId.value) payload.append('_method', 'PUT');
     return payload;
 }
@@ -497,7 +537,7 @@ function firstError(error) {
 }
 
 function stepForBackendField(field) {
-    if (/^(title|category|program_cycle|description|image)/.test(field)) return 'basics';
+    if (/^(title|category|program_cycle|description|image|cover)/.test(field)) return 'basics';
     if (/^(benefits|slots_available|application_limit|support_)/.test(field)) return 'support';
     if (/^(application_opens_at|deadline|expected_results_at|location_|latitude|longitude|contact_|official_program_url)/.test(field)) return 'dates-location';
     if (/^(eligibility|eligible_|income_|minimum_|exclude_)/.test(field)) return 'eligibility';
@@ -614,13 +654,26 @@ async function loadProgram() {
     }
 }
 
+async function loadCoverOptions() {
+    try {
+        const response = await window.axios.get('/provider/cover-images');
+        coverImages.value = response.data.images ?? [];
+        recommendedCoverKey.value = response.data.recommended_key || 'learning-together';
+        providerCoverUrl.value = response.data.provider_cover?.url || providerCoverUrl.value;
+        if (!programId.value && !coverKey.value) coverKey.value = recommendedCoverKey.value;
+    } catch (error) {
+        showAlert('Background choices unavailable', error.response?.data?.message || 'The image library could not be loaded.');
+    }
+}
+
 onMounted(() => {
     loadProgram();
+    loadCoverOptions();
     window.addEventListener('popstate', handleHistory);
 });
 onBeforeUnmount(() => {
     window.removeEventListener('popstate', handleHistory);
-    if (imagePreviewUrl.value) URL.revokeObjectURL(imagePreviewUrl.value);
+    if (coverPreviewUrl.value) URL.revokeObjectURL(coverPreviewUrl.value);
 });
 </script>
 
@@ -652,6 +705,10 @@ onBeforeUnmount(() => {
                             <span v-if="!isCreateMode" class="border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-700">
                                 {{ originalStatus.replace('_', ' ') }}
                             </span>
+                            <a v-if="programId" :href="`/provider/previews/programs/${programId}`" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950">
+                                <i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>
+                                Preview as applicant
+                            </a>
                         </div>
                     </div>
                 </header>
@@ -733,19 +790,15 @@ onBeforeUnmount(() => {
                                         </label>
                                     </div>
                                     <aside class="border-l border-slate-200 pl-6">
-                                        <p class="text-xs font-bold text-slate-700">Program image</p>
+                                        <div class="flex items-start justify-between gap-3">
+                                            <div><p class="text-xs font-bold text-slate-700">Program background</p><p class="mt-1 text-[11px] leading-4 text-slate-500">Used on scholarship cards and the detail page.</p></div>
+                                            <span class="shrink-0 bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{{ coverSourceLabel }}</span>
+                                        </div>
                                         <div class="mt-3 grid aspect-[4/3] place-items-center overflow-hidden border border-slate-200 bg-slate-50">
                                             <img v-if="programImage" :src="programImage" alt="Program preview" class="h-full w-full object-cover">
                                             <i v-else class="fa-regular fa-image text-3xl text-slate-300" aria-hidden="true"></i>
                                         </div>
-                                        <label class="mt-3 block cursor-pointer border border-slate-300 bg-white px-3 py-2.5 text-center text-xs font-bold text-slate-700 hover:bg-slate-50">
-                                            Upload image
-                                            <input type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="handleImage">
-                                        </label>
-                                        <label v-if="portalUser.provider_logo_url" class="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-600">
-                                            <input v-model="useProviderLogo" type="checkbox" class="mt-1 border-slate-300 text-slate-950 focus:ring-slate-700" @change="selectProviderLogo">
-                                            Use the organization logo
-                                        </label>
+                                        <button type="button" class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-950" @click="coverPickerOpen = true"><i class="fa-regular fa-image" aria-hidden="true"></i>Choose background</button>
                                     </aside>
                                 </div>
                             </section>
@@ -1071,6 +1124,22 @@ onBeforeUnmount(() => {
                 </section>
             </div>
         </Teleport>
+
+        <CoverImagePickerModal
+            :open="coverPickerOpen"
+            title="Choose a scholarship background"
+            description="Use a system image, a copy of the organization background, or upload a program-specific image."
+            :images="coverImages"
+            :selected-source="coverSource"
+            :selected-key="coverKey"
+            :provider-cover-url="providerCoverUrl"
+            :busy="isSaving"
+            @close="coverPickerOpen = false"
+            @select-system="selectSystemCover"
+            @select-provider="selectProviderCover"
+            @upload="selectUploadedCover"
+            @reset="resetCover"
+        />
 
         <LocationMapModal
             :open="showLocationMap"

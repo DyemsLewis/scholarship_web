@@ -138,7 +138,6 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->assertJsonValidationErrors([
                 'category',
                 'benefits',
-                'image_file',
                 'application_mode',
             ]);
 
@@ -401,7 +400,6 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->assertJsonValidationErrors([
                 'category',
                 'benefits',
-                'image_file',
                 'application_mode',
                 'eligibility',
                 'requirements',

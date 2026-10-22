@@ -572,6 +572,8 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('contract_version', 1)
             ->assertJsonPath('workspace.title', 'Selection dashboard')
             ->assertJsonPath('metrics.1.value', 1)
+            ->assertJsonPath('metrics.2.value', 0)
+            ->assertJsonPath('metrics.2.label', 'Ready for review')
             ->assertJsonPath('sections.1.items.0.id', $application->id)
             ->assertJsonCount(4, 'metrics')
             ->assertJsonCount(2, 'sections');

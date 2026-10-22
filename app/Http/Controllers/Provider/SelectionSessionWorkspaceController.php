@@ -183,14 +183,16 @@ class SelectionSessionWorkspaceController extends Controller
 
     private function unassignedApplications(Builder $query): Builder
     {
-        return $query->whereHas('stageProgresses', fn (Builder $progressQuery) => $progressQuery
-            ->where('status', 'current')
-            ->whereColumn('stage_key', 'scholarship_applications.workflow_stage')
-            ->where(function (Builder $statusQuery): void {
-                $statusQuery
-                    ->whereNull('operational_status')
-                    ->orWhereIn('operational_status', ['not_started', 'waiting_for_schedule']);
-            }));
+        return $query
+            ->whereIn('workflow_stage', [ApplicationStageCatalog::EXAM, ApplicationStageCatalog::INTERVIEW])
+            ->whereHas('stageProgresses', fn (Builder $progressQuery) => $progressQuery
+                ->where('status', 'current')
+                ->whereColumn('stage_key', 'scholarship_applications.workflow_stage')
+                ->where(function (Builder $statusQuery): void {
+                    $statusQuery
+                        ->whereNull('operational_status')
+                        ->orWhereIn('operational_status', ['not_started', 'waiting_for_schedule']);
+                }));
     }
 
     private function resultApplications(Builder $query): Builder
@@ -203,7 +205,17 @@ class SelectionSessionWorkspaceController extends Controller
                     ->whereColumn('stage_key', 'scholarship_applications.workflow_stage'))
                 ->orWhereHas('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
                     ->where('status', 'completed')
-                    ->whereColumn('type', 'scholarship_applications.workflow_stage'));
+                    ->whereColumn('type', 'scholarship_applications.workflow_stage'))
+                ->orWhere(fn (Builder $formalQuery) => $formalQuery
+                    ->where('workflow_stage', ApplicationStageCatalog::FORMAL_APPLICATION)
+                    ->whereDoesntHave('stageAssignments', fn (Builder $assignmentQuery) => $assignmentQuery
+                        ->whereIn('status', ['assigned', 'acknowledged'])
+                        ->whereHas('session', fn (Builder $sessionQuery) => $sessionQuery
+                            ->where('stage_key', ApplicationStageCatalog::FORMAL_APPLICATION)
+                            ->where('status', '!=', 'cancelled')))
+                    ->whereDoesntHave('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
+                        ->where('type', ApplicationStageCatalog::FORMAL_APPLICATION)
+                        ->where('status', '!=', 'cancelled')));
         });
     }
 
@@ -229,6 +241,7 @@ class SelectionSessionWorkspaceController extends Controller
     {
         $profile = $application->applicant?->studentProfile;
         $progress = $application->stageProgresses->firstWhere('stage_key', $application->workflow_stage);
+        $isFormalApplication = $application->workflow_stage === ApplicationStageCatalog::FORMAL_APPLICATION;
 
         return [
             'id' => (int) $application->id,
@@ -255,7 +268,7 @@ class SelectionSessionWorkspaceController extends Controller
             'submitted_at' => $application->submitted_at?->format('M d, Y'),
             'action' => $queue === 'results'
                 ? [
-                    'label' => 'Review outcome',
+                    'label' => $isFormalApplication ? 'Review formal application' : 'Review outcome',
                     'url' => route('provider.applications.show', [
                         'application' => $application,
                         'workspace' => 'selection',
@@ -264,10 +277,11 @@ class SelectionSessionWorkspaceController extends Controller
                 ]
                 : [
                     'label' => 'Create session',
-                    'url' => route('provider.workspaces.selection.sessions.create', [
+                    'url' => route('provider.workspaces.selection.unassigned', [
                         'program_id' => $application->scholarship_id,
                         'stage_key' => $application->workflow_stage,
                         'application_id' => $application->id,
+                        'create_session' => 1,
                     ], false),
                 ],
         ];

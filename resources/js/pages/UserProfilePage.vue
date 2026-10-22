@@ -96,11 +96,10 @@ const fieldClass = 'min-w-0';
 const labelClass = 'mb-2 block text-sm font-semibold leading-5 text-slate-700';
 const inputClass = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
 const compactInputClass = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
-const sectionCardClass = 'student-card overflow-hidden';
-const sectionHeaderClass = 'flex flex-col gap-3 border-b border-slate-200 bg-white p-4 sm:flex-row sm:items-start sm:justify-between sm:p-5';
-const sectionBodyClass = 'bg-white p-4 sm:p-5';
+const sectionCardClass = 'w-full';
+const sectionBodyClass = 'space-y-0 bg-white px-4 py-5 sm:px-6';
 const sectionStatusPillClass = 'w-fit rounded-md px-2.5 py-1.5 text-xs font-bold';
-const formPanelClass = 'rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5';
+const formPanelClass = 'border-b border-slate-200 py-5 first:pt-0 last:border-b-0 last:pb-0';
 const formPanelTitleClass = 'text-sm font-bold text-slate-950';
 const formPanelDescriptionClass = 'mt-1 text-xs leading-5 text-slate-500';
 const optionButtonBaseClass = 'inline-flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-semibold transition';
@@ -374,10 +373,19 @@ const schoolProofOption = computed(() => {
         required: false,
     };
 });
+const noCurrentScholarshipProofOption = computed(() => ({
+    value: 'no_current_scholarship_proof',
+    label: 'Proof of no current scholarship',
+    description: 'Certificate, clearance, or signed declaration accepted by the provider.',
+    icon: 'fa-solid fa-award',
+    context: ['Optional unless a program requires it'],
+    required: false,
+}));
 const verificationDocumentOptions = computed(() => [
     academicProofOption.value,
     recentSchoolIdOption.value,
     schoolProofOption.value,
+    noCurrentScholarshipProofOption.value,
 ]);
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
 const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
@@ -413,7 +421,7 @@ const manualAcademicResultComplete = computed(() => Boolean(form.value.grading_s
 const schoolVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'school_record') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
-    .filter((document) => !['academic_record', 'recent_school_id', 'school_record', 'achievement_evidence'].includes(document.document_type)));
+    .filter((document) => !['academic_record', 'recent_school_id', 'school_record', 'no_current_scholarship_proof', 'achievement_evidence'].includes(document.document_type)));
 const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
     ...option,
     document: verificationDocuments.value.find((document) => document.document_type === option.value) ?? null,
@@ -557,7 +565,31 @@ const overviewProfileAction = computed(() => {
         actionable: false,
     };
 });
-const activeProfileSection = computed(() => profileSections.find((section) => section.id === activeSection.value) ?? profileSections[0]);
+const profileEditorCopy = computed(() => ({
+    personal: {
+        title: 'Personal and contact',
+        description: 'Update the learner identity and current contact details.',
+    },
+    academic: {
+        title: 'Learning record',
+        description: 'Update the current school stage, program path, and academic result.',
+    },
+    household: {
+        title: 'Household and guardian',
+        description: 'Update eligibility, guardian, and outside-scholarship details.',
+    },
+    location: {
+        title: 'Home location',
+        description: 'Update the general address used for residency and distance checks.',
+    },
+    verification: {
+        title: 'Supporting evidence',
+        description: 'Manage the records providers use to check the saved profile.',
+    },
+}[activeSection.value] ?? {
+    title: 'Applicant profile',
+    description: 'Update the information used in scholarship applications.',
+}));
 const recommendedSection = computed(() => {
     if (academicOcrActive.value && missingProfileFields.value.some((field) => ['gwa', 'grading_scale'].includes(field.key))) {
         return 'verification';
@@ -1777,6 +1809,7 @@ async function deleteVerificationDocument(document) {
     const isAcademicRecord = document.document_type === 'academic_record';
     const isRecentSchoolId = document.document_type === 'recent_school_id';
     const isSchoolRecord = document.document_type === 'school_record';
+    const isNoCurrentScholarshipProof = document.document_type === 'no_current_scholarship_proof';
     const isAchievementEvidence = document.document_type === 'achievement_evidence';
     const confirmed = await requestConfirmation({
         title: isAcademicRecord
@@ -1785,7 +1818,9 @@ async function deleteVerificationDocument(document) {
                 ? 'Remove recent school ID?'
                 : (isSchoolRecord
                     ? 'Remove school proof?'
-                    : (isAchievementEvidence ? 'Remove achievement evidence?' : 'Remove older proof file?'))),
+                    : (isNoCurrentScholarshipProof
+                        ? 'Remove scholarship-status proof?'
+                        : (isAchievementEvidence ? 'Remove achievement evidence?' : 'Remove older proof file?')))),
         message: `${document.original_name || 'This file'} will be removed from supporting evidence. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic record review will return to not submitted.' : ''}`,
         confirmLabel: 'Remove file',
         tone: 'danger',
@@ -2142,7 +2177,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         role="presentation"
                         @click.self="closeProfileEditor"
                     >
-                    <section :class="['applicant-profile-editor flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden bg-slate-50 shadow-2xl sm:max-h-[92vh]', showProfileGuidance ? 'show-guidance' : '']" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title" aria-describedby="profile-editor-description">
+                    <section :class="['applicant-profile-editor flex max-h-[96vh] w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:max-h-[92vh]', showProfileGuidance ? 'show-guidance' : '']" role="dialog" aria-modal="true" aria-labelledby="profile-editor-title" aria-describedby="profile-editor-description">
                     <section class="shrink-0 overflow-hidden border-b border-slate-200 bg-white">
                         <div class="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-center lg:justify-between">
                             <div class="flex min-w-0 items-start gap-3">
@@ -2160,12 +2195,18 @@ watch(() => form.value.grading_scale, (scale) => {
                                     <p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">
                                         {{ activeSection === 'verification' ? 'Supporting records' : 'Edit applicant profile' }}
                                     </p>
-                                    <h2 id="profile-editor-title" class="mt-1 truncate text-xl font-bold text-slate-950">{{ activeProfileSection.label }}</h2>
-                                    <p id="profile-editor-description" class="mt-1 text-sm text-slate-500">{{ activeProfileSection.impact }}</p>
+                                    <h2 id="profile-editor-title" class="mt-1 truncate text-xl font-bold text-slate-950">{{ profileEditorCopy.title }}</h2>
+                                    <p id="profile-editor-description" class="mt-1 text-sm text-slate-500">{{ profileEditorCopy.description }}</p>
                                 </div>
                             </div>
 
-                            <div class="flex items-center gap-3">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <span
+                                    v-if="activeSection === 'verification'"
+                                    :class="[sectionStatusPillClass, needsVerificationUpload ? 'bg-amber-100 text-amber-800' : verificationStatusClass(profileVerificationStatus)]"
+                                >
+                                    {{ needsVerificationUpload ? 'Files needed' : verificationStatusLabel(profileVerificationStatus) }}
+                                </span>
                                 <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950" @click="showProfileGuidance = !showProfileGuidance">
                                     <i :class="['fa-solid mr-1.5 text-[10px]', showProfileGuidance ? 'fa-eye-slash' : 'fa-circle-question']" aria-hidden="true"></i>
                                     {{ showProfileGuidance ? 'Hide guidance' : 'Show guidance' }}
@@ -2173,21 +2214,13 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <span :class="['text-xs font-bold', hasUnsavedChanges ? 'text-amber-700' : 'text-slate-400']">
                                     {{ hasUnsavedChanges ? 'Unsaved changes' : 'Saved' }}
                                 </span>
-                                <button
-                                    type="button"
-                                    class="rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="isSaving || (activeSection !== 'verification' && !hasUnsavedChanges)"
-                                    @click="finishProfileEditor"
-                                >
-                                    {{ isSaving ? 'Saving...' : activeSection === 'verification' && !hasUnsavedChanges ? 'Close' : 'Save changes' }}
-                                </button>
                             </div>
                         </div>
 
                     </section>
 
-                    <section class="min-h-0 flex-1 space-y-5 overflow-y-auto p-3 sm:p-5">
-                        <div v-if="errorMessage || validationErrorEntries.length" class="student-card p-4">
+                    <section class="min-h-0 flex-1 overflow-y-auto bg-white">
+                        <div v-if="errorMessage || validationErrorEntries.length" class="mx-4 mt-4 border-l-4 border-rose-500 bg-rose-50 p-4 sm:mx-6">
                             <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
                                 {{ errorMessage }}
                             </p>
@@ -2205,15 +2238,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         </div>
 
                         <section v-if="['personal', 'household'].includes(activeSection)" :id="`profile-${activeSection}`" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">Required</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">{{ activeSection === 'personal' ? 'Personal and contact' : 'Household and guardian' }}</h3>
-                                    <p class="mt-1 text-sm text-slate-500">{{ activeSection === 'personal' ? 'Add the learner identity and current contact details.' : 'Add eligibility, guardian, and outside-scholarship details.' }}</p>
-                                </div>
-                            </div>
-
-                            <div :class="[sectionBodyClass, 'space-y-4']">
+                            <div :class="sectionBodyClass">
                                 <div v-if="activeSection === 'personal'" :class="formPanelClass">
                                     <div class="mb-4">
                                         <h4 :class="formPanelTitleClass">Official name</h4>
@@ -2501,15 +2526,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         </section>
 
                         <section v-if="activeSection === 'academic'" id="profile-academic" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">Required</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Learning background</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Add the learner's current school stage, program path, and grade format.</p>
-                                </div>
-                            </div>
-
-                            <div :class="[sectionBodyClass, 'space-y-4']">
+                            <div :class="sectionBodyClass">
                                 <div :class="formPanelClass">
                                     <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                         <div>
@@ -2665,17 +2682,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         </section>
 
                         <section v-if="activeSection === 'location'" id="profile-location" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">Required</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Location</h3>
-                                    <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Programs use your city, province, and region for residency rules and distance estimates.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div :class="[sectionBodyClass, 'space-y-4']">
+                            <div :class="sectionBodyClass">
                                 <div :class="formPanelClass">
                                     <div class="mb-5 flex items-start gap-3">
                                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-300">
@@ -2750,20 +2757,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         </section>
 
                         <section v-if="activeSection === 'verification'" id="profile-verification" :class="sectionCardClass">
-                            <div :class="sectionHeaderClass">
-                                <div>
-                                    <p class="student-kicker">Profile records</p>
-                                    <h3 class="mt-2 text-xl font-bold text-slate-950">Supporting evidence</h3>
-                                    <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                        Upload the records providers need to check.
-                                    </p>
-                                </div>
-                                <span :class="[sectionStatusPillClass, needsVerificationUpload ? 'bg-amber-100 text-amber-800' : verificationStatusClass(profileVerificationStatus)]">
-                                    {{ needsVerificationUpload ? 'Files needed' : verificationStatusLabel(profileVerificationStatus) }}
-                                </span>
-                            </div>
-
-                            <div :class="[sectionBodyClass, 'space-y-4']">
+                            <div :class="sectionBodyClass">
                                 <div
                                     v-if="user?.applicant_verification_notes"
                                     :class="[
@@ -2970,7 +2964,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         </section>
 
 
-                        <div class="sticky bottom-0 flex flex-col gap-3 border border-slate-200 bg-white p-3 shadow-[0_-8px_20px_rgba(15,23,42,0.06)] sm:flex-row sm:items-center sm:justify-end">
+                        <div class="sticky bottom-0 flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-8px_20px_rgba(15,23,42,0.06)] sm:flex-row sm:items-center sm:justify-end sm:px-6">
                             <button
                                 type="button"
                                 class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"

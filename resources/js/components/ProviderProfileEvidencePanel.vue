@@ -71,6 +71,12 @@ function extractedAcademicResult(proof) {
 
     return 'No result extracted';
 }
+
+function proofTypeLabel(type) {
+    return type === 'no_current_scholarship_proof'
+        ? 'Proof of no current scholarship'
+        : labelFromKey(type);
+}
 </script>
 
 <template>
@@ -125,7 +131,7 @@ function extractedAcademicResult(proof) {
             <article v-for="proof in proofs" :key="proof.id" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <div class="min-w-0">
                     <div class="flex flex-wrap items-center gap-2">
-                        <p class="font-bold text-slate-950">{{ labelFromKey(proof.document_type) }}</p>
+                        <p class="font-bold text-slate-950">{{ proofTypeLabel(proof.document_type) }}</p>
                         <span :class="['rounded px-2 py-1 text-[10px] font-bold uppercase', verificationClass(proof.status)]">{{ labelFromKey(proof.status || 'submitted') }}</span>
                     </div>
                     <p class="mt-1 truncate text-xs text-slate-500">{{ proof.original_name }} - {{ formatFileSize(proof.size) }}</p>

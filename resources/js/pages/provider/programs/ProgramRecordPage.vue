@@ -97,6 +97,10 @@ onMounted(loadProgram);
                                 <span :class="['inline-flex border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide', statusClass(program.status.tone)]">
                                     {{ program.status.label }}
                                 </span>
+                                <a :href="`/provider/previews/programs/${programId}`" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950">
+                                    <i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>
+                                    Applicant preview
+                                </a>
                                 <a v-if="program.actions.edit_url" :href="program.actions.edit_url" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">
                                     <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
                                     Edit program

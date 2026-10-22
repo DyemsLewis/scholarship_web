@@ -11,13 +11,14 @@ const queueByPath = {
     '/provider/workspaces/selection/history': 'history',
 };
 const copyByQueue = {
-    active: { title: 'Selection sessions', description: 'Prepare and run formal application, examination, and interview sessions.', empty: 'No active sessions.' },
-    unassigned: { title: 'Unassigned applicants', description: 'Place applicants into a session for their current selection stage.', empty: 'Every applicant is assigned to a session.' },
-    results: { title: 'Results to record', description: 'Review completed participation before recording each applicant outcome.', empty: 'No completed activities are waiting for an outcome.' },
+    active: { title: 'Selection sessions', description: 'Prepare and run optional formal appointments, examinations, and interviews.', empty: 'No active sessions.' },
+    unassigned: { title: 'Unassigned applicants', description: 'Schedule exam or interview applicants who do not yet have a session.', empty: 'Every exam and interview applicant is assigned.' },
+    results: { title: 'Ready for review', description: 'Review formal applications and completed selection activities.', empty: 'No application or activity is waiting for review.' },
     history: { title: 'Session history', description: 'Reference completed and cancelled selection sessions.', empty: 'No session history yet.' },
 };
 
 const path = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/selection/active';
+const pageQuery = new URLSearchParams(window.location.search);
 const activeQueue = queueByPath[path] ?? 'active';
 const pageCopy = copyByQueue[activeQueue];
 const workspace = ref(null);
@@ -27,8 +28,8 @@ const sessions = ref([]);
 const applications = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
 const search = ref('');
-const selectedProgram = ref(new URLSearchParams(window.location.search).get('program_id') ?? '');
-const selectedStage = ref(new URLSearchParams(window.location.search).get('stage_key') ?? '');
+const selectedProgram = ref(pageQuery.get('program_id') ?? '');
+const selectedStage = ref(pageQuery.get('stage_key') ?? '');
 const isLoading = ref(true);
 const errorMessage = ref('');
 const showSessionModal = ref(false);
@@ -71,6 +72,14 @@ function formatDate(value) {
     return new Intl.DateTimeFormat('en-PH', { month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 
+function applicationQueueNote(application) {
+    if (activeQueue === 'results' && application.stage.key === 'formal_application') {
+        return 'Ready for document review';
+    }
+
+    return activeQueue === 'results' ? 'Activity complete' : 'Needs a session';
+}
+
 function openSessionModal(context = {}) {
     sessionContext.value = {
         programId: context.programId ?? '',
@@ -82,6 +91,10 @@ function openSessionModal(context = {}) {
 
 function closeSessionModal() {
     showSessionModal.value = false;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('create_session');
+    url.searchParams.delete('application_id');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
 }
 
 function handleSessionSaved(session) {
@@ -117,7 +130,16 @@ watch(search, () => {
     searchTimer = window.setTimeout(() => loadRecords(1), 300);
 });
 watch([selectedProgram, selectedStage], () => loadRecords(1));
-onMounted(() => loadRecords());
+onMounted(() => {
+    loadRecords();
+    if (pageQuery.get('create_session') === '1') {
+        openSessionModal({
+            programId: pageQuery.get('program_id') ?? '',
+            stageKey: pageQuery.get('stage_key') ?? '',
+            applicationId: pageQuery.get('application_id'),
+        });
+    }
+});
 onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
@@ -136,7 +158,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                 <p class="mt-1 text-sm text-slate-600">{{ pageCopy.description }}</p>
                             </div>
                         </div>
-                        <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800" @click="openSessionModal()"><i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>Create session</button>
+                        <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800" @click="openSessionModal()"><i class="fa-solid fa-calendar-plus text-[10px]" aria-hidden="true"></i>Schedule activity</button>
                     </div>
                 </header>
 
@@ -175,19 +197,22 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
                         <table v-else class="w-full min-w-[68rem] table-fixed border-collapse text-left">
                             <caption class="sr-only">{{ pageCopy.title }}</caption>
-                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><th class="w-[34%] px-5 py-3">Applicant</th><th class="w-[31%] px-5 py-3">Program</th><th class="w-[18%] px-5 py-3">Stage</th><th class="w-[12%] px-5 py-3">Submitted</th><th class="w-[5%] px-5 py-3 text-right"><span class="sr-only">Action</span></th></tr></thead>
+                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><th class="w-[32%] px-5 py-3">Applicant</th><th class="w-[29%] px-5 py-3">Program</th><th class="w-[18%] px-5 py-3">Stage</th><th class="w-[12%] px-5 py-3">Submitted</th><th class="w-[9%] px-5 py-3 text-right"><span class="sr-only">Actions</span></th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applicants...</p></td></tr>
                                 <tr v-else-if="!applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Records move here automatically as work is completed.' }}</p></td></tr>
                                 <tr v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4"><div class="flex min-w-0 items-center gap-3"><img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ application.applicant.education || 'Education not provided' }}</p></div></div></td>
                                     <td class="px-5 py-4"><p class="truncate text-sm font-semibold text-slate-800">{{ application.program.title }}</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage.label }}</p><p class="mt-1 text-xs text-slate-500">{{ activeQueue === 'results' ? 'Activity complete' : 'Needs a session' }}</p></td>
+                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage.label }}</p><p class="mt-1 text-xs text-slate-500">{{ applicationQueueNote(application) }}</p></td>
                                     <td class="px-5 py-4 text-sm text-slate-600">{{ application.submitted_at || 'Not available' }}</td>
-                                    <td class="px-5 py-4 text-right">
+                                    <td class="px-5 py-4 text-right"><div class="flex justify-end gap-2">
                                         <button v-if="activeQueue === 'unassigned'" type="button" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${application.action.label} for ${application.applicant.name}`" @click="openSessionModal({ programId: application.program.id, stageKey: application.stage.key, applicationId: application.id })"><i class="fa-solid fa-calendar-plus text-xs" aria-hidden="true"></i></button>
-                                        <a v-else :href="application.action.url" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${application.action.label} for ${application.applicant.name}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
-                                    </td>
+                                        <template v-else>
+                                            <button v-if="application.stage.key === 'formal_application'" type="button" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Schedule an optional appointment for ${application.applicant.name}`" @click="openSessionModal({ programId: application.program.id, stageKey: application.stage.key, applicationId: application.id })"><i class="fa-solid fa-calendar-plus text-xs" aria-hidden="true"></i></button>
+                                            <a :href="application.action.url" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${application.action.label} for ${application.applicant.name}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                                        </template>
+                                    </div></td>
                                 </tr>
                             </tbody>
                         </table>

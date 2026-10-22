@@ -2,9 +2,14 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPreviewToolbar.vue';
 
 const appElement = document.getElementById('app');
 const providerId = appElement?.dataset.providerId || null;
+const isPreview = appElement?.dataset.providerPreview === 'true';
+const previewDataUrl = appElement?.dataset.previewDataUrl || '';
+const previewBackUrl = appElement?.dataset.previewBackUrl || '/provider/workspaces/organization-profile/public';
+const previewWidth = ref('desktop');
 const isDetail = Boolean(providerId);
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -14,10 +19,12 @@ const summary = ref({ providers: 0, programs: 0 });
 const search = ref('');
 const selectedType = ref('all');
 const failedLogos = ref(new Set());
-const providerHero = {
-    image: '/images/filipino-campus.jpg',
-    alt: 'Filipino students walking together on a university campus',
-};
+const providerHero = computed(() => ({
+    image: provider.value?.cover_url || '/images/filipino-campus.jpg',
+    alt: provider.value?.cover_url
+        ? `${provider.value?.name || 'Scholarship provider'} background`
+        : 'Filipino students walking together on a university campus',
+}));
 
 const providerTypes = computed(() => [
     'all',
@@ -125,7 +132,9 @@ async function loadPage() {
     errorMessage.value = '';
 
     try {
-        const endpoint = isDetail
+        const endpoint = isPreview
+            ? previewDataUrl
+            : isDetail
             ? `/dashboard/providers/${providerId}/data`
             : '/dashboard/providers/data';
         const response = await window.axios.get(endpoint);
@@ -147,12 +156,20 @@ onMounted(loadPage);
 </script>
 
 <template>
-    <main class="student-shell">
-        <ApplicantSidebar />
+    <main :class="isPreview ? 'min-h-screen bg-slate-200' : 'student-shell'">
+        <ApplicantSidebar v-if="!isPreview" />
 
-        <section class="student-page">
+        <ProviderApplicantPreviewToolbar
+            v-if="isPreview"
+            :back-url="previewBackUrl"
+            :status="provider?.verification_label || 'Profile preview'"
+            :width="previewWidth"
+            @update:width="previewWidth = $event"
+        />
+
+        <section :class="['student-page', isPreview && previewWidth === 'mobile' ? 'mx-auto max-w-[30rem]' : '']">
             <div class="student-container">
-                <a v-if="isDetail" href="/dashboard/providers" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
+                <a v-if="isDetail && !isPreview" href="/dashboard/providers" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to providers
                 </a>
@@ -206,7 +223,7 @@ onMounted(loadPage);
                                 <div class="min-w-0 flex-1">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <h2 class="font-display text-xl font-bold text-slate-950">{{ item.name }}</h2>
-                                        <span class="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-800"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Verified</span>
+                                        <span :class="['inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em]', item.is_verified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']"><i :class="item.is_verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-clock'" aria-hidden="true"></i>{{ item.verification_label || (item.is_verified ? 'Verified' : 'Verification pending') }}</span>
                                     </div>
                                     <p class="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{{ typeLabel(item.type) }}<span v-if="item.year_established"> | Since {{ item.year_established }}</span></p>
                                     <p class="mt-2 line-clamp-2 max-w-4xl text-sm leading-6 text-slate-600">{{ item.mission || item.description || 'This provider has current scholarship opportunities.' }}</p>
@@ -236,7 +253,7 @@ onMounted(loadPage);
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <p class="student-kicker">{{ typeLabel(provider.type) }}</p>
-                                            <span class="inline-flex items-center gap-1.5 rounded-md bg-emerald-100 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-emerald-800"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Verified</span>
+                                            <span :class="['inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em]', provider.is_verified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']"><i :class="provider.is_verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-clock'" aria-hidden="true"></i>{{ provider.verification_label || (provider.is_verified ? 'Verified' : 'Verification pending') }}</span>
                                         </div>
                                         <h1 class="mt-2 font-display text-3xl font-bold leading-[1.08] text-slate-950 sm:text-4xl">{{ provider.name }}</h1>
                                     </div>
@@ -324,9 +341,9 @@ onMounted(loadPage);
                             <article v-for="program in provider.programs" :key="program.id" class="student-card overflow-hidden rounded-md border-slate-300">
                                 <div class="grid lg:min-h-56 lg:grid-cols-[20rem_minmax(0,1fr)]">
                                     <figure class="relative h-52 overflow-hidden bg-slate-900 lg:h-auto">
-                                        <img :src="programVisual(program).image" :alt="programVisual(program).alt" class="absolute inset-0 h-full w-full object-cover">
+                                        <img :src="program.image_url || programVisual(program).image" :alt="program.image_url ? `${program.title} background` : programVisual(program).alt" class="absolute inset-0 h-full w-full object-cover">
                                         <div class="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-transparent"></div>
-                                        <img :src="program.image_url" :alt="`${program.title} program mark`" class="absolute bottom-4 left-4 h-16 w-16 rounded-md bg-white object-contain p-2 shadow-lg ring-1 ring-white/70">
+                                        <img v-if="hasLogo(provider)" :src="provider.logo_url" :alt="`${provider.name} logo`" class="absolute bottom-4 left-4 h-16 w-16 rounded-md bg-white object-contain p-2 shadow-lg ring-1 ring-white/70">
                                     </figure>
 
                                     <div class="flex flex-col p-5 sm:p-6">
@@ -338,11 +355,12 @@ onMounted(loadPage);
                                         <p v-if="program.description" class="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-slate-600">{{ program.description }}</p>
 
                                         <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-4 text-xs font-semibold text-slate-500">
-                                            <span><strong class="text-slate-950">{{ program.eligibility_match?.score ?? 0 }}%</strong> profile match</span>
+                                            <span v-if="isPreview"><strong class="text-slate-950">Varies</strong> by applicant</span>
+                                            <span v-else><strong class="text-slate-950">{{ program.eligibility_match?.score ?? 0 }}%</strong> profile match</span>
                                             <span><strong class="text-slate-950">{{ program.benefit_summary || 'Support listed' }}</strong></span>
                                         </div>
 
-                                        <a :href="`/dashboard/scholarships/${program.id}`" class="mt-5 inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                        <a :href="isPreview ? `/provider/previews/programs/${program.id}` : `/dashboard/scholarships/${program.id}`" class="mt-5 inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800">
                                             View scholarship
                                             <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                         </a>

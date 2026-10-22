@@ -45,6 +45,14 @@ test('the applicant profile has one record and an accessible section editor', ()
     assert.match(source, /aria-modal="true"/);
     assert.match(source, /aria-labelledby="profile-editor-title"/);
     assert.match(source, /aria-describedby="profile-editor-description"/);
+    assert.match(source, /const sectionCardClass = 'w-full'/);
+    assert.match(source, /const formPanelClass = 'border-b border-slate-200/);
+    assert.doesNotMatch(source, /sectionHeaderClass/);
+    assert.equal(
+        (source.match(/@click="finishProfileEditor"/g) ?? []).length,
+        1,
+        'The profile editor should expose one save action in its footer.',
+    );
     assert.match(source, /handleUnsavedNavigation/);
     assert.match(source, /title: 'Leave without saving\?'/);
     assert.match(source, /confirmLabel: 'Discard and leave'/);

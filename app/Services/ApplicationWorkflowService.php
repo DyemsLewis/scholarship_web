@@ -65,11 +65,24 @@ class ApplicationWorkflowService
                 ], [
                     'position' => $position,
                     'status' => $stage === $currentStage ? 'current' : 'pending',
+                    'operational_status' => $stage === $currentStage
+                        ? $this->initialOperationalStatusForStage($stage)
+                        : null,
                     'started_at' => $stage === $currentStage ? now() : null,
                 ]);
 
+                $progressUpdates = [];
                 if ((int) $progress->position !== $position) {
-                    $progress->update(['position' => $position]);
+                    $progressUpdates['position'] = $position;
+                }
+                $initialOperationalStatus = $this->initialOperationalStatusForStage($stage);
+                if ($stage === $currentStage
+                    && blank($progress->operational_status)
+                    && $initialOperationalStatus !== null) {
+                    $progressUpdates['operational_status'] = $initialOperationalStatus;
+                }
+                if ($progressUpdates !== []) {
+                    $progress->update($progressUpdates);
                 }
             }
         }
@@ -259,6 +272,7 @@ class ApplicationWorkflowService
                 $nextProgress = $locked->stageProgresses->firstWhere('stage_key', $nextStage);
                 $nextProgress?->update([
                     'status' => 'current',
+                    'operational_status' => $this->initialOperationalStatusForStage($nextStage),
                     'result' => null,
                     'started_at' => $nextProgress->started_at ?: $now,
                 ]);
@@ -737,6 +751,7 @@ class ApplicationWorkflowService
                     ->where('position', '>', $progress->position)
                     ->update([
                         'status' => 'pending',
+                        'operational_status' => null,
                         'result' => null,
                         'notes' => null,
                         'started_at' => null,
@@ -756,6 +771,7 @@ class ApplicationWorkflowService
 
             $progress->update([
                 'status' => 'current',
+                'operational_status' => $this->initialOperationalStatusForStage($stage),
                 'result' => null,
                 'notes' => null,
                 'completed_at' => null,
@@ -974,6 +990,9 @@ class ApplicationWorkflowService
             ], [
                 'position' => $position,
                 'status' => $status,
+                'operational_status' => $status === 'current'
+                    ? $this->initialOperationalStatusForStage($stage)
+                    : null,
                 'result' => $result,
                 'started_at' => in_array($status, ['current', 'passed', 'not_passed'], true)
                     ? ($application->submitted_at ?: now())
@@ -1068,6 +1087,15 @@ class ApplicationWorkflowService
             'interview' => 'interview',
             'formal_application', 'decision' => 'approved',
             default => 'approved',
+        };
+    }
+
+    private function initialOperationalStatusForStage(string $stage): ?string
+    {
+        return match ($stage) {
+            'formal_application' => 'ready_for_review',
+            'exam', 'interview' => 'waiting_for_schedule',
+            default => null,
         };
     }
 

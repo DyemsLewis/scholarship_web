@@ -26,7 +26,7 @@ class SuccessfulDemoCleanupSeeder extends Seeder
 {
     private const PRODUCTION_CONFIRMATION = 'BUILD_COMPLETE_DEMONSTRATION';
 
-    private const PRIMARY_PROVIDER_USERNAME = 'harborlight';
+    private const PRIMARY_PROVIDER_USERNAME = 'sulongdunong';
 
     private const SUCCESSFUL_APPLICANT_USERNAME = 'vincentrafaeltorres';
 
@@ -69,7 +69,7 @@ class SuccessfulDemoCleanupSeeder extends Seeder
 
         $provider = User::query()
             ->where('username', self::PRIMARY_PROVIDER_USERNAME)
-            ->where('email', 'programs@harborlight.test')
+            ->where('email', 'programs@sulongdunong.test')
             ->firstOrFail();
         $successfulApplicant = User::query()
             ->where('username', self::SUCCESSFUL_APPLICANT_USERNAME)
@@ -81,7 +81,7 @@ class SuccessfulDemoCleanupSeeder extends Seeder
             ->firstOrFail();
         $program = Scholarship::query()
             ->whereBelongsTo($provider, 'provider')
-            ->where('title', 'Harborlight Senior Scholars Program')
+            ->where('title', 'Sulong Dunong Senior Scholars Program')
             ->firstOrFail();
         $successfulApplication = ScholarshipApplication::query()
             ->whereBelongsTo($program)

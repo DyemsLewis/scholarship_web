@@ -51,6 +51,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -228,6 +229,102 @@ class ApplicantDashboardController extends Controller
         return response()->json([
             'user' => $this->userPayload($request),
             'detail' => $detailService->build($scholarship, $request->user(), $view),
+        ]);
+    }
+
+    public function providerPreview(Request $request): Response
+    {
+        $this->authorizeProviderPreview($request, 'manage_profile');
+        $provider = $request->user()->providerOrganizationOwner();
+
+        return response()
+            ->view('dashboard-providers', [
+                'provider' => $provider,
+                'preview' => true,
+                'previewBackUrl' => route('provider.workspaces.organization-profile.public', absolute: false),
+            ])
+            ->header('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    }
+
+    public function providerPreviewData(Request $request): JsonResponse
+    {
+        $this->authorizeProviderPreview($request, 'manage_profile');
+        $provider = $request->user()->providerOrganizationOwner();
+        $provider->load([
+            'providerProfile',
+            'providerScholarships' => fn ($query) => $query
+                ->with(['provider.providerProfile', 'events'])
+                ->withCount(['bookmarks', 'applications'])
+                ->discoverable()
+                ->orderByRaw('deadline is null')
+                ->orderBy('deadline'),
+        ]);
+        $payload = $this->publicProviderPayload($provider, $request->user());
+        $payload['is_verified'] = $provider->providerProfile?->isVerified() ?? false;
+        $payload['verification_label'] = $payload['is_verified']
+            ? 'Verified organization'
+            : 'Verification pending';
+
+        return response()->json([
+            'user' => $this->userPayload($request),
+            'provider' => $payload,
+            'preview' => [
+                'enabled' => true,
+                'status' => $payload['verification_label'],
+                'back_url' => route('provider.workspaces.organization-profile.public', absolute: false),
+            ],
+        ]);
+    }
+
+    public function scholarshipPreview(
+        Request $request,
+        Scholarship $scholarship,
+        string $section = 'summary',
+    ): Response {
+        $this->authorizeScholarshipPreview($request, $scholarship);
+        abort_unless(in_array($section, ['summary', 'eligibility', 'award', 'application', 'provider'], true), 404);
+
+        return response()
+            ->view('dashboard-scholarship-detail', [
+                'scholarship' => $scholarship,
+                'section' => $section,
+                'preview' => true,
+                'previewBackUrl' => route('provider.programs.edit.step', [
+                    'scholarship' => $scholarship,
+                    'step' => 'review',
+                ], false),
+            ])
+            ->header('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    }
+
+    public function scholarshipPreviewData(
+        Request $request,
+        Scholarship $scholarship,
+        ApplicantScholarshipDetailService $detailService,
+    ): JsonResponse {
+        $this->authorizeScholarshipPreview($request, $scholarship);
+        $view = (string) $request->query('section', 'summary');
+        $scenario = (string) $request->query('scenario', 'general');
+
+        return response()->json([
+            'user' => $this->userPayload($request),
+            'detail' => $detailService->buildPreview(
+                $scholarship,
+                $request->user(),
+                $view,
+                $scenario,
+            ),
+            'preview' => [
+                'enabled' => true,
+                'status' => Str::headline($scholarship->status ?: 'draft'),
+                'scenario' => in_array($scenario, ['general', 'eligible', 'ineligible'], true)
+                    ? $scenario
+                    : 'general',
+                'back_url' => route('provider.programs.edit.step', [
+                    'scholarship' => $scholarship,
+                    'step' => 'review',
+                ], false),
+            ],
         ]);
     }
 
@@ -751,6 +848,7 @@ class ApplicantDashboardController extends Controller
             'academic_record' => 'academic record',
             'recent_school_id' => 'recent school ID',
             'school_record' => 'school enrollment proof',
+            'no_current_scholarship_proof' => 'proof of no current scholarship',
             'achievement_evidence' => 'achievement evidence',
         };
         $existing = $user->applicantVerificationDocuments()
@@ -1026,6 +1124,7 @@ class ApplicantDashboardController extends Controller
                 'academic_record' => "{$user->name} removed an academic verification record.",
                 'recent_school_id' => "{$user->name} removed a recent school ID.",
                 'school_record' => "{$user->name} removed a school enrollment proof.",
+                'no_current_scholarship_proof' => "{$user->name} removed proof of no current scholarship.",
                 'achievement_evidence' => "{$user->name} removed achievement evidence.",
                 default => "{$user->name} removed a legacy profile verification file.",
             },
@@ -1037,6 +1136,7 @@ class ApplicantDashboardController extends Controller
                 'academic_record' => 'Academic record removed. Upload a current record when you are ready for verification.',
                 'recent_school_id' => 'Recent school ID removed. Upload a current ID to complete your required evidence.',
                 'school_record' => 'School enrollment proof removed. Your academic verification was not changed.',
+                'no_current_scholarship_proof' => 'Proof of no current scholarship removed.',
                 'achievement_evidence' => 'Achievement evidence removed.',
                 default => 'Older proof file removed. Your academic verification was not changed.',
             },
@@ -3086,6 +3186,20 @@ class ApplicantDashboardController extends Controller
             && $provider->providerProfile?->isVerified();
     }
 
+    private function authorizeProviderPreview(Request $request, string $permission): void
+    {
+        $actor = $request->user();
+
+        abort_unless($actor?->isProvider(), 403);
+        abort_unless($actor->hasPortalPermission($permission), 403);
+    }
+
+    private function authorizeScholarshipPreview(Request $request, Scholarship $scholarship): void
+    {
+        $this->authorizeProviderPreview($request, 'manage_programs');
+        abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+    }
+
     private function publicProviderPayload(User $provider, ?User $applicant = null): array
     {
         $profile = $provider->providerProfile;
@@ -3100,6 +3214,7 @@ class ApplicantDashboardController extends Controller
             'logo_url' => filled($profile?->logo_path)
                 ? asset(ltrim($profile->logo_path, '/'))
                 : null,
+            'cover_url' => $profile?->coverImageUrl(),
             'mission' => $profile?->mission,
             'description' => $profile?->provider_description,
             'year_established' => $profile?->year_established,
@@ -3110,7 +3225,10 @@ class ApplicantDashboardController extends Controller
             'contact_number' => $profile?->provider_contact_number,
             'contact_department' => $profile?->contact_department,
             'office_hours' => $profile?->office_hours,
-            'is_verified' => true,
+            'is_verified' => $profile?->isVerified() ?? false,
+            'verification_label' => $profile?->isVerified()
+                ? 'Verified organization'
+                : 'Verification pending',
             'programs_count' => $programs->count(),
             'focus_areas' => $programs
                 ->pluck('category')
@@ -3270,6 +3388,7 @@ class ApplicantDashboardController extends Controller
                 'logo_url' => filled($scholarship->provider?->providerProfile?->logo_path)
                     ? asset(ltrim($scholarship->provider->providerProfile->logo_path, '/'))
                     : null,
+                'cover_url' => $scholarship->provider?->providerProfile?->coverImageUrl(),
                 'website' => $scholarship->provider?->provider_website,
                 'description' => $scholarship->provider?->provider_description,
                 'mission' => $scholarship->provider?->providerProfile?->mission,
@@ -3283,11 +3402,7 @@ class ApplicantDashboardController extends Controller
 
     private function scholarshipImageUrl(Scholarship $scholarship): string
     {
-        if (filled($scholarship->image_path)) {
-            return asset(ltrim($scholarship->image_path, '/'));
-        }
-
-        return asset('uploads/scholarship-default.jpg');
+        return $scholarship->coverImageUrl();
     }
 
     private function mapUrl(Scholarship $scholarship): ?string
@@ -3545,6 +3660,7 @@ class ApplicantDashboardController extends Controller
             'Latest report card or grades',
             'Certificate of enrollment',
             'Recent school ID',
+            'Proof of no current scholarship',
             'Proof of income',
             'Certificate of indigency',
             'Birth certificate',

@@ -21,6 +21,7 @@ const documentsPerPage = 7;
 const documentsPage = ref(1);
 const applicationsPerPage = 3;
 const applicationsPage = ref(1);
+const statusBadgeBase = 'inline-flex h-7 min-w-[7.5rem] items-center justify-center gap-1.5 rounded px-2.5 text-[10px] font-bold uppercase tracking-wide';
 const requestedDocumentView = new URLSearchParams(window.location.search).get('view');
 const documentView = ['prepared', 'applications'].includes(requestedDocumentView)
     ? requestedDocumentView
@@ -49,6 +50,7 @@ const documentDescriptions = {
     'Latest report card or grades': 'Your latest available school grades or report card.',
     'Certificate of enrollment': 'Current proof that you are enrolled in school.',
     'Recent school ID': 'A clear copy or photo of your most recent school ID.',
+    'Proof of no current scholarship': 'A certificate, clearance, or signed declaration accepted by the provider confirming that you do not currently receive another scholarship.',
     'Proof of income': 'A recent income certificate, payslip, or similar household income proof.',
     'Certificate of indigency': 'A current certificate issued by your barangay or local office.',
     'Birth certificate': 'A clear copy of your birth certificate.',
@@ -133,6 +135,38 @@ function readinessClass(percent) {
     }
 
     return 'bg-slate-100 text-slate-700';
+}
+
+function preparedDocumentStatus(document) {
+    return document
+        ? {
+            label: 'Ready',
+            icon: 'fa-solid fa-circle-check',
+            className: 'bg-emerald-100 text-emerald-800',
+        }
+        : {
+            label: 'Not uploaded',
+            icon: 'fa-regular fa-circle',
+            className: 'bg-slate-100 text-slate-600',
+        };
+}
+
+function applicationStatus(status) {
+    const normalized = status || 'submitted';
+
+    if (['selected', 'accepted', 'recipient', 'completed'].includes(normalized)) {
+        return { label: labelFromKey(normalized), icon: 'fa-solid fa-circle-check', className: 'bg-emerald-100 text-emerald-800' };
+    }
+
+    if (['not_selected', 'rejected', 'cancelled', 'withdrawn'].includes(normalized)) {
+        return { label: labelFromKey(normalized), icon: 'fa-solid fa-circle-xmark', className: 'bg-rose-100 text-rose-800' };
+    }
+
+    if (['qualified', 'shortlisted', 'waitlisted'].includes(normalized)) {
+        return { label: labelFromKey(normalized), icon: 'fa-solid fa-hourglass-half', className: 'bg-amber-100 text-amber-800' };
+    }
+
+    return { label: labelFromKey(normalized), icon: 'fa-regular fa-clock', className: 'bg-slate-100 text-slate-700' };
 }
 
 function readinessBarClass(percent) {
@@ -372,19 +406,14 @@ onMounted(loadDocuments);
                             <article
                                 v-for="row in paginatedDocumentRows"
                                 :key="row.name"
-                                class="flex flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between"
+                                class="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_9rem_auto] lg:items-center"
                             >
                                 <div class="flex min-w-0 items-start gap-3">
                                     <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', row.document ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500']">
                                         <i :class="row.document ? 'fa-solid fa-file-circle-check' : 'fa-regular fa-file-lines'" aria-hidden="true"></i>
                                     </span>
                                     <div class="min-w-0">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <h3 class="text-sm font-bold text-slate-950">{{ row.name }}</h3>
-                                            <span :class="['rounded px-2 py-0.5 text-[10px] font-bold uppercase', row.document ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500']">
-                                                {{ row.document ? 'Ready' : 'Not uploaded' }}
-                                            </span>
-                                        </div>
+                                        <h3 class="text-sm font-bold text-slate-950">{{ row.name }}</h3>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">{{ row.description }}</p>
                                         <div v-if="row.document" class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                                             <span class="max-w-xs truncate">{{ row.document.original_name }}</span>
@@ -392,6 +421,13 @@ onMounted(loadDocuments);
                                             <span class="font-semibold text-slate-700">{{ documentReuseLabel(row.document) }}</span>
                                         </div>
                                     </div>
+                                </div>
+
+                                <div class="lg:text-center">
+                                    <span :class="[statusBadgeBase, preparedDocumentStatus(row.document).className]">
+                                        <i :class="preparedDocumentStatus(row.document).icon" aria-hidden="true"></i>
+                                        {{ preparedDocumentStatus(row.document).label }}
+                                    </span>
                                 </div>
 
                                 <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
@@ -468,7 +504,7 @@ onMounted(loadDocuments);
                                 <article
                                     v-for="document in otherPreparedDocuments"
                                     :key="document.id"
-                                    class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+                                    class="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_9rem_auto] lg:items-center"
                                 >
                                     <div class="flex min-w-0 items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] font-black text-slate-600">
@@ -479,7 +515,13 @@ onMounted(loadDocuments);
                                             <p class="mt-1 truncate text-xs text-slate-500">{{ document.original_name }}</p>
                                         </div>
                                     </div>
-                                    <div class="flex flex-wrap items-center gap-2">
+                                    <div class="lg:text-center">
+                                        <span :class="[statusBadgeBase, preparedDocumentStatus(document).className]">
+                                            <i :class="preparedDocumentStatus(document).icon" aria-hidden="true"></i>
+                                            {{ preparedDocumentStatus(document).label }}
+                                        </span>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-2 lg:justify-end">
                                         <button type="button" class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" @click="openDocumentPreview(document)">
                                             <i class="fa-solid fa-eye" aria-hidden="true"></i>
                                             View
@@ -537,7 +579,7 @@ onMounted(loadDocuments);
                             <article
                                 v-for="application in paginatedApplications"
                                 :key="application.id"
-                                class="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,0.6fr)_auto] lg:items-center"
+                                class="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_9rem_minmax(15rem,0.6fr)_auto] lg:items-center"
                             >
                                 <div class="flex min-w-0 gap-3">
                                     <img
@@ -546,19 +588,21 @@ onMounted(loadDocuments);
                                         class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                     >
                                     <div class="min-w-0">
-                                        <div class="flex min-w-0 flex-wrap items-center gap-2">
-                                            <p class="max-w-full truncate text-xs font-bold text-slate-500">
-                                                {{ application.scholarship?.provider?.name || 'Scholarship Provider' }}
-                                            </p>
-                                            <span class="rounded bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600">
-                                                {{ labelFromKey(application.status || 'submitted') }}
-                                            </span>
-                                        </div>
+                                        <p class="max-w-full truncate text-xs font-bold text-slate-500">
+                                            {{ application.scholarship?.provider?.name || 'Scholarship Provider' }}
+                                        </p>
                                         <h3 class="mt-1 truncate text-base font-bold text-slate-950">
                                             {{ application.scholarship?.title || 'Scholarship application' }}
                                         </h3>
                                         <p class="mt-1 text-xs text-slate-500">Submitted {{ application.submitted_at || 'recently' }}</p>
                                     </div>
+                                </div>
+
+                                <div class="lg:text-center">
+                                    <span :class="[statusBadgeBase, applicationStatus(application.status).className]">
+                                        <i :class="applicationStatus(application.status).icon" aria-hidden="true"></i>
+                                        {{ applicationStatus(application.status).label }}
+                                    </span>
                                 </div>
 
                                 <div class="min-w-0">

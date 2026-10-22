@@ -155,6 +155,14 @@ async function saveSession() {
     }
 }
 
+function cancelForm() {
+    if (window.history.length > 1) {
+        window.history.back();
+        return;
+    }
+    window.location.replace('/provider/workspaces/selection/unassigned');
+}
+
 watch(() => form.value.program_id, () => {
     if (sessionId) return;
     if (!availableStages.value.some((stage) => stage.key === form.value.stage_key)) form.value.stage_key = '';
@@ -212,7 +220,7 @@ onMounted(loadForm);
                         </section>
 
                         <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-7 py-4">
-                            <button v-if="step === 2" type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="step = 1"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>Previous</button><a v-else href="/provider/workspaces/selection/active" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950"><i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>Cancel</a>
+                            <button v-if="step === 2" type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="step = 1"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>Previous</button><button v-else type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="cancelForm"><i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>Cancel</button>
                             <button v-if="step === 1" type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-xs font-bold text-white hover:bg-slate-800" @click="continueToDelivery">Continue<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></button><button v-else type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="isSaving"><i :class="['fa-solid', isSaving ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : sessionId ? 'Save changes' : 'Save and open roster' }}</button>
                         </footer>
                     </form>

@@ -1188,11 +1188,7 @@ class MobileAuthController extends Controller
 
     private function scholarshipImageUrl(Scholarship $scholarship): string
     {
-        if (filled($scholarship->image_path)) {
-            return asset(ltrim($scholarship->image_path, '/'));
-        }
-
-        return asset('uploads/scholarship-default.jpg');
+        return $scholarship->coverImageUrl();
     }
 
     private function mapUrl(Scholarship $scholarship): ?string
@@ -1527,6 +1523,7 @@ class MobileAuthController extends Controller
             'Certificate of enrollment',
             'Latest report card or grades',
             'Recent school ID',
+            'Proof of no current scholarship',
             'Proof of income',
             'Certificate of indigency',
             'Parent or guardian valid ID',

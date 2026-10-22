@@ -118,6 +118,124 @@ class ProviderProgramImageLifecycleTest extends TestCase
         }
     }
 
+    public function test_provider_can_choose_a_system_background_and_replace_it_with_an_upload(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $uploadedPath = null;
+
+        try {
+            $this->actingAs($provider)
+                ->getJson('/provider/cover-images')
+                ->assertOk()
+                ->assertJsonPath('recommended_key', 'campus-community')
+                ->assertJsonCount(8, 'images');
+
+            $this->actingAs($provider)
+                ->postJson('/provider/profile/cover', [
+                    'cover_source' => 'system',
+                    'cover_key' => 'science-class',
+                ])
+                ->assertOk()
+                ->assertJsonPath('cover.source', 'system')
+                ->assertJsonPath('cover.key', 'science-class');
+
+            $this->assertDatabaseHas('provider_profiles', [
+                'user_id' => $provider->id,
+                'cover_image_source' => 'system',
+                'cover_image_key' => 'science-class',
+                'cover_image_path' => null,
+            ]);
+
+            $response = $this->actingAs($provider)
+                ->post('/provider/profile/cover', [
+                    'cover_source' => 'upload',
+                    'cover_file' => UploadedFile::fake()->image('organization-cover.jpg', 1200, 600),
+                ], ['HTTP_ACCEPT' => 'application/json'])
+                ->assertOk()
+                ->assertJsonPath('cover.source', 'upload')
+                ->assertJsonPath('cover.is_custom', true);
+
+            $uploadedPath = $provider->fresh()->providerProfile->cover_image_path;
+            $this->assertNotNull($uploadedPath);
+            $this->assertFileExists(public_path($uploadedPath));
+
+            $this->actingAs($provider)
+                ->postJson('/provider/profile/cover', ['cover_source' => 'default'])
+                ->assertOk()
+                ->assertJsonPath('cover.source', 'default');
+
+            $this->assertFileDoesNotExist(public_path($uploadedPath));
+        } finally {
+            if ($uploadedPath && is_file(public_path($uploadedPath))) {
+                @unlink(public_path($uploadedPath));
+            }
+        }
+    }
+
+    public function test_program_can_use_system_uploaded_and_organization_backgrounds(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update([
+            'verification_status' => 'approved',
+            'cover_image_source' => 'system',
+            'cover_image_key' => 'campus-community',
+        ]);
+        $pathsToClean = [];
+
+        try {
+            $systemProgram = $this->actingAs($provider)
+                ->postJson('/provider/scholarships', [
+                    'title' => 'System Cover Program',
+                    'category' => 'STEM scholarship',
+                    'status' => 'draft',
+                    'cover_source' => 'system',
+                    'cover_key' => 'science-project',
+                ])
+                ->assertCreated()
+                ->assertJsonPath('scholarship.cover_image_source', 'system')
+                ->assertJsonPath('scholarship.cover_image_key', 'science-project');
+
+            $this->assertStringContainsString(
+                '/images/filipino-students-science-experiment.jpg',
+                $systemProgram->json('scholarship.cover_image_url'),
+            );
+
+            $uploadResponse = $this->actingAs($provider)
+                ->post('/provider/scholarships', [
+                    'title' => 'Uploaded Cover Program',
+                    'status' => 'draft',
+                    'cover_source' => 'upload',
+                    'cover_file' => UploadedFile::fake()->image('program-cover.jpg', 1200, 600),
+                ], ['HTTP_ACCEPT' => 'application/json'])
+                ->assertCreated()
+                ->assertJsonPath('scholarship.cover_image_source', 'upload');
+            $pathsToClean[] = $uploadResponse->json('scholarship.cover_image_path');
+            $this->assertFileExists(public_path($pathsToClean[0]));
+
+            $providerResponse = $this->actingAs($provider)
+                ->postJson('/provider/scholarships', [
+                    'title' => 'Organization Cover Program',
+                    'status' => 'draft',
+                    'cover_source' => 'provider',
+                ])
+                ->assertCreated()
+                ->assertJsonPath('scholarship.cover_image_source', 'provider')
+                ->assertJsonPath('scholarship.cover_image_key', 'campus-community');
+
+            $this->assertStringContainsString(
+                '/images/filipino-campus.jpg',
+                $providerResponse->json('scholarship.cover_image_url'),
+            );
+        } finally {
+            foreach (array_filter($pathsToClean) as $path) {
+                if (is_file(public_path($path))) {
+                    @unlink(public_path($path));
+                }
+            }
+        }
+    }
+
     private function pngContent(): string
     {
         return base64_decode(

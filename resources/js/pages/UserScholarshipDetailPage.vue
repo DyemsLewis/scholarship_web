@@ -2,10 +2,17 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
+import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPreviewToolbar.vue';
 
 const appRoot = document.getElementById('app');
 const scholarshipId = appRoot?.dataset.scholarshipId;
 const requestedView = appRoot?.dataset.scholarshipSection || 'summary';
+const isPreview = appRoot?.dataset.providerPreview === 'true';
+const previewDataUrl = appRoot?.dataset.previewDataUrl || '';
+const previewBackUrl = appRoot?.dataset.previewBackUrl || '/provider/programs';
+const previewStatus = appRoot?.dataset.previewStatus || 'Preview';
+const previewWidth = ref('desktop');
+const previewScenario = ref(new URLSearchParams(window.location.search).get('scenario') || 'general');
 
 const user = ref(null);
 const detail = ref(null);
@@ -27,33 +34,34 @@ const requirementReadiness = computed(() => requirements.value?.readiness ?? {})
 const process = computed(() => content.value?.process ?? {});
 const provider = computed(() => activeView.value === 'provider' ? content.value : {});
 const providerLocation = computed(() => provider.value?.location ?? {});
-const scholarshipImage = computed(() => identity.value?.image_url || identity.value?.provider?.logo_url);
+const scholarshipImage = computed(() => identity.value?.provider?.logo_url);
 const scholarshipVisual = computed(() => {
     const subject = `${identity.value?.title ?? ''} ${identity.value?.category ?? ''}`.toLowerCase();
+    const chosenCover = identity.value?.image_url;
 
     if (/(stem|science|technology|engineering)/.test(subject)) {
         return {
-            hero: '/images/filipino-students-science-class.jpg',
-            heroAlt: 'Filipino students taking part in a science class',
-            overview: '/images/filipino-students-science-experiment.jpg',
-            overviewAlt: 'Filipino students learning through a classroom science activity',
+            hero: chosenCover || '/images/filipino-students-science-class.jpg',
+            heroAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino students taking part in a science class',
+            overview: chosenCover || '/images/filipino-students-science-experiment.jpg',
+            overviewAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino students learning through a classroom science activity',
         };
     }
 
     if (/(college|university|tertiary|graduate)/.test(subject)) {
         return {
-            hero: '/images/filipino-graduates.jpg',
-            heroAlt: 'Filipino graduates celebrating their education milestone',
-            overview: '/images/filipino-campus.jpg',
-            overviewAlt: 'Students walking through a campus in the Philippines',
+            hero: chosenCover || '/images/filipino-graduates.jpg',
+            heroAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino graduates celebrating their education milestone',
+            overview: chosenCover || '/images/filipino-campus.jpg',
+            overviewAlt: chosenCover ? `${identity.value?.title} background` : 'Students walking through a campus in the Philippines',
         };
     }
 
     return {
-        hero: '/images/filipino-students-studying.jpg',
-        heroAlt: 'Filipino students studying together in a classroom',
-        overview: '/images/filipino-students-group-study.jpg',
-        overviewAlt: 'Filipino students working together during class',
+        hero: chosenCover || '/images/filipino-students-studying.jpg',
+        heroAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino students studying together in a classroom',
+        overview: chosenCover || '/images/filipino-students-group-study.jpg',
+        overviewAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino students working together during class',
     };
 });
 const sectionVisual = computed(() => ({
@@ -78,8 +86,8 @@ const sectionVisual = computed(() => ({
         caption: 'Prepare once, then follow each stage.',
     },
     provider: {
-        image: '/images/filipino-campus.jpg',
-        alt: 'Students on a campus in the Philippines',
+        image: provider.value?.cover_url || '/images/filipino-campus.jpg',
+        alt: provider.value?.cover_url ? `${provider.value?.name || 'Scholarship provider'} background` : 'Students on a campus in the Philippines',
         caption: 'Learn who will manage your application.',
     },
 }[activeView.value]));
@@ -240,9 +248,15 @@ async function loadScholarship() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get(`/dashboard/scholarships/${scholarshipId}/data`, {
-            params: { section: requestedView },
-        });
+        const response = await window.axios.get(
+            isPreview ? previewDataUrl : `/dashboard/scholarships/${scholarshipId}/data`,
+            {
+                params: {
+                    section: requestedView,
+                    ...(isPreview ? { scenario: previewScenario.value } : {}),
+                },
+            },
+        );
 
         user.value = response.data.user;
         detail.value = response.data.detail;
@@ -254,7 +268,7 @@ async function loadScholarship() {
 }
 
 async function toggleSave() {
-    if (!detail.value?.saved || isSaving.value) {
+    if (isPreview || !detail.value?.saved || isSaving.value) {
         return;
     }
 
@@ -284,21 +298,42 @@ async function toggleSave() {
 }
 
 function handlePrimaryAction() {
+    if (isPreview) return;
+
     if (decision.value.action?.kind === 'save') {
         toggleSave();
     }
+}
+
+function changePreviewScenario(scenario) {
+    previewScenario.value = scenario;
+    const url = new URL(window.location.href);
+    url.searchParams.set('scenario', scenario);
+    window.history.replaceState({}, '', url);
+    loadScholarship();
 }
 
 onMounted(loadScholarship);
 </script>
 
 <template>
-    <main class="student-shell">
-        <ApplicantSidebar />
+    <main :class="isPreview ? 'min-h-screen bg-slate-200' : 'student-shell'">
+        <ApplicantSidebar v-if="!isPreview" />
 
-        <section class="student-page">
+        <ProviderApplicantPreviewToolbar
+            v-if="isPreview"
+            :back-url="previewBackUrl"
+            :status="previewStatus"
+            :width="previewWidth"
+            :scenario="previewScenario"
+            show-scenario
+            @update:width="previewWidth = $event"
+            @update:scenario="changePreviewScenario"
+        />
+
+        <section :class="['student-page', isPreview && previewWidth === 'mobile' ? 'mx-auto max-w-[30rem]' : '']">
             <div class="student-container pb-10">
-                <a href="/dashboard/scholarships" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
+                <a v-if="!isPreview" href="/dashboard/scholarships" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to scholarships
                 </a>
@@ -348,7 +383,7 @@ onMounted(loadScholarship);
 
                                 <div class="mt-auto flex flex-wrap items-center gap-2 pt-6">
                                     <button
-                                        v-if="decision.action?.kind !== 'save'"
+                                        v-if="!isPreview && decision.action?.kind !== 'save'"
                                         type="button"
                                         class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                                         :disabled="isSaving"
@@ -358,7 +393,7 @@ onMounted(loadScholarship);
                                         {{ isSaving ? 'Saving...' : (detail.saved?.is_saved ? 'Saved' : 'Save') }}
                                     </button>
                                     <a
-                                        v-if="decision.action?.kind === 'link'"
+                                        v-if="!isPreview && decision.action?.kind === 'link'"
                                         :href="decision.action.href"
                                         class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800"
                                     >
@@ -369,7 +404,7 @@ onMounted(loadScholarship);
                                         v-else-if="decision.action"
                                         type="button"
                                         class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
-                                        :disabled="isSaving"
+                                        :disabled="isSaving || isPreview"
                                         @click="handlePrimaryAction"
                                     >
                                         {{ isSaving ? 'Saving...' : decision.action.label }}
@@ -612,10 +647,14 @@ onMounted(loadScholarship);
                                     <h3 class="mt-1 text-lg font-bold text-slate-950">{{ requirementReadiness.title }}</h3>
                                     <p class="mt-1 text-sm leading-5 text-slate-600">{{ requirementReadiness.description }}</p>
                                 </div>
-                                <a :href="requirements.manage_files_href" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                <a v-if="requirements.manage_files_href" :href="requirements.manage_files_href" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
                                     <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
                                     My Documents
                                 </a>
+                                <span v-else-if="isPreview" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-100 px-4 text-sm font-bold text-slate-500">
+                                    <i class="fa-solid fa-lock" aria-hidden="true"></i>
+                                    Applicant files
+                                </span>
                             </header>
 
                             <div class="grid gap-3 border-b border-slate-200 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5">

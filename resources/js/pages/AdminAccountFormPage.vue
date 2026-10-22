@@ -225,6 +225,7 @@ const applicantVerificationDocumentOptions = {
     academic_record: 'Academic record',
     recent_school_id: 'Recent school ID',
     school_record: 'School enrollment proof',
+    no_current_scholarship_proof: 'Proof of no current scholarship',
     achievement_evidence: 'Achievement evidence',
 };
 const hasAcademicVerificationDocument = computed(() => verificationDocuments.value.some(

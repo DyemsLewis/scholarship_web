@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-labelledby="title">
+  <title id="title">Sulong Dunong Senior Scholars Program</title>
+  <rect width="240" height="240" rx="18" fill="#07142d"/>
+  <path d="M45 65c27-5 52 3 75 22v94c-23-19-48-27-75-22zm150 0c-27-5-52 3-75 22v94c23-19 48-27 75-22z" fill="#fff"/>
+  <path d="M120 45 92 76h56z" fill="#f5b700"/>
+  <path d="M113 47h14v55h-14z" fill="#f5b700"/>
+  <circle cx="120" cy="42" r="10" fill="#f5b700"/>
+</svg>

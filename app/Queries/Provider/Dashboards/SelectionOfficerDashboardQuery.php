@@ -58,7 +58,7 @@ final class SelectionOfficerDashboardQuery
                 'key' => 'selection-officer',
                 'eyebrow' => 'Selection activities',
                 'title' => 'Selection dashboard',
-                'description' => 'Coordinate sessions first, then record completed activity results.',
+                'description' => 'Review formal applications and coordinate scheduled selection activities.',
                 'icon' => 'fa-solid fa-calendar-check',
                 'organization_name' => $context['organization_name'],
                 'access_scope' => $this->accessScope($context),
@@ -79,15 +79,15 @@ final class SelectionOfficerDashboardQuery
                     'key' => 'unassigned',
                     'label' => 'Need a session',
                     'value' => (clone $unassigned)->count(),
-                    'detail' => 'Applicants not assigned',
+                    'detail' => 'Exam or interview applicants',
                     'tone' => 'attention',
                     'url' => '/provider/workspaces/selection/unassigned',
                 ],
                 [
                     'key' => 'results',
-                    'label' => 'Results ready',
+                    'label' => 'Ready for review',
                     'value' => (clone $results)->count(),
-                    'detail' => 'Activity completed',
+                    'detail' => 'Applications or completed activities',
                     'tone' => 'attention',
                     'url' => '/provider/workspaces/selection/results',
                 ],
@@ -116,7 +116,7 @@ final class SelectionOfficerDashboardQuery
                     'key' => 'candidate-actions',
                     'eyebrow' => 'Candidate work',
                     'title' => 'Applicants needing action',
-                    'description' => 'Completed results appear before applicants waiting for a session.',
+                    'description' => 'Review formal applications and completed session results.',
                     'empty_message' => 'No applicant activity needs action.',
                     'action' => [
                         'label' => 'Open results',
@@ -137,12 +137,14 @@ final class SelectionOfficerDashboardQuery
 
     private function unassignedApplications(Builder $query): Builder
     {
-        return $query->whereHas('stageProgresses', fn (Builder $progress) => $progress
-            ->where('status', 'current')
-            ->whereColumn('stage_key', 'scholarship_applications.workflow_stage')
-            ->where(fn (Builder $status) => $status
-                ->whereNull('operational_status')
-                ->orWhereIn('operational_status', ['not_started', 'waiting_for_schedule'])));
+        return $query
+            ->whereIn('workflow_stage', [ApplicationStageCatalog::EXAM, ApplicationStageCatalog::INTERVIEW])
+            ->whereHas('stageProgresses', fn (Builder $progress) => $progress
+                ->where('status', 'current')
+                ->whereColumn('stage_key', 'scholarship_applications.workflow_stage')
+                ->where(fn (Builder $status) => $status
+                    ->whereNull('operational_status')
+                    ->orWhereIn('operational_status', ['not_started', 'waiting_for_schedule'])));
     }
 
     private function resultApplications(Builder $query): Builder
@@ -154,7 +156,17 @@ final class SelectionOfficerDashboardQuery
                 ->whereColumn('stage_key', 'scholarship_applications.workflow_stage'))
             ->orWhereHas('schedules', fn (Builder $schedule) => $schedule
                 ->where('status', 'completed')
-                ->whereColumn('type', 'scholarship_applications.workflow_stage')));
+                ->whereColumn('type', 'scholarship_applications.workflow_stage'))
+            ->orWhere(fn (Builder $formal) => $formal
+                ->where('workflow_stage', ApplicationStageCatalog::FORMAL_APPLICATION)
+                ->whereDoesntHave('stageAssignments', fn (Builder $assignment) => $assignment
+                    ->whereIn('status', ['assigned', 'acknowledged'])
+                    ->whereHas('session', fn (Builder $session) => $session
+                        ->where('stage_key', ApplicationStageCatalog::FORMAL_APPLICATION)
+                        ->where('status', '!=', 'cancelled')))
+                ->whereDoesntHave('schedules', fn (Builder $schedule) => $schedule
+                    ->where('type', ApplicationStageCatalog::FORMAL_APPLICATION)
+                    ->where('status', '!=', 'cancelled'))));
     }
 
     /** @return array<string, mixed> */
@@ -188,6 +200,7 @@ final class SelectionOfficerDashboardQuery
     {
         $profile = $application->applicant?->studentProfile;
         $stage = Str::headline($application->workflow_stage);
+        $isFormalApplication = $application->workflow_stage === ApplicationStageCatalog::FORMAL_APPLICATION;
 
         return [
             'id' => (int) $application->id,
@@ -197,25 +210,32 @@ final class SelectionOfficerDashboardQuery
                 ? route('provider.applications.profile-photo.view', $application, false)
                 : null,
             'status' => [
-                'label' => $kind === 'result' ? 'Result ready' : 'Needs session',
+                'label' => $kind === 'result'
+                    ? ($isFormalApplication ? 'Ready for review' : 'Result ready')
+                    : 'Needs session',
                 'tone' => 'attention',
             ],
             'meta' => [
                 $stage,
-                $kind === 'result' ? 'Participation is ready for review' : 'No active session assignment',
+                $kind === 'result'
+                    ? ($isFormalApplication ? 'Review the formal application record' : 'Participation is ready for review')
+                    : 'No active session assignment',
             ],
             'action' => [
-                'label' => $kind === 'result' ? 'Review result' : 'Create session',
+                'label' => $kind === 'result'
+                    ? ($isFormalApplication ? 'Review formal application' : 'Review result')
+                    : 'Create session',
                 'url' => $kind === 'result'
                     ? route('provider.applications.show', [
                         'application' => $application,
                         'workspace' => 'selection',
                         'return_to' => '/provider/workspaces/selection/results',
                     ], false)
-                    : route('provider.workspaces.selection.sessions.create', [
+                    : route('provider.workspaces.selection.unassigned', [
                         'program_id' => $application->scholarship_id,
                         'stage_key' => $application->workflow_stage,
                         'application_id' => $application->id,
+                        'create_session' => 1,
                     ], false),
             ],
         ];

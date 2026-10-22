@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\CoverImageCatalog;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -23,6 +24,9 @@ class ProviderProfile extends Model
         'year_established',
         'service_area',
         'logo_path',
+        'cover_image_source',
+        'cover_image_key',
+        'cover_image_path',
         'provider_contact_email',
         'provider_contact_number',
         'contact_department',
@@ -59,5 +63,10 @@ class ProviderProfile extends Model
     public function isVerified(): bool
     {
         return $this->verification_status === 'approved';
+    }
+
+    public function coverImageUrl(): string
+    {
+        return CoverImageCatalog::providerUrl($this);
     }
 }

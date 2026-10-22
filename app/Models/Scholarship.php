@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\CoverImageCatalog;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +15,9 @@ class Scholarship extends Model
     protected $fillable = [
         'provider_id',
         'image_path',
+        'cover_image_source',
+        'cover_image_key',
+        'cover_image_path',
         'title',
         'category',
         'program_cycle',
@@ -107,6 +111,11 @@ class Scholarship extends Model
     public function provider(): BelongsTo
     {
         return $this->belongsTo(User::class, 'provider_id');
+    }
+
+    public function coverImageUrl(): string
+    {
+        return CoverImageCatalog::scholarshipUrl($this);
     }
 
     public function applications(): HasMany

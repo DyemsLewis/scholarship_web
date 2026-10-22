@@ -130,6 +130,10 @@ const rejectionReasons = decisionReasonOptions.filter((option) => [
 ].includes(option.value));
 
 function labelize(value) {
+    if (value === 'no_current_scholarship_proof') {
+        return 'Proof of no current scholarship';
+    }
+
     return value ? String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Not provided';
 }
 

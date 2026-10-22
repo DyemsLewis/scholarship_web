@@ -41,6 +41,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'Latest report card or grades',
             'Certificate of enrollment',
             'Recent school ID',
+            'Proof of no current scholarship',
             'Proof of income',
             'Certificate of indigency',
             'Birth certificate',

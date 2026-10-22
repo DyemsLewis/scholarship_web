@@ -9,6 +9,7 @@ use App\Models\RecipientMonitoringCycle;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Support\CoverImageCatalog;
 use App\Support\RecipientAgreement;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -1222,6 +1223,9 @@ trait HandlesProviderRoleWorkspaceData
                 'name' => $profile?->provider_name ?: $owner->name,
                 'type' => $profile?->provider_type ? Str::headline($profile->provider_type) : 'Type not set',
                 'logo_url' => filled($profile?->logo_path) ? asset(ltrim($profile->logo_path, '/')) : null,
+                'cover_image_source' => $profile?->cover_image_source ?: 'default',
+                'cover_image_key' => $profile?->cover_image_key,
+                'cover_image_url' => CoverImageCatalog::providerUrl($profile),
                 'updated_at' => $profile?->updated_at?->format('M d, Y h:i A'),
                 'verification_status' => $verificationDisplayStatus,
                 'verification_status_label' => match ($verificationDisplayStatus) {

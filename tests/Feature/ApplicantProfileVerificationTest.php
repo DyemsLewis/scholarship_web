@@ -547,6 +547,72 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->assertNotNull($schoolProofResponse->json('prepared_document.id'));
     }
 
+    public function test_optional_no_current_scholarship_proof_is_reusable_and_visible_to_the_provider(): void
+    {
+        Storage::fake('local');
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+
+        $response = $this->actingAs($applicant)
+            ->post('/dashboard/profile/verification-documents', [
+                'document_type' => 'no_current_scholarship_proof',
+                'document_file' => UploadedFile::fake()->create('no-current-scholarship.pdf', 120, 'application/pdf'),
+                'terms_accepted' => '1',
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('verification_documents.0.document_type', 'no_current_scholarship_proof')
+            ->assertJsonPath('prepared_document.document_name', 'Proof of no current scholarship')
+            ->assertJsonPath('user.applicant_verification_status', 'unsubmitted');
+
+        $proof = ApplicantVerificationDocument::query()
+            ->where('applicant_id', $applicant->id)
+            ->where('document_type', 'no_current_scholarship_proof')
+            ->firstOrFail();
+
+        $this->assertDatabaseHas('student_documents', [
+            'user_id' => $applicant->id,
+            'document_name' => 'Proof of no current scholarship',
+        ]);
+
+        $scholarship = Scholarship::create([
+            'provider_id' => $provider->id,
+            'title' => 'Single Scholarship Support Program',
+            'description' => 'Requires confirmation that the applicant has no current scholarship.',
+            'requirements' => 'Proof of no current scholarship',
+            'deadline' => now()->addMonth()->toDateString(),
+            'status' => 'published',
+        ]);
+        $application = ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $providerResponse = $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $proof->id,
+                'document_type' => 'no_current_scholarship_proof',
+            ]);
+
+        $proofPayload = collect($providerResponse->json('application.applicant.profile_proofs'))
+            ->firstWhere('document_type', 'no_current_scholarship_proof');
+
+        $this->actingAs($provider)
+            ->get($proofPayload['view_url'])
+            ->assertOk();
+
+        $this->actingAs($applicant)
+            ->deleteJson("/dashboard/profile/verification-documents/{$proof->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Proof of no current scholarship removed.');
+
+        $this->assertNotNull($response->json('prepared_document.id'));
+    }
+
     public function test_academic_verification_record_is_copied_to_documents_and_survives_verification_deletion(): void
     {
         Storage::fake('local');

@@ -31,6 +31,8 @@ test('the selection directory creates sessions without navigating to the standal
     const directory = readFileSync(new URL(components[0], import.meta.url), 'utf8');
     assert.match(directory, /@click="openSessionModal\(\)"/);
     assert.match(directory, /<SelectionSessionFormModal/);
+    assert.match(directory, /Schedule an optional appointment/);
+    assert.match(directory, /Ready for document review/);
     assert.doesNotMatch(directory, /href="\/provider\/workspaces\/selection\/sessions\/create"/);
 });
 

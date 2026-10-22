@@ -7,26 +7,26 @@ The complete demo uses fictional identities and synthetic applicant portraits. L
 | Role | Username | Email |
 | --- | --- | --- |
 | Super admin | `superadmin` | `superadmin@findscholarship.test` |
-| Provider owner | `harborlight` | `programs@harborlight.test` |
+| Provider owner | `sulongdunong` | `programs@sulongdunong.test` |
 
 ## Provider Team Accounts
 
 | Workspace | Username | Email |
 | --- | --- | --- |
-| Full-access manager | `harborlight.manager` | `harborlight.manager@scholarship.test` |
-| Program coordinator | `harborlight.programs` | `harborlight.programs@scholarship.test` |
-| Application reviewer | `harborlight.reviewer` | `harborlight.reviewer@scholarship.test` |
-| Selection officer | `harborlight.selection` | `harborlight.selection@scholarship.test` |
-| Decision officer | `harborlight.decisions` | `harborlight.decisions@scholarship.test` |
-| Recipient officer | `harborlight.recipients` | `harborlight.recipients@scholarship.test` |
-| Monitoring officer | `harborlight.monitoring` | `harborlight.monitoring@scholarship.test` |
-| Benefit release officer | `harborlight.releases` | `harborlight.releases@scholarship.test` |
-| Organization profile manager | `harborlight.profile` | `harborlight.profile@scholarship.test` |
-| Team administrator | `harborlight.team` | `harborlight.team@scholarship.test` |
-| Support staff | `harborlight.support` | `harborlight.support@scholarship.test` |
-| Billing staff | `harborlight.billing` | `harborlight.billing@scholarship.test` |
+| Full-access manager | `sulongdunong.manager` | `sulongdunong.manager@scholarship.test` |
+| Program coordinator | `sulongdunong.programs` | `sulongdunong.programs@scholarship.test` |
+| Application reviewer | `sulongdunong.reviewer` | `sulongdunong.reviewer@scholarship.test` |
+| Selection officer | `sulongdunong.selection` | `sulongdunong.selection@scholarship.test` |
+| Decision officer | `sulongdunong.decisions` | `sulongdunong.decisions@scholarship.test` |
+| Recipient officer | `sulongdunong.recipients` | `sulongdunong.recipients@scholarship.test` |
+| Monitoring officer | `sulongdunong.monitoring` | `sulongdunong.monitoring@scholarship.test` |
+| Benefit release officer | `sulongdunong.releases` | `sulongdunong.releases@scholarship.test` |
+| Organization profile manager | `sulongdunong.profile` | `sulongdunong.profile@scholarship.test` |
+| Team administrator | `sulongdunong.team` | `sulongdunong.team@scholarship.test` |
+| Support staff | `sulongdunong.support` | `sulongdunong.support@scholarship.test` |
+| Billing staff | `sulongdunong.billing` | `sulongdunong.billing@scholarship.test` |
 
-Program-scoped staff are assigned to the Harborlight Senior Scholars Program. Their workspaces share the stage-by-stage applications below, an active monitoring review, one completed recipient lifecycle, resolved support history, and a completed optional-service purchase.
+Program-scoped staff are assigned to the Sulong Dunong Senior Scholars Program. Their workspaces share the stage-by-stage applications below, an active monitoring review, one completed recipient lifecycle, resolved support history, and a completed optional-service purchase.
 
 ## Admin Team Accounts
 
@@ -63,7 +63,7 @@ Local demo accounts use `password123` unless `DEMO_PASSWORD` or `DEMO_ADMIN_PASS
 
 | Program | State |
 | --- | --- |
-| Harborlight Senior Scholars Program | Published with staged applications, active monitoring, and one completed recipient lifecycle |
+| Sulong Dunong Senior Scholars Program | Published with staged applications, active monitoring, and one completed recipient lifecycle |
 | Ready-to-Learn Essentials Fund 2025-2026 | Closed prior cycle |
 | College Launch One-Time Grant | Published one-time grant |
 
@@ -75,4 +75,4 @@ Run only against a database intentionally prepared for the demonstration:
 php artisan migrate:fresh --seeder=CompleteDemoSeeder --force
 ```
 
-The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, and the Harborlight Senior Scholars Program as ID `1`. It removes failed, rejected, correction, overdue, and issue scenarios while retaining positive workflow records that demonstrate each next action.
+The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, and the Sulong Dunong Senior Scholars Program as ID `1`. It removes failed, rejected, correction, overdue, and issue scenarios while retaining positive workflow records that demonstrate each next action.

@@ -89,7 +89,7 @@ class ApplicantApplicationDetailService
             'program' => [
                 'title' => $scholarship?->title ?? 'Scholarship application',
                 'category' => $scholarship?->category,
-                'image_url' => $this->publicAssetUrl($scholarship?->image_path, 'uploads/scholarship-default.jpg'),
+                'image_url' => $scholarship?->coverImageUrl(),
                 'deadline' => $scholarship?->deadline?->format('M d, Y'),
                 'review_method' => $this->applicationModeLabel($scholarship?->application_mode),
             ],

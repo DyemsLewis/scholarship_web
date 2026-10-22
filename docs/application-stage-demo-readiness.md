@@ -4,7 +4,7 @@ This local demo exercises the normalized selection workflow while retaining lega
 
 ## Demonstration path
 
-1. Sign in as `harborlight.selection` and open **Selection activities**.
+1. Sign in as `sulongdunong.selection` and open **Selection activities**.
 2. Show the two published activities under **Active**, then open either session to review its schedule, assigned applicant, acknowledgement, and pending attendance.
 3. Open **Unassigned** to show the formal-application record that still needs a session.
 4. Open **Results** to show the completed exam and interview records that are ready for an outcome.

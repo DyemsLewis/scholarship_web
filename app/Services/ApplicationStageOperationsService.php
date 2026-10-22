@@ -508,7 +508,11 @@ class ApplicationStageOperationsService
 
             foreach ($locked->assignments->whereIn('status', self::ACTIVE_ASSIGNMENT_STATUSES) as $assignment) {
                 $assignment->update(['status' => 'cancelled', 'notes' => $reason]);
-                $this->updateProgress($assignment->application, $locked, 'waiting_for_schedule');
+                $this->updateProgress(
+                    $assignment->application,
+                    $locked,
+                    $locked->stage_key === 'formal_application' ? 'ready_for_review' : 'waiting_for_schedule',
+                );
                 $this->notifyCancellation($locked, $assignment, $reason);
             }
 

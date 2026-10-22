@@ -505,6 +505,11 @@ class User extends Authenticatable implements MustVerifyEmail
             'provider_logo_url' => filled($providerProfile?->logo_path)
                 ? asset(ltrim($providerProfile->logo_path, '/'))
                 : null,
+            'provider_cover_source' => $providerProfile?->cover_image_source ?: 'default',
+            'provider_cover_key' => $providerProfile?->cover_image_key,
+            'provider_cover_url' => $this->isProvider()
+                ? \App\Support\CoverImageCatalog::providerUrl($providerProfile)
+                : null,
             'provider_contact_email' => $providerProfile?->provider_contact_email,
             'provider_contact_number' => $providerProfile?->provider_contact_number,
             'provider_contact_department' => $providerProfile?->contact_department,

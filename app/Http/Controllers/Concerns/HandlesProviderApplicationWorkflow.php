@@ -1986,9 +1986,14 @@ trait HandlesProviderApplicationWorkflow
             return true;
         }
 
-        $normalizedSessionCompleted = ApplicationStageAssignment::query()
+        $normalizedSessions = ApplicationStageAssignment::query()
             ->where('scholarship_application_id', $application->id)
             ->whereIn('status', ['assigned', 'acknowledged'])
+            ->whereHas('session', fn (Builder $query) => $query
+                ->where('stage_key', $stage)
+                ->where('status', '!=', 'cancelled'));
+        $normalizedSessionExists = (clone $normalizedSessions)->exists();
+        $normalizedSessionCompleted = (clone $normalizedSessions)
             ->whereHas('attendance', fn (Builder $query) => $query->where('status', '!=', 'pending'))
             ->whereHas('session', fn (Builder $query) => $query
                 ->where('stage_key', $stage)
@@ -2007,11 +2012,15 @@ trait HandlesProviderApplicationWorkflow
         }
 
         if ($application->relationLoaded('schedules')) {
-            $stageSchedules = $application->schedules->where('type', $stage);
+            $stageSchedules = $application->schedules
+                ->where('type', $stage)
+                ->where('status', '!=', 'cancelled');
 
-            // Existing formal handoffs did not require a dated schedule. Once one is
-            // published, it follows the same completion rule as exams and interviews.
-            if ($stage === 'formal_application' && $stageSchedules->isEmpty()) {
+            // A formal application can be reviewed directly. Once an appointment is
+            // assigned, it follows the same completion rule as exams and interviews.
+            if ($stage === 'formal_application'
+                && ! $normalizedSessionExists
+                && $stageSchedules->isEmpty()) {
                 return true;
             }
 
@@ -2020,14 +2029,17 @@ trait HandlesProviderApplicationWorkflow
             ));
         }
 
-        $stageSchedules = $application->schedules()->where('type', $stage);
+        $stageSchedules = $application->schedules()
+            ->where('type', $stage)
+            ->where('status', '!=', 'cancelled');
 
-        if ($stage === 'formal_application' && ! (clone $stageSchedules)->exists()) {
+        if ($stage === 'formal_application'
+            && ! $normalizedSessionExists
+            && ! (clone $stageSchedules)->exists()) {
             return true;
         }
 
         return $stageSchedules
-            ->where('type', $stage)
             ->where('status', 'completed')
             ->exists();
     }

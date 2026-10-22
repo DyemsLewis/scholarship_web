@@ -10,7 +10,7 @@ use RuntimeException;
 
 class DemoSelectionActivitySeeder extends Seeder
 {
-    private const PROGRAM_TITLE = 'Harborlight Senior Scholars Program';
+    private const PROGRAM_TITLE = 'Sulong Dunong Senior Scholars Program';
 
     private const SESSION_TITLES = [
         'Qualifying exam - Morning group',
@@ -43,7 +43,7 @@ class DemoSelectionActivitySeeder extends Seeder
         $provider = User::query()
             ->where('role', 'provider')
             ->whereNull('parent_account_id')
-            ->where('username', 'harborlight')
+            ->where('username', 'sulongdunong')
             ->first();
         $scholarship = Scholarship::query()
             ->where('title', self::PROGRAM_TITLE)
@@ -51,7 +51,7 @@ class DemoSelectionActivitySeeder extends Seeder
             ->first();
 
         if (! $provider || ! $scholarship) {
-            throw new RuntimeException('Seed the complete Harborlight demo before adding selection activities.');
+            throw new RuntimeException('Seed the complete Sulong Dunong demo before adding selection activities.');
         }
 
         $existingTitles = $scholarship->stageSessions()

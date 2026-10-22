@@ -534,6 +534,12 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/organization-profile/data', [ProviderController::class, 'organizationProfileManagerWorkspaceData'])
             ->middleware('permission:manage_profile')
             ->name('workspaces.organization-profile.data');
+        Route::get('/previews/organization/data', [ApplicantDashboardController::class, 'providerPreviewData'])
+            ->middleware('permission:manage_profile')
+            ->name('previews.organization.data');
+        Route::get('/previews/organization', [ApplicantDashboardController::class, 'providerPreview'])
+            ->middleware('permission:manage_profile')
+            ->name('previews.organization.show');
         Route::patch('/workspaces/organization-profile/{section}', [ProviderController::class, 'updateOrganizationProfileSection'])
             ->middleware('permission:manage_profile')
             ->whereIn('section', ['public', 'contact', 'legal'])
@@ -672,6 +678,19 @@ Route::middleware(['auth', 'provider'])
         Route::get('/programs/dashboard/data', [ProgramCoordinatorDashboardController::class, 'data'])
             ->middleware('permission:manage_programs')
             ->name('programs.dashboard.data');
+        Route::get('/previews/programs/{scholarship}/data', [ApplicantDashboardController::class, 'scholarshipPreviewData'])
+            ->middleware('permission:manage_programs')
+            ->whereNumber('scholarship')
+            ->name('previews.programs.data');
+        Route::get('/previews/programs/{scholarship}', [ApplicantDashboardController::class, 'scholarshipPreview'])
+            ->middleware('permission:manage_programs')
+            ->whereNumber('scholarship')
+            ->name('previews.programs.show');
+        Route::get('/previews/programs/{scholarship}/{section}', [ApplicantDashboardController::class, 'scholarshipPreview'])
+            ->middleware('permission:manage_programs')
+            ->whereNumber('scholarship')
+            ->where('section', 'eligibility|award|application|provider')
+            ->name('previews.programs.section');
         Route::get('/programs/drafts', [ProgramDirectoryController::class, 'index'])
             ->defaults('programFilter', 'drafts')
             ->middleware('permission:manage_programs')
@@ -769,6 +788,8 @@ Route::middleware(['auth', 'provider'])
         Route::get('/profile/data', [ProviderController::class, 'profileData'])->name('profile.data');
         Route::patch('/profile', [ProviderController::class, 'updateProfile'])->name('profile.update');
         Route::post('/profile/logo', [ProviderController::class, 'uploadProviderLogo'])->middleware(['permission:manage_profile', 'throttle:10,1'])->name('profile.logo.store');
+        Route::get('/cover-images', [ProviderController::class, 'providerCoverImageOptions'])->name('cover-images.index');
+        Route::post('/profile/cover', [ProviderController::class, 'updateProviderCover'])->middleware(['permission:manage_profile', 'throttle:10,1'])->name('profile.cover.store');
         Route::post('/verification-documents', [ProviderController::class, 'uploadVerificationDocument'])->middleware(['permission:manage_profile', 'throttle:10,1'])->name('verification-documents.store');
         Route::get('/verification-documents/{document}/view', [ProviderController::class, 'viewVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.view');
         Route::get('/verification-documents/{document}/download', [ProviderController::class, 'downloadVerificationDocument'])->middleware('permission:manage_profile')->name('verification-documents.download');

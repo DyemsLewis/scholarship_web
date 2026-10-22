@@ -149,6 +149,88 @@ class ApplicationStageOperationsApiTest extends TestCase
             ->assertJsonPath('candidates.0.application_id', $application->id);
     }
 
+    public function test_formal_application_is_reviewable_without_a_session_but_can_use_an_optional_appointment(): void
+    {
+        [, $officer, $program] = $this->programContext();
+        $application = $this->applicationAtExam($program);
+        $application = app(ApplicationWorkflowService::class)->recordStageResult(
+            $application,
+            'exam',
+            'passed',
+            $program->provider,
+        );
+
+        $this->assertSame('formal_application', $application->workflow_stage);
+        $this->assertSame(
+            'ready_for_review',
+            $application->stageProgresses()->where('stage_key', 'formal_application')->value('operational_status'),
+        );
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/selection/sessions/data?queue=unassigned')
+            ->assertOk()
+            ->assertJsonPath('summary.unassigned', 0)
+            ->assertJsonCount(0, 'applications');
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/selection/sessions/data?queue=results')
+            ->assertOk()
+            ->assertJsonPath('summary.results', 1)
+            ->assertJsonPath('applications.0.id', $application->id)
+            ->assertJsonPath('applications.0.action.label', 'Review formal application');
+
+        $this->actingAs($officer)
+            ->getJson('/provider/workspaces/selection/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('metrics.1.value', 0)
+            ->assertJsonPath('metrics.2.value', 1)
+            ->assertJsonPath('sections.1.items.0.status.label', 'Ready for review')
+            ->assertJsonPath('sections.1.items.0.action.label', 'Review formal application');
+
+        $session = $this->createSession($officer, $program, [
+            'stage_key' => 'formal_application',
+            'title' => 'Optional document appointment',
+            'proof_required' => false,
+        ]);
+        $this->actingAs($officer)
+            ->postJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}/assignments", [
+                'application_ids' => [$application->id],
+            ])
+            ->assertCreated();
+
+        $this->assertSame(
+            'scheduled',
+            $application->stageProgresses()->where('stage_key', 'formal_application')->value('operational_status'),
+        );
+
+        $this->actingAs($officer)
+            ->patchJson("/provider/applications/{$application->id}/stages/formal_application/result", [
+                'result' => 'passed',
+                'notes' => 'This should wait for the assigned appointment.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('result');
+
+        $this->actingAs($officer)
+            ->postJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}/cancel", [
+                'reason' => 'The applicant can complete the formal review without an appointment.',
+            ])
+            ->assertOk();
+
+        $this->assertSame(
+            'ready_for_review',
+            $application->stageProgresses()->where('stage_key', 'formal_application')->value('operational_status'),
+        );
+
+        $this->actingAs($officer)
+            ->patchJson("/provider/applications/{$application->id}/stages/formal_application/result", [
+                'result' => 'passed',
+                'notes' => 'Formal requirements reviewed without an appointment.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('application.workflow.current_stage', 'decision');
+    }
+
     public function test_publishing_and_rescheduling_notify_the_applicant_and_preserve_history(): void
     {
         [, $officer, $program] = $this->programContext();

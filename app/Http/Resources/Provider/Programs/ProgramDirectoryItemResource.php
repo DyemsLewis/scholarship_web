@@ -17,9 +17,7 @@ class ProgramDirectoryItemResource extends JsonResource
             'title' => $this->title,
             'category' => $this->category,
             'cycle' => $this->program_cycle,
-            'image_url' => filled($this->image_path)
-                ? asset(ltrim($this->image_path, '/'))
-                : asset('uploads/scholarship-default.jpg'),
+            'image_url' => $this->coverImageUrl(),
             'status' => $lifecycle->status($this->status),
             'phase' => $lifecycle->phase($this->status),
             'application_period' => [

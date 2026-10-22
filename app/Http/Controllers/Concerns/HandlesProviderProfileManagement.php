@@ -11,6 +11,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\AcademicRecordOcrService;
+use App\Support\CoverImageCatalog;
 use App\Support\Terms;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -321,6 +322,85 @@ trait HandlesProviderProfileManagement
         return response()->json([
             'message' => 'Provider logo updated successfully.',
             'user' => $this->providerStaffPayload($request->user()->fresh(['providerProfile'])),
+        ]);
+    }
+
+    public function providerCoverImageOptions(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+
+        $profile = $request->user()
+            ->providerOrganizationOwner()
+            ->providerProfile;
+
+        return response()->json([
+            'images' => CoverImageCatalog::options(),
+            'recommended_key' => CoverImageCatalog::defaultProviderKey(),
+            'provider_cover' => [
+                'source' => $profile?->cover_image_source ?: 'default',
+                'key' => $profile?->cover_image_key,
+                'url' => CoverImageCatalog::providerUrl($profile),
+                'is_custom' => filled($profile?->cover_image_path),
+            ],
+        ]);
+    }
+
+    public function updateProviderCover(Request $request): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->hasPortalPermission('manage_profile'), 403);
+
+        $validated = $request->validate([
+            'cover_source' => ['required', Rule::in(['default', 'system', 'upload'])],
+            'cover_key' => [
+                'nullable',
+                Rule::requiredIf(fn (): bool => $request->input('cover_source') === 'system'),
+                Rule::in(CoverImageCatalog::keys()),
+            ],
+            'cover_file' => [
+                'nullable',
+                Rule::requiredIf(fn (): bool => $request->input('cover_source') === 'upload'),
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:6144',
+                'dimensions:min_width=800,min_height=400',
+            ],
+        ]);
+
+        $providerOwner = $request->user()->providerOrganizationOwner();
+        $profile = $providerOwner->providerProfile()->firstOrCreate([
+            'user_id' => $providerOwner->id,
+        ]);
+        $oldCoverPath = $profile->cover_image_path;
+        $source = $validated['cover_source'];
+        $coverPath = $source === 'upload' ? $this->storeProviderCover($request) : null;
+
+        $profile->update([
+            'cover_image_source' => $source === 'default' ? null : $source,
+            'cover_image_key' => $source === 'system' ? $validated['cover_key'] : null,
+            'cover_image_path' => $coverPath,
+        ]);
+
+        if ($oldCoverPath !== $coverPath) {
+            $this->deleteProviderCoverIfManaged($oldCoverPath);
+        }
+
+        ActivityLog::record(
+            $request->user(),
+            'provider_cover_updated',
+            ($profile->provider_name ?: $providerOwner->name ?: 'Provider').' updated the organization background.',
+            $request,
+            ['provider_id' => $providerOwner->id, 'cover_source' => $source],
+        );
+
+        return response()->json([
+            'message' => 'Organization background updated.',
+            'cover' => [
+                'source' => $profile->cover_image_source ?: 'default',
+                'key' => $profile->cover_image_key,
+                'url' => $profile->coverImageUrl(),
+                'is_custom' => filled($profile->cover_image_path),
+            ],
         ]);
     }
 
@@ -638,6 +718,35 @@ trait HandlesProviderProfileManagement
         return "uploads/providers/{$filename}";
     }
 
+    private function storeProviderCover(Request $request): string
+    {
+        $file = $request->file('cover_file');
+        $directory = public_path('uploads/providers/covers');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = $file->hashName();
+        $file->move($directory, $filename);
+
+        return "uploads/providers/covers/{$filename}";
+    }
+
+    private function deleteProviderCoverIfManaged(?string $coverPath): void
+    {
+        $normalizedPath = ltrim(str_replace('\\', '/', (string) $coverPath), '/');
+
+        if (! str_starts_with($normalizedPath, 'uploads/providers/covers/')) {
+            return;
+        }
+
+        $absolutePath = public_path($normalizedPath);
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
+    }
+
     private function deleteProviderLogoIfUnused(?string $logoPath): void
     {
         $normalizedPath = ltrim(str_replace('\\', '/', (string) $logoPath), '/');
@@ -674,6 +783,9 @@ trait HandlesProviderProfileManagement
             'provider_logo_url' => filled($profile?->logo_path)
                 ? asset(ltrim($profile->logo_path, '/'))
                 : null,
+            'provider_cover_source' => $profile?->cover_image_source ?: 'default',
+            'provider_cover_key' => $profile?->cover_image_key,
+            'provider_cover_url' => CoverImageCatalog::providerUrl($profile),
             'provider_contact_email' => $profile?->provider_contact_email,
             'provider_contact_number' => $profile?->provider_contact_number,
             'provider_contact_department' => $profile?->contact_department,

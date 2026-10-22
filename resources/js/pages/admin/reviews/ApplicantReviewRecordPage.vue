@@ -129,7 +129,13 @@ async function reviewPhoto(action) {
     } finally { photoSaving.value = false; }
 }
 
-function documentLabel(type) { return String(type).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+function documentLabel(type) {
+    if (type === 'no_current_scholarship_proof') {
+        return 'Proof of no current scholarship';
+    }
+
+    return String(type).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 onMounted(loadRecord);
 </script>
 

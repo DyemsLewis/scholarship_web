@@ -11,6 +11,7 @@ class ApplicantVerificationDocument extends Model
         'academic_record',
         'recent_school_id',
         'school_record',
+        'no_current_scholarship_proof',
         'achievement_evidence',
     ];
 

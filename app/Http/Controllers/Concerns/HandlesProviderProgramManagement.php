@@ -14,6 +14,7 @@ use App\Rules\PhoneNumber;
 use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
+use App\Support\CoverImageCatalog;
 use App\Support\LearnerProgramPath;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEligibilityCondition;
@@ -216,15 +217,17 @@ trait HandlesProviderProgramManagement
         $this->ensureProviderCanPost($request);
 
         $copiedImagePath = $this->copyScholarshipImage($scholarship->image_path);
+        $copiedCoverPath = $this->copyScholarshipCover($scholarship->cover_image_path);
 
         try {
-            $duplicate = DB::transaction(function () use ($request, $scholarship, $copiedImagePath): Scholarship {
+            $duplicate = DB::transaction(function () use ($request, $scholarship, $copiedImagePath, $copiedCoverPath): Scholarship {
                 $duplicate = $scholarship->replicate([
                     'created_at',
                     'updated_at',
                 ]);
                 $duplicate->title = $this->duplicateScholarshipTitle($request->user()->providerOrganizationId(), $scholarship->title);
                 $duplicate->image_path = $copiedImagePath;
+                $duplicate->cover_image_path = $copiedCoverPath;
                 $duplicate->status = 'draft';
                 $duplicate->views_count = 0;
                 $duplicate->provider_terms_accepted_at = null;
@@ -236,6 +239,7 @@ trait HandlesProviderProgramManagement
             });
         } catch (Throwable $error) {
             $this->deleteScholarshipImageIfUnused($copiedImagePath);
+            $this->deleteScholarshipCoverIfUnused($copiedCoverPath);
 
             throw $error;
         }
@@ -277,9 +281,11 @@ trait HandlesProviderProgramManagement
         $scholarshipId = $scholarship->id;
         $scholarshipTitle = $scholarship->title;
         $imagePath = $scholarship->image_path;
+        $coverPath = $scholarship->cover_image_path;
 
         DB::transaction(fn () => $scholarship->delete());
         $this->deleteScholarshipImageIfUnused($imagePath);
+        $this->deleteScholarshipCoverIfUnused($coverPath);
 
         ActivityLog::record(
             $request->user(),
@@ -314,13 +320,23 @@ trait HandlesProviderProgramManagement
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
         $imagePath = $this->storeScholarshipImage($request);
+        [$coverAttributes, $newCoverPath] = $this->normalizeScholarshipCover($request, $validated);
+        $validated = [...$validated, ...$coverAttributes];
 
         if ($imagePath === null && $request->boolean('use_provider_logo')) {
             $imagePath = $this->copyProviderLogoForScholarship($request->user());
         }
         $termsAccepted = $request->boolean('terms_accepted');
 
-        unset($validated['image_file'], $validated['use_provider_logo'], $validated['terms_accepted'], $validated['program_events']);
+        unset(
+            $validated['image_file'],
+            $validated['use_provider_logo'],
+            $validated['cover_source'],
+            $validated['cover_key'],
+            $validated['cover_file'],
+            $validated['terms_accepted'],
+            $validated['program_events'],
+        );
         $validated['description'] = (string) ($validated['description'] ?? '');
         $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
 
@@ -349,6 +365,7 @@ trait HandlesProviderProgramManagement
             });
         } catch (Throwable $error) {
             $this->deleteScholarshipImageIfUnused($imagePath);
+            $this->deleteScholarshipCoverIfUnused($newCoverPath);
 
             throw $error;
         }
@@ -398,7 +415,10 @@ trait HandlesProviderProgramManagement
         $benefitsChanged = $benefits !== null && app(SB::class)->changed($scholarship, $benefits);
         $this->ensureScholarshipSelectionPlanIsStable($scholarship, $validated['selection_stages']);
         $oldImagePath = $scholarship->image_path;
+        $oldCoverPath = $scholarship->cover_image_path;
         $imagePath = $this->storeScholarshipImage($request);
+        [$coverAttributes, $newCoverPath] = $this->normalizeScholarshipCover($request, $validated, $scholarship);
+        $validated = [...$validated, ...$coverAttributes];
 
         if ($imagePath === null && $request->boolean('use_provider_logo')) {
             $imagePath = $this->copyProviderLogoForScholarship($request->user());
@@ -419,7 +439,15 @@ trait HandlesProviderProgramManagement
 
         $termsAccepted = $request->boolean('terms_accepted');
 
-        unset($validated['image_file'], $validated['use_provider_logo'], $validated['terms_accepted'], $validated['program_events']);
+        unset(
+            $validated['image_file'],
+            $validated['use_provider_logo'],
+            $validated['cover_source'],
+            $validated['cover_key'],
+            $validated['cover_file'],
+            $validated['terms_accepted'],
+            $validated['program_events'],
+        );
         $validated['description'] = $request->has('description')
             ? (string) ($validated['description'] ?? '')
             : $scholarship->description;
@@ -473,12 +501,17 @@ trait HandlesProviderProgramManagement
             });
         } catch (Throwable $error) {
             $this->deleteScholarshipImageIfUnused($imagePath);
+            $this->deleteScholarshipCoverIfUnused($newCoverPath);
 
             throw $error;
         }
 
         if ($imagePath && $oldImagePath !== $imagePath) {
             $this->deleteScholarshipImageIfUnused($oldImagePath);
+        }
+
+        if ($coverAttributes !== [] && $oldCoverPath !== $scholarship->fresh()->cover_image_path) {
+            $this->deleteScholarshipCoverIfUnused($oldCoverPath);
         }
 
         if ($scholarship->status === 'pending_review') {
@@ -541,8 +574,10 @@ trait HandlesProviderProgramManagement
 
         $this->addScholarshipEligibilityConsistencyErrors($errors, $value);
 
-        if (blank($imagePath)) {
-            $errors['image_file'] = 'Upload a program logo or reuse the provider logo before submitting for review.';
+        $coverPath = $validated['cover_image_path'] ?? $scholarship?->cover_image_path;
+        $coverKey = $validated['cover_image_key'] ?? $scholarship?->cover_image_key;
+        if (blank($imagePath) && blank($coverPath) && ! CoverImageCatalog::has($coverKey)) {
+            $errors['cover_file'] = 'Choose a program background before submitting for review.';
         }
 
         // Do not strand an older live program that predates the expanded form.
@@ -854,6 +889,19 @@ trait HandlesProviderProgramManagement
             'status' => ['required', Rule::in(['draft', 'pending_review', 'published', 'closed', 'rejected'])],
             'image_file' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
             'use_provider_logo' => ['nullable', 'boolean'],
+            'cover_source' => ['nullable', Rule::in(['default', 'system', 'provider', 'upload'])],
+            'cover_key' => [
+                'nullable',
+                Rule::requiredIf(fn (): bool => $request->input('cover_source') === 'system'),
+                Rule::in(CoverImageCatalog::keys()),
+            ],
+            'cover_file' => [
+                'nullable',
+                'image',
+                'mimes:jpg,jpeg,png,webp',
+                'max:6144',
+                'dimensions:min_width=800,min_height=400',
+            ],
             'terms_accepted' => $requiresCompleteSubmission ? ['accepted'] : ['nullable'],
             'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
             'application_questions' => ['nullable', 'string', 'max:10000', 'json'],
@@ -1345,6 +1393,9 @@ trait HandlesProviderProgramManagement
     {
         $reviewableFields = [
             'image_path',
+            'cover_image_source',
+            'cover_image_key',
+            'cover_image_path',
             'title',
             'category',
             'program_cycle',
@@ -1502,6 +1553,152 @@ trait HandlesProviderProgramManagement
         return "uploads/scholarships/{$filename}";
     }
 
+    private function normalizeScholarshipCover(
+        Request $request,
+        array $validated,
+        ?Scholarship $scholarship = null,
+    ): array {
+        if ($request->hasFile('cover_file')) {
+            $path = $this->storeScholarshipCover($request);
+
+            return [[
+                'cover_image_source' => 'upload',
+                'cover_image_key' => null,
+                'cover_image_path' => $path,
+            ], $path];
+        }
+
+        if (! $request->has('cover_source')) {
+            if ($scholarship !== null) {
+                return [[], null];
+            }
+
+            return [[
+                'cover_image_source' => 'system',
+                'cover_image_key' => CoverImageCatalog::defaultScholarshipKey($validated['category'] ?? null),
+                'cover_image_path' => null,
+            ], null];
+        }
+
+        $source = (string) $request->input('cover_source');
+
+        if ($source === 'provider') {
+            return $this->copyProviderCoverForScholarship($request->user());
+        }
+
+        if ($source === 'upload') {
+            if ($scholarship?->cover_image_source === 'upload' && filled($scholarship->cover_image_path)) {
+                return [[], null];
+            }
+
+            throw ValidationException::withMessages([
+                'cover_file' => 'Choose an image file before using an uploaded background.',
+            ]);
+        }
+
+        $key = $source === 'system'
+            ? (string) $request->input('cover_key')
+            : CoverImageCatalog::defaultScholarshipKey($validated['category'] ?? $scholarship?->category);
+
+        return [[
+            'cover_image_source' => 'system',
+            'cover_image_key' => $key,
+            'cover_image_path' => null,
+        ], null];
+    }
+
+    private function copyProviderCoverForScholarship(User $actor): array
+    {
+        $profile = $actor->providerOrganizationOwner()->providerProfile;
+
+        if (filled($profile?->cover_image_path)) {
+            $sourcePath = public_path(ltrim($profile->cover_image_path, '/'));
+
+            if (is_file($sourcePath)) {
+                $directory = public_path('uploads/scholarships/covers');
+                if (! is_dir($directory)) {
+                    mkdir($directory, 0755, true);
+                }
+
+                $extension = strtolower(pathinfo($sourcePath, PATHINFO_EXTENSION)) ?: 'jpg';
+                $relativePath = 'uploads/scholarships/covers/'.Str::uuid().".{$extension}";
+
+                if (copy($sourcePath, public_path($relativePath))) {
+                    return [[
+                        'cover_image_source' => 'provider',
+                        'cover_image_key' => null,
+                        'cover_image_path' => $relativePath,
+                    ], $relativePath];
+                }
+            }
+        }
+
+        return [[
+            'cover_image_source' => 'provider',
+            'cover_image_key' => CoverImageCatalog::has($profile?->cover_image_key)
+                ? $profile->cover_image_key
+                : CoverImageCatalog::defaultProviderKey(),
+            'cover_image_path' => null,
+        ], null];
+    }
+
+    private function storeScholarshipCover(Request $request): string
+    {
+        $file = $request->file('cover_file');
+        $directory = public_path('uploads/scholarships/covers');
+
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $filename = $file->hashName();
+        $file->move($directory, $filename);
+
+        return "uploads/scholarships/covers/{$filename}";
+    }
+
+    private function copyScholarshipCover(?string $coverPath): ?string
+    {
+        $normalizedPath = $this->managedScholarshipCoverPath($coverPath);
+        if ($normalizedPath === null || ! is_file(public_path($normalizedPath))) {
+            return null;
+        }
+
+        $directory = public_path('uploads/scholarships/covers');
+        if (! is_dir($directory)) {
+            mkdir($directory, 0755, true);
+        }
+
+        $extension = strtolower(pathinfo($normalizedPath, PATHINFO_EXTENSION)) ?: 'jpg';
+        $relativePath = 'uploads/scholarships/covers/'.Str::uuid().".{$extension}";
+
+        return copy(public_path($normalizedPath), public_path($relativePath)) ? $relativePath : null;
+    }
+
+    private function deleteScholarshipCoverIfUnused(?string $coverPath): void
+    {
+        $normalizedPath = $this->managedScholarshipCoverPath($coverPath);
+
+        if ($normalizedPath === null
+            || Scholarship::query()->where('cover_image_path', $normalizedPath)->exists()) {
+            return;
+        }
+
+        $absolutePath = public_path($normalizedPath);
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
+    }
+
+    private function managedScholarshipCoverPath(?string $coverPath): ?string
+    {
+        $normalizedPath = ltrim(str_replace('\\', '/', (string) $coverPath), '/');
+
+        return str_starts_with($normalizedPath, 'uploads/scholarships/covers/')
+            ? $normalizedPath
+            : null;
+    }
+
     private function copyScholarshipImage(?string $imagePath): ?string
     {
         $normalizedPath = $this->managedScholarshipImagePath($imagePath);
@@ -1561,6 +1758,10 @@ trait HandlesProviderProgramManagement
             'id' => $scholarship->id,
             'image_path' => $scholarship->image_path,
             'image_url' => $this->scholarshipImageUrl($scholarship),
+            'cover_image_source' => $scholarship->cover_image_source,
+            'cover_image_key' => $scholarship->cover_image_key,
+            'cover_image_path' => $scholarship->cover_image_path,
+            'cover_image_url' => $scholarship->coverImageUrl(),
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'program_cycle' => $scholarship->program_cycle,
@@ -1708,11 +1909,7 @@ trait HandlesProviderProgramManagement
 
     private function scholarshipImageUrl(Scholarship $scholarship): string
     {
-        if (filled($scholarship->image_path)) {
-            return asset(ltrim($scholarship->image_path, '/'));
-        }
-
-        return asset('uploads/scholarship-default.jpg');
+        return $scholarship->coverImageUrl();
     }
 
     private function ensureProviderCanPost(Request $request): void

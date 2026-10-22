@@ -36,7 +36,9 @@ class CompleteDemoSeederTest extends TestCase
         $this->assertSame(12, User::query()->where('role', 'provider')->whereNotNull('parent_account_id')->count());
         $this->assertSame(10, User::query()->where('role', 'applicant')->count());
         $this->assertSame('superadmin@findscholarship.test', User::query()->findOrFail(1)->email);
-        $this->assertSame('programs@harborlight.test', User::query()->findOrFail(2)->email);
+        $this->assertSame('programs@sulongdunong.test', User::query()->findOrFail(2)->email);
+        $this->assertSame('sulongdunong', User::query()->findOrFail(2)->username);
+        $this->assertDatabaseMissing('users', ['username' => 'harborlight']);
         $this->assertDatabaseMissing('users', ['username' => 'provider.pending']);
         $this->assertDatabaseMissing('users', ['username' => 'provider.revision']);
 
@@ -201,7 +203,7 @@ class CompleteDemoSeederTest extends TestCase
         $this->get(route('provider.applications.data'))
             ->assertOk();
 
-        $providerBilling = User::query()->where('username', 'harborlight.billing')->firstOrFail();
+        $providerBilling = User::query()->where('username', 'sulongdunong.billing')->firstOrFail();
         $this->actingAs($providerBilling)
             ->get('/provider/workspaces/billing')
             ->assertOk();

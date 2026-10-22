@@ -134,8 +134,8 @@ class CompleteDemoSeeder extends Seeder
     private function seedProvider(User $admin): User
     {
         $provider = User::query()->create([
-            'email' => 'programs@harborlight.test',
-            'username' => 'harborlight',
+            'email' => 'programs@sulongdunong.test',
+            'username' => 'sulongdunong',
             'role' => 'provider',
             'account_title' => 'Executive Program Director',
             'permissions' => User::PROVIDER_PERMISSIONS,
@@ -153,20 +153,20 @@ class CompleteDemoSeeder extends Seeder
             'middle_initial' => 'M',
             'contact_number' => '09171234567',
             'representative_position' => 'Executive Program Director',
-            'provider_name' => 'Harborlight Education Collective',
+            'provider_name' => 'Sulong Dunong Education Foundation',
             'provider_type' => 'non_profit',
-            'provider_website' => 'https://findscholarship.online/providers/harborlight',
+            'provider_website' => 'https://findscholarship.online/providers/sulong-dunong',
             'provider_address' => 'Barangay Mayamot, Antipolo City, Rizal',
             'provider_description' => 'A demonstration education collective coordinating verified study support, selection activities, and recipient services for senior high school learners.',
             'mission' => 'Connect learners with accountable education support and clear pathways from application through program completion.',
             'year_established' => 2019,
             'service_area' => 'Antipolo City and nearby communities in Rizal',
-            'logo_path' => '/images/demo/providers/harborlight-collective.svg',
-            'provider_contact_email' => 'programs@harborlight.test',
+            'logo_path' => '/images/demo/providers/sulong-dunong-foundation.svg',
+            'provider_contact_email' => 'programs@sulongdunong.test',
             'provider_contact_number' => '09171234567',
             'contact_department' => 'Scholarship Programs Office',
             'office_hours' => 'Monday to Friday, 8:30 AM to 5:00 PM',
-            'legal_name' => 'Harborlight Education Collective, Inc.',
+            'legal_name' => 'Sulong Dunong Education Foundation, Inc.',
             'registration_authority' => 'Securities and Exchange Commission',
             'registration_number' => 'DEMO-CN201945821',
             'registration_date' => '2019-08-14',
@@ -181,7 +181,7 @@ class CompleteDemoSeeder extends Seeder
             'representative_authorization' => 'Representative authorization letter',
             'organization_profile' => 'Organization profile and program history',
         ] as $type => $label) {
-            $contents = $this->demoDocument('Harborlight Education Collective', $label, 'Provider verification record');
+            $contents = $this->demoDocument('Sulong Dunong Education Foundation', $label, 'Provider verification record');
             $path = "demo-showcase/provider/{$type}.svg";
             Storage::disk('local')->put($path, $contents);
             $provider->providerVerificationDocuments()->create([
@@ -206,8 +206,8 @@ class CompleteDemoSeeder extends Seeder
     {
         $scholarship = Scholarship::query()->create([
             'provider_id' => $provider->id,
-            'image_path' => '/images/demo/programs/harborlight-scholars.svg',
-            'title' => 'Harborlight Senior Scholars Program',
+            'image_path' => '/images/demo/programs/sulong-dunong-scholars.svg',
+            'title' => 'Sulong Dunong Senior Scholars Program',
             'category' => 'Financial assistance',
             'program_cycle' => 'School Year 2026-2027',
             'description' => 'A year-long senior high school scholarship with education allowance, learning materials, mentoring, and structured recipient support.',
@@ -225,7 +225,7 @@ class CompleteDemoSeeder extends Seeder
             'eligible_locations' => "Rizal\nMetro Manila",
             'income_requirement' => 'PHP 10,000 - 20,000',
             'exclude_current_scholarship_recipients' => true,
-            'location_name' => 'Harborlight Learning Center',
+            'location_name' => 'Sulong Dunong Learning Center',
             'location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
             'latitude' => 14.6255000,
             'longitude' => 121.1245000,
@@ -235,7 +235,7 @@ class CompleteDemoSeeder extends Seeder
             'handoff_mode' => 'onsite',
             'handoff_instructions' => 'Bring the original enrollment record, latest grades, and recent school ID for formal verification.',
             'handoff_deadline' => now()->addDays(20)->toDateString(),
-            'handoff_location_name' => 'Harborlight Learning Center',
+            'handoff_location_name' => 'Sulong Dunong Learning Center',
             'handoff_location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
             'review_rubric' => ReviewRubric::DEFAULT,
             'application_questions' => [
@@ -263,14 +263,14 @@ class CompleteDemoSeeder extends Seeder
                 'noncompliance_consequence' => 'The provider contacts the recipient and reviews the circumstances before delaying or ending unreleased support.',
                 'exit_or_exception_process' => 'Recipients may request more time or an exception for illness, transfer, family circumstances, or another documented issue.',
             ],
-            'contact_email' => 'programs@harborlight.test',
+            'contact_email' => 'programs@sulongdunong.test',
             'contact_number' => '09171234567',
             'application_opens_at' => now()->subDays(30)->toDateString(),
             'deadline' => now()->addDays(45)->toDateString(),
             'expected_results_at' => now()->addDays(65)->toDateString(),
             'support_starts_at' => now()->subDays(20)->toDateString(),
             'support_ends_at' => now()->addMonths(8)->toDateString(),
-            'official_program_url' => 'https://findscholarship.online/scholarships/harborlight-senior-scholars',
+            'official_program_url' => 'https://findscholarship.online/scholarships/sulong-dunong-senior-scholars',
             'contact_person' => 'Isabel M. Quinto',
             'contact_department' => 'Scholarship Programs Office',
             'status' => 'published',
@@ -314,7 +314,7 @@ class CompleteDemoSeeder extends Seeder
                 'title' => 'Senior Scholars Qualifying Exam',
                 'scheduled_at' => now()->addDays(8)->setTime(9, 0),
                 'mode' => 'onsite',
-                'venue' => 'Harborlight Learning Center',
+                'venue' => 'Sulong Dunong Learning Center',
                 'location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
                 'instructions' => 'Bring a recent school ID, two pencils, and the schedule notice.',
                 'status' => 'scheduled',
@@ -326,7 +326,7 @@ class CompleteDemoSeeder extends Seeder
                 'title' => 'Finalist Online Interview',
                 'scheduled_at' => now()->addDays(15)->setTime(13, 30),
                 'mode' => 'online',
-                'online_url' => 'https://meet.google.com/demo-harborlight-room',
+                'online_url' => 'https://meet.google.com/demo-sulong-dunong-room',
                 'instructions' => 'Join ten minutes early and keep your school ID ready.',
                 'status' => 'scheduled',
                 'created_by' => $provider->id,
@@ -949,9 +949,9 @@ class CompleteDemoSeeder extends Seeder
             'title' => $type === 'exam' ? 'Senior Scholars Qualifying Exam' : 'Finalist Online Interview',
             'scheduled_at' => $scheduledAt,
             'mode' => $online ? 'online' : 'onsite',
-            'venue' => $online ? null : 'Harborlight Learning Center',
+            'venue' => $online ? null : 'Sulong Dunong Learning Center',
             'location_address' => $online ? null : 'Barangay Mayamot, Antipolo City, Rizal',
-            'online_url' => $online ? 'https://meet.google.com/demo-harborlight-room' : null,
+            'online_url' => $online ? 'https://meet.google.com/demo-sulong-dunong-room' : null,
             'instructions' => $type === 'exam'
                 ? 'Bring a recent school ID and arrive twenty minutes early.'
                 : 'Join ten minutes early and keep your school ID ready.',
@@ -975,7 +975,7 @@ class CompleteDemoSeeder extends Seeder
             ->where('stage_key', 'formal_application')
             ->where('status', 'current')
             ->update([
-                'operational_status' => 'waiting_for_schedule',
+                'operational_status' => 'ready_for_review',
                 'proof_required' => false,
                 'updated_at' => now(),
             ]);
@@ -1070,9 +1070,9 @@ class CompleteDemoSeeder extends Seeder
             'ends_at' => $endsAt,
             'timezone' => 'Asia/Manila',
             'mode' => $mode,
-            'venue' => $mode === 'onsite' ? 'Harborlight Learning Center' : null,
+            'venue' => $mode === 'onsite' ? 'Sulong Dunong Learning Center' : null,
             'location_address' => $mode === 'onsite' ? 'Barangay Mayamot, Antipolo City, Rizal' : null,
-            'meeting_url' => $mode === 'online' ? 'https://meet.google.com/demo-harborlight-room' : null,
+            'meeting_url' => $mode === 'online' ? 'https://meet.google.com/demo-sulong-dunong-room' : null,
             'capacity' => 24,
             'instructions' => $stage === 'exam'
                 ? 'Bring a recent school ID and arrive twenty minutes early.'

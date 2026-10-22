@@ -15,6 +15,7 @@ class ApplicantDocumentLibraryService
         'academic_record' => 'Latest report card or grades',
         'recent_school_id' => 'Recent school ID',
         'school_record' => 'Certificate of enrollment',
+        'no_current_scholarship_proof' => 'Proof of no current scholarship',
         'achievement_evidence' => 'Achievement evidence',
     ];
 

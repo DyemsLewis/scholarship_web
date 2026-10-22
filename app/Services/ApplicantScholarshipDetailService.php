@@ -98,6 +98,142 @@ class ApplicantScholarshipDetailService
         ];
     }
 
+    public function buildPreview(
+        Scholarship $scholarship,
+        User $viewer,
+        string $view = 'summary',
+        string $scenario = 'general',
+    ): array {
+        $scenario = in_array($scenario, ['general', 'eligible', 'ineligible'], true)
+            ? $scenario
+            : 'general';
+        $detail = $this->build($scholarship, $viewer, $view);
+
+        $detail['preview'] = [
+            'enabled' => true,
+            'scenario' => $scenario,
+            'status' => Str::headline($scholarship->status ?: 'draft'),
+        ];
+        $detail['saved'] = [
+            'is_saved' => false,
+            'label' => 'Save scholarship',
+            'endpoint' => null,
+            'method' => null,
+            'disabled' => true,
+        ];
+        $detail['decision'] = $this->previewDecision($scenario);
+        $detail['navigation'] = collect($detail['navigation'])
+            ->map(function (array $item) use ($scholarship, $scenario): array {
+                $routeParameters = [
+                    'scholarship' => $scholarship,
+                    'scenario' => $scenario,
+                ];
+
+                if ($item['key'] !== 'summary') {
+                    $routeParameters['section'] = $item['key'];
+                }
+
+                return [
+                    ...$item,
+                    'href' => route(
+                        $item['key'] === 'summary'
+                            ? 'provider.previews.programs.show'
+                            : 'provider.previews.programs.section',
+                        $routeParameters,
+                        false,
+                    ),
+                ];
+            })
+            ->all();
+        $detail['identity']['provider']['href'] = route('provider.previews.organization.show', absolute: false);
+
+        if ($view === 'summary') {
+            $detail['content']['readiness'] = collect($detail['content']['readiness'] ?? [])
+                ->map(function (array $item) use ($scholarship, $scenario): array {
+                    $target = match ($item['key'] ?? null) {
+                        'eligibility' => 'eligibility',
+                        'files' => 'application',
+                        default => 'award',
+                    };
+
+                    return [
+                        ...$item,
+                        'href' => route('provider.previews.programs.section', [
+                            'scholarship' => $scholarship,
+                            'section' => $target,
+                            'scenario' => $scenario,
+                        ], false),
+                    ];
+                })
+                ->all();
+        }
+
+        if ($view === 'eligibility') {
+            $detail['content']['profile'] = [
+                'complete' => $scenario !== 'general',
+                'percent' => $scenario === 'general' ? 0 : 100,
+                'missing' => $scenario === 'general' ? ['Applicant profile information'] : [],
+            ];
+            $detail['content']['blockers'] = $scenario === 'ineligible'
+                ? [['label' => 'A published eligibility rule does not match this sample applicant.']]
+                : [];
+        }
+
+        if ($view === 'application') {
+            $detail['content']['requirements']['manage_files_href'] = null;
+        }
+
+        if ($view === 'provider') {
+            $detail['content']['profile_href'] = route('provider.previews.organization.show', absolute: false);
+        }
+
+        return $detail;
+    }
+
+    private function previewDecision(string $scenario): array
+    {
+        $content = match ($scenario) {
+            'eligible' => [
+                'state' => 'eligible',
+                'tone' => 'positive',
+                'eyebrow' => 'Eligible applicant example',
+                'title' => 'Start with pre-screening',
+                'description' => 'An applicant whose profile matches the published rules can begin the application.',
+                'can_apply' => true,
+            ],
+            'ineligible' => [
+                'state' => 'blocked',
+                'tone' => 'blocked',
+                'eyebrow' => 'Ineligible applicant example',
+                'title' => 'Some eligibility rules do not match',
+                'description' => 'The applicant is directed to review the published requirements before continuing.',
+                'can_apply' => false,
+            ],
+            default => [
+                'state' => 'preview',
+                'tone' => 'neutral',
+                'eyebrow' => 'Applicant view preview',
+                'title' => 'The next action depends on the applicant',
+                'description' => 'Eligibility, profile readiness, dates, and application capacity determine the live action.',
+                'can_apply' => false,
+            ],
+        };
+
+        return [
+            ...$content,
+            'has_applied' => false,
+            'application_id' => null,
+            'application_status' => null,
+            'blockers' => [],
+            'action' => [
+                'kind' => 'disabled',
+                'label' => $scenario === 'eligible' ? 'Start pre-screening' : 'Applicant action',
+                'href' => null,
+                'disabled' => true,
+            ],
+        ];
+    }
+
     private function decision(
         Scholarship $scholarship,
         ?ScholarshipApplication $application,
@@ -218,12 +354,13 @@ class ApplicantScholarshipDetailService
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'program_cycle' => $scholarship->program_cycle,
-            'image_url' => $this->publicAssetUrl($scholarship->image_path, 'uploads/scholarship-default.jpg'),
+            'image_url' => $scholarship->coverImageUrl(),
             'provider' => [
                 'id' => $scholarship->provider?->id,
                 'name' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
                 'type' => $scholarship->provider?->provider_type,
                 'logo_url' => $this->publicAssetUrl($scholarship->provider?->providerProfile?->logo_path),
+                'cover_url' => $scholarship->provider?->providerProfile?->coverImageUrl(),
                 'href' => $scholarship->provider
                     ? route('dashboard.providers.show', $scholarship->provider, false)
                     : null,
@@ -689,6 +826,7 @@ class ApplicantScholarshipDetailService
             'service_area' => $profile?->service_area,
             'website' => $provider?->provider_website,
             'logo_url' => $this->publicAssetUrl($profile?->logo_path),
+            'cover_url' => $profile?->coverImageUrl(),
             'profile_href' => $provider
                 ? route('dashboard.providers.show', $provider, false)
                 : null,
