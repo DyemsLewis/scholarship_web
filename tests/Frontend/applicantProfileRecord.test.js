@@ -54,6 +54,11 @@ test('the applicant profile has one record and an accessible section editor', ()
     assert.match(modalSource, /event\.key !== 'Tab'/);
     assert.match(modalSource, /document\.body\.style\.overflow = 'hidden'/);
     assert.match(modalSource, /previouslyFocused\?\.focus\?\.\(\)/);
+    assert.doesNotMatch(
+        source,
+        /watch\(showProfileEditorModal,[\s\S]*?document\.body\.style\.overflow/,
+        'The modal component must be the only owner of the page scroll lock.',
+    );
     assert.match(source, /const sectionCardClass = 'w-full'/);
     assert.match(source, /const formPanelClass = 'border-b border-slate-200/);
     assert.doesNotMatch(source, /sectionHeaderClass/);

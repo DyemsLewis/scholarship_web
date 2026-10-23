@@ -2071,7 +2071,6 @@ onMounted(async () => {
         openProfileEditor(requestedProfileSection);
     }
 
-    document.body.style.overflow = showProfileEditorModal.value ? 'hidden' : '';
 });
 
 onBeforeUnmount(() => {
@@ -2079,11 +2078,6 @@ onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
     window.removeEventListener('keydown', handleProfileEscape);
     document.removeEventListener('click', handleUnsavedNavigation);
-    document.body.style.overflow = '';
-});
-
-watch(showProfileEditorModal, (isOpen) => {
-    document.body.style.overflow = isOpen ? 'hidden' : '';
 });
 
 watch(() => form.value.grading_scale, (scale) => {
