@@ -2314,6 +2314,7 @@ class AdminController extends Controller
             'provider_contact_number' => $scholarship->provider?->providerProfile?->provider_contact_number,
             'provider_verification_status' => $scholarship->provider?->providerProfile?->verification_status,
             'status' => $scholarship->status,
+            'logo_url' => $scholarship->logoUrl(),
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),

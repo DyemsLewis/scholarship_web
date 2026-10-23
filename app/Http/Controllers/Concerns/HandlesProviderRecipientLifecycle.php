@@ -228,6 +228,7 @@ trait HandlesProviderRecipientLifecycle
             ],
             'plan' => $plan ? $this->recipientMonitoringPlanPayload($plan) : null,
             'can_edit' => $request->user()->hasPortalPermission('manage_programs'),
+            'can_publish_check_in' => $request->user()->hasPortalPermission('manage_monitoring'),
             'frequencies' => collect(RecipientMonitoringPlan::FREQUENCIES)
                 ->map(fn (string $value): array => [
                     'value' => $value,

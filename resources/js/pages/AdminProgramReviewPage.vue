@@ -561,8 +561,8 @@ onMounted(loadScholarship);
                         <div class="flex flex-col gap-4 border-l-4 border-l-amber-400 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                             <div class="flex min-w-0 items-center gap-3">
                                 <img
-                                    :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
-                                    :alt="scholarship.title"
+                                    :src="scholarship.logo_url || '/uploads/scholarship-default.jpg'"
+                                    :alt="`${scholarship.title} logo`"
                                     class="h-12 w-12 shrink-0 rounded-md bg-slate-50 object-contain p-1.5 ring-1 ring-slate-200"
                                 >
                                 <div class="min-w-0">

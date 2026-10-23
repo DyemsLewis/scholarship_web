@@ -108,9 +108,14 @@ class ProviderWorkspacePageController extends Controller
         return $this->workspace($request, 'verify_applications', 'provider-application-reviewer-workspace');
     }
 
-    public function reviewDashboard(Request $request): View
+    public function reviewDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'verify_applications', 'provider-application-reviewer-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'verify_applications',
+            'provider-application-reviewer-dashboard',
+            'provider.workspaces.reviews.unassigned',
+        );
     }
 
     public function selection(Request $request): View
@@ -118,9 +123,14 @@ class ProviderWorkspacePageController extends Controller
         return $this->workspace($request, 'manage_selection_activities', 'provider-selection-officer-workspace');
     }
 
-    public function selectionDashboard(Request $request): View
+    public function selectionDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'manage_selection_activities', 'provider-selection-officer-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'manage_selection_activities',
+            'provider-selection-officer-dashboard',
+            'provider.workspaces.selection.active',
+        );
     }
 
     public function selectionSessionCreate(Request $request): View
@@ -148,9 +158,14 @@ class ProviderWorkspacePageController extends Controller
         return $this->workspace($request, 'record_final_decisions', 'provider-decision-officer-workspace');
     }
 
-    public function decisionDashboard(Request $request): View
+    public function decisionDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'record_final_decisions', 'provider-decision-officer-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'record_final_decisions',
+            'provider-decision-officer-dashboard',
+            'provider.workspaces.decisions.pending',
+        );
     }
 
     public function recipients(Request $request): View
@@ -158,9 +173,14 @@ class ProviderWorkspacePageController extends Controller
         return $this->workspace($request, 'manage_recipients', 'provider-recipient-officer-workspace');
     }
 
-    public function recipientDashboard(Request $request): View
+    public function recipientDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'manage_recipients', 'provider-recipient-officer-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'manage_recipients',
+            'provider-recipient-officer-dashboard',
+            'provider.workspaces.recipients.agreements',
+        );
     }
 
     public function monitoring(Request $request): View
@@ -168,9 +188,14 @@ class ProviderWorkspacePageController extends Controller
         return $this->workspace($request, 'manage_monitoring', 'provider-monitoring-officer-workspace');
     }
 
-    public function monitoringDashboard(Request $request): View
+    public function monitoringDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'manage_monitoring', 'provider-monitoring-officer-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'manage_monitoring',
+            'provider-monitoring-officer-dashboard',
+            'provider.workspaces.monitoring.review',
+        );
     }
 
     public function releases(Request $request): View
@@ -178,9 +203,14 @@ class ProviderWorkspacePageController extends Controller
         return $this->workspace($request, 'manage_benefit_releases', 'provider-benefit-release-officer-workspace');
     }
 
-    public function releaseDashboard(Request $request): View
+    public function releaseDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'manage_benefit_releases', 'provider-benefit-release-officer-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'manage_benefit_releases',
+            'provider-benefit-release-officer-dashboard',
+            'provider.workspaces.releases.issues',
+        );
     }
 
     public function releaseSchedule(Request $request): View
@@ -193,9 +223,14 @@ class ProviderWorkspacePageController extends Controller
         return $this->workspace($request, 'manage_profile', 'provider-organization-profile-manager-workspace');
     }
 
-    public function organizationProfileDashboard(Request $request): View
+    public function organizationProfileDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'manage_profile', 'provider-organization-profile-manager-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'manage_profile',
+            'provider-organization-profile-manager-dashboard',
+            'provider.workspaces.organization-profile.readiness',
+        );
     }
 
     public function organizationProfilePublic(Request $request): View
@@ -218,25 +253,57 @@ class ProviderWorkspacePageController extends Controller
         return $this->workspace($request, 'manage_team', 'provider-team-administrator-workspace');
     }
 
-    public function teamDashboard(Request $request): View
+    public function teamDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'manage_team', 'provider-team-administrator-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'manage_team',
+            'provider-team-administrator-dashboard',
+            'provider.workspaces.team.setup',
+        );
     }
 
-    public function supportDashboard(Request $request): View
+    public function supportDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'manage_reports', 'provider-support-staff-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'manage_reports',
+            'provider-support-staff-dashboard',
+            'provider.workspaces.support.needs-response',
+        );
     }
 
-    public function billingDashboard(Request $request): View
+    public function billingDashboard(Request $request): View|RedirectResponse
     {
-        return $this->workspace($request, 'manage_billing', 'provider-billing-staff-dashboard');
+        return $this->workspaceDashboard(
+            $request,
+            'manage_billing',
+            'provider-billing-staff-dashboard',
+            'provider.workspaces.billing.requests',
+        );
     }
 
     private function workspace(Request $request, string $permission, string $view): View
     {
         abort_unless($request->user()?->isProvider(), 403);
         abort_unless($request->user()->hasPortalPermission($permission), 403);
+
+        return view($view);
+    }
+
+    private function workspaceDashboard(
+        Request $request,
+        string $permission,
+        string $view,
+        string $managerRoute,
+    ): View|RedirectResponse {
+        $user = $request->user();
+        abort_unless($user?->isProvider(), 403);
+        abort_unless($user->hasPortalPermission($permission), 403);
+
+        if (! $user->isManagedAccount() || $user->account_title === 'manager') {
+            return redirect()->route($managerRoute);
+        }
 
         return view($view);
     }

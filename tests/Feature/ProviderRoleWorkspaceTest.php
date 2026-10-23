@@ -57,22 +57,23 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('manager_overview.summary.applications', 1)
             ->assertJsonPath('manager_overview.priority_action.title', 'Recipient onboarding')
             ->assertJsonPath('manager_overview.priority_action.count', 1)
-            ->assertJsonPath('manager_overview.priority_action.href', '/provider/workspaces/recipients');
+            ->assertJsonPath('manager_overview.priority_action.href', '/provider/workspaces/recipients/agreements');
+
+        $this->actingAs($manager)->get('/provider/programs')->assertOk();
 
         foreach ([
-            '/provider/programs',
-            '/provider/workspaces/reviews',
-            '/provider/workspaces/selection',
-            '/provider/workspaces/decisions',
-            '/provider/workspaces/recipients',
-            '/provider/workspaces/monitoring',
-            '/provider/workspaces/releases',
-            '/provider/workspaces/organization-profile',
-            '/provider/workspaces/team',
-            '/provider/workspaces/support',
-            '/provider/workspaces/billing',
-        ] as $workspace) {
-            $this->actingAs($manager)->get($workspace)->assertOk();
+            '/provider/workspaces/reviews' => '/provider/workspaces/reviews/unassigned',
+            '/provider/workspaces/selection' => '/provider/workspaces/selection/active',
+            '/provider/workspaces/decisions' => '/provider/workspaces/decisions/pending',
+            '/provider/workspaces/recipients' => '/provider/workspaces/recipients/agreements',
+            '/provider/workspaces/monitoring' => '/provider/workspaces/monitoring/review',
+            '/provider/workspaces/releases' => '/provider/workspaces/releases/issues',
+            '/provider/workspaces/organization-profile' => '/provider/workspaces/organization-profile/readiness',
+            '/provider/workspaces/team' => '/provider/workspaces/team/setup',
+            '/provider/workspaces/support' => '/provider/workspaces/support/needs-response',
+            '/provider/workspaces/billing' => '/provider/workspaces/billing/requests',
+        ] as $workspace => $queue) {
+            $this->actingAs($manager)->get($workspace)->assertRedirect($queue);
         }
 
         $this->actingAs($manager)

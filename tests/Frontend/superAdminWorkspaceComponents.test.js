@@ -34,3 +34,11 @@ for (const path of components) {
         assert.deepEqual(template.errors, []);
     });
 }
+
+test('super admin summary uses supported icons for all four metrics', () => {
+    const filename = new URL('../../resources/js/pages/admin/governance/SuperAdminWorkspacePage.vue', import.meta.url);
+    const source = readFileSync(filename, 'utf8');
+
+    assert.doesNotMatch(source, /fa-shield-check/);
+    assert.match(source, /fa-shield-halved/);
+});

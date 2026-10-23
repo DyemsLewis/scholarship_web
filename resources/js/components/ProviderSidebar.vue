@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import ProviderAccountSidebarLink from '../pages/provider/ProviderAccountSidebarLink.vue';
 import RoleSidebar from './RoleSidebar.vue';
 import { supplementalProviderWorkspaceLinks } from '../support/providerWorkspaceNavigation';
 
@@ -311,5 +312,9 @@ const navLinks = computed(() => usesDedicatedWorkspace
         neutral-accent
         sharp
         navigation-label="Provider workspace"
-    />
+    >
+        <template #account-actions>
+            <ProviderAccountSidebarLink />
+        </template>
+    </RoleSidebar>
 </template>

@@ -23,9 +23,10 @@ class ProgramDirectoryController extends Controller
         $actor = $request->user();
         $validated = $request->validated();
         $filter = $request->filter();
+        $workspace = $request->workspace();
         $search = trim((string) ($validated['search'] ?? ''));
         $sort = $validated['sort'] ?? 'updated';
-        $paginator = $programs->paginate($actor, $filter, $search, $sort);
+        $paginator = $programs->paginate($actor, $filter, $search, $sort, $workspace);
         $owner = $actor->providerOrganizationOwner()->loadMissing('providerProfile');
 
         return response()->json([
@@ -33,7 +34,8 @@ class ProgramDirectoryController extends Controller
                 'organization_name' => $owner->provider_name ?: $owner->name,
                 'access_scope' => $actor->hasLimitedProviderProgramAccess() ? 'assigned' : 'all',
             ],
-            'summary' => $programs->summary($actor),
+            'summary' => $programs->summary($actor, $workspace),
+            'workspace' => $workspace,
             'filter' => $filter,
             'sort' => $sort,
             'programs' => ProgramDirectoryItemResource::collection(collect($paginator->items()))->resolve($request),

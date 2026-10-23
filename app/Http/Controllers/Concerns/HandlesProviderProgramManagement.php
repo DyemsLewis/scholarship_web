@@ -574,9 +574,15 @@ trait HandlesProviderProgramManagement
 
         $this->addScholarshipEligibilityConsistencyErrors($errors, $value);
 
+        $isLegacyPublishedProgram = $scholarship?->status === 'published';
+
+        if (blank($imagePath) && ! $isLegacyPublishedProgram) {
+            $errors['image_file'] = 'Upload a scholarship logo before submitting for review.';
+        }
+
         $coverPath = $validated['cover_image_path'] ?? $scholarship?->cover_image_path;
         $coverKey = $validated['cover_image_key'] ?? $scholarship?->cover_image_key;
-        if (blank($imagePath) && blank($coverPath) && ! CoverImageCatalog::has($coverKey)) {
+        if (blank($coverPath) && ! CoverImageCatalog::has($coverKey) && ! $isLegacyPublishedProgram) {
             $errors['cover_file'] = 'Choose a program background before submitting for review.';
         }
 
@@ -1471,7 +1477,7 @@ trait HandlesProviderProgramManagement
 
     private function comparableScholarshipValue(mixed $value): mixed
     {
-        if ($value instanceof \DateTimeInterface) {
+        if ($value instanceof DateTimeInterface) {
             return $value->format('Y-m-d');
         }
 
@@ -1505,7 +1511,6 @@ trait HandlesProviderProgramManagement
             ]));
     }
 
-
     private function copyProviderLogoForScholarship(User $actor): ?string
     {
         $profile = $actor->providerOrganizationOwner()->providerProfile()->first();
@@ -1532,7 +1537,6 @@ trait HandlesProviderProgramManagement
 
         return copy($sourcePath, public_path($relativePath)) ? $relativePath : null;
     }
-
 
     private function storeScholarshipImage(Request $request): ?string
     {
@@ -1757,6 +1761,7 @@ trait HandlesProviderProgramManagement
         return [
             'id' => $scholarship->id,
             'image_path' => $scholarship->image_path,
+            'logo_url' => $scholarship->logoUrl(),
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'cover_image_source' => $scholarship->cover_image_source,
             'cover_image_key' => $scholarship->cover_image_key,
@@ -1959,5 +1964,4 @@ trait HandlesProviderProgramManagement
             ? 'https://www.openstreetmap.org/search?query='.rawurlencode($query)
             : null;
     }
-
 }

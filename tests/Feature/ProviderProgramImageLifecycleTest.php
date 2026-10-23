@@ -236,6 +236,64 @@ class ProviderProgramImageLifecycleTest extends TestCase
         }
     }
 
+    public function test_scholarship_logo_is_saved_and_returned_separately_from_its_background(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+        $logoPath = null;
+
+        try {
+            $response = $this->actingAs($provider)
+                ->post('/provider/scholarships', [
+                    'title' => 'Independent Identity Program',
+                    'status' => 'draft',
+                    'image_file' => UploadedFile::fake()->image('program-logo.png', 256, 256),
+                    'cover_source' => 'system',
+                    'cover_key' => 'science-project',
+                ], ['HTTP_ACCEPT' => 'application/json'])
+                ->assertCreated()
+                ->assertJsonPath('scholarship.cover_image_source', 'system')
+                ->assertJsonPath('scholarship.cover_image_key', 'science-project');
+
+            $logoPath = $response->json('scholarship.image_path');
+            $logoUrl = $response->json('scholarship.logo_url');
+            $coverUrl = $response->json('scholarship.cover_image_url');
+
+            $this->assertNotNull($logoPath);
+            $this->assertFileExists(public_path($logoPath));
+            $this->assertStringContainsString($logoPath, $logoUrl);
+            $this->assertNotSame($logoUrl, $coverUrl);
+
+            $this->actingAs($provider)
+                ->getJson('/provider/programs/data')
+                ->assertOk()
+                ->assertJsonPath('programs.0.logo_url', $logoUrl)
+                ->assertJsonPath('programs.0.image_url', $logoUrl);
+        } finally {
+            if ($logoPath && is_file(public_path($logoPath))) {
+                @unlink(public_path($logoPath));
+            }
+        }
+    }
+
+    public function test_submitting_a_program_requires_a_logo_and_background_independently(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['verification_status' => 'approved']);
+
+        $this->actingAs($provider)
+            ->postJson('/provider/scholarships', [
+                'title' => 'Missing Logo Program',
+                'description' => 'A complete submission must identify its scholarship separately from its background.',
+                'status' => 'pending_review',
+                'cover_source' => 'system',
+                'cover_key' => 'science-project',
+                'terms_accepted' => true,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('image_file');
+    }
+
     private function pngContent(): string
     {
         return base64_decode(

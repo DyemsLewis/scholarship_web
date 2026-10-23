@@ -22,75 +22,68 @@ class RoleTestAccountsSeeder extends Seeder
             ->where('role', 'admin')
             ->whereNull('parent_account_id')
             ->first();
-        $providerOwner = User::query()
-            ->where('email', 'programs@sulongdunong.test')
+        $providerOwners = User::query()
             ->where('role', 'provider')
             ->whereNull('parent_account_id')
+            ->whereHas('providerProfile', fn ($query) => $query->where('verification_status', 'approved'))
             ->with('providerProfile')
-            ->first();
+            ->orderBy('id')
+            ->get();
 
-        if (! $providerOwner && app()->environment(['local', 'testing'])) {
-            $providerOwner = User::query()
-                ->where('role', 'provider')
-                ->whereNull('parent_account_id')
-                ->orderBy('id')
-                ->with('providerProfile')
-                ->first();
+        if (! $adminOwner || $providerOwners->isEmpty()) {
+            throw new RuntimeException('Seed the demo admin and approved providers before creating role test accounts.');
         }
 
-        if (! $adminOwner || ! $providerOwner) {
-            throw new RuntimeException('Seed the demo admin and primary provider before creating role test accounts.');
-        }
+        DB::transaction(function () use ($adminOwner, $providerOwners, $password): void {
+            foreach ($providerOwners as $providerOwner) {
+                foreach ($this->providerAccounts($providerOwner) as $account) {
+                    $user = $this->seedManagedUser(
+                        owner: $providerOwner,
+                        role: 'provider',
+                        account: $account,
+                        password: $password,
+                    );
 
-        DB::transaction(function () use ($adminOwner, $providerOwner, $password): void {
-            foreach ($this->providerAccounts($providerOwner) as $account) {
-                $user = $this->seedManagedUser(
-                    owner: $providerOwner,
-                    role: 'provider',
-                    account: $account,
-                    password: $password,
-                );
+                    $ownerProfile = $providerOwner->providerProfile;
+                    $user->providerProfile()->updateOrCreate([
+                        'user_id' => $user->id,
+                    ], [
+                        'first_name' => $account['first_name'],
+                        'last_name' => $account['last_name'],
+                        'middle_initial' => $account['middle_initial'],
+                        'contact_number' => $account['contact_number'],
+                        'provider_name' => $ownerProfile?->provider_name,
+                        'provider_type' => $ownerProfile?->provider_type,
+                        'provider_website' => $ownerProfile?->provider_website,
+                        'provider_address' => $ownerProfile?->provider_address,
+                        'provider_description' => $ownerProfile?->provider_description,
+                        'logo_path' => $ownerProfile?->logo_path,
+                        'provider_contact_email' => $ownerProfile?->provider_contact_email,
+                        'provider_contact_number' => $ownerProfile?->provider_contact_number,
+                        'verification_status' => $ownerProfile?->verification_status ?? 'approved',
+                        'verification_notes' => $ownerProfile?->verification_notes,
+                        'verified_by' => $ownerProfile?->verified_by,
+                        'verified_at' => $ownerProfile?->verified_at,
+                    ]);
+                }
 
-                $ownerProfile = $providerOwner->providerProfile;
-                $user->providerProfile()->updateOrCreate([
-                    'user_id' => $user->id,
-                ], [
-                    'first_name' => $account['first_name'],
-                    'last_name' => $account['last_name'],
-                    'middle_initial' => $account['middle_initial'],
-                    'contact_number' => $account['contact_number'],
-                    'provider_name' => $ownerProfile?->provider_name,
-                    'provider_type' => $ownerProfile?->provider_type,
-                    'provider_website' => $ownerProfile?->provider_website,
-                    'provider_address' => $ownerProfile?->provider_address,
-                    'provider_description' => $ownerProfile?->provider_description,
-                    'logo_path' => $ownerProfile?->logo_path,
-                    'provider_contact_email' => $ownerProfile?->provider_contact_email,
-                    'provider_contact_number' => $ownerProfile?->provider_contact_number,
-                    'verification_status' => $ownerProfile?->verification_status ?? 'approved',
-                    'verification_notes' => $ownerProfile?->verification_notes,
-                    'verified_by' => $ownerProfile?->verified_by,
-                    'verified_at' => $ownerProfile?->verified_at,
-                ]);
-            }
+                $reviewer = User::query()
+                    ->where('parent_account_id', $providerOwner->id)
+                    ->where('username', $providerOwner->username.'.reviewer')
+                    ->first();
+                $reviewApplicationIds = ScholarshipApplication::query()
+                    ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerOwner->id))
+                    ->where('workflow_stage', 'screening')
+                    ->whereNull('assigned_reviewer_id')
+                    ->orderBy('id')
+                    ->limit(2)
+                    ->pluck('id');
 
-            $staffPrefix = $providerOwner->username;
-            $reviewer = User::query()
-                ->where('parent_account_id', $providerOwner->id)
-                ->where('username', $staffPrefix.'.reviewer')
-                ->first();
-            $reviewApplicationIds = ScholarshipApplication::query()
-                ->whereHas('scholarship', fn ($query) => $query->where('provider_id', $providerOwner->id))
-                ->where('workflow_stage', 'screening')
-                ->whereNull('assigned_reviewer_id')
-                ->orderBy('id')
-                ->limit(2)
-                ->pluck('id');
-
-            if ($reviewer && $reviewApplicationIds->isNotEmpty()) {
-                ScholarshipApplication::query()
-                    ->whereIn('id', $reviewApplicationIds)
-                    ->update(['assigned_reviewer_id' => $reviewer->id]);
+                if ($reviewer && $reviewApplicationIds->isNotEmpty()) {
+                    ScholarshipApplication::query()
+                        ->whereIn('id', $reviewApplicationIds)
+                        ->update(['assigned_reviewer_id' => $reviewer->id]);
+                }
             }
 
             foreach ($this->adminAccounts() as $account) {
@@ -119,19 +112,7 @@ class RoleTestAccountsSeeder extends Seeder
      */
     private function seedManagedUser(User $owner, string $role, array $account, string $password): User
     {
-        $programScopedProviderRoles = [
-            'program_coordinator',
-            'application_reviewer',
-            'selection_officer',
-            'decision_officer',
-            'recipient_officer',
-            'monitoring_officer',
-            'benefit_release_officer',
-        ];
-        $assignedProgramIds = $role === 'provider'
-            && in_array($account['account_title'], $programScopedProviderRoles, true)
-                ? $owner->providerScholarships()->pluck('id')->map(fn ($id): int => (int) $id)->all()
-                : null;
+        $assignedProgramIds = $this->assignedProgramIdsForAccount($owner, $role, $account);
         $user = User::query()->updateOrCreate([
             'email' => $account['email'],
         ], [
@@ -155,13 +136,60 @@ class RoleTestAccountsSeeder extends Seeder
         return $user;
     }
 
+    /**
+     * Give the demo team realistic portfolio boundaries instead of granting every
+     * operational account access to every scholarship in its organization.
+     *
+     * @param  array<string, mixed>  $account
+     * @return array<int, int>|null
+     */
+    private function assignedProgramIdsForAccount(User $owner, string $role, array $account): ?array
+    {
+        if ($role !== 'provider') {
+            return null;
+        }
+
+        $programScopedProviderRoles = [
+            'program_coordinator',
+            'application_reviewer',
+            'selection_officer',
+            'decision_officer',
+            'recipient_officer',
+            'monitoring_officer',
+            'benefit_release_officer',
+            'team_administrator',
+            'support_staff',
+        ];
+
+        if (! in_array($account['account_title'], $programScopedProviderRoles, true)) {
+            return null;
+        }
+
+        $publishedProgramIds = $owner->providerScholarships()
+            ->where('status', 'published')
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->values();
+
+        if ($publishedProgramIds->isEmpty()) {
+            return [];
+        }
+
+        $assignedProgramId = $account['account_title'] === 'program_coordinator'
+            ? ($publishedProgramIds->get(1) ?? $publishedProgramIds->first())
+            : $publishedProgramIds->first();
+
+        return [(int) $assignedProgramId];
+    }
+
     /** @return array<int, array<string, mixed>> */
     private function providerAccounts(User $owner): array
     {
         $accounts = [
             [
-                'email' => 'sulongdunong.manager@scholarship.test',
-                'username' => 'sulongdunong.manager',
+                'email' => 'aralbridge.manager@scholarship.test',
+                'username' => 'aralbridge.manager',
                 'first_name' => 'Marco',
                 'middle_initial' => 'A',
                 'last_name' => 'Villanueva',
@@ -170,8 +198,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => User::PROVIDER_PERMISSIONS,
             ],
             [
-                'email' => 'sulongdunong.programs@scholarship.test',
-                'username' => 'sulongdunong.programs',
+                'email' => 'aralbridge.programs@scholarship.test',
+                'username' => 'aralbridge.programs',
                 'first_name' => 'Patricia',
                 'middle_initial' => 'B',
                 'last_name' => 'Gomez',
@@ -180,8 +208,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_programs'],
             ],
             [
-                'email' => 'sulongdunong.reviewer@scholarship.test',
-                'username' => 'sulongdunong.reviewer',
+                'email' => 'aralbridge.reviewer@scholarship.test',
+                'username' => 'aralbridge.reviewer',
                 'first_name' => 'Rafael',
                 'middle_initial' => 'C',
                 'last_name' => 'Torres',
@@ -190,8 +218,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['verify_applications'],
             ],
             [
-                'email' => 'sulongdunong.selection@scholarship.test',
-                'username' => 'sulongdunong.selection',
+                'email' => 'aralbridge.selection@scholarship.test',
+                'username' => 'aralbridge.selection',
                 'first_name' => 'Selena',
                 'middle_initial' => 'C',
                 'last_name' => 'Mendoza',
@@ -200,8 +228,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_selection_activities'],
             ],
             [
-                'email' => 'sulongdunong.decisions@scholarship.test',
-                'username' => 'sulongdunong.decisions',
+                'email' => 'aralbridge.decisions@scholarship.test',
+                'username' => 'aralbridge.decisions',
                 'first_name' => 'Diana',
                 'middle_initial' => 'C',
                 'last_name' => 'Aquino',
@@ -210,8 +238,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['record_final_decisions'],
             ],
             [
-                'email' => 'sulongdunong.recipients@scholarship.test',
-                'username' => 'sulongdunong.recipients',
+                'email' => 'aralbridge.recipients@scholarship.test',
+                'username' => 'aralbridge.recipients',
                 'first_name' => 'Rina',
                 'middle_initial' => 'C',
                 'last_name' => 'Flores',
@@ -220,8 +248,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_recipients'],
             ],
             [
-                'email' => 'sulongdunong.monitoring@scholarship.test',
-                'username' => 'sulongdunong.monitoring',
+                'email' => 'aralbridge.monitoring@scholarship.test',
+                'username' => 'aralbridge.monitoring',
                 'first_name' => 'Monica',
                 'middle_initial' => 'C',
                 'last_name' => 'Santos',
@@ -230,8 +258,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_monitoring'],
             ],
             [
-                'email' => 'sulongdunong.releases@scholarship.test',
-                'username' => 'sulongdunong.releases',
+                'email' => 'aralbridge.releases@scholarship.test',
+                'username' => 'aralbridge.releases',
                 'first_name' => 'Beatrice',
                 'middle_initial' => 'C',
                 'last_name' => 'Cruz',
@@ -240,8 +268,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_benefit_releases'],
             ],
             [
-                'email' => 'sulongdunong.profile@scholarship.test',
-                'username' => 'sulongdunong.profile',
+                'email' => 'aralbridge.profile@scholarship.test',
+                'username' => 'aralbridge.profile',
                 'first_name' => 'Olivia',
                 'middle_initial' => 'C',
                 'last_name' => 'Domingo',
@@ -250,8 +278,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_profile'],
             ],
             [
-                'email' => 'sulongdunong.team@scholarship.test',
-                'username' => 'sulongdunong.team',
+                'email' => 'aralbridge.team@scholarship.test',
+                'username' => 'aralbridge.team',
                 'first_name' => 'Teresa',
                 'middle_initial' => 'C',
                 'last_name' => 'Bautista',
@@ -260,8 +288,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_team'],
             ],
             [
-                'email' => 'sulongdunong.support@scholarship.test',
-                'username' => 'sulongdunong.support',
+                'email' => 'aralbridge.support@scholarship.test',
+                'username' => 'aralbridge.support',
                 'first_name' => 'Sofia',
                 'middle_initial' => 'D',
                 'last_name' => 'Lim',
@@ -270,8 +298,8 @@ class RoleTestAccountsSeeder extends Seeder
                 'permissions' => ['manage_reports'],
             ],
             [
-                'email' => 'sulongdunong.billing@scholarship.test',
-                'username' => 'sulongdunong.billing',
+                'email' => 'aralbridge.billing@scholarship.test',
+                'username' => 'aralbridge.billing',
                 'first_name' => 'Daniel',
                 'middle_initial' => 'E',
                 'last_name' => 'Reyes',
@@ -281,14 +309,14 @@ class RoleTestAccountsSeeder extends Seeder
             ],
         ];
 
-        if ($owner->username === 'sulongdunong') {
+        if ($owner->username === 'aralbridge') {
             return $accounts;
         }
 
         return array_map(static function (array $account) use ($owner): array {
             $prefix = $owner->username ?: 'provider';
-            $account['email'] = str_replace('sulongdunong.', $prefix.'.', $account['email']);
-            $account['username'] = str_replace('sulongdunong.', $prefix.'.', $account['username']);
+            $account['email'] = str_replace('aralbridge.', $prefix.'.', $account['email']);
+            $account['username'] = str_replace('aralbridge.', $prefix.'.', $account['username']);
 
             return $account;
         }, $accounts);

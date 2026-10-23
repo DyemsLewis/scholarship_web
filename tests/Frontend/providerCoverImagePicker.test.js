@@ -44,3 +44,11 @@ test('provider forms use the shared picker instead of separate inline image cont
     assert.match(program, /fields\.cover_source = coverSource\.value/);
     assert.doesNotMatch(program, /Use the organization logo/);
 });
+
+test('the program form treats its square logo and wide background as separate media', () => {
+    const program = readFileSync(new URL(components[2], import.meta.url), 'utf8');
+    assert.match(program, /Scholarship logo/);
+    assert.match(program, /Background image/);
+    assert.match(program, /payload\.append\('image_file', logoFile\.value\)/);
+    assert.match(program, /payload\.append\('cover_file', coverFile\.value\)/);
+});

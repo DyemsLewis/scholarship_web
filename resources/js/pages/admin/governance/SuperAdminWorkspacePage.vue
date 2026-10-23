@@ -16,7 +16,7 @@ const escalations = ref([]);
 const workloadByOwner = computed(() => Object.fromEntries(operationalAreas.value.map((area) => [area.owner.toLowerCase(), area.count])));
 const metrics = computed(() => [
     { key: 'admins', label: 'Active admin staff', value: summary.value.active_admins, detail: `${summary.value.managed_admins} managed accounts`, icon: 'fa-solid fa-user-shield' },
-    { key: 'coverage', label: 'Roles covered', value: `${summary.value.covered_roles} of ${summary.value.total_roles}`, detail: escalations.value.length ? 'Coverage gap detected' : 'Operational ownership', icon: 'fa-solid fa-shield-check', tone: escalations.value.length ? 'attention' : '' },
+    { key: 'coverage', label: 'Roles covered', value: `${summary.value.covered_roles} of ${summary.value.total_roles}`, detail: escalations.value.length ? 'Coverage gap detected' : 'Operational ownership', icon: 'fa-solid fa-shield-halved', tone: escalations.value.length ? 'attention' : '' },
     { key: 'users', label: 'Platform users', value: summary.value.platform_users, detail: 'All registered accounts', icon: 'fa-solid fa-users' },
     { key: 'attention', label: 'Open workload', value: summary.value.operational_attention, detail: 'Across admin teams', icon: 'fa-solid fa-list-check', tone: summary.value.operational_attention ? 'attention' : '' },
 ]);

@@ -30,6 +30,8 @@ class ProgramRecordResource extends JsonResource
             'category' => $this->category,
             'cycle' => $this->program_cycle,
             'description' => $this->description,
+            'logo_url' => $this->logoUrl(),
+            'cover_image_url' => $this->coverImageUrl(),
             'status' => $lifecycle->status($this->status),
             'timeline' => [
                 'opens' => $this->application_opens_at?->format('M d, Y'),

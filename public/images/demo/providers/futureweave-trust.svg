@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-labelledby="title">
+  <title id="title">FutureWeave Education Trust demo logo</title>
+  <rect width="320" height="320" rx="36" fill="#0f3d3e"/>
+  <path d="M62 87h196v146H62z" fill="#fff" opacity=".96"/>
+  <path d="M62 87c49 0 80 14 98 40 18-26 49-40 98-40v146c-49 0-80 13-98 39-18-26-49-39-98-39z" fill="#e7f3ef" stroke="#d69e2e" stroke-width="8"/>
+  <path d="M160 127v145M100 132c27 2 44 11 60 29m60-29c-27 2-44 11-60 29" fill="none" stroke="#0f3d3e" stroke-width="9" stroke-linecap="round"/>
+</svg>

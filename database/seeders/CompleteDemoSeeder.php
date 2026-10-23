@@ -69,6 +69,8 @@ class CompleteDemoSeeder extends Seeder
         $provider = $this->seedProvider($admin);
         $scholarship = $this->seedScholarship($provider);
         $programExamples = $this->seedProgramLifecycleExamples($scholarship);
+        $partnerProvider = $this->seedPartnerProvider($admin);
+        $this->seedPartnerScholarships($partnerProvider, $scholarship);
         $applications = collect();
 
         foreach ($this->applicantRecords() as $index => $record) {
@@ -135,8 +137,8 @@ class CompleteDemoSeeder extends Seeder
     private function seedProvider(User $admin): User
     {
         $provider = User::query()->create([
-            'email' => 'programs@sulongdunong.test',
-            'username' => 'sulongdunong',
+            'email' => 'owner@aralbridge.test',
+            'username' => 'aralbridge',
             'role' => 'provider',
             'account_title' => 'Executive Program Director',
             'permissions' => User::PROVIDER_PERMISSIONS,
@@ -149,25 +151,25 @@ class CompleteDemoSeeder extends Seeder
         ]);
         $provider->forceFill(['email_verified_at' => now()->subMonths(5)])->save();
         $provider->providerProfile()->create([
-            'first_name' => 'Isabel',
-            'last_name' => 'Quinto',
-            'middle_initial' => 'M',
+            'first_name' => 'Celia',
+            'last_name' => 'Montemayor',
+            'middle_initial' => 'A',
             'contact_number' => '09171234567',
             'representative_position' => 'Executive Program Director',
-            'provider_name' => 'Sulong Dunong Education Foundation',
+            'provider_name' => 'AralBridge Community Foundation',
             'provider_type' => 'non_profit',
-            'provider_website' => 'https://findscholarship.online/providers/sulong-dunong',
-            'provider_address' => 'Barangay Mayamot, Antipolo City, Rizal',
+            'provider_website' => 'https://findscholarship.online/providers/aralbridge',
+            'provider_address' => 'Barangay Kapitolyo, Pasig City, Metro Manila',
             'provider_description' => 'A demonstration education collective coordinating verified study support, selection activities, and recipient services for senior high school learners.',
             'mission' => 'Connect learners with accountable education support and clear pathways from application through program completion.',
             'year_established' => 2019,
-            'service_area' => 'Antipolo City and nearby communities in Rizal',
-            'logo_path' => '/images/demo/providers/sulong-dunong-foundation.svg',
-            'provider_contact_email' => 'programs@sulongdunong.test',
+            'service_area' => 'Pasig City, Rizal, and eastern Metro Manila',
+            'logo_path' => '/images/demo/providers/aralbridge-foundation.svg',
+            'provider_contact_email' => 'owner@aralbridge.test',
             'provider_contact_number' => '09171234567',
             'contact_department' => 'Scholarship Programs Office',
             'office_hours' => 'Monday to Friday, 8:30 AM to 5:00 PM',
-            'legal_name' => 'Sulong Dunong Education Foundation, Inc.',
+            'legal_name' => 'AralBridge Community Foundation, Inc.',
             'registration_authority' => 'Securities and Exchange Commission',
             'registration_number' => 'DEMO-CN201945821',
             'registration_date' => '2019-08-14',
@@ -182,7 +184,7 @@ class CompleteDemoSeeder extends Seeder
             'representative_authorization' => 'Representative authorization letter',
             'organization_profile' => 'Organization profile and program history',
         ] as $type => $label) {
-            $contents = $this->demoDocument('Sulong Dunong Education Foundation', $label, 'Provider verification record');
+            $contents = $this->demoDocument('AralBridge Community Foundation', $label, 'Provider verification record');
             $path = "demo-showcase/provider/{$type}.svg";
             Storage::disk('local')->put($path, $contents);
             $provider->providerVerificationDocuments()->create([
@@ -203,12 +205,83 @@ class CompleteDemoSeeder extends Seeder
         return $provider->fresh('providerProfile');
     }
 
+    private function seedPartnerProvider(User $admin): User
+    {
+        $provider = User::query()->create([
+            'email' => 'owner@futureweave.test',
+            'username' => 'futureweave',
+            'role' => 'provider',
+            'account_title' => 'Foundation Director',
+            'permissions' => User::PROVIDER_PERMISSIONS,
+            'password' => $this->demoPassword(),
+            'account_status' => 'active',
+            'must_reset_password' => false,
+            'terms_accepted_at' => now()->subMonths(4),
+            'privacy_accepted_at' => now()->subMonths(4),
+            'terms_version' => Terms::VERSION,
+        ]);
+        $provider->forceFill(['email_verified_at' => now()->subMonths(4)])->save();
+        $provider->providerProfile()->create([
+            'first_name' => 'Ramon',
+            'last_name' => 'Alcantara',
+            'middle_initial' => 'L',
+            'contact_number' => '09172345001',
+            'representative_position' => 'Foundation Director',
+            'provider_name' => 'FutureWeave Education Trust',
+            'provider_type' => 'non_profit',
+            'provider_website' => 'https://findscholarship.online/providers/futureweave',
+            'provider_address' => 'Barangay Poblacion, Muntinlupa City, Metro Manila',
+            'provider_description' => 'A fictional demonstration organization providing school essentials, STEM learning support, and guided student pathways.',
+            'mission' => 'Help learners connect present school needs with practical education and career opportunities.',
+            'year_established' => 2020,
+            'service_area' => 'Southern Metro Manila and nearby Laguna communities',
+            'logo_path' => '/images/demo/providers/futureweave-trust.svg',
+            'provider_contact_email' => 'owner@futureweave.test',
+            'provider_contact_number' => '09172345001',
+            'contact_department' => 'Education Programs Office',
+            'office_hours' => 'Monday to Friday, 9:00 AM to 5:00 PM',
+            'legal_name' => 'FutureWeave Education Trust, Inc.',
+            'registration_authority' => 'Securities and Exchange Commission',
+            'registration_number' => 'DEMO-CN202041275',
+            'registration_date' => '2020-07-20',
+            'verification_status' => 'approved',
+            'verification_notes' => 'Complete fictional organization record approved for the demonstration dataset.',
+            'verified_at' => now()->subMonths(3),
+            'verified_by' => $admin->id,
+        ]);
+
+        foreach ([
+            'registration_certificate' => 'SEC registration certificate',
+            'representative_authorization' => 'Representative authorization letter',
+            'organization_profile' => 'Organization profile and program history',
+        ] as $type => $label) {
+            $contents = $this->demoDocument('FutureWeave Education Trust', $label, 'Provider verification record');
+            $path = "demo-showcase/provider-futureweave/{$type}.svg";
+            Storage::disk('local')->put($path, $contents);
+            $provider->providerVerificationDocuments()->create([
+                'uploaded_by' => $provider->id,
+                'document_type' => $type,
+                'original_name' => Str::slug($label).'.svg',
+                'path' => $path,
+                'mime_type' => 'image/svg+xml',
+                'size' => strlen($contents),
+                'status' => 'approved',
+                'review_notes' => 'Verified for the fictional demonstration dataset.',
+                'uploaded_at' => now()->subMonths(3),
+                'terms_accepted_at' => now()->subMonths(3),
+                'terms_version' => Terms::VERSION,
+            ]);
+        }
+
+        return $provider->fresh('providerProfile');
+    }
+
     private function seedScholarship(User $provider): Scholarship
     {
         $scholarship = Scholarship::query()->create([
             'provider_id' => $provider->id,
-            'image_path' => '/images/demo/programs/sulong-dunong-scholars.svg',
-            'title' => 'Sulong Dunong Senior Scholars Program',
+            'image_path' => '/images/demo/programs/aralbridge-pathways.svg',
+            'title' => 'AralBridge Scholars Pathway',
             'category' => 'Financial assistance',
             'program_cycle' => 'School Year 2026-2027',
             'description' => 'A year-long senior high school scholarship with education allowance, learning materials, mentoring, and structured recipient support.',
@@ -226,8 +299,8 @@ class CompleteDemoSeeder extends Seeder
             'eligible_locations' => "Rizal\nMetro Manila",
             'income_requirement' => 'PHP 10,000 - 20,000',
             'exclude_current_scholarship_recipients' => true,
-            'location_name' => 'Sulong Dunong Learning Center',
-            'location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
+            'location_name' => 'AralBridge Learning Hub',
+            'location_address' => 'Barangay Kapitolyo, Pasig City, Metro Manila',
             'latitude' => 14.6255000,
             'longitude' => 121.1245000,
             'requirements' => implode("\n", self::REQUIREMENTS),
@@ -236,8 +309,8 @@ class CompleteDemoSeeder extends Seeder
             'handoff_mode' => 'onsite',
             'handoff_instructions' => 'Bring the original enrollment record, latest grades, and recent school ID for formal verification.',
             'handoff_deadline' => now()->addDays(20)->toDateString(),
-            'handoff_location_name' => 'Sulong Dunong Learning Center',
-            'handoff_location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
+            'handoff_location_name' => 'AralBridge Learning Hub',
+            'handoff_location_address' => 'Barangay Kapitolyo, Pasig City, Metro Manila',
             'review_rubric' => ReviewRubric::DEFAULT,
             'application_questions' => [
                 ['id' => 'study_goal', 'prompt' => 'How will the scholarship help you continue your studies?', 'required' => true],
@@ -264,15 +337,15 @@ class CompleteDemoSeeder extends Seeder
                 'noncompliance_consequence' => 'The provider contacts the recipient and reviews the circumstances before delaying or ending unreleased support.',
                 'exit_or_exception_process' => 'Recipients may request more time or an exception for illness, transfer, family circumstances, or another documented issue.',
             ],
-            'contact_email' => 'programs@sulongdunong.test',
+            'contact_email' => 'owner@aralbridge.test',
             'contact_number' => '09171234567',
             'application_opens_at' => now()->subDays(30)->toDateString(),
             'deadline' => now()->addDays(45)->toDateString(),
             'expected_results_at' => now()->addDays(65)->toDateString(),
             'support_starts_at' => now()->subDays(20)->toDateString(),
             'support_ends_at' => now()->addMonths(8)->toDateString(),
-            'official_program_url' => 'https://findscholarship.online/scholarships/sulong-dunong-senior-scholars',
-            'contact_person' => 'Isabel M. Quinto',
+            'official_program_url' => 'https://findscholarship.online/scholarships/aralbridge-scholars-pathway',
+            'contact_person' => 'Celia A. Montemayor',
             'contact_department' => 'Scholarship Programs Office',
             'status' => 'published',
             'views_count' => 148,
@@ -315,8 +388,8 @@ class CompleteDemoSeeder extends Seeder
                 'title' => 'Senior Scholars Qualifying Exam',
                 'scheduled_at' => now()->addDays(8)->setTime(9, 0),
                 'mode' => 'onsite',
-                'venue' => 'Sulong Dunong Learning Center',
-                'location_address' => 'Barangay Mayamot, Antipolo City, Rizal',
+                'venue' => 'AralBridge Learning Hub',
+                'location_address' => 'Barangay Kapitolyo, Pasig City, Metro Manila',
                 'instructions' => 'Bring a recent school ID, two pencils, and the schedule notice.',
                 'status' => 'scheduled',
                 'created_by' => $provider->id,
@@ -327,7 +400,7 @@ class CompleteDemoSeeder extends Seeder
                 'title' => 'Finalist Online Interview',
                 'scheduled_at' => now()->addDays(15)->setTime(13, 30),
                 'mode' => 'online',
-                'online_url' => 'https://meet.google.com/demo-sulong-dunong-room',
+                'online_url' => 'https://meet.google.com/demo-aralbridge-room',
                 'instructions' => 'Join ten minutes early and keep your school ID ready.',
                 'status' => 'scheduled',
                 'created_by' => $provider->id,
@@ -347,13 +420,74 @@ class CompleteDemoSeeder extends Seeder
         return $scholarship->fresh(['benefits', 'events']);
     }
 
+    private function seedPartnerScholarships(User $provider, Scholarship $source): void
+    {
+        $definitions = [
+            [
+                'title' => 'FutureWeave STEM Discovery Grant',
+                'image_path' => '/images/demo/programs/futureweave-stem.svg',
+                'category' => 'STEM scholarship',
+                'description' => 'A fictional STEM scholarship combining project support, a qualifying activity, and guided learning sessions.',
+                'selection_stages' => ['screening', 'formal_application', 'exam', 'interview', 'decision'],
+                'award_amount' => 15000,
+                'slots_available' => 12,
+                'application_limit' => 45,
+                'eligible_courses' => 'STEM',
+                'location_name' => 'FutureWeave Learning Studio',
+                'location_address' => 'Barangay Poblacion, Muntinlupa City, Metro Manila',
+                'contact_person' => 'Ramon L. Alcantara',
+                'contact_email' => 'owner@futureweave.test',
+                'contact_number' => '09172345001',
+                'official_program_url' => 'https://findscholarship.online/scholarships/futureweave-stem-discovery',
+                'views_count' => 93,
+            ],
+            [
+                'title' => 'FutureWeave School Essentials Award',
+                'image_path' => '/images/demo/programs/futureweave-essentials.svg',
+                'category' => 'School supplies',
+                'description' => 'A fictional one-time award for essential school materials, connectivity, and local transportation needs.',
+                'selection_stages' => ['screening', 'formal_application', 'decision'],
+                'award_amount' => 6500,
+                'slots_available' => 25,
+                'application_limit' => 80,
+                'eligible_courses' => 'Any strand',
+                'location_name' => 'FutureWeave Community Desk',
+                'location_address' => 'Barangay Poblacion, Muntinlupa City, Metro Manila',
+                'contact_person' => 'Ramon L. Alcantara',
+                'contact_email' => 'owner@futureweave.test',
+                'contact_number' => '09172345001',
+                'official_program_url' => 'https://findscholarship.online/scholarships/futureweave-school-essentials',
+                'views_count' => 67,
+            ],
+        ];
+
+        foreach ($definitions as $attributes) {
+            $program = $source->replicate();
+            $program->provider_id = $provider->id;
+            $program->fill([
+                ...$attributes,
+                'provider_objective_notes' => 'Provide clear, accountable education support through a fictional demonstration program.',
+                'handoff_location_name' => $attributes['location_name'],
+                'handoff_location_address' => $attributes['location_address'],
+                'status' => 'published',
+            ]);
+            $program->save();
+
+            foreach ($source->benefits as $benefit) {
+                $copy = $benefit->replicate();
+                $copy->scholarship_id = $program->id;
+                $copy->save();
+            }
+        }
+    }
+
     /** @return Collection<string, Scholarship> */
     private function seedProgramLifecycleExamples(Scholarship $source): Collection
     {
         $definitions = [
             'draft' => [
-                'title' => 'Commute Forward Student Grant',
-                'image_path' => '/images/demo/programs/commute-forward.svg',
+                'title' => 'AralBridge Transit Support Draft',
+                'image_path' => '/images/demo/programs/aralbridge-transit.svg',
                 'description' => 'A draft transport-support program that the coordinator can finish and submit for review.',
                 'status' => 'draft',
                 'application_opens_at' => now()->addMonths(2)->toDateString(),
@@ -361,8 +495,8 @@ class CompleteDemoSeeder extends Seeder
                 'views_count' => 0,
             ],
             'pending_review' => [
-                'title' => 'Connected Classrooms Access Grant',
-                'image_path' => '/images/demo/programs/connected-classrooms.svg',
+                'title' => 'AralBridge Connected Learning Grant',
+                'image_path' => '/images/demo/programs/aralbridge-connected.svg',
                 'description' => 'A completed program submission waiting for administrator publication review.',
                 'status' => 'pending_review',
                 'application_opens_at' => now()->addMonth()->toDateString(),
@@ -370,8 +504,8 @@ class CompleteDemoSeeder extends Seeder
                 'views_count' => 0,
             ],
             'closed' => [
-                'title' => 'Ready-to-Learn Essentials Fund 2025-2026',
-                'image_path' => '/images/demo/programs/ready-to-learn.svg',
+                'title' => 'AralBridge Learning Essentials 2025-2026',
+                'image_path' => '/images/demo/programs/aralbridge-essentials.svg',
                 'program_cycle' => 'School Year 2025-2026',
                 'description' => 'A completed prior-cycle program retained for records and reporting demonstrations.',
                 'status' => 'closed',
@@ -382,8 +516,8 @@ class CompleteDemoSeeder extends Seeder
                 'views_count' => 224,
             ],
             'rejected' => [
-                'title' => 'Saturday Learning Support Award',
-                'image_path' => '/images/demo/programs/saturday-learning.svg',
+                'title' => 'AralBridge Weekend Learning Award',
+                'image_path' => '/images/demo/programs/aralbridge-weekend.svg',
                 'description' => 'A returned program example that requires clearer release conditions before resubmission.',
                 'status' => 'rejected',
                 'application_opens_at' => now()->addMonths(2)->toDateString(),
@@ -391,8 +525,8 @@ class CompleteDemoSeeder extends Seeder
                 'views_count' => 0,
             ],
             'full_capacity' => [
-                'title' => 'College Launch One-Time Grant',
-                'image_path' => '/images/demo/programs/college-launch.svg',
+                'title' => 'AralBridge College Start Grant',
+                'image_path' => '/images/demo/programs/aralbridge-college-start.svg',
                 'description' => 'A published one-slot award used to demonstrate a program that has reached recipient capacity.',
                 'status' => 'published',
                 'slots_available' => 1,
@@ -949,7 +1083,7 @@ class CompleteDemoSeeder extends Seeder
             'title' => $type === 'exam' ? 'Senior Scholars Qualifying Exam' : 'Finalist Online Interview',
             'scheduled_at' => $scheduledAt,
             'mode' => $online ? 'online' : 'onsite',
-            'venue' => $online ? null : 'Sulong Dunong Learning Center',
+            'venue' => $online ? null : 'AralBridge Learning Hub',
             'location_address' => $online ? null : 'Barangay Mayamot, Antipolo City, Rizal',
             'online_url' => $online ? 'https://meet.google.com/demo-sulong-dunong-room' : null,
             'instructions' => $type === 'exam'
@@ -1070,7 +1204,7 @@ class CompleteDemoSeeder extends Seeder
             'ends_at' => $endsAt,
             'timezone' => 'Asia/Manila',
             'mode' => $mode,
-            'venue' => $mode === 'onsite' ? 'Sulong Dunong Learning Center' : null,
+            'venue' => $mode === 'onsite' ? 'AralBridge Learning Hub' : null,
             'location_address' => $mode === 'onsite' ? 'Barangay Mayamot, Antipolo City, Rizal' : null,
             'meeting_url' => $mode === 'online' ? 'https://meet.google.com/demo-sulong-dunong-room' : null,
             'capacity' => 24,
@@ -1880,18 +2014,18 @@ class CompleteDemoSeeder extends Seeder
         ];
 
         return [
-            [...$shared, 'scenario' => 'screening_review', 'first_name' => 'Alyssa Mae', 'last_name' => 'Reyes', 'middle_initial' => 'C', 'gender' => 'female', 'school' => 'Antipolo City Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 12', 'gwa' => 91.20, 'birthdate' => '2008-03-14', 'barangay' => 'San Isidro', 'city' => 'Antipolo City', 'address' => 'Barangay San Isidro, Antipolo City, Rizal', 'guardian' => 'Lorna Reyes', 'goal' => 'Complete senior high school and prepare for an engineering degree.', 'achievements' => 'Honor student and regional science quiz participant.', 'activities' => 'Science club member and weekend family store assistant.'],
+            [...$shared, 'scenario' => 'screening_review', 'first_name' => 'Mira Celeste', 'last_name' => 'Andrada', 'middle_initial' => 'Q', 'gender' => 'female', 'school' => 'Antipolo City Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 12', 'gwa' => 91.20, 'birthdate' => '2008-03-14', 'barangay' => 'San Isidro', 'city' => 'Antipolo City', 'address' => 'Barangay San Isidro, Antipolo City, Rizal', 'guardian' => 'Teresa Andrada', 'goal' => 'Complete senior high school and prepare for an engineering degree.', 'achievements' => 'Honor student and regional science quiz participant.', 'activities' => 'Science club member and weekend family store assistant.'],
             [...$shared, 'scenario' => 'correction', 'first_name' => 'Joshua Miguel', 'last_name' => 'Santos', 'middle_initial' => 'P', 'gender' => 'male', 'school' => 'Sumulong Memorial Senior High School', 'strand' => 'ABM', 'year_level' => 'Grade 12', 'gwa' => 88.75, 'birthdate' => '2008-05-22', 'barangay' => 'Mayamot', 'city' => 'Antipolo City', 'address' => 'Barangay Mayamot, Antipolo City, Rizal', 'guardian' => 'Rogelio Santos', 'goal' => 'Finish Grade 12 and pursue accountancy.', 'achievements' => 'Class treasurer and school business-plan finalist.', 'activities' => 'Student council volunteer and helps manage household expenses.'],
-            [...$shared, 'scenario' => 'formal_application', 'first_name' => 'Bianca Louise', 'last_name' => 'Navarro', 'middle_initial' => 'D', 'gender' => 'female', 'school' => 'Antipolo National High School', 'strand' => 'HUMSS', 'year_level' => 'Grade 12', 'gwa' => 93.10, 'birthdate' => '2008-07-09', 'barangay' => 'Dela Paz', 'city' => 'Antipolo City', 'address' => 'Barangay Dela Paz, Antipolo City, Rizal', 'guardian' => 'Elena Navarro', 'goal' => 'Prepare for a college program in communication.', 'achievements' => 'Campus journalism awardee and consistent honor student.', 'activities' => 'School paper writer and youth reading volunteer.'],
-            [...$shared, 'scenario' => 'exam_scheduled', 'first_name' => 'Mark Angelo', 'last_name' => 'Dela Cruz', 'middle_initial' => 'R', 'gender' => 'male', 'school' => 'Mambugan Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 11', 'gwa' => 89.40, 'birthdate' => '2009-01-18', 'barangay' => 'Mambugan', 'city' => 'Antipolo City', 'address' => 'Barangay Mambugan, Antipolo City, Rizal', 'guardian' => 'Liza Dela Cruz', 'goal' => 'Build a strong foundation for computer science.', 'achievements' => 'Robotics team member and mathematics contest qualifier.', 'activities' => 'Computer club member and assists younger siblings with schoolwork.'],
-            [...$shared, 'scenario' => 'exam_result', 'first_name' => 'Carlo Javier', 'last_name' => 'Mendoza', 'middle_initial' => 'S', 'gender' => 'male', 'school' => 'Antipolo City Senior High School', 'strand' => 'TVL-ICT', 'year_level' => 'Grade 12', 'gwa' => 87.90, 'birthdate' => '2008-10-02', 'barangay' => 'Cupang', 'city' => 'Antipolo City', 'address' => 'Barangay Cupang, Antipolo City, Rizal', 'guardian' => 'Marites Mendoza', 'goal' => 'Earn an information technology certification and enter college.', 'achievements' => 'School web-design finalist and ICT merit awardee.', 'activities' => 'Peer computer tutor and community event volunteer.'],
-            [...$shared, 'scenario' => 'interview_scheduled', 'first_name' => 'Sofia Marie', 'last_name' => 'Villanueva', 'middle_initial' => 'A', 'gender' => 'female', 'school' => 'San Roque Senior High School', 'strand' => 'GAS', 'year_level' => 'Grade 12', 'gwa' => 90.60, 'birthdate' => '2008-02-27', 'barangay' => 'San Roque', 'city' => 'Antipolo City', 'address' => 'Barangay San Roque, Antipolo City, Rizal', 'guardian' => 'Noemi Villanueva', 'goal' => 'Continue to college and study education.', 'achievements' => 'Reading program volunteer and honor student.', 'activities' => 'Youth choir member and primary-school reading tutor.'],
-            [...$shared, 'scenario' => 'interview_result', 'first_name' => 'Gabriel Luis', 'last_name' => 'Ramos', 'middle_initial' => 'T', 'gender' => 'male', 'school' => 'Cogeo Village Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 12', 'gwa' => 92.35, 'birthdate' => '2008-06-11', 'barangay' => 'Bagong Nayon', 'city' => 'Antipolo City', 'address' => 'Barangay Bagong Nayon, Antipolo City, Rizal', 'guardian' => 'Rosario Ramos', 'goal' => 'Qualify for an electronics engineering program.', 'achievements' => 'Research fair finalist and physics quiz team member.', 'activities' => 'Research club officer and neighborhood tutorial volunteer.'],
-            [...$shared, 'scenario' => 'final_decision', 'first_name' => 'Trisha Anne', 'last_name' => 'Garcia', 'middle_initial' => 'M', 'gender' => 'female', 'school' => 'Antipolo National High School', 'strand' => 'ABM', 'year_level' => 'Grade 12', 'gwa' => 89.95, 'birthdate' => '2008-08-30', 'barangay' => 'Dalig', 'city' => 'Antipolo City', 'address' => 'Barangay Dalig, Antipolo City, Rizal', 'guardian' => 'Carmela Garcia', 'goal' => 'Enter college and develop community business skills.', 'achievements' => 'Entrepreneurship pitch winner and honor student.', 'activities' => 'School cooperative volunteer and household caregiver.'],
+            [...$shared, 'scenario' => 'formal_application', 'first_name' => 'Noel Adrian', 'last_name' => 'Pangan', 'middle_initial' => 'D', 'gender' => 'male', 'school' => 'Antipolo National High School', 'strand' => 'HUMSS', 'year_level' => 'Grade 12', 'gwa' => 93.10, 'birthdate' => '2008-07-09', 'barangay' => 'Dela Paz', 'city' => 'Antipolo City', 'address' => 'Barangay Dela Paz, Antipolo City, Rizal', 'guardian' => 'Adora Pangan', 'goal' => 'Prepare for a college program in communication.', 'achievements' => 'Campus journalism awardee and consistent honor student.', 'activities' => 'School paper writer and youth reading volunteer.'],
+            [...$shared, 'scenario' => 'exam_scheduled', 'first_name' => 'Tala Beatriz', 'last_name' => 'Soriano', 'middle_initial' => 'R', 'gender' => 'female', 'school' => 'Mambugan Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 11', 'gwa' => 89.40, 'birthdate' => '2009-01-18', 'barangay' => 'Mambugan', 'city' => 'Antipolo City', 'address' => 'Barangay Mambugan, Antipolo City, Rizal', 'guardian' => 'Rina Soriano', 'goal' => 'Build a strong foundation for computer science.', 'achievements' => 'Robotics team member and mathematics contest qualifier.', 'activities' => 'Computer club member and assists younger siblings with schoolwork.'],
+            [...$shared, 'scenario' => 'exam_result', 'first_name' => 'Ivo Miguel', 'last_name' => 'Lacuesta', 'middle_initial' => 'S', 'gender' => 'male', 'school' => 'Antipolo City Senior High School', 'strand' => 'TVL-ICT', 'year_level' => 'Grade 12', 'gwa' => 87.90, 'birthdate' => '2008-10-02', 'barangay' => 'Cupang', 'city' => 'Antipolo City', 'address' => 'Barangay Cupang, Antipolo City, Rizal', 'guardian' => 'Corazon Lacuesta', 'goal' => 'Earn an information technology certification and enter college.', 'achievements' => 'School web-design finalist and ICT merit awardee.', 'activities' => 'Peer computer tutor and community event volunteer.'],
+            [...$shared, 'scenario' => 'interview_scheduled', 'first_name' => 'Amihan Claire', 'last_name' => 'Robles', 'middle_initial' => 'A', 'gender' => 'female', 'school' => 'San Roque Senior High School', 'strand' => 'GAS', 'year_level' => 'Grade 12', 'gwa' => 90.60, 'birthdate' => '2008-02-27', 'barangay' => 'San Roque', 'city' => 'Antipolo City', 'address' => 'Barangay San Roque, Antipolo City, Rizal', 'guardian' => 'Lucia Robles', 'goal' => 'Continue to college and study education.', 'achievements' => 'Reading program volunteer and honor student.', 'activities' => 'Youth choir member and primary-school reading tutor.'],
+            [...$shared, 'scenario' => 'interview_result', 'first_name' => 'Enzo Rafael', 'last_name' => 'Marasigan', 'middle_initial' => 'T', 'gender' => 'male', 'school' => 'Cogeo Village Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 12', 'gwa' => 92.35, 'birthdate' => '2008-06-11', 'barangay' => 'Bagong Nayon', 'city' => 'Antipolo City', 'address' => 'Barangay Bagong Nayon, Antipolo City, Rizal', 'guardian' => 'Estrella Marasigan', 'goal' => 'Qualify for an electronics engineering program.', 'achievements' => 'Research fair finalist and physics quiz team member.', 'activities' => 'Research club officer and neighborhood tutorial volunteer.'],
+            [...$shared, 'scenario' => 'final_decision', 'first_name' => 'Lira Mae', 'last_name' => 'Sarmiento', 'middle_initial' => 'M', 'gender' => 'female', 'school' => 'Antipolo National High School', 'strand' => 'ABM', 'year_level' => 'Grade 12', 'gwa' => 89.95, 'birthdate' => '2008-08-30', 'barangay' => 'Dalig', 'city' => 'Antipolo City', 'address' => 'Barangay Dalig, Antipolo City, Rizal', 'guardian' => 'Myrna Sarmiento', 'goal' => 'Enter college and develop community business skills.', 'achievements' => 'Entrepreneurship pitch winner and honor student.', 'activities' => 'School cooperative volunteer and household caregiver.'],
             [...$shared, 'scenario' => 'waitlisted', 'first_name' => 'Camille Rose', 'last_name' => 'Flores', 'middle_initial' => 'L', 'gender' => 'female', 'school' => 'Sumulong Memorial Senior High School', 'strand' => 'HUMSS', 'year_level' => 'Grade 12', 'gwa' => 88.20, 'birthdate' => '2008-12-06', 'barangay' => 'Muntingdilaw', 'city' => 'Antipolo City', 'address' => 'Barangay Muntingdilaw, Antipolo City, Rizal', 'guardian' => 'Teresa Flores', 'goal' => 'Study social work and support community youth programs.', 'achievements' => 'Debate finalist and community essay awardee.', 'activities' => 'Youth council volunteer and peer support facilitator.'],
-            [...$shared, 'scenario' => 'selected_agreement', 'first_name' => 'Daniel Paolo', 'last_name' => 'Aquino', 'middle_initial' => 'V', 'gender' => 'male', 'school' => 'Mambugan Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 12', 'gwa' => 94.00, 'birthdate' => '2008-04-25', 'barangay' => 'Mambugan', 'city' => 'Antipolo City', 'address' => 'Barangay Mambugan, Antipolo City, Rizal', 'guardian' => 'Arlene Aquino', 'goal' => 'Study civil engineering and contribute to safer communities.', 'achievements' => 'Division mathematics medalist and research team leader.', 'activities' => 'Math club tutor and barangay clean-up volunteer.'],
-            [...$shared, 'scenario' => 'active_monitoring', 'first_name' => 'Nicole Andrea', 'last_name' => 'Bautista', 'middle_initial' => 'E', 'gender' => 'female', 'school' => 'San Roque Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 12', 'gwa' => 91.80, 'birthdate' => '2008-09-17', 'barangay' => 'San Roque', 'city' => 'Antipolo City', 'address' => 'Barangay San Roque, Antipolo City, Rizal', 'guardian' => 'Melanie Bautista', 'goal' => 'Maintain strong grades and prepare for nursing school.', 'achievements' => 'Biology quiz finalist and consistent honor student.', 'activities' => 'Health club volunteer and helps care for younger siblings.'],
-            [...$shared, 'scenario' => 'completed_support', 'first_name' => 'Vincent Rafael', 'last_name' => 'Torres', 'middle_initial' => 'G', 'gender' => 'male', 'school' => 'Cogeo Village Senior High School', 'strand' => 'TVL-ICT', 'year_level' => 'Grade 12', 'gwa' => 92.25, 'birthdate' => '2008-11-03', 'barangay' => 'Bagong Nayon', 'city' => 'Antipolo City', 'address' => 'Barangay Bagong Nayon, Antipolo City, Rizal', 'guardian' => 'Grace Torres', 'goal' => 'Complete senior high school and continue to an information systems degree.', 'achievements' => 'ICT skills competition medalist and honor student.', 'activities' => 'Computer laboratory assistant and community digital-literacy volunteer.'],
+            [...$shared, 'scenario' => 'selected_agreement', 'first_name' => 'Kian Paulo', 'last_name' => 'Villareal', 'middle_initial' => 'V', 'gender' => 'male', 'school' => 'Mambugan Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 12', 'gwa' => 94.00, 'birthdate' => '2008-04-25', 'barangay' => 'Mambugan', 'city' => 'Antipolo City', 'address' => 'Barangay Mambugan, Antipolo City, Rizal', 'guardian' => 'Leah Villareal', 'goal' => 'Study civil engineering and contribute to safer communities.', 'achievements' => 'Division mathematics medalist and research team leader.', 'activities' => 'Math club tutor and barangay clean-up volunteer.'],
+            [...$shared, 'scenario' => 'active_monitoring', 'first_name' => 'Naya Elise', 'last_name' => 'Manalo', 'middle_initial' => 'E', 'gender' => 'female', 'school' => 'San Roque Senior High School', 'strand' => 'STEM', 'year_level' => 'Grade 12', 'gwa' => 91.80, 'birthdate' => '2008-09-17', 'barangay' => 'San Roque', 'city' => 'Antipolo City', 'address' => 'Barangay San Roque, Antipolo City, Rizal', 'guardian' => 'Celina Manalo', 'goal' => 'Maintain strong grades and prepare for nursing school.', 'achievements' => 'Biology quiz finalist and consistent honor student.', 'activities' => 'Health club volunteer and helps care for younger siblings.'],
+            [...$shared, 'scenario' => 'completed_support', 'first_name' => 'Theo Gabriel', 'last_name' => 'Alonzo', 'middle_initial' => 'G', 'gender' => 'male', 'school' => 'Cogeo Village Senior High School', 'strand' => 'TVL-ICT', 'year_level' => 'Grade 12', 'gwa' => 92.25, 'birthdate' => '2008-11-03', 'barangay' => 'Bagong Nayon', 'city' => 'Antipolo City', 'address' => 'Barangay Bagong Nayon, Antipolo City, Rizal', 'guardian' => 'Rebecca Alonzo', 'goal' => 'Complete senior high school and continue to an information systems degree.', 'achievements' => 'ICT skills competition medalist and honor student.', 'activities' => 'Computer laboratory assistant and community digital-literacy volunteer.'],
             [...$shared, 'scenario' => 'screening_rejected', 'first_name' => 'Janine Mae', 'last_name' => 'Lopez', 'middle_initial' => 'A', 'gender' => 'female', 'school' => 'Marikina Senior High School', 'strand' => 'HUMSS', 'year_level' => 'Grade 12', 'gwa' => 89.10, 'birthdate' => '2008-01-12', 'barangay' => 'Concepcion Uno', 'city' => 'Marikina City', 'address' => 'Barangay Concepcion Uno, Marikina City, Metro Manila', 'guardian' => 'Rosalinda Lopez', 'goal' => 'Prepare for a college degree in public administration.', 'achievements' => 'Essay contest finalist and honor student.', 'activities' => 'Student publication contributor and community volunteer.'],
             [...$shared, 'scenario' => 'exam_failed', 'first_name' => 'Ethan Cole', 'last_name' => 'Martinez', 'middle_initial' => 'B', 'gender' => 'male', 'school' => 'Antipolo National High School', 'strand' => 'STEM', 'year_level' => 'Grade 11', 'gwa' => 86.40, 'birthdate' => '2009-02-08', 'barangay' => 'Dela Paz', 'city' => 'Antipolo City', 'address' => 'Barangay Dela Paz, Antipolo City, Rizal', 'guardian' => 'Mila Martinez', 'goal' => 'Improve my mathematics foundation before college.', 'achievements' => 'School science exhibit participant.', 'activities' => 'Math club member and family store assistant.'],
             [...$shared, 'scenario' => 'interview_failed', 'first_name' => 'Patricia Joy', 'last_name' => 'Castillo', 'middle_initial' => 'C', 'gender' => 'female', 'school' => 'Sumulong Memorial Senior High School', 'strand' => 'ABM', 'year_level' => 'Grade 12', 'gwa' => 87.60, 'birthdate' => '2008-04-16', 'barangay' => 'Mayamot', 'city' => 'Antipolo City', 'address' => 'Barangay Mayamot, Antipolo City, Rizal', 'guardian' => 'Lourdes Castillo', 'goal' => 'Study entrepreneurship and help grow our family livelihood.', 'achievements' => 'Business-plan team member.', 'activities' => 'Class officer and family livelihood assistant.'],

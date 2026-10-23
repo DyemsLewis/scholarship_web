@@ -1,5 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewModal.vue';
+import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
 const programId = document.getElementById('app')?.dataset.programId;
@@ -7,6 +9,8 @@ const program = ref(null);
 const isLoading = ref(true);
 const errorMessage = ref('');
 const showFullDescription = ref(false);
+const previewOpen = ref(false);
+const previewScenario = ref('general');
 
 const descriptionIsLong = computed(() => (program.value?.description?.length ?? 0) > 360);
 const visibleDescription = computed(() => {
@@ -84,7 +88,7 @@ onMounted(loadProgram);
                     <header class="mt-5 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
                         <div class="flex items-center justify-between gap-8 px-7 py-6">
                             <div class="flex min-w-0 items-center gap-4">
-                                <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true"><i class="fa-solid fa-graduation-cap"></i></span>
+                                <img :src="program.logo_url" :alt="`${program.title} logo`" class="h-12 w-12 shrink-0 border border-slate-200 bg-white object-contain p-1" @error="$event.currentTarget.src = '/uploads/scholarship-default.jpg'">
                                 <div class="min-w-0">
                                     <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Program record</p>
                                     <h1 id="program-record-title" class="mt-1 truncate font-display text-3xl font-bold tracking-tight text-slate-950">{{ program.title }}</h1>
@@ -97,10 +101,10 @@ onMounted(loadProgram);
                                 <span :class="['inline-flex border px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide', statusClass(program.status.tone)]">
                                     {{ program.status.label }}
                                 </span>
-                                <a :href="`/provider/previews/programs/${programId}`" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950">
+                                <button type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="previewOpen = true">
                                     <i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>
                                     Applicant preview
-                                </a>
+                                </button>
                                 <a v-if="program.actions.edit_url" :href="program.actions.edit_url" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">
                                     <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
                                     Edit program
@@ -204,5 +208,27 @@ onMounted(loadProgram);
                 </template>
             </div>
         </section>
+
+        <ApplicantPagePreviewModal
+            :open="previewOpen"
+            :title="program?.title || 'Scholarship program'"
+            description="Review the saved program exactly as an applicant will see it."
+            :status="program?.status?.label || 'Preview'"
+            :scenario="previewScenario"
+            show-scenario
+            :full-page-url="`/provider/previews/programs/${programId}`"
+            @close="previewOpen = false"
+            @update:scenario="previewScenario = $event"
+        >
+            <UserScholarshipDetailPage
+                v-if="previewOpen"
+                :key="`${programId}-${previewScenario}`"
+                embedded
+                :scholarship-id="programId"
+                :preview-data-url="`/provider/previews/programs/${programId}/data`"
+                :initial-scenario="previewScenario"
+                :preview-status="program?.status?.label || 'Preview'"
+            />
+        </ApplicantPagePreviewModal>
     </main>
 </template>

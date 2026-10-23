@@ -4,15 +4,26 @@ import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPreviewToolbar.vue';
 
+const props = defineProps({
+    embedded: { type: Boolean, default: false },
+    scholarshipId: { type: [String, Number], default: '' },
+    initialView: { type: String, default: 'summary' },
+    previewDataUrl: { type: String, default: '' },
+    previewStatus: { type: String, default: '' },
+    initialScenario: { type: String, default: 'general' },
+});
+
 const appRoot = document.getElementById('app');
-const scholarshipId = appRoot?.dataset.scholarshipId;
-const requestedView = appRoot?.dataset.scholarshipSection || 'summary';
-const isPreview = appRoot?.dataset.providerPreview === 'true';
-const previewDataUrl = appRoot?.dataset.previewDataUrl || '';
+const scholarshipId = props.scholarshipId || appRoot?.dataset.scholarshipId;
+const requestedView = props.embedded ? props.initialView : (appRoot?.dataset.scholarshipSection || 'summary');
+const isPreview = props.embedded || appRoot?.dataset.providerPreview === 'true';
+const previewDataUrl = props.previewDataUrl || appRoot?.dataset.previewDataUrl || '';
 const previewBackUrl = appRoot?.dataset.previewBackUrl || '/provider/programs';
-const previewStatus = appRoot?.dataset.previewStatus || 'Preview';
-const previewWidth = ref('desktop');
-const previewScenario = ref(new URLSearchParams(window.location.search).get('scenario') || 'general');
+const previewStatus = props.previewStatus || appRoot?.dataset.previewStatus || 'Preview';
+const previewScenario = ref(props.embedded
+    ? props.initialScenario
+    : (new URLSearchParams(window.location.search).get('scenario') || 'general'));
+const currentView = ref(requestedView);
 
 const user = ref(null);
 const detail = ref(null);
@@ -28,7 +39,7 @@ const decision = computed(() => detail.value?.decision ?? {});
 const content = computed(() => detail.value?.content ?? {});
 const snapshot = computed(() => detail.value?.snapshot ?? []);
 const navigation = computed(() => detail.value?.navigation ?? []);
-const activeView = computed(() => detail.value?.view ?? requestedView);
+const activeView = computed(() => detail.value?.view ?? currentView.value);
 const requirements = computed(() => content.value?.requirements ?? {});
 const requirementReadiness = computed(() => requirements.value?.readiness ?? {});
 const process = computed(() => content.value?.process ?? {});
@@ -252,7 +263,7 @@ async function loadScholarship() {
             isPreview ? previewDataUrl : `/dashboard/scholarships/${scholarshipId}/data`,
             {
                 params: {
-                    section: requestedView,
+                    section: currentView.value,
                     ...(isPreview ? { scenario: previewScenario.value } : {}),
                 },
             },
@@ -307,32 +318,52 @@ function handlePrimaryAction() {
 
 function changePreviewScenario(scenario) {
     previewScenario.value = scenario;
-    const url = new URL(window.location.href);
-    url.searchParams.set('scenario', scenario);
-    window.history.replaceState({}, '', url);
+    if (!props.embedded) {
+        const url = new URL(window.location.href);
+        url.searchParams.set('scenario', scenario);
+        window.history.replaceState({}, '', url);
+    }
     loadScholarship();
+}
+
+function openPreviewSection(event, section) {
+    if (!props.embedded) return;
+
+    event.preventDefault();
+    if (section === currentView.value) return;
+
+    currentView.value = section;
+    loadScholarship();
+}
+
+function readinessSection(item) {
+    if (item?.key === 'eligibility') return 'eligibility';
+    if (item?.key === 'files') return 'application';
+    return 'award';
+}
+
+function blockPreviewAction(event) {
+    if (isPreview) event.preventDefault();
 }
 
 onMounted(loadScholarship);
 </script>
 
 <template>
-    <main :class="isPreview ? 'min-h-screen bg-slate-200' : 'student-shell'">
+    <main :class="props.embedded ? 'min-h-full bg-slate-100' : isPreview ? 'min-h-screen bg-slate-200' : 'student-shell'" :data-embedded-preview="props.embedded || undefined">
         <ApplicantSidebar v-if="!isPreview" />
 
         <ProviderApplicantPreviewToolbar
-            v-if="isPreview"
+            v-if="isPreview && !props.embedded"
             :back-url="previewBackUrl"
             :status="previewStatus"
-            :width="previewWidth"
             :scenario="previewScenario"
             show-scenario
-            @update:width="previewWidth = $event"
             @update:scenario="changePreviewScenario"
         />
 
-        <section :class="['student-page', isPreview && previewWidth === 'mobile' ? 'mx-auto max-w-[30rem]' : '']">
-            <div class="student-container pb-10">
+        <section :class="props.embedded ? 'min-h-full px-4 py-5 sm:px-6' : 'student-page'">
+            <div :class="props.embedded ? 'mx-auto max-w-6xl pb-8' : 'student-container pb-10'">
                 <a v-if="!isPreview" href="/dashboard/scholarships" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to scholarships
@@ -354,7 +385,7 @@ onMounted(loadScholarship);
                                     <p class="student-kicker">Scholarship program</p>
                                     <h1 class="mt-2 max-w-3xl text-3xl font-bold leading-[1.08] text-slate-950 sm:text-4xl">{{ identity.title }}</h1>
                                     <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
-                                        <a v-if="identity.provider?.href" :href="identity.provider.href" class="font-bold text-slate-800 hover:text-slate-950 hover:underline">
+                                        <a v-if="identity.provider?.href" :href="identity.provider.href" class="font-bold text-slate-800 hover:text-slate-950 hover:underline" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                             {{ identity.provider.name }}
                                         </a>
                                         <span v-else class="font-bold text-slate-800">{{ identity.provider?.name }}</span>
@@ -447,6 +478,7 @@ onMounted(loadScholarship);
                                     'relative flex min-h-12 items-center justify-center rounded-md px-5 text-sm font-bold transition lg:flex-1',
                                     item.active ? 'bg-slate-950 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950',
                                 ]"
+                                @click="openPreviewSection($event, item.key)"
                             >
                                 {{ item.label }}
                             </a>
@@ -474,7 +506,7 @@ onMounted(loadScholarship);
                                         <p class="mt-1 text-sm leading-6 text-slate-600">{{ benefitDetails(content.primary_benefit) || content.primary_benefit.display_summary }}</p>
                                     </div>
 
-                                    <a :href="navigation.find((item) => item.key === 'award')?.href" class="mt-6 inline-flex w-fit items-center gap-2 text-sm font-bold text-slate-800 hover:text-slate-950 hover:underline">
+                                    <a :href="navigation.find((item) => item.key === 'award')?.href" class="mt-6 inline-flex w-fit items-center gap-2 text-sm font-bold text-slate-800 hover:text-slate-950 hover:underline" @click="openPreviewSection($event, 'award')">
                                         See benefits and terms
                                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                     </a>
@@ -494,7 +526,7 @@ onMounted(loadScholarship);
                                 <h3 class="mt-1 text-lg font-bold text-slate-950">Your readiness</h3>
                             </header>
                             <div class="divide-y divide-slate-200">
-                                <a v-for="item in content.readiness" :key="item.key" :href="item.href" class="group flex items-start gap-3 px-4 py-3.5 transition hover:bg-slate-50 sm:px-5">
+                                <a v-for="item in content.readiness" :key="item.key" :href="item.href" class="group flex items-start gap-3 px-4 py-3.5 transition hover:bg-slate-50 sm:px-5" @click="openPreviewSection($event, readinessSection(item))">
                                     <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', stateStyle(item.state).icon]">
                                         <i :class="item.icon" aria-hidden="true"></i>
                                     </span>
@@ -743,7 +775,7 @@ onMounted(loadScholarship);
                                         </div>
                                     </div>
                                     <p v-if="provider.summary" class="mt-4 max-w-3xl whitespace-pre-line text-sm leading-7 text-slate-600">{{ provider.summary }}</p>
-                                    <a v-if="provider.profile_href" :href="provider.profile_href" class="mt-5 inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                    <a v-if="provider.profile_href" :href="provider.profile_href" class="mt-5 inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                         Provider page
                                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                     </a>
@@ -784,11 +816,11 @@ onMounted(loadScholarship);
                                         </div>
                                         <div v-if="provider.contact.email">
                                             <p class="text-xs font-semibold text-slate-500">Email</p>
-                                            <a :href="`mailto:${provider.contact.email}`" class="mt-1 block break-all text-sm font-bold text-slate-900 hover:underline">{{ provider.contact.email }}</a>
+                                            <a :href="`mailto:${provider.contact.email}`" class="mt-1 block break-all text-sm font-bold text-slate-900 hover:underline" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">{{ provider.contact.email }}</a>
                                         </div>
                                         <div v-if="provider.contact.number">
                                             <p class="text-xs font-semibold text-slate-500">Phone</p>
-                                            <a :href="`tel:${provider.contact.number}`" class="mt-1 block text-sm font-bold text-slate-900 hover:underline">{{ provider.contact.number }}</a>
+                                            <a :href="`tel:${provider.contact.number}`" class="mt-1 block text-sm font-bold text-slate-900 hover:underline" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">{{ provider.contact.number }}</a>
                                         </div>
                                         <div v-if="provider.contact.office_hours">
                                             <p class="text-xs font-semibold text-slate-500">Office hours</p>
@@ -815,11 +847,11 @@ onMounted(loadScholarship);
 
                                 <section v-if="provider.website || provider.official_program_url" class="px-5 py-5 sm:px-6">
                                     <div class="flex flex-wrap gap-3">
-                                        <a v-if="provider.official_program_url" :href="provider.official_program_url" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                        <a v-if="provider.official_program_url" :href="provider.official_program_url" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                             Official program page
                                             <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                         </a>
-                                        <a v-if="provider.website" :href="provider.website" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
+                                        <a v-if="provider.website" :href="provider.website" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                             Organization website
                                             <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                         </a>

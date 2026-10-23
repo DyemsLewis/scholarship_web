@@ -98,6 +98,7 @@ const pages = {
     landing: () => import('./pages/LandingPage.vue'),
     login: () => import('./pages/LoginPage.vue'),
     provider: () => import('./pages/provider/ProviderManagerDashboardPage.vue'),
+    providerAccount: () => import('./pages/provider/ProviderAccountPage.vue'),
     providerApplicationReviewerDashboard: () => import('./pages/provider/reviews/ApplicationReviewerDashboardPage.vue'),
     providerApplicationReviewerWorkspace: () => import('./pages/provider/reviews/ApplicationReviewDirectoryPage.vue'),
     providerApplicationReviewRecord: () => import('./pages/provider/reviews/ApplicationReviewRecordPage.vue'),

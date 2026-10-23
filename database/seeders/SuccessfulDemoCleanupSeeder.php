@@ -26,25 +26,25 @@ class SuccessfulDemoCleanupSeeder extends Seeder
 {
     private const PRODUCTION_CONFIRMATION = 'BUILD_COMPLETE_DEMONSTRATION';
 
-    private const PRIMARY_PROVIDER_USERNAME = 'sulongdunong';
+    private const PRIMARY_PROVIDER_USERNAME = 'aralbridge';
 
-    private const SUCCESSFUL_APPLICANT_USERNAME = 'vincentrafaeltorres';
+    private const SUCCESSFUL_APPLICANT_USERNAME = 'theogabrielalonzo';
 
-    private const ACTIVE_MONITORING_APPLICANT_USERNAME = 'nicoleandreabautista';
+    private const ACTIVE_MONITORING_APPLICANT_USERNAME = 'nayaelisemanalo';
 
     /**
      * Keep one positive record at each meaningful workflow point. Failed,
      * rejected, correction, overdue, and issue scenarios are still removed.
      */
     private const RETAINED_APPLICANT_USERNAMES = [
-        'alyssamaereyes',
-        'biancalouisenavarro',
-        'markangelodelacruz',
-        'carlojaviermendoza',
-        'sofiamarievillanueva',
-        'gabrielluisramos',
-        'trishaannegarcia',
-        'danielpaoloaquino',
+        'miracelesteandrada',
+        'noeladrianpangan',
+        'talabeatrizsoriano',
+        'ivomiguellacuesta',
+        'amihanclairerobles',
+        'enzorafaelmarasigan',
+        'liramaesarmiento',
+        'kianpaulovillareal',
         self::ACTIVE_MONITORING_APPLICANT_USERNAME,
         self::SUCCESSFUL_APPLICANT_USERNAME,
     ];
@@ -55,9 +55,9 @@ class SuccessfulDemoCleanupSeeder extends Seeder
     ];
 
     private const REMOVED_PROGRAM_TITLES = [
-        'Commute Forward Student Grant',
-        'Connected Classrooms Access Grant',
-        'Saturday Learning Support Award',
+        'AralBridge Transit Support Draft',
+        'AralBridge Connected Learning Grant',
+        'AralBridge Weekend Learning Award',
     ];
 
     public function run(): void
@@ -69,19 +69,19 @@ class SuccessfulDemoCleanupSeeder extends Seeder
 
         $provider = User::query()
             ->where('username', self::PRIMARY_PROVIDER_USERNAME)
-            ->where('email', 'programs@sulongdunong.test')
+            ->where('email', 'owner@aralbridge.test')
             ->firstOrFail();
         $successfulApplicant = User::query()
             ->where('username', self::SUCCESSFUL_APPLICANT_USERNAME)
-            ->where('email', 'vincent-rafaeltorres@demo.test')
+            ->where('email', 'theo-gabrielalonzo@demo.test')
             ->firstOrFail();
         $activeMonitoringApplicant = User::query()
             ->where('username', self::ACTIVE_MONITORING_APPLICANT_USERNAME)
-            ->where('email', 'nicole-andreabautista@demo.test')
+            ->where('email', 'naya-elisemanalo@demo.test')
             ->firstOrFail();
         $program = Scholarship::query()
             ->whereBelongsTo($provider, 'provider')
-            ->where('title', 'Sulong Dunong Senior Scholars Program')
+            ->where('title', 'AralBridge Scholars Pathway')
             ->firstOrFail();
         $successfulApplication = ScholarshipApplication::query()
             ->whereBelongsTo($program)

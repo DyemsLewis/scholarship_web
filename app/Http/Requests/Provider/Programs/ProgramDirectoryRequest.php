@@ -9,8 +9,16 @@ class ProgramDirectoryRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->isProvider()
-            && $this->user()->hasPortalPermission('manage_programs');
+        if (! $this->user()?->isProvider()) {
+            return false;
+        }
+
+        if ($this->isMonitoringWorkspace()) {
+            return $this->user()->hasPortalPermission('manage_programs')
+                || $this->user()->hasPortalPermission('manage_monitoring');
+        }
+
+        return $this->user()->hasPortalPermission('manage_programs');
     }
 
     public function rules(): array
@@ -19,6 +27,7 @@ class ProgramDirectoryRequest extends FormRequest
             'filter' => ['sometimes', Rule::in(['all', 'drafts', 'review', 'published', 'closed'])],
             'search' => ['sometimes', 'nullable', 'string', 'max:100'],
             'sort' => ['sometimes', Rule::in(['updated', 'deadline', 'title'])],
+            'workspace' => ['sometimes', Rule::in(['programs', 'monitoring'])],
             'page' => ['sometimes', 'integer', 'min:1'],
         ];
     }
@@ -38,5 +47,16 @@ class ProgramDirectoryRequest extends FormRequest
         }
 
         return 'all';
+    }
+
+    public function workspace(): string
+    {
+        return $this->isMonitoringWorkspace() ? 'monitoring' : 'programs';
+    }
+
+    private function isMonitoringWorkspace(): bool
+    {
+        return $this->routeIs('provider.monitoring.plans')
+            || $this->input('workspace') === 'monitoring';
     }
 }

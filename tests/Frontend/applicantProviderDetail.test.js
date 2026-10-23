@@ -34,3 +34,10 @@ test('provider details use an image-led desktop hierarchy without changing the d
     assert.match(source, /filteredProviders/);
     assert.doesNotMatch(source, /sm:grid-cols-\[11rem_minmax\(0,1fr\)\]/);
 });
+
+test('provider details support embedded read-only previews', () => {
+    assert.match(source, /embedded: \{ type: Boolean/);
+    assert.match(source, /data-embedded-preview/);
+    assert.match(source, /blockPreviewAction/);
+    assert.match(source, /aria-disabled="isPreview \|\| undefined"/);
+});

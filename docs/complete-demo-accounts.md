@@ -1,34 +1,39 @@
 # Complete Demo Accounts
 
-The complete demo uses fictional identities and synthetic applicant portraits. Local tests use the fallback password only when no demo credential is configured. Hosted demonstrations require strong `DEMO_ADMIN_PASSWORD` and `DEMO_PASSWORD` values supplied only for the seed command.
+All organizations and people in this dataset are fictional. Every applicant uses the same neutral silhouette instead of a real person's photograph. Local accounts use `password123` unless the demo password environment variables are set; hosted passwords are intentionally not stored here.
 
 ## Main Accounts
 
 | Role | Username | Email |
 | --- | --- | --- |
 | Super admin | `superadmin` | `superadmin@findscholarship.test` |
-| Provider owner | `sulongdunong` | `programs@sulongdunong.test` |
+| AralBridge owner | `aralbridge` | `owner@aralbridge.test` |
+| FutureWeave owner | `futureweave` | `owner@futureweave.test` |
 
-## Provider Team Accounts
+## Provider Teams
+
+Both providers have a complete role team. Replace `{provider}` with `aralbridge` or `futureweave`.
 
 | Workspace | Username | Email |
 | --- | --- | --- |
-| Full-access manager | `sulongdunong.manager` | `sulongdunong.manager@scholarship.test` |
-| Program coordinator | `sulongdunong.programs` | `sulongdunong.programs@scholarship.test` |
-| Application reviewer | `sulongdunong.reviewer` | `sulongdunong.reviewer@scholarship.test` |
-| Selection officer | `sulongdunong.selection` | `sulongdunong.selection@scholarship.test` |
-| Decision officer | `sulongdunong.decisions` | `sulongdunong.decisions@scholarship.test` |
-| Recipient officer | `sulongdunong.recipients` | `sulongdunong.recipients@scholarship.test` |
-| Monitoring officer | `sulongdunong.monitoring` | `sulongdunong.monitoring@scholarship.test` |
-| Benefit release officer | `sulongdunong.releases` | `sulongdunong.releases@scholarship.test` |
-| Organization profile manager | `sulongdunong.profile` | `sulongdunong.profile@scholarship.test` |
-| Team administrator | `sulongdunong.team` | `sulongdunong.team@scholarship.test` |
-| Support staff | `sulongdunong.support` | `sulongdunong.support@scholarship.test` |
-| Billing staff | `sulongdunong.billing` | `sulongdunong.billing@scholarship.test` |
+| Full-access manager | `{provider}.manager` | `{provider}.manager@scholarship.test` |
+| Program coordinator | `{provider}.programs` | `{provider}.programs@scholarship.test` |
+| Application reviewer | `{provider}.reviewer` | `{provider}.reviewer@scholarship.test` |
+| Selection officer | `{provider}.selection` | `{provider}.selection@scholarship.test` |
+| Decision officer | `{provider}.decisions` | `{provider}.decisions@scholarship.test` |
+| Recipient officer | `{provider}.recipients` | `{provider}.recipients@scholarship.test` |
+| Monitoring officer | `{provider}.monitoring` | `{provider}.monitoring@scholarship.test` |
+| Benefit release officer | `{provider}.releases` | `{provider}.releases@scholarship.test` |
+| Organization profile manager | `{provider}.profile` | `{provider}.profile@scholarship.test` |
+| Team administrator | `{provider}.team` | `{provider}.team@scholarship.test` |
+| Support staff | `{provider}.support` | `{provider}.support@scholarship.test` |
+| Billing staff | `{provider}.billing` | `{provider}.billing@scholarship.test` |
 
-Program-scoped staff are assigned to the Sulong Dunong Senior Scholars Program. Their workspaces share the stage-by-stage applications below, an active monitoring review, one completed recipient lifecycle, resolved support history, and a completed optional-service purchase.
+The AralBridge team owns the complete stage-by-stage application demonstration, active monitoring review, completed recipient lifecycle, resolved support history, and completed optional-service purchase. The FutureWeave team demonstrates a separate organization, role scope, and program directory.
 
-## Admin Team Accounts
+Program access is intentionally divided for the demo. Each provider's full-access manager, organization profile manager, and billing staff can work across the organization. The program coordinator is assigned only to the provider's second published scholarship. The reviewer, selection, decision, recipient, monitoring, benefit release, team administration, and support accounts are assigned only to the provider's primary published scholarship. Provider owners still have access to every scholarship they own.
+
+## Admin Team
 
 | Workspace | Username | Email |
 | --- | --- | --- |
@@ -40,39 +45,37 @@ Program-scoped staff are assigned to the Sulong Dunong Senior Scholars Program. 
 | Records officer | `admin.records` | `admin.records@scholarship.test` |
 | Portal manager | `admin.manager` | `admin.manager@scholarship.test` |
 
-## Applicant Workflow Accounts
+## Applicant Stages
 
 | Demonstration | Username | Email |
 | --- | --- | --- |
-| Pre-screening review ready | `alyssamaereyes` | `alyssa-maereyes@demo.test` |
-| Formal application ready | `biancalouisenavarro` | `bianca-louisenavarro@demo.test` |
-| Exam scheduled | `markangelodelacruz` | `mark-angelodela-cruz@demo.test` |
-| Exam result ready to record | `carlojaviermendoza` | `carlo-javiermendoza@demo.test` |
-| Interview scheduled | `sofiamarievillanueva` | `sofia-marievillanueva@demo.test` |
-| Interview result ready to record | `gabrielluisramos` | `gabriel-luisramos@demo.test` |
-| Final decision ready to record | `trishaannegarcia` | `trisha-annegarcia@demo.test` |
-| Recipient agreement ready to accept | `danielpaoloaquino` | `daniel-paoloaquino@demo.test` |
-| Monitoring submission ready to review | `nicoleandreabautista` | `nicole-andreabautista@demo.test` |
-| Completed monitoring and support | `vincentrafaeltorres` | `vincent-rafaeltorres@demo.test` |
+| Pre-screening review ready | `miracelesteandrada` | `mira-celesteandrada@demo.test` |
+| Formal application ready | `noeladrianpangan` | `noel-adrianpangan@demo.test` |
+| Exam scheduled | `talabeatrizsoriano` | `tala-beatrizsoriano@demo.test` |
+| Exam result ready to record | `ivomiguellacuesta` | `ivo-miguellacuesta@demo.test` |
+| Interview scheduled | `amihanclairerobles` | `amihan-clairerobles@demo.test` |
+| Interview result ready to record | `enzorafaelmarasigan` | `enzo-rafaelmarasigan@demo.test` |
+| Final decision ready to record | `liramaesarmiento` | `lira-maesarmiento@demo.test` |
+| Recipient agreement ready to accept | `kianpaulovillareal` | `kian-paulovillareal@demo.test` |
+| Monitoring submission ready to review | `nayaelisemanalo` | `naya-elisemanalo@demo.test` |
+| Completed monitoring and support | `theogabrielalonzo` | `theo-gabrielalonzo@demo.test` |
 
-The scheduled exam and interview accounts let applicants review upcoming activity details. The completed exam and interview accounts let provider staff record the next result. The pre-screening, formal application, final decision, agreement, and monitoring records are also positioned for their next valid action. Vincent remains the read-only completed path with five passed stages, a closed monitoring case, confirmed releases, fulfilled benefits, and a completed support decision.
+## Programs
 
-Local demo accounts use `password123` unless `DEMO_PASSWORD` or `DEMO_ADMIN_PASSWORD` is configured. Hosted passwords remain environment-managed and are not stored in this document.
-
-## Program Lifecycle Examples
-
-| Program | State |
-| --- | --- |
-| Sulong Dunong Senior Scholars Program | Published with staged applications, active monitoring, and one completed recipient lifecycle |
-| Ready-to-Learn Essentials Fund 2025-2026 | Closed prior cycle |
-| College Launch One-Time Grant | Published one-time grant |
+| Provider | Program | State |
+| --- | --- | --- |
+| AralBridge | AralBridge Scholars Pathway | Published with all application stages and recipient support |
+| AralBridge | AralBridge College Start Grant | Published one-time award |
+| AralBridge | AralBridge Learning Essentials 2025-2026 | Closed prior cycle |
+| FutureWeave | FutureWeave STEM Discovery Grant | Published full-stage scholarship |
+| FutureWeave | FutureWeave School Essentials Award | Published one-time award |
 
 ## Reset Command
 
-Run only against a database intentionally prepared for the demonstration:
+Run only against a database intentionally prepared for this demonstration:
 
 ```bash
 php artisan migrate:fresh --seeder=CompleteDemoSeeder --force
 ```
 
-The seeder intentionally creates the super admin as user ID `1`, the primary provider as user ID `2`, and the Sulong Dunong Senior Scholars Program as ID `1`. It removes failed, rejected, correction, overdue, and issue scenarios while retaining positive workflow records that demonstrate each next action.
+The seeder intentionally creates the super admin as user ID `1`, the AralBridge owner as user ID `2`, and AralBridge Scholars Pathway as program ID `1`. It retains one positive applicant record at every meaningful stage and excludes failed, rejected, correction, overdue, and issue scenarios.

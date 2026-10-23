@@ -17,6 +17,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PortalManagerController;
 use App\Http\Controllers\Provider\ApplicationStageOperationController;
+use App\Http\Controllers\Provider\ProviderAccountController;
 use App\Http\Controllers\Provider\Programs\ProgramCoordinatorDashboardController;
 use App\Http\Controllers\Provider\Programs\ProgramDirectoryController;
 use App\Http\Controllers\Provider\Programs\ProgramRecordController;
@@ -316,6 +317,14 @@ Route::middleware(['auth', 'provider'])
     ->name('provider.')
     ->group(function (): void {
         Route::get('/', [ProviderWorkspacePageController::class, 'index'])->name('index');
+        Route::get('/account', [ProviderAccountController::class, 'show'])->name('account');
+        Route::get('/account/data', [ProviderAccountController::class, 'data'])->name('account.data');
+        Route::patch('/account', [ProviderAccountController::class, 'update'])
+            ->middleware('throttle:10,1')
+            ->name('account.update');
+        Route::patch('/account/password', [ProviderAccountController::class, 'updatePassword'])
+            ->middleware('throttle:5,1')
+            ->name('account.password.update');
         Route::get('/governance', [ProviderWorkspacePageController::class, 'governance'])->name('governance');
         Route::get('/governance/data', [ProviderController::class, 'governanceData'])->name('governance.data');
         Route::patch('/governance/operating-mode', [ProviderController::class, 'updateOperatingMode'])
@@ -673,7 +682,7 @@ Route::middleware(['auth', 'provider'])
             ->name('programs');
         Route::get('/programs/data', [ProgramDirectoryController::class, 'data'])
             ->defaults('programFilter', 'all')
-            ->middleware('permission:manage_programs')
+            ->middleware('permission:manage_programs,manage_monitoring')
             ->name('programs.data');
         Route::get('/programs/dashboard/data', [ProgramCoordinatorDashboardController::class, 'data'])
             ->middleware('permission:manage_programs')
@@ -740,8 +749,11 @@ Route::middleware(['auth', 'provider'])
         Route::get('/applications/recipients', [ProviderApplicationPageController::class, 'applications'])->middleware(['permission:manage_recipients,manage_monitoring,manage_benefit_releases', 'provider.approved'])->name('applications.recipients');
         Route::get('/applications/waitlist', [ProviderApplicationPageController::class, 'applications'])->middleware(['permission:record_final_decisions', 'provider.approved'])->name('applications.waitlist-directory');
         Route::get('/monitoring', [ProviderRecipientPageController::class, 'recipientMonitoringDirectory'])->middleware(['permission:manage_monitoring,manage_benefit_releases,manage_recipients', 'provider.approved'])->name('monitoring');
+        Route::get('/monitoring/plans', [ProgramDirectoryController::class, 'index'])
+            ->middleware(['permission:manage_programs,manage_monitoring', 'provider.approved'])
+            ->name('monitoring.plans');
         Route::get('/monitoring/{scholarship}', [ProviderRecipientPageController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:manage_monitoring,manage_benefit_releases,manage_recipients', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.show');
-        Route::get('/monitoring/{scholarship}/plan', [ProviderRecipientPageController::class, 'recipientMonitoringPlanWorkspace'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.plan');
+        Route::get('/monitoring/{scholarship}/plan', [ProviderRecipientPageController::class, 'recipientMonitoringPlanWorkspace'])->middleware(['permission:manage_programs,manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.plan');
         Route::get('/monitoring/{scholarship}/academic', [ProviderRecipientPageController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.academic');
         Route::get('/monitoring/{scholarship}/releases', [ProviderRecipientPageController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.releases');
         Route::get('/monitoring/{scholarship}/outcomes', [ProviderRecipientPageController::class, 'recipientMonitoringWorkspace'])->middleware(['permission:manage_recipients,manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('monitoring.outcomes');
@@ -895,8 +907,8 @@ Route::middleware(['auth', 'provider'])
         Route::post('/scholarships/{scholarship}/events', [ProviderController::class, 'upsertScholarshipEvent'])->middleware(['permission:manage_programs', 'provider.approved'])->name('scholarships.events.upsert');
         Route::post('/scholarships/{scholarship}/announcements', [ProviderController::class, 'storeScholarshipAnnouncement'])->middleware(['permission:manage_programs', 'provider.approved'])->name('scholarships.announcements.store');
         Route::get('/scholarships/{scholarship}/monitoring-cycles', [ProviderController::class, 'recipientMonitoringData'])->middleware(['permission:manage_monitoring,manage_benefit_releases,manage_recipients', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring-cycles.index');
-        Route::get('/scholarships/{scholarship}/monitoring-plan', [ProviderController::class, 'recipientMonitoringPlanData'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring-plan.show');
-        Route::put('/scholarships/{scholarship}/monitoring-plan', [ProviderController::class, 'upsertRecipientMonitoringPlan'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('scholarship')->name('scholarships.monitoring-plan.update');
+        Route::get('/scholarships/{scholarship}/monitoring-plan', [ProviderController::class, 'recipientMonitoringPlanData'])->middleware(['permission:manage_programs,manage_monitoring', 'provider.approved'])->whereNumber('scholarship')->name('scholarships.monitoring-plan.show');
+        Route::put('/scholarships/{scholarship}/monitoring-plan', [ProviderController::class, 'upsertRecipientMonitoringPlan'])->middleware(['permission:manage_programs', 'provider.approved', 'throttle:20,1'])->whereNumber('scholarship')->name('scholarships.monitoring-plan.update');
         Route::post('/scholarships/{scholarship}/monitoring-cycles', [ProviderController::class, 'storeRecipientMonitoringCycle'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.monitoring-cycles.store');
         Route::post('/scholarships/{scholarship}/monitoring-check-ins', [ProviderController::class, 'storeRecipientMonitoringCheckIn'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.monitoring-check-ins.store');
         Route::post('/monitoring-requirements/{requirement}/applications/{application}/record', [ProviderController::class, 'recordRecipientMonitoringRequirement'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber(['requirement', 'application'])->name('monitoring-requirements.record');

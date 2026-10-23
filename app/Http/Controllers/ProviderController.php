@@ -88,7 +88,7 @@ class ProviderController extends Controller
     private const PROVIDER_GOVERNANCE_RESPONSIBILITIES = [
         'manage_programs' => [
             'label' => 'Program coordination',
-            'description' => 'Builds and maintains scholarship programs.',
+            'description' => 'Builds programs and defines recipient monitoring plans.',
             'role' => 'Program coordinator',
         ],
         'verify_applications' => [
@@ -113,7 +113,7 @@ class ProviderController extends Controller
         ],
         'manage_monitoring' => [
             'label' => 'Recipient monitoring',
-            'description' => 'Reviews check-ins, requests, and interventions.',
+            'description' => 'Publishes check-ins and reviews records, requests, and interventions.',
             'role' => 'Monitoring officer',
         ],
         'manage_benefit_releases' => [

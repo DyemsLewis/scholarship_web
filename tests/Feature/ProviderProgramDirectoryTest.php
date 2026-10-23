@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Scholarship;
+use App\Models\RecipientMonitoringPlan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -218,10 +219,164 @@ class ProviderProgramDirectoryTest extends TestCase
             'parent_account_id' => $owner->id,
             'permissions' => ['verify_applications'],
         ]);
-
         $this->actingAs($reviewer)->get('/provider/programs')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/programs/data')->assertForbidden();
         $this->actingAs($reviewer)->getJson('/provider/programs/dashboard/data')->assertForbidden();
+    }
+
+    public function test_manager_can_open_the_monitoring_plan_directory_with_plan_states(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $activeProgram = $this->program($owner, 'Active monitoring program', 'published');
+        $unconfiguredProgram = $this->program($owner, 'Monitoring setup needed', 'closed');
+        $this->program($owner, 'Unpublished program', 'draft');
+        $manager = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $owner->id,
+            'permissions' => ['manage_programs', 'manage_monitoring'],
+        ]);
+
+        $plan = RecipientMonitoringPlan::query()->create([
+            'scholarship_id' => $activeProgram->id,
+            'created_by' => $manager->id,
+            'updated_by' => $manager->id,
+            'frequency' => 'semester',
+            'grace_period_days' => 7,
+            'allow_exception_requests' => true,
+            'status' => 'active',
+            'version' => 1,
+            'activated_at' => now(),
+        ]);
+        $plan->requirements()->create([
+            'type' => 'academic_progress',
+            'title' => 'Semester grades',
+            'required' => true,
+            'requires_file' => true,
+            'requires_original_verification' => false,
+            'minimum_grade' => 85,
+            'grading_scale' => 'percentage',
+            'sort_order' => 0,
+        ]);
+
+        $this->actingAs($manager)
+            ->get('/provider/monitoring/plans')
+            ->assertOk()
+            ->assertViewIs('provider-program-directory');
+
+        $response = $this->actingAs($manager)
+            ->getJson('/provider/programs/data?workspace=monitoring&sort=title')
+            ->assertOk()
+            ->assertJsonPath('workspace', 'monitoring')
+            ->assertJsonPath('summary.total', 2)
+            ->assertJsonPath('summary.active', 1)
+            ->assertJsonPath('summary.not_set', 1)
+            ->assertJsonPath('programs.0.monitoring.status', 'active')
+            ->assertJsonPath('programs.0.monitoring.requirements_count', 1)
+            ->assertJsonPath('programs.1.monitoring.status_label', 'Not set up')
+            ->assertJsonCount(2, 'programs');
+
+        $this->assertEqualsCanonicalizing(
+            [$activeProgram->id, $unconfiguredProgram->id],
+            collect($response->json('programs'))->pluck('id')->all(),
+        );
+    }
+
+    public function test_monitoring_setup_is_split_between_program_and_monitoring_roles(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Shared monitoring program', 'published');
+        $coordinator = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $owner->id,
+            'account_title' => 'program_coordinator',
+            'permissions' => ['manage_programs'],
+        ]);
+        $monitoringOfficer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $owner->id,
+            'account_title' => 'monitoring_officer',
+            'permissions' => ['manage_monitoring'],
+        ]);
+        $reviewer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $owner->id,
+            'account_title' => 'application_reviewer',
+            'permissions' => ['verify_applications'],
+        ]);
+        $plan = RecipientMonitoringPlan::query()->create([
+            'scholarship_id' => $program->id,
+            'created_by' => $coordinator->id,
+            'updated_by' => $coordinator->id,
+            'frequency' => 'semester',
+            'grace_period_days' => 7,
+            'allow_exception_requests' => true,
+            'status' => 'active',
+            'version' => 1,
+            'activated_at' => now(),
+        ]);
+        $plan->requirements()->create([
+            'type' => 'academic_progress',
+            'title' => 'Semester grades',
+            'evidence_description' => 'Upload a current grade report.',
+            'required' => true,
+            'requires_file' => true,
+            'requires_original_verification' => false,
+            'minimum_grade' => 85,
+            'grading_scale' => 'percentage',
+            'sort_order' => 0,
+        ]);
+        $checkInPayload = [
+            'title' => 'First semester check-in',
+            'period_label' => 'First semester',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ];
+
+        $this->actingAs($coordinator)
+            ->get('/provider/monitoring/plans')
+            ->assertOk();
+        $this->actingAs($coordinator)
+            ->getJson('/provider/programs/data?workspace=monitoring')
+            ->assertOk()
+            ->assertJsonPath('programs.0.monitoring.can_edit_plan', true)
+            ->assertJsonPath('programs.0.monitoring.can_publish_check_in', false);
+        $this->actingAs($coordinator)
+            ->getJson("/provider/scholarships/{$program->id}/monitoring-plan")
+            ->assertOk()
+            ->assertJsonPath('can_edit', true)
+            ->assertJsonPath('can_publish_check_in', false);
+        $this->actingAs($coordinator)
+            ->postJson("/provider/scholarships/{$program->id}/monitoring-check-ins", $checkInPayload)
+            ->assertForbidden();
+
+        $this->actingAs($monitoringOfficer)
+            ->get('/provider/monitoring/plans')
+            ->assertOk();
+        $this->actingAs($monitoringOfficer)
+            ->getJson('/provider/programs/data?workspace=monitoring')
+            ->assertOk()
+            ->assertJsonPath('programs.0.monitoring.can_edit_plan', false)
+            ->assertJsonPath('programs.0.monitoring.can_publish_check_in', true);
+        $this->actingAs($monitoringOfficer)
+            ->getJson("/provider/scholarships/{$program->id}/monitoring-plan")
+            ->assertOk()
+            ->assertJsonPath('can_edit', false)
+            ->assertJsonPath('can_publish_check_in', true);
+        $this->actingAs($monitoringOfficer)
+            ->putJson("/provider/scholarships/{$program->id}/monitoring-plan", [])
+            ->assertForbidden();
+        $this->actingAs($monitoringOfficer)
+            ->getJson('/provider/programs/data')
+            ->assertForbidden();
+        $this->actingAs($monitoringOfficer)
+            ->postJson("/provider/scholarships/{$program->id}/monitoring-check-ins", $checkInPayload)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('recipients');
+
+        $this->actingAs($reviewer)->get('/provider/monitoring/plans')->assertForbidden();
+        $this->actingAs($reviewer)
+            ->getJson('/provider/programs/data?workspace=monitoring')
+            ->assertForbidden();
     }
 
     private function coordinator(User $owner, ?array $programIds = null): User

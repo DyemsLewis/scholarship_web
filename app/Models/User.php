@@ -376,6 +376,10 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function getNameAttribute(): string
     {
+        if ($this->isProvider() && $this->isManagedAccount() && $this->contactName()) {
+            return $this->contactName();
+        }
+
         if ($this->isProvider() && $this->provider_name) {
             return $this->provider_name;
         }

@@ -1,7 +1,13 @@
 <script setup>
+import ProviderAccountSidebarLink from './ProviderAccountSidebarLink.vue';
 import RoleSidebar from '../../components/RoleSidebar.vue';
 
 const permissions = new Set(window.portalUser?.permissions ?? []);
+const usesManagerNavigation = Boolean(
+    window.portalUser?.is_organization_owner
+    || window.portalUser?.account_title === 'manager',
+);
+const managerWorkspaceHome = (dashboardHref, queueHref) => usesManagerNavigation ? queueHref : dashboardHref;
 const navLinks = [
     {
         href: '/provider',
@@ -24,18 +30,18 @@ if (permissions.has('manage_programs')) {
             { href: '/provider/programs/review', label: 'Under review', exact: true },
             { href: '/provider/programs/published', label: 'Published', exact: true },
             { href: '/provider/programs/closed', label: 'Closed', exact: true },
+            ...(!permissions.has('manage_monitoring') ? [{ href: '/provider/monitoring/plans', label: 'Monitoring plans', exact: true }] : []),
         ],
     });
 }
 
 if (permissions.has('verify_applications')) {
     navLinks.push({
-        href: '/provider/workspaces/reviews',
+        href: managerWorkspaceHome('/provider/workspaces/reviews', '/provider/workspaces/reviews/unassigned'),
         label: 'Application review',
         icon: 'fa-solid fa-clipboard-check',
         key: 'reviews',
         children: [
-            { href: '/provider/workspaces/reviews', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/reviews/assigned', label: 'My reviews', exact: true },
             { href: '/provider/workspaces/reviews/unassigned', label: 'Unassigned', exact: true },
             { href: '/provider/workspaces/reviews/returned', label: 'Returned updates', exact: true },
@@ -46,12 +52,11 @@ if (permissions.has('verify_applications')) {
 
 if (permissions.has('manage_selection_activities')) {
     navLinks.push({
-        href: '/provider/workspaces/selection',
+        href: managerWorkspaceHome('/provider/workspaces/selection', '/provider/workspaces/selection/active'),
         label: 'Selection activities',
         icon: 'fa-solid fa-calendar-check',
         key: 'selection',
         children: [
-            { href: '/provider/workspaces/selection', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/selection/active', label: 'Sessions', exact: true },
             { href: '/provider/workspaces/selection/unassigned', label: 'Unassigned applicants', exact: true },
             { href: '/provider/workspaces/selection/results', label: 'Results to record', exact: true },
@@ -62,12 +67,11 @@ if (permissions.has('manage_selection_activities')) {
 
 if (permissions.has('record_final_decisions')) {
     navLinks.push({
-        href: '/provider/workspaces/decisions',
+        href: managerWorkspaceHome('/provider/workspaces/decisions', '/provider/workspaces/decisions/pending'),
         label: 'Final decisions',
         icon: 'fa-solid fa-gavel',
         key: 'decisions',
         children: [
-            { href: '/provider/workspaces/decisions', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/decisions/pending', label: 'Pending decisions', exact: true },
             { href: '/provider/workspaces/decisions/waitlist', label: 'Waitlist', exact: true },
             { href: '/provider/workspaces/decisions/recorded', label: 'Decision history', exact: true },
@@ -77,12 +81,11 @@ if (permissions.has('record_final_decisions')) {
 
 if (permissions.has('manage_recipients')) {
     navLinks.push({
-        href: '/provider/workspaces/recipients',
+        href: managerWorkspaceHome('/provider/workspaces/recipients', '/provider/workspaces/recipients/agreements'),
         label: 'Recipients',
         icon: 'fa-solid fa-user-shield',
         key: 'recipients',
         children: [
-            { href: '/provider/workspaces/recipients', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/recipients/agreements', label: 'Agreement responses', exact: true },
             { href: '/provider/workspaces/recipients/active', label: 'Active recipients', exact: true },
             { href: '/provider/workspaces/recipients/declined', label: 'Declined responses', exact: true },
@@ -93,12 +96,12 @@ if (permissions.has('manage_recipients')) {
 
 if (permissions.has('manage_monitoring')) {
     navLinks.push({
-        href: '/provider/workspaces/monitoring',
+        href: managerWorkspaceHome('/provider/workspaces/monitoring', '/provider/workspaces/monitoring/review'),
         label: 'Monitoring',
         icon: 'fa-solid fa-chart-line',
         key: 'monitoring',
         children: [
-            { href: '/provider/workspaces/monitoring', label: 'Dashboard', exact: true },
+            { href: '/provider/monitoring/plans', label: 'Plans & schedules', exact: true },
             { href: '/provider/workspaces/monitoring/review', label: 'Needs review', exact: true },
             { href: '/provider/workspaces/monitoring/follow-ups', label: 'Follow-ups', exact: true },
             { href: '/provider/workspaces/monitoring/awaiting', label: 'Awaiting uploads', exact: true },
@@ -109,12 +112,11 @@ if (permissions.has('manage_monitoring')) {
 
 if (permissions.has('manage_benefit_releases')) {
     navLinks.push({
-        href: '/provider/workspaces/releases',
+        href: managerWorkspaceHome('/provider/workspaces/releases', '/provider/workspaces/releases/issues'),
         label: 'Benefit releases',
         icon: 'fa-solid fa-hand-holding-dollar',
         key: 'releases',
         children: [
-            { href: '/provider/workspaces/releases', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/releases/issues', label: 'Reported issues', exact: true },
             { href: '/provider/workspaces/releases/record', label: 'Record distribution', exact: true },
             { href: '/provider/workspaces/releases/upcoming', label: 'Upcoming releases', exact: true },
@@ -126,12 +128,11 @@ if (permissions.has('manage_benefit_releases')) {
 
 if (permissions.has('manage_profile')) {
     navLinks.push({
-        href: '/provider/workspaces/organization-profile',
+        href: managerWorkspaceHome('/provider/workspaces/organization-profile', '/provider/workspaces/organization-profile/readiness'),
         label: 'Organization profile',
         icon: 'fa-solid fa-building-shield',
         key: 'organization-profile',
         children: [
-            { href: '/provider/workspaces/organization-profile', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/organization-profile/readiness', label: 'Profile readiness', exact: true },
             { href: '/provider/workspaces/organization-profile/public', label: 'Public profile', exact: true },
             { href: '/provider/workspaces/organization-profile/contact', label: 'Contact & location', exact: true },
@@ -142,12 +143,11 @@ if (permissions.has('manage_profile')) {
 
 if (permissions.has('manage_team')) {
     navLinks.push({
-        href: '/provider/workspaces/team',
+        href: managerWorkspaceHome('/provider/workspaces/team', '/provider/workspaces/team/setup'),
         label: 'Team access',
         icon: 'fa-solid fa-users-gear',
         key: 'team',
         children: [
-            { href: '/provider/workspaces/team', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/team/setup', label: 'Setup required', exact: true },
             { href: '/provider/workspaces/team/active', label: 'Active accounts', exact: true },
             { href: '/provider/workspaces/team/suspended', label: 'Suspended accounts', exact: true },
@@ -158,12 +158,11 @@ if (permissions.has('manage_team')) {
 
 if (permissions.has('manage_reports')) {
     navLinks.push({
-        href: '/provider/workspaces/support',
+        href: managerWorkspaceHome('/provider/workspaces/support', '/provider/workspaces/support/needs-response'),
         label: 'Support cases',
         icon: 'fa-solid fa-headset',
         key: 'support',
         children: [
-            { href: '/provider/workspaces/support', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/support/needs-response', label: 'Needs response', exact: true },
             { href: '/provider/workspaces/support/waiting', label: 'Waiting for platform', exact: true },
             { href: '/provider/workspaces/support/platform', label: 'Platform reports', exact: true },
@@ -175,13 +174,12 @@ if (permissions.has('manage_reports')) {
 
 if (permissions.has('manage_billing')) {
     navLinks.push({
-        href: '/provider/workspaces/billing',
+        href: managerWorkspaceHome('/provider/workspaces/billing', '/provider/workspaces/billing/requests'),
         label: 'Platform services',
         icon: 'fa-solid fa-receipt',
         key: 'billing',
         activePaths: ['/provider/billing'],
         children: [
-            { href: '/provider/workspaces/billing', label: 'Dashboard', exact: true },
             { href: '/provider/workspaces/billing/requests', label: 'Requests to finish', exact: true },
             { href: '/provider/workspaces/billing/action', label: 'Action needed', exact: true },
             { href: '/provider/workspaces/billing/waiting', label: 'Waiting to start', exact: true },
@@ -203,5 +201,9 @@ if (permissions.has('manage_billing')) {
         logout-message="You will need to sign in again to continue using the provider portal."
         sharp
         navigation-label="Workspace"
-    />
+    >
+        <template #account-actions>
+            <ProviderAccountSidebarLink />
+        </template>
+    </RoleSidebar>
 </template>

@@ -1,10 +1,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AlertDialog from '../../../components/AlertDialog.vue';
+import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewModal.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import CoverImagePickerModal from '../../../components/CoverImagePickerModal.vue';
 import LocationMapModal from '../../../components/LocationMapModal.vue';
 import { useConfirmationDialog } from '../../../composables/useConfirmationDialog';
+import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
 const pathMatch = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
@@ -26,6 +28,9 @@ const isSaving = ref(false);
 const savedMessage = ref('');
 const originalStatus = ref('draft');
 const applicationsCount = ref(0);
+const logoInput = ref(null);
+const logoFile = ref(null);
+const logoPreviewUrl = ref('');
 const coverPickerOpen = ref(false);
 const coverImages = ref([]);
 const coverSource = ref('default');
@@ -42,6 +47,8 @@ const benefitDraft = ref(null);
 const editingBenefitIndex = ref(null);
 const benefitTitleInput = ref(null);
 const alert = ref({ open: false, title: '', message: '' });
+const previewOpen = ref(false);
+const previewScenario = ref('general');
 const { confirmation, requestConfirmation, confirmConfirmation, cancelConfirmation } = useConfirmationDialog();
 
 const inputClass = 'h-11 w-full border border-slate-300 bg-white px-3 text-sm text-slate-950 outline-none transition focus:border-slate-800 focus:ring-1 focus:ring-slate-800';
@@ -128,6 +135,8 @@ function emptyForm() {
             release_conditions: '', duration: '', noncompliance_consequence: '', exit_or_exception_process: '',
         },
         termsAccepted: false,
+        logoPath: '',
+        logoUrl: '',
         coverUrl: '',
     };
 }
@@ -138,6 +147,8 @@ const currentStep = computed(() => steps[activeStepIndex.value] ?? steps[0]);
 const isCreateMode = computed(() => !programId.value);
 const isReadOnly = computed(() => originalStatus.value === 'pending_review');
 const canDelete = computed(() => originalStatus.value === 'draft' && applicationsCount.value === 0);
+const hasScholarshipLogo = computed(() => Boolean(logoFile.value || form.value.logoPath));
+const scholarshipLogo = computed(() => logoPreviewUrl.value || (form.value.logoPath ? form.value.logoUrl : ''));
 const selectedSystemCover = computed(() => coverImages.value.find((image) => image.key === (coverKey.value || recommendedCoverKey.value)) ?? null);
 const programImage = computed(() => {
     if (coverPreviewUrl.value) return coverPreviewUrl.value;
@@ -163,6 +174,7 @@ const stepChecks = computed(() => ({
         && form.value.category
         && form.value.programCycle.trim()
         && form.value.description.trim()
+        && hasScholarshipLogo.value
         && Boolean(programImage.value || ['default', 'system', 'provider'].includes(coverSource.value))
     ),
     support: Boolean(
@@ -251,7 +263,7 @@ function closeAlert() {
 
 function stepMessage(stepId) {
     return {
-        basics: 'Add the program title, category, cycle, short summary, and program image.',
+        basics: 'Add the title, category, cycle, summary, scholarship logo, and background image.',
         support: 'Add at least one benefit, both capacity limits, and a valid support period.',
         'dates-location': 'Add the deadline, public contact, complete program location, and map pin.',
         eligibility: 'Describe eligible applicants and add at least one matching rule.',
@@ -375,6 +387,28 @@ function clearCoverUpload() {
     coverPreviewUrl.value = '';
 }
 
+function selectScholarshipLogo(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 4 * 1024 * 1024) {
+        event.target.value = '';
+        showAlert('Logo could not be selected', 'Choose a JPG, PNG, or WebP image up to 4 MB.');
+        return;
+    }
+
+    if (logoPreviewUrl.value) URL.revokeObjectURL(logoPreviewUrl.value);
+    logoFile.value = file;
+    logoPreviewUrl.value = URL.createObjectURL(file);
+}
+
+function openLogoPicker() {
+    if (!logoInput.value) return;
+
+    logoInput.value.value = '';
+    logoInput.value.click();
+}
+
 function selectSystemCover(image) {
     clearCoverUpload();
     coverSource.value = 'system';
@@ -480,12 +514,17 @@ function fillForm(program) {
             ...(program.recipient_agreement ?? {}),
         },
         termsAccepted: false,
-        coverUrl: program.cover_image_url ?? program.image_url ?? '',
+        logoPath: program.image_path ?? '',
+        logoUrl: program.logo_url ?? program.image_url ?? '',
+        coverUrl: program.cover_image_url ?? '',
     };
     originalStatus.value = program.status ?? 'draft';
     applicationsCount.value = Number(program.applications_count ?? 0);
-    coverSource.value = program.cover_image_source ?? (program.image_path ? 'legacy' : 'default');
+    coverSource.value = program.cover_image_source ?? 'default';
     coverKey.value = program.cover_image_key ?? '';
+    logoFile.value = null;
+    if (logoPreviewUrl.value) URL.revokeObjectURL(logoPreviewUrl.value);
+    logoPreviewUrl.value = '';
     clearCoverUpload();
 }
 
@@ -526,6 +565,7 @@ function createPayload(status, termsAccepted = false) {
         fields.cover_key = coverKey.value;
     }
     Object.entries(fields).forEach(([key, value]) => append(payload, key, value));
+    if (logoFile.value) payload.append('image_file', logoFile.value);
     if (coverFile.value) payload.append('cover_file', coverFile.value);
     if (programId.value) payload.append('_method', 'PUT');
     return payload;
@@ -673,6 +713,7 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
     window.removeEventListener('popstate', handleHistory);
+    if (logoPreviewUrl.value) URL.revokeObjectURL(logoPreviewUrl.value);
     if (coverPreviewUrl.value) URL.revokeObjectURL(coverPreviewUrl.value);
 });
 </script>
@@ -705,10 +746,10 @@ onBeforeUnmount(() => {
                             <span v-if="!isCreateMode" class="border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-700">
                                 {{ originalStatus.replace('_', ' ') }}
                             </span>
-                            <a v-if="programId" :href="`/provider/previews/programs/${programId}`" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950">
+                            <button v-if="programId" type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="previewOpen = true">
                                 <i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>
                                 Preview as applicant
-                            </a>
+                            </button>
                         </div>
                     </div>
                 </header>
@@ -790,15 +831,33 @@ onBeforeUnmount(() => {
                                         </label>
                                     </div>
                                     <aside class="border-l border-slate-200 pl-6">
-                                        <div class="flex items-start justify-between gap-3">
-                                            <div><p class="text-xs font-bold text-slate-700">Program background</p><p class="mt-1 text-[11px] leading-4 text-slate-500">Used on scholarship cards and the detail page.</p></div>
-                                            <span class="shrink-0 bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{{ coverSourceLabel }}</span>
+                                        <div>
+                                            <p class="text-xs font-bold text-slate-700">Scholarship logo <span class="text-amber-700">Required</span></p>
+                                            <p class="mt-1 text-[11px] leading-4 text-slate-500">Shown in program tables and compact records.</p>
+                                            <div class="mt-3 flex items-center gap-4">
+                                                <div class="grid h-20 w-20 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-white">
+                                                    <img v-if="scholarshipLogo" :src="scholarshipLogo" alt="Scholarship logo preview" class="h-full w-full object-contain p-2">
+                                                    <i v-else class="fa-solid fa-award text-2xl text-slate-300" aria-hidden="true"></i>
+                                                </div>
+                                                <div class="min-w-0 flex-1">
+                                                    <input ref="logoInput" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="selectScholarshipLogo">
+                                                    <button type="button" class="inline-flex h-9 w-full items-center justify-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-950" @click="openLogoPicker"><i class="fa-solid fa-arrow-up-from-bracket text-[10px]" aria-hidden="true"></i>{{ hasScholarshipLogo ? 'Replace logo' : 'Upload logo' }}</button>
+                                                    <p class="mt-2 text-[10px] leading-4 text-slate-400">Square JPG, PNG, or WebP. Up to 4 MB.</p>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="mt-3 grid aspect-[4/3] place-items-center overflow-hidden border border-slate-200 bg-slate-50">
-                                            <img v-if="programImage" :src="programImage" alt="Program preview" class="h-full w-full object-cover">
-                                            <i v-else class="fa-regular fa-image text-3xl text-slate-300" aria-hidden="true"></i>
+
+                                        <div class="mt-6 border-t border-slate-200 pt-5">
+                                            <div class="flex items-start justify-between gap-3">
+                                                <div><p class="text-xs font-bold text-slate-700">Background image <span class="text-amber-700">Required</span></p><p class="mt-1 text-[11px] leading-4 text-slate-500">Used on scholarship cards and detail pages.</p></div>
+                                                <span class="shrink-0 bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{{ coverSourceLabel }}</span>
+                                            </div>
+                                            <div class="mt-3 grid aspect-video place-items-center overflow-hidden border border-slate-200 bg-slate-50">
+                                                <img v-if="programImage" :src="programImage" alt="Scholarship background preview" class="h-full w-full object-cover">
+                                                <i v-else class="fa-regular fa-image text-3xl text-slate-300" aria-hidden="true"></i>
+                                            </div>
+                                            <button type="button" class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-950" @click="coverPickerOpen = true"><i class="fa-regular fa-image" aria-hidden="true"></i>Choose background</button>
                                         </div>
-                                        <button type="button" class="mt-3 inline-flex h-10 w-full items-center justify-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-950" @click="coverPickerOpen = true"><i class="fa-regular fa-image" aria-hidden="true"></i>Choose background</button>
                                     </aside>
                                 </div>
                             </section>
@@ -1158,6 +1217,27 @@ onBeforeUnmount(() => {
             @picked="handleMapPicked"
             @error="mapMessage = $event"
         />
+        <ApplicantPagePreviewModal
+            :open="previewOpen"
+            :title="form.title || 'Scholarship program'"
+            description="This preview uses the last saved program details. Save recent edits before checking them here."
+            :status="originalStatus.replaceAll('_', ' ')"
+            :scenario="previewScenario"
+            show-scenario
+            :full-page-url="programId ? `/provider/previews/programs/${programId}` : ''"
+            @close="previewOpen = false"
+            @update:scenario="previewScenario = $event"
+        >
+            <UserScholarshipDetailPage
+                v-if="previewOpen && programId"
+                :key="`${programId}-${previewScenario}`"
+                embedded
+                :scholarship-id="programId"
+                :preview-data-url="`/provider/previews/programs/${programId}/data`"
+                :initial-scenario="previewScenario"
+                :preview-status="originalStatus.replaceAll('_', ' ')"
+            />
+        </ApplicantPagePreviewModal>
         <AlertDialog :open="alert.open" :title="alert.title" :message="alert.message" @close="closeAlert" />
         <ConfirmationDialog
             :open="confirmation.open"

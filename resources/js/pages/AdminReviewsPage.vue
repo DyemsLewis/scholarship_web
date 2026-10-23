@@ -535,8 +535,8 @@ onMounted(loadReviewData);
                                 class="portal-record-row flex items-center gap-3"
                             >
                                 <img
-                                    :src="scholarship.image_url || '/uploads/scholarship-default.jpg'"
-                                    :alt="scholarship.title"
+                                    :src="scholarship.logo_url || '/uploads/scholarship-default.jpg'"
+                                    :alt="`${scholarship.title} logo`"
                                     class="h-10 w-10 shrink-0 rounded-md bg-white object-contain p-1 ring-1 ring-slate-200"
                                 >
                                 <div class="min-w-0 flex-1">

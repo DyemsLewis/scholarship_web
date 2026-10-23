@@ -7,7 +7,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Scholarship extends Model
@@ -116,6 +115,15 @@ class Scholarship extends Model
     public function coverImageUrl(): string
     {
         return CoverImageCatalog::scholarshipUrl($this);
+    }
+
+    public function logoUrl(): string
+    {
+        if (filled($this->image_path)) {
+            return asset(ltrim($this->image_path, '/'));
+        }
+
+        return asset('uploads/scholarship-default.jpg');
     }
 
     public function applications(): HasMany

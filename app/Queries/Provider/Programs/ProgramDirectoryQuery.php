@@ -12,7 +12,7 @@ final class ProgramDirectoryQuery
 
     public function __construct(private readonly ProviderProgramScope $scope) {}
 
-    public function paginate(User $actor, string $filter, string $search, string $sort): LengthAwarePaginator
+    public function paginate(User $actor, string $filter, string $search, string $sort, string $workspace = 'programs'): LengthAwarePaginator
     {
         $query = $this->scope->query($actor)
             ->select([
@@ -21,6 +21,7 @@ final class ProgramDirectoryQuery
                 'title',
                 'category',
                 'program_cycle',
+                'image_path',
                 'status',
                 'application_limit',
                 'slots_available',
@@ -28,7 +29,16 @@ final class ProgramDirectoryQuery
                 'deadline',
                 'updated_at',
             ])
-            ->withCount('applications');
+            ->with([
+                'monitoringPlan' => fn ($plan) => $plan
+                    ->select(['id', 'scholarship_id', 'status', 'frequency', 'starts_on', 'ends_on', 'updated_at'])
+                    ->withCount('requirements'),
+            ])
+            ->withCount(['applications', 'monitoringCycles']);
+
+        if ($workspace === 'monitoring') {
+            $query->whereIn('status', ['published', 'closed']);
+        }
 
         $this->applyFilter($query, $filter);
 
@@ -53,8 +63,26 @@ final class ProgramDirectoryQuery
         return $query->paginate(self::PER_PAGE)->withQueryString();
     }
 
-    public function summary(User $actor): array
+    public function summary(User $actor, string $workspace = 'programs'): array
     {
+        if ($workspace === 'monitoring') {
+            $programs = $this->scope->query($actor)->whereIn('status', ['published', 'closed']);
+            $total = (clone $programs)->count();
+            $active = (clone $programs)
+                ->whereHas('monitoringPlan', fn (Builder $query) => $query->where('status', 'active'))
+                ->count();
+            $draft = (clone $programs)
+                ->whereHas('monitoringPlan', fn (Builder $query) => $query->where('status', 'draft'))
+                ->count();
+
+            return [
+                'total' => $total,
+                'active' => $active,
+                'draft' => $draft,
+                'not_set' => max(0, $total - $active - $draft),
+            ];
+        }
+
         $summary = $this->scope->query($actor)
             ->selectRaw('COUNT(*) as total')
             ->selectRaw("SUM(CASE WHEN status IN ('draft', 'rejected') THEN 1 ELSE 0 END) as needs_action")

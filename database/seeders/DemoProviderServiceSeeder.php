@@ -19,7 +19,7 @@ class DemoProviderServiceSeeder extends Seeder
         $admin = User::query()->where('role', 'admin')->orderBy('id')->first();
         $provider = User::query()
             ->where('role', 'provider')
-            ->where('email', 'programs@sulongdunong.test')
+            ->where('email', 'owner@aralbridge.test')
             ->first();
 
         if (! $provider) {
@@ -31,7 +31,7 @@ class DemoProviderServiceSeeder extends Seeder
         }
 
         if (! $admin || ! $provider) {
-            $this->command?->warn('Demo admin or Sulong Dunong provider account is missing. Provider services were not seeded.');
+            $this->command?->warn('Demo admin or AralBridge provider account is missing. Provider services were not seeded.');
 
             return;
         }
@@ -51,7 +51,7 @@ class DemoProviderServiceSeeder extends Seeder
                 'contact_name' => $providerBilling->name,
                 'contact_email' => $providerBilling->email,
             ],
-            'request_summary' => 'Review the Sulong Dunong scholarship draft before publication.',
+            'request_summary' => 'Review the AralBridge scholarship draft before publication.',
             'requested_outcome' => 'A focused list of corrections before program submission.',
             'submitted_at' => $now->copy()->subDay(),
         ]);

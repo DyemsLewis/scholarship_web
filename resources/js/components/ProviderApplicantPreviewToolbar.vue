@@ -2,12 +2,11 @@
 defineProps({
     backUrl: { type: String, required: true },
     status: { type: String, default: 'Preview' },
-    width: { type: String, default: 'desktop' },
     scenario: { type: String, default: 'general' },
     showScenario: { type: Boolean, default: false },
 });
 
-const emit = defineEmits(['update:width', 'update:scenario']);
+const emit = defineEmits(['update:scenario']);
 </script>
 
 <template>
@@ -35,15 +34,6 @@ const emit = defineEmits(['update:width', 'update:scenario']);
                         <option value="ineligible">Not eligible</option>
                     </select>
                 </label>
-
-                <div class="flex h-9 border border-slate-300 bg-white p-1" aria-label="Preview width">
-                    <button type="button" :class="['grid w-8 place-items-center text-xs', width === 'desktop' ? 'bg-slate-950 text-white' : 'text-slate-500']" title="Desktop preview" @click="emit('update:width', 'desktop')">
-                        <i class="fa-solid fa-desktop" aria-hidden="true"></i>
-                    </button>
-                    <button type="button" :class="['grid w-8 place-items-center text-xs', width === 'mobile' ? 'bg-slate-950 text-white' : 'text-slate-500']" title="Mobile preview" @click="emit('update:width', 'mobile')">
-                        <i class="fa-solid fa-mobile-screen" aria-hidden="true"></i>
-                    </button>
-                </div>
 
                 <a :href="backUrl" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">
                     <i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>

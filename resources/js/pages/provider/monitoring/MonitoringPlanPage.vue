@@ -9,13 +9,17 @@ const savedPlan = ref(null);
 const frequencies = ref([]);
 const requirementTypes = ref([]);
 const canEdit = ref(false);
+const canPublishCheckIn = ref(false);
 const isLoading = ref(true);
 const isSaving = ref(false);
+const isPublishingCheckIn = ref(false);
 const errorMessage = ref('');
 const activeSection = ref('schedule');
 const requirementEditor = ref(null);
+const checkInEditor = ref(false);
 const editingIndex = ref(-1);
 const form = ref(defaultPlan());
+const checkInForm = ref(defaultCheckIn());
 
 const sections = [
     { key: 'schedule', label: '1. Schedule', icon: 'fa-solid fa-calendar-days' },
@@ -42,6 +46,23 @@ function defaultPlan() {
         allow_exception_requests: true,
         instructions: '',
         requirements: [],
+    };
+}
+
+function localDate() {
+    const now = new Date();
+    const local = new Date(now.getTime() - (now.getTimezoneOffset() * 60_000));
+    return local.toISOString().slice(0, 10);
+}
+
+function defaultCheckIn() {
+    return {
+        title: '',
+        period_label: '',
+        school_year: '',
+        opens_at: localDate(),
+        due_at: '',
+        instructions: '',
     };
 }
 
@@ -76,6 +97,7 @@ async function loadPlan() {
         frequencies.value = response.data.frequencies ?? [];
         requirementTypes.value = response.data.requirement_types ?? [];
         canEdit.value = Boolean(response.data.can_edit);
+        canPublishCheckIn.value = Boolean(response.data.can_publish_check_in);
         hydrate(savedPlan.value);
     } catch (error) {
         errorMessage.value = firstError(error, 'The monitoring plan could not be loaded.');
@@ -191,6 +213,41 @@ async function savePlan(status) {
     }
 }
 
+function openCheckInEditor() {
+    checkInForm.value = {
+        ...defaultCheckIn(),
+        school_year: scholarship.value?.program_cycle || '',
+    };
+    checkInEditor.value = true;
+}
+
+async function publishCheckIn() {
+    if (!activePlan.value || isPublishingCheckIn.value) return;
+
+    isPublishingCheckIn.value = true;
+    errorMessage.value = '';
+    try {
+        const response = await window.axios.post(
+            `/provider/scholarships/${scholarshipId}/monitoring-check-ins`,
+            checkInForm.value,
+        );
+        checkInEditor.value = false;
+        showPortalToast({
+            type: 'success',
+            title: 'Check-in published',
+            message: response.data.message,
+        });
+    } catch (error) {
+        showPortalToast({
+            type: 'error',
+            title: 'Check-in not published',
+            message: firstError(error, 'The check-in could not be published.'),
+        });
+    } finally {
+        isPublishingCheckIn.value = false;
+    }
+}
+
 onMounted(loadPlan);
 </script>
 
@@ -218,13 +275,15 @@ onMounted(loadPlan);
                             </div>
                             <div class="flex items-center gap-3">
                                 <span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', activePlan ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600']">{{ savedPlan?.status_label || 'Not saved' }}</span>
-                                <a href="/provider/workspaces/monitoring" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i> Monitoring</a>
+                                <button v-if="activePlan && canPublishCheckIn" type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800" @click="openCheckInEditor"><i class="fa-solid fa-calendar-plus text-[10px] text-amber-300" aria-hidden="true"></i>New check-in</button>
+                                <a href="/provider/monitoring/plans" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i> All plans</a>
                             </div>
                         </div>
                     </header>
 
                     <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
                     <div v-if="!canEdit" class="mt-4 border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">This plan is read-only for your role. A program manager can update it.</div>
+                    <div v-else-if="activePlan && !canPublishCheckIn" class="mt-4 border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">The plan is active. A monitoring officer publishes each check-in period.</div>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <nav class="grid grid-cols-3 border-b border-slate-200" aria-label="Monitoring plan sections">
@@ -289,6 +348,27 @@ onMounted(loadPlan);
                     <div class="col-span-2 flex gap-6 border border-slate-200 bg-slate-50 p-4"><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_file" type="checkbox"> File required</label><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_original_verification" type="checkbox"> Original may be checked</label></div>
                 </div>
                 <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="requirementEditor = null">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white"><i class="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true"></i>Save requirement</button></footer>
+            </form>
+        </div>
+
+        <div v-if="checkInEditor" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" role="dialog" aria-modal="true" aria-labelledby="check-in-editor-title" @click.self="checkInEditor = false">
+            <form class="w-full max-w-2xl border border-slate-300 bg-white shadow-2xl" @submit.prevent="publishCheckIn">
+                <header class="flex items-start justify-between border-b border-slate-200 px-6 py-5">
+                    <div><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Recipient monitoring</p><h2 id="check-in-editor-title" class="mt-1 text-xl font-bold text-slate-950">Schedule a check-in</h2><p class="mt-1 text-sm text-slate-500">Publish one period to all active recipients in this program.</p></div>
+                    <button type="button" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600" aria-label="Close" @click="checkInEditor = false"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                </header>
+                <div class="grid grid-cols-2 gap-5 p-6">
+                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Check-in title</span><input v-model="checkInForm.title" required maxlength="120" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester progress check"></label>
+                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Academic period <span class="font-normal text-slate-400">(optional)</span></span><input v-model="checkInForm.period_label" maxlength="80" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester"></label>
+                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">School year <span class="font-normal text-slate-400">(optional)</span></span><input v-model="checkInForm.school_year" maxlength="30" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="2026-2027"></label>
+                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Opens</span><input v-model="checkInForm.opens_at" required type="date" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
+                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Due date</span><input v-model="checkInForm.due_at" required type="date" :min="checkInForm.opens_at || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
+                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Period instructions <span class="font-normal text-slate-400">(optional)</span></span><textarea v-model="checkInForm.instructions" rows="3" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm" placeholder="Only add instructions specific to this check-in."></textarea></label>
+                </div>
+                <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
+                    <p class="text-xs text-slate-500">The active plan requirements will be included automatically.</p>
+                    <div class="flex gap-2"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="checkInEditor = false">Cancel</button><button type="submit" :disabled="isPublishingCheckIn" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50"><i :class="['fa-solid text-[10px]', isPublishingCheckIn ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>{{ isPublishingCheckIn ? 'Publishing...' : 'Publish check-in' }}</button></div>
+                </footer>
             </form>
         </div>
     </main>

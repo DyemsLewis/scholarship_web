@@ -4,13 +4,18 @@ import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPreviewToolbar.vue';
 
+const props = defineProps({
+    embedded: { type: Boolean, default: false },
+    providerId: { type: [String, Number], default: '' },
+    previewDataUrl: { type: String, default: '' },
+});
+
 const appElement = document.getElementById('app');
-const providerId = appElement?.dataset.providerId || null;
-const isPreview = appElement?.dataset.providerPreview === 'true';
-const previewDataUrl = appElement?.dataset.previewDataUrl || '';
+const providerId = props.providerId || appElement?.dataset.providerId || null;
+const isPreview = props.embedded || appElement?.dataset.providerPreview === 'true';
+const previewDataUrl = props.previewDataUrl || appElement?.dataset.previewDataUrl || '';
 const previewBackUrl = appElement?.dataset.previewBackUrl || '/provider/workspaces/organization-profile/public';
-const previewWidth = ref('desktop');
-const isDetail = Boolean(providerId);
+const isDetail = props.embedded || Boolean(providerId);
 const isLoading = ref(true);
 const errorMessage = ref('');
 const providers = ref([]);
@@ -127,6 +132,10 @@ function resetFilters() {
     selectedType.value = 'all';
 }
 
+function blockPreviewAction(event) {
+    if (isPreview) event.preventDefault();
+}
+
 async function loadPage() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -156,19 +165,17 @@ onMounted(loadPage);
 </script>
 
 <template>
-    <main :class="isPreview ? 'min-h-screen bg-slate-200' : 'student-shell'">
+    <main :class="props.embedded ? 'min-h-full bg-slate-100' : isPreview ? 'min-h-screen bg-slate-200' : 'student-shell'" :data-embedded-preview="props.embedded || undefined">
         <ApplicantSidebar v-if="!isPreview" />
 
         <ProviderApplicantPreviewToolbar
-            v-if="isPreview"
+            v-if="isPreview && !props.embedded"
             :back-url="previewBackUrl"
             :status="provider?.verification_label || 'Profile preview'"
-            :width="previewWidth"
-            @update:width="previewWidth = $event"
         />
 
-        <section :class="['student-page', isPreview && previewWidth === 'mobile' ? 'mx-auto max-w-[30rem]' : '']">
-            <div class="student-container">
+        <section :class="props.embedded ? 'min-h-full px-4 py-5 sm:px-6' : 'student-page'">
+            <div :class="props.embedded ? 'mx-auto max-w-6xl pb-8' : 'student-container'">
                 <a v-if="isDetail && !isPreview" href="/dashboard/providers" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to providers
@@ -277,11 +284,11 @@ onMounted(loadPage);
                                 </dl>
 
                                 <div class="mt-auto flex flex-wrap gap-2 pt-6">
-                                    <a v-if="provider.contact_email" :href="`mailto:${provider.contact_email}`" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                    <a v-if="provider.contact_email" :href="`mailto:${provider.contact_email}`" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                         Email provider
                                         <i class="fa-regular fa-envelope text-xs" aria-hidden="true"></i>
                                     </a>
-                                    <a v-if="websiteUrl(provider.website)" :href="websiteUrl(provider.website)" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
+                                    <a v-if="websiteUrl(provider.website)" :href="websiteUrl(provider.website)" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                         Visit website
                                         <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                     </a>
@@ -360,7 +367,7 @@ onMounted(loadPage);
                                             <span><strong class="text-slate-950">{{ program.benefit_summary || 'Support listed' }}</strong></span>
                                         </div>
 
-                                        <a :href="isPreview ? `/provider/previews/programs/${program.id}` : `/dashboard/scholarships/${program.id}`" class="mt-5 inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                        <a :href="isPreview ? `/provider/previews/programs/${program.id}` : `/dashboard/scholarships/${program.id}`" class="mt-5 inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                             View scholarship
                                             <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                         </a>

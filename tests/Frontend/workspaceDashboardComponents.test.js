@@ -34,3 +34,10 @@ for (const component of components) {
         assert.deepEqual(template.errors, []);
     });
 }
+
+test('WorkspaceMetricStrip uses a fixed icon box for consistent alignment', () => {
+    const filename = new URL('../../resources/js/components/workspace-dashboard/WorkspaceMetricStrip.vue', import.meta.url);
+    const source = readFileSync(filename, 'utf8');
+
+    assert.match(source, /block h-4 w-4 text-center text-sm leading-4/);
+});

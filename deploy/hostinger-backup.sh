@@ -63,4 +63,19 @@ find "$backup_root" -maxdepth 1 -type f \
     \( -name 'scholarship-backup-*.tar.gz' -o -name 'scholarship-backup-*.tar.gz.sha256' \) \
     -mtime +14 -delete
 
+# Frequent deployments can create many backups in one day. Keep a hard cap in
+# addition to the age limit so account storage cannot grow without bound.
+stale_archive_list="$working_dir/stale-backups.txt"
+find "$backup_root" -maxdepth 1 -type f -name 'scholarship-backup-*.tar.gz' \
+    -printf '%T@ %p\n' \
+    | sort -nr \
+    | sed -n '15,$s/^[^ ]* //p' \
+    > "$stale_archive_list"
+
+while IFS= read -r stale_archive; do
+    if [[ "$stale_archive" == "$backup_root"/scholarship-backup-*.tar.gz ]]; then
+        rm -f -- "$stale_archive" "$stale_archive.sha256"
+    fi
+done < "$stale_archive_list"
+
 echo "BACKUP_CREATED=$archive"

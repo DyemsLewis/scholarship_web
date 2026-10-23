@@ -10,7 +10,7 @@ use RuntimeException;
 
 class DemoSelectionActivitySeeder extends Seeder
 {
-    private const PROGRAM_TITLE = 'Sulong Dunong Senior Scholars Program';
+    private const PROGRAM_TITLE = 'AralBridge Scholars Pathway';
 
     private const SESSION_TITLES = [
         'Qualifying exam - Morning group',
@@ -21,11 +21,11 @@ class DemoSelectionActivitySeeder extends Seeder
     ];
 
     private const APPLICANTS = [
-        'formal_application' => ['Bianca Louise', 'Navarro'],
-        'exam_scheduled' => ['Mark Angelo', 'Dela Cruz'],
-        'exam_result' => ['Carlo Javier', 'Mendoza'],
-        'interview_scheduled' => ['Sofia Marie', 'Villanueva'],
-        'interview_result' => ['Gabriel Luis', 'Ramos'],
+        'formal_application' => ['Noel Adrian', 'Pangan'],
+        'exam_scheduled' => ['Tala Beatriz', 'Soriano'],
+        'exam_result' => ['Ivo Miguel', 'Lacuesta'],
+        'interview_scheduled' => ['Amihan Claire', 'Robles'],
+        'interview_result' => ['Enzo Rafael', 'Marasigan'],
         'exam_failed' => ['Ethan Cole', 'Martinez'],
     ];
 
@@ -43,7 +43,7 @@ class DemoSelectionActivitySeeder extends Seeder
         $provider = User::query()
             ->where('role', 'provider')
             ->whereNull('parent_account_id')
-            ->where('username', 'sulongdunong')
+            ->where('username', 'aralbridge')
             ->first();
         $scholarship = Scholarship::query()
             ->where('title', self::PROGRAM_TITLE)
@@ -51,7 +51,7 @@ class DemoSelectionActivitySeeder extends Seeder
             ->first();
 
         if (! $provider || ! $scholarship) {
-            throw new RuntimeException('Seed the complete Sulong Dunong demo before adding selection activities.');
+            throw new RuntimeException('Seed the complete AralBridge demo before adding selection activities.');
         }
 
         $existingTitles = $scholarship->stageSessions()
