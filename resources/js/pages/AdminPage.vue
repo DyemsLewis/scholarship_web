@@ -310,7 +310,7 @@ onMounted(loadAdminData);
                                         </p>
                                     </div>
                                     <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', roleClass(user.role)]">
-                                        {{ user.role }}
+                                        {{ statusLabel(user.role) }}
                                     </span>
                                 </div>
 

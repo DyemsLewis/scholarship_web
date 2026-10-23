@@ -5,6 +5,7 @@ import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import { labelFromKey } from '../../../support/display';
 
 const area = document.getElementById('app')?.dataset.area ?? 'team';
 const config = area === 'platform'
@@ -150,7 +151,7 @@ onMounted(loadArea);
             <AdminTableFrame title="Recent platform activity" description="Latest auditable events from the last seven days." icon="fa-solid fa-clock-rotate-left" class="mt-4">
                 <table v-if="payload.activity?.items?.length" class="portal-data-table min-w-[66rem]">
                     <thead><tr><th class="px-5">Event</th><th>Actor</th><th>Category</th><th class="px-5">Recorded</th></tr></thead>
-                    <tbody><tr v-for="item in payload.activity.items" :key="item.id"><td class="px-5"><p class="max-w-xl truncate font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td><td><p class="font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs capitalize text-slate-500">{{ item.actor_role }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold capitalize text-slate-700">{{ item.category }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
+                    <tbody><tr v-for="item in payload.activity.items" :key="item.id"><td class="px-5"><p class="max-w-xl truncate font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td><td><p class="font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ labelFromKey(item.actor_role) }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ labelFromKey(item.category) }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
                 </table>
                 <AdminEmptyState v-else-if="!isLoading" title="No recent activity" description="No auditable platform events were recorded this week." icon="fa-solid fa-clock-rotate-left" />
             </AdminTableFrame>

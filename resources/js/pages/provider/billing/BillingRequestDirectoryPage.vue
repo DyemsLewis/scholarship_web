@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import { labelFromKey } from '../../../support/display';
 
 const queueByPath = {
     '/provider/workspaces/billing/requests': 'requests',
@@ -203,7 +204,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                     </td>
                                     <td v-else class="px-5 py-4">
                                         <p class="text-sm font-bold text-slate-900">{{ amountLabel(entry) }}</p>
-                                        <p class="mt-1 text-xs capitalize text-slate-500">{{ entry.status }}<span v-if="entry.paid_at"> · {{ dateLabel(entry.paid_at) }}</span></p>
+                                        <p class="mt-1 text-xs text-slate-500">{{ labelFromKey(entry.status) }}<span v-if="entry.paid_at"> · {{ dateLabel(entry.paid_at) }}</span></p>
                                     </td>
                                     <td class="px-5 py-4 text-right">
                                         <div class="inline-flex items-center gap-2">

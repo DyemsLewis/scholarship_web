@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import { labelFromKey } from '../../../support/display';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -78,7 +79,7 @@ onMounted(loadWorkspace);
                             <div class="min-w-0 flex-1">
                                 <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Organization record</p>
                                 <h2 id="organization-record-title" class="mt-1 truncate text-xl font-bold text-slate-950">{{ profile.name }}</h2>
-                                <p class="mt-1 text-sm text-slate-500">{{ profile.type }}<span v-if="profile.updated_at"> · Updated {{ profile.updated_at }}</span></p>
+                                <p class="mt-1 text-sm text-slate-500">{{ labelFromKey(profile.type) }}<span v-if="profile.updated_at"> · Updated {{ profile.updated_at }}</span></p>
                             </div>
                             <div class="border-l border-slate-200 pl-6 text-right">
                                 <p class="text-2xl font-black text-slate-950">{{ summary.completion_percentage }}%</p>

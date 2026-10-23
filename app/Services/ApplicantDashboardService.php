@@ -273,8 +273,8 @@ class ApplicantDashboardService
                 applicationId: $application->id,
                 resourceKey: $schedule['resource_key'] ?? "application-stage-{$application->id}",
                 tone: 'attention',
-                dueAt: $schedule['scheduled_at']?->toISOString(),
-                dueLabel: $schedule['scheduled_at']?->format('M d, Y h:i A'),
+                dueAt: $schedule ? $schedule['scheduled_at']?->toISOString() : null,
+                dueLabel: $schedule ? $schedule['scheduled_at']?->format('M d, Y h:i A') : null,
             );
         }
 

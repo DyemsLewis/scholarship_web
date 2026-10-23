@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import { labelFromKey } from '../../../support/display';
 
 const planCode = window.location.pathname.match(/\/provider\/workspaces\/billing\/services\/([^/]+)\/request$/)?.[1] ?? '';
 const requestId = new URLSearchParams(window.location.search).get('request');
@@ -158,7 +159,7 @@ onMounted(loadIntake);
                                 <template v-if="field.type === 'program'">
                                     <select :id="`service-${field.key}`" v-model="form[field.key]" :class="['mt-2 h-12 w-full border bg-white px-4 text-sm outline-none', fieldError(field.key) ? 'border-rose-400' : 'border-slate-300 focus:border-slate-950']">
                                         <option value="">{{ field.required ? 'Choose a program' : 'No specific program' }}</option>
-                                        <option v-for="program in programs" :key="program.id" :value="program.id">{{ program.title }} · {{ program.status }}</option>
+                                        <option v-for="program in programs" :key="program.id" :value="program.id">{{ program.title }} · {{ labelFromKey(program.status) }}</option>
                                     </select>
                                     <p v-if="field.required && !programs.length" class="mt-2 text-xs font-semibold text-amber-700">No program is available yet. Ask your program coordinator to create one before requesting this service.</p>
                                 </template>

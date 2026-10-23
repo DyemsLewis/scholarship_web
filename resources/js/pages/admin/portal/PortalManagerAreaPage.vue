@@ -5,6 +5,7 @@ import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import { labelFromKey } from '../../../support/display';
 
 const area = document.getElementById('app')?.dataset.area ?? 'accounts';
 const areas = {
@@ -110,7 +111,7 @@ onMounted(loadArea);
                 <tbody>
                     <tr v-for="user in payload.users" :key="user.id">
                         <td class="px-5"><div class="flex items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-user text-sm" aria-hidden="true"></i><img v-if="user.image_url" :src="user.image_url" :alt="user.name" :class="['absolute inset-0 h-full w-full bg-white', user.image_fit === 'contain' ? 'object-contain p-1' : 'object-cover']" @error="$event.currentTarget.remove()"></span><span class="min-w-0"><strong class="block max-w-sm truncate text-sm text-slate-950">{{ user.name }}</strong><span class="block max-w-sm truncate text-xs text-slate-500">{{ user.email }}</span></span></div></td>
-                        <td class="text-sm font-semibold text-slate-700">{{ user.role }}</td>
+                        <td class="text-sm font-semibold text-slate-700">{{ labelFromKey(user.role) }}</td>
                         <td><span class="inline-flex bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">{{ user.issue }}</span></td>
                         <td class="px-5 text-sm text-slate-500">{{ user.updated_at }}</td>
                     </tr>
@@ -132,7 +133,7 @@ onMounted(loadArea);
             <div v-if="isLoading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading support cases...</div>
             <table v-else-if="payload.cases?.items?.length" class="portal-data-table min-w-[64rem]">
                 <thead><tr><th class="px-5">Concern</th><th>Reporter</th><th>Category</th><th class="px-5">Submitted</th></tr></thead>
-                <tbody><tr v-for="item in payload.cases.items" :key="item.id"><td class="px-5"><p class="max-w-lg truncate font-bold text-slate-950">{{ item.subject }}</p><p v-if="item.program?.title" class="mt-1 max-w-lg truncate text-xs text-slate-500">{{ item.program.title }}</p></td><td><div class="flex items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-user text-sm" aria-hidden="true"></i><img v-if="item.reporter.image_url" :src="item.reporter.image_url" :alt="item.reporter.name" :class="['absolute inset-0 h-full w-full bg-white', item.reporter.image_fit === 'contain' ? 'object-contain p-1' : 'object-cover']" @error="$event.currentTarget.remove()"></span><span><strong class="block text-sm text-slate-800">{{ item.reporter.name }}</strong><span class="text-xs text-slate-500">{{ item.reporter.type }}</span></span></div></td><td class="text-sm font-semibold text-slate-700">{{ item.category_label }}</td><td class="px-5 text-sm text-slate-500">{{ item.submitted_at }}</td></tr></tbody>
+                <tbody><tr v-for="item in payload.cases.items" :key="item.id"><td class="px-5"><p class="max-w-lg truncate font-bold text-slate-950">{{ item.subject }}</p><p v-if="item.program?.title" class="mt-1 max-w-lg truncate text-xs text-slate-500">{{ item.program.title }}</p></td><td><div class="flex items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-user text-sm" aria-hidden="true"></i><img v-if="item.reporter.image_url" :src="item.reporter.image_url" :alt="item.reporter.name" :class="['absolute inset-0 h-full w-full bg-white', item.reporter.image_fit === 'contain' ? 'object-contain p-1' : 'object-cover']" @error="$event.currentTarget.remove()"></span><span><strong class="block text-sm text-slate-800">{{ item.reporter.name }}</strong><span class="text-xs text-slate-500">{{ labelFromKey(item.reporter.type) }}</span></span></div></td><td class="text-sm font-semibold text-slate-700">{{ item.category_label }}</td><td class="px-5 text-sm text-slate-500">{{ item.submitted_at }}</td></tr></tbody>
             </table>
             <AdminEmptyState v-else-if="!isLoading" title="No cases need a response" description="The support queue is clear." icon="fa-solid fa-comments" />
         </AdminTableFrame>
@@ -161,7 +162,7 @@ onMounted(loadArea);
                 <div v-if="isLoading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading activity records...</div>
                 <table v-else-if="payload.activity?.items?.length" class="portal-data-table min-w-[66rem]">
                     <thead><tr><th class="px-5">Event</th><th>Actor</th><th>Category</th><th class="px-5">Recorded</th></tr></thead>
-                    <tbody><tr v-for="item in payload.activity.items" :key="item.id"><td class="px-5"><p class="max-w-xl truncate font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td><td><p class="text-sm font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs capitalize text-slate-500">{{ item.actor_role }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold capitalize text-slate-700">{{ item.category }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
+                    <tbody><tr v-for="item in payload.activity.items" :key="item.id"><td class="px-5"><p class="max-w-xl truncate font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td><td><p class="text-sm font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ labelFromKey(item.actor_role) }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ labelFromKey(item.category) }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
                 </table>
                 <AdminEmptyState v-else-if="!isLoading" title="No recent activity" description="No audit events were recorded in this period." icon="fa-solid fa-clock-rotate-left" />
             </AdminTableFrame>

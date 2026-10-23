@@ -693,7 +693,7 @@ onMounted(loadScholarship);
                                         <div class="flex flex-wrap items-center justify-between gap-2">
                                             <p class="text-sm font-bold text-slate-950">{{ check.label }}</p>
                                             <span :class="['shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ring-1 ring-inset', readinessBadgeClass(check.tone)]">
-                                                {{ check.status }}
+                                                {{ statusLabel(check.status) }}
                                             </span>
                                         </div>
                                         <p class="mt-1 text-xs leading-5 text-slate-500">{{ check.detail }}</p>

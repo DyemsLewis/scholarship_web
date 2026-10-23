@@ -28,6 +28,7 @@ use App\Services\ScholarshipEligibilityService;
 use App\Support\ReviewRubric;
 use App\Support\Terms;
 use Carbon\CarbonInterface;
+use Database\Seeders\Support\DemoSubmittedDocument;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -520,11 +521,10 @@ class CompleteDemoSeeder extends Seeder
         ]);
         $applicant->forceFill(['email_verified_at' => now()->subMonths(2)])->save();
 
-        $photoFilename = sprintf('applicant-%02d.jpg', $number);
-        $photoSourceFilename = sprintf('applicant-%02d.jpg', (($number - 1) % 12) + 1);
-        $photoSource = public_path("images/demo/applicants/{$photoSourceFilename}");
+        $photoFilename = 'default-applicant-avatar.jpg';
+        $photoSource = public_path('images/demo/default-applicant-avatar.jpg');
         if (! is_file($photoSource)) {
-            throw new RuntimeException("Missing demo applicant photo: {$photoSource}");
+            throw new RuntimeException("Missing default demo applicant avatar: {$photoSource}");
         }
         $photoPath = "demo-showcase/profile-photos/{$applicant->id}/{$photoFilename}";
         Storage::disk('local')->put($photoPath, file_get_contents($photoSource));
@@ -597,17 +597,17 @@ class CompleteDemoSeeder extends Seeder
 
         foreach (['academic_record', 'recent_school_id', 'achievement_evidence'] as $documentType) {
             $label = Str::headline($documentType);
-            $contents = $this->demoDocument($applicant->name, $label, 'Applicant profile evidence');
-            $path = "demo-showcase/applicant-evidence/{$applicant->id}/{$documentType}.svg";
-            Storage::disk('local')->put($path, $contents);
+            $asset = DemoSubmittedDocument::get($documentType, $number);
+            $path = "demo-showcase/applicant-evidence/{$applicant->id}/{$documentType}.{$asset['extension']}";
+            Storage::disk('local')->put($path, $asset['contents']);
             ApplicantVerificationDocument::query()->create([
                 'applicant_id' => $applicant->id,
                 'uploaded_by' => $applicant->id,
                 'document_type' => $documentType,
-                'original_name' => Str::slug($label).'.svg',
+                'original_name' => $asset['original_name'],
                 'path' => $path,
-                'mime_type' => 'image/svg+xml',
-                'size' => strlen($contents),
+                'mime_type' => $asset['mime_type'],
+                'size' => $asset['size'],
                 'status' => $verificationPending ? 'submitted' : 'approved',
                 'review_notes' => $verificationPending ? null : 'Verified in the local showcase dataset.',
                 'uploaded_at' => now()->subMonths(2),
@@ -666,9 +666,9 @@ class CompleteDemoSeeder extends Seeder
         ]);
 
         foreach (self::REQUIREMENTS as $requirement) {
-            $contents = $this->demoDocument($applicant->name, $requirement, $scholarship->title);
-            $path = 'demo-showcase/application-documents/'.$application->id.'/'.Str::slug($requirement).'.svg';
-            Storage::disk('local')->put($path, $contents);
+            $asset = DemoSubmittedDocument::get($requirement, $applicantNumber);
+            $path = 'demo-showcase/application-documents/'.$application->id.'/'.Str::slug($requirement).'.'.$asset['extension'];
+            Storage::disk('local')->put($path, $asset['contents']);
             $status = match (true) {
                 $scenario === 'screening_review' => 'pending',
                 $scenario === 'correction' && $requirement === 'Recent school ID' => 'needs_replacement',
@@ -677,10 +677,10 @@ class CompleteDemoSeeder extends Seeder
             $application->documents()->create([
                 'uploaded_by' => $applicant->id,
                 'document_name' => $requirement,
-                'original_name' => Str::slug($requirement).'.svg',
+                'original_name' => $asset['original_name'],
                 'path' => $path,
-                'mime_type' => 'image/svg+xml',
-                'size' => strlen($contents),
+                'mime_type' => $asset['mime_type'],
+                'size' => $asset['size'],
                 'status' => $status,
                 'review_notes' => $status === 'accepted'
                     ? 'Readable and accepted for the local showcase.'

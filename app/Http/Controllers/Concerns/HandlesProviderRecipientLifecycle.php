@@ -1099,7 +1099,7 @@ trait HandlesProviderRecipientLifecycle
         ActivityLog::record(
             $request->user(),
             'recipient_monitoring_intervention_created',
-            "{$request->user()->name} added a {$validated['type']} intervention for {$application->applicant?->name}.",
+            "{$request->user()->name} added a ".Str::headline($validated['type'])." intervention for {$application->applicant?->name}.",
             $request,
             [
                 'scholarship_id' => $scholarship->id,
@@ -1597,7 +1597,7 @@ trait HandlesProviderRecipientLifecycle
         ActivityLog::record(
             $request->user(),
             'recipient_benefit_release_recorded',
-            "{$request->user()->name} recorded {$status} for {$record->application?->applicant?->name} in {$release->title}.",
+            "{$request->user()->name} recorded {$statusLabels[$status]} for {$record->application?->applicant?->name} in {$release->title}.",
             $request,
             [
                 'scholarship_id' => $scholarship->id,

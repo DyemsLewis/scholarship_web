@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import { labelFromKey } from '../../../support/display';
 
 const sessionId = window.location.pathname.match(/selection-activities\/(\d+)/)?.[1];
 const loading = ref(true);
@@ -96,7 +97,7 @@ onMounted(loadSession);
                 <section class="admin-panel mt-4 overflow-hidden">
                     <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Session details</h2><p class="mt-0.5 text-sm text-slate-500">Provider-recorded schedule and readiness.</p></div></header>
                     <dl class="grid grid-cols-4 border-b border-slate-200">
-                        <div class="px-6 py-4"><dt class="text-xs font-semibold text-slate-500">Mode</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.mode }}</dd></div>
+                        <div class="px-6 py-4"><dt class="text-xs font-semibold text-slate-500">Mode</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ labelFromKey(session.mode) }}</dd></div>
                         <div class="px-6 py-4"><dt class="text-xs font-semibold text-slate-500">Ends</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.ends_at || 'Not specified' }}</dd></div>
                         <div class="px-6 py-4"><dt class="text-xs font-semibold text-slate-500">Attendance pending</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.counts.pending_attendance }}</dd></div>
                         <div class="px-6 py-4"><dt class="text-xs font-semibold text-slate-500">Proof rule</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.proof_required ? 'Required' : 'Optional' }}</dd></div>

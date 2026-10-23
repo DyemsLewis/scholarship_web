@@ -47,11 +47,19 @@ class DecisionSupportServiceTest extends TestCase
         [, $applicant, $scholarship] = $this->application([
             'eligible_education_levels' => 'senior_high_school',
         ]);
+        $applicant->studentProfile()->update([
+            'education_level' => 'senior_high_school',
+        ]);
 
-        $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant);
+        $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant->fresh());
         $education = collect($eligibility['criteria'])->firstWhere('key', 'education_level');
 
         $this->assertSame('pass', $education['status']);
+        $this->assertSame(
+            'Your profile lists Senior High School, which is included in Senior High School.',
+            $education['comparison'],
+        );
+        $this->assertStringNotContainsString('_', $education['comparison']);
         $this->assertTrue($eligibility['is_eligible']);
         $this->assertSame([], $eligibility['blocking_criteria']);
     }

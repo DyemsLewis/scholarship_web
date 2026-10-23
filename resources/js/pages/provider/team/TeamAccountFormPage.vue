@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import { labelFromKey } from '../../../support/display';
 
 const accountId = window.location.pathname.match(/\/provider\/team\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(accountId));
@@ -252,7 +253,7 @@ onMounted(loadAccount);
                                 <header class="border-b border-slate-200 bg-slate-50 px-5 py-3"><p class="text-sm font-bold text-slate-900">Choose programs</p></header>
                                 <div v-if="!availablePrograms.length" class="px-5 py-10 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-white text-slate-500"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">No programs are available within your access scope.</p></div>
                                 <div v-else class="divide-y divide-slate-200">
-                                    <label v-for="program in availablePrograms" :key="program.id" class="flex cursor-pointer items-center gap-3 px-5 py-3.5 hover:bg-slate-50"><input type="checkbox" class="h-4 w-4 accent-slate-950" :checked="form.assigned_program_ids.includes(program.id)" @change="toggleProgram(program.id)"><span class="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">{{ program.title }}</span><span class="text-[10px] font-bold uppercase tracking-wide text-slate-400">{{ program.status }}</span></label>
+                                    <label v-for="program in availablePrograms" :key="program.id" class="flex cursor-pointer items-center gap-3 px-5 py-3.5 hover:bg-slate-50"><input type="checkbox" class="h-4 w-4 accent-slate-950" :checked="form.assigned_program_ids.includes(program.id)" @change="toggleProgram(program.id)"><span class="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">{{ program.title }}</span><span class="text-[10px] font-bold uppercase tracking-wide text-slate-400">{{ labelFromKey(program.status) }}</span></label>
                                 </div>
                             </div>
 

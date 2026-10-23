@@ -141,7 +141,7 @@ trait HandlesProviderApplicationWorkflow
         ActivityLog::record(
             $request->user(),
             'scholarship_event_completed',
-            "{$request->user()->name} completed the {$event->type} event for {$scholarship->title}.",
+            "{$request->user()->name} completed the ".ScholarshipSelectionPlan::label($event->type)." event for {$scholarship->title}.",
             $request,
             [
                 'scholarship_id' => $scholarship->id,
@@ -259,7 +259,7 @@ trait HandlesProviderApplicationWorkflow
         ActivityLog::record(
             $request->user(),
             'application_schedule_bulk_tracking_updated',
-            "{$request->user()->name} updated {$event->type} results for {$applications->count()} applicant(s).",
+            "{$request->user()->name} updated ".ScholarshipSelectionPlan::label($event->type)." results for {$applications->count()} applicant(s).",
             $request,
             [
                 'scholarship_id' => $scholarship->id,
@@ -397,7 +397,7 @@ trait HandlesProviderApplicationWorkflow
         ActivityLog::record(
             $request->user(),
             'application_stage_result_recorded',
-            "{$request->user()->name} recorded {$validated['result']} for {$stage} on application #{$updated->id}.",
+            "{$request->user()->name} recorded {$this->statusLabel($validated['result'])} for ".ScholarshipSelectionPlan::label($stage)." on application #{$updated->id}.",
             $request,
             ['application_id' => $updated->id, 'stage' => $stage, 'result' => $validated['result']],
         );
@@ -537,7 +537,7 @@ trait HandlesProviderApplicationWorkflow
         ActivityLog::record(
             $request->user(),
             'application_decision_reopened',
-            "{$request->user()->name} reopened {$availability['stage']} for application #{$updated->id}.",
+            "{$request->user()->name} reopened {$availability['stage_label']} for application #{$updated->id}.",
             $request,
             [
                 'application_id' => $updated->id,
@@ -1017,7 +1017,7 @@ trait HandlesProviderApplicationWorkflow
         ActivityLog::record(
             $request->user(),
             'application_schedule_tracking_updated',
-            "{$request->user()->name} updated {$schedule->type} tracking for application #{$application->id}.",
+            "{$request->user()->name} updated {$this->scheduleTypeLabel($schedule->type)} tracking for application #{$application->id}.",
             $request,
             [
                 'application_id' => $application->id,
@@ -1032,7 +1032,7 @@ trait HandlesProviderApplicationWorkflow
                 'user_id' => $application->applicant_id,
                 'type' => 'application_schedule',
                 'title' => $this->scheduleTypeLabel($schedule->type).' schedule updated',
-                'message' => "The provider updated your {$this->scheduleTypeLabel($schedule->type)} schedule to {$schedule->status}. Open the application to review the details.",
+                'message' => "The provider updated your {$this->scheduleTypeLabel($schedule->type)} schedule to {$this->statusLabel($schedule->status)}. Open the application to review the details.",
                 'action_url' => route('dashboard.applications.show', $application, false),
             ]);
         }
@@ -1674,7 +1674,7 @@ trait HandlesProviderApplicationWorkflow
         ActivityLog::record(
             $request->user(),
             'application_status_updated',
-            "{$request->user()->name} updated application #{$application->id} to {$validated['status']}.",
+            "{$request->user()->name} updated application #{$application->id} to {$this->statusLabel($validated['status'])}.",
             $request,
             [
                 'application_id' => $application->id,
@@ -1886,7 +1886,7 @@ trait HandlesProviderApplicationWorkflow
         ActivityLog::record(
             $request->user(),
             'document_status_updated',
-            "{$request->user()->name} marked {$document->document_name} as {$validated['status']} for application #{$document->application?->id}.",
+            "{$request->user()->name} marked {$document->document_name} as {$this->statusLabel($validated['status'])} for application #{$document->application?->id}.",
             $request,
             [
                 'application_id' => $document->application?->id,

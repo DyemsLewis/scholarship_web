@@ -159,6 +159,9 @@ const selectedApplicationMode = computed(() => applicationModeLabel(selectedScho
 const selectedApplicationModeDescription = computed(() => applicationModeDescription(selectedScholarship.value?.application_mode));
 const selectedNeedsOriginalVerification = computed(() => ['onsite', 'hybrid'].includes(selectedScholarship.value?.application_mode));
 const selectedSelectionPlan = computed(() => selectionPlanFor(selectedScholarship.value));
+const selectedEligibilityUrl = computed(() => selectedScholarship.value
+    ? `/dashboard/scholarships/${selectedScholarship.value.id}/eligibility`
+    : '/dashboard/scholarships');
 const selectedEligibilityCriteria = computed(() => {
     const scholarship = selectedScholarship.value;
 
@@ -184,7 +187,6 @@ const selectedEligibilityCriteria = computed(() => {
         return {
             ...rule,
             value: rule.formatted ? rule.value : eligibilityRuleLabel(rule.value, check),
-            profileValue: check?.student_value || check?.studentValue || 'Not provided',
             status: check?.status ?? 'info',
             statusLabel: eligibilityCriterionStatusLabel(check),
             comparison: check?.comparison || check?.note || '',
@@ -687,6 +689,33 @@ function eligibilityCriterionStatusLabel(criterion) {
     return criterion?.key === 'academic' && criterion?.requirement
         ? 'Provider review'
         : 'Open to all';
+}
+
+function eligibilityCriterionCardClass(status) {
+    return {
+        pass: 'border-emerald-200 bg-emerald-50/50',
+        fail: 'border-rose-300 bg-rose-50/60',
+        missing: 'border-amber-300 bg-amber-50/60',
+        info: 'border-sky-200 bg-sky-50/60',
+    }[status] ?? 'border-slate-200 bg-white';
+}
+
+function eligibilityCriterionIconClass(status) {
+    return {
+        pass: 'bg-emerald-100 text-emerald-700',
+        fail: 'bg-rose-100 text-rose-700',
+        missing: 'bg-amber-100 text-amber-800',
+        info: 'bg-sky-100 text-sky-700',
+    }[status] ?? 'bg-slate-100 text-slate-700';
+}
+
+function eligibilityCriterionBadgeClass(status) {
+    return {
+        pass: 'bg-emerald-100 text-emerald-800',
+        fail: 'bg-rose-100 text-rose-700',
+        missing: 'bg-amber-100 text-amber-800',
+        info: 'bg-sky-100 text-sky-800',
+    }[status] ?? 'bg-slate-100 text-slate-600';
 }
 
 function documentRequirements(requirements) {
@@ -1201,25 +1230,30 @@ watch(selectedScholarship, (scholarship) => {
                                         <EligibilityConditionList class="mt-3" :conditions="selectedEligibilityConditions" />
                                     </div>
 
-                                    <div class="px-4 pt-4">
-                                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Structured matching restrictions</p>
-                                        <p class="mt-1 text-xs text-slate-500">Automatically compared with the information in your profile.</p>
+                                    <div class="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-end sm:justify-between">
+                                        <div>
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Structured matching restrictions</p>
+                                            <p class="mt-1 text-xs text-slate-500">A summary of the rules and their current status.</p>
+                                        </div>
+                                        <a :href="selectedEligibilityUrl" class="inline-flex w-fit shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-950 hover:text-slate-950">
+                                            View full eligibility
+                                            <i class="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true"></i>
+                                        </a>
                                     </div>
                                     <dl class="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">
                                         <div
                                             v-for="criterion in selectedEligibilityCriteria"
                                             :key="criterion.key"
                                             :class="[
-                                                'flex items-start gap-3 rounded-md border bg-white p-3',
-                                                criterion.status === 'fail' ? 'border-rose-300' : criterion.status === 'missing' ? 'border-amber-300' : 'border-slate-200',
+                                                'flex h-full items-start gap-3 rounded-md border p-3',
+                                                eligibilityCriterionCardClass(criterion.status),
                                             ]"
                                         >
-                                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', criterion.status === 'fail' ? 'bg-rose-100 text-rose-700' : criterion.status === 'missing' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700']"><i :class="criterion.icon" aria-hidden="true"></i></span>
-                                            <div class="min-w-0">
+                                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', eligibilityCriterionIconClass(criterion.status)]"><i :class="criterion.icon" aria-hidden="true"></i></span>
+                                            <div class="flex min-w-0 flex-1 flex-col self-stretch">
                                                 <dt class="text-[11px] font-semibold text-slate-500">{{ criterion.label }}</dt>
                                                 <dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ criterion.value }}</dd>
-                                                <p class="mt-1 text-xs leading-5 text-slate-500">Your profile: <span class="font-semibold text-slate-700">{{ criteriaLabel(criterion.profileValue) }}</span></p>
-                                                <span :class="['mt-2 inline-flex rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', criterion.status === 'fail' ? 'bg-rose-100 text-rose-700' : criterion.status === 'missing' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600']">{{ criterion.statusLabel }}</span>
+                                                <span :class="['mt-3 inline-flex w-fit rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', eligibilityCriterionBadgeClass(criterion.status)]">{{ criterion.statusLabel }}</span>
                                             </div>
                                         </div>
                                     </dl>

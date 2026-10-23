@@ -974,7 +974,7 @@ class AdminController extends Controller
         ActivityLog::record(
             $request->user(),
             'scholarship_review_updated',
-            "{$request->user()->name} marked scholarship {$scholarship->title} as {$validated['status']}.",
+            "{$request->user()->name} marked scholarship {$scholarship->title} as {$this->labelFromKey($validated['status'])}.",
             $request,
             [
                 'scholarship_id' => $scholarship->id,
@@ -1726,7 +1726,7 @@ class AdminController extends Controller
         ActivityLog::record(
             $request->user(),
             'account_status_updated',
-            "{$request->user()->name} marked {$user->email} as {$status}.",
+            "{$request->user()->name} marked {$user->email} as {$this->labelFromKey($status)}.",
             $request,
             ['updated_user_id' => $user->id, 'account_status' => $status],
         );

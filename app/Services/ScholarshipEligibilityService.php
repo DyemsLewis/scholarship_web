@@ -600,16 +600,36 @@ class ScholarshipEligibilityService
                     : 'This program does not request files during pre-screening.');
         }
 
+        $displayStudentValue = $this->displayCriterionValue($studentValue);
+        $displayRequirement = $this->displayCriterionValue($requirement);
+
         return match ($status) {
-            'pass' => filled($studentValue) && filled($requirement)
-                ? "Your profile lists {$studentValue}, which is included in {$requirement}."
+            'pass' => filled($displayStudentValue) && filled($displayRequirement)
+                ? "Your profile lists {$displayStudentValue}, which is included in {$displayRequirement}."
                 : 'Your profile matches this program rule.',
-            'fail' => "Your profile lists ".($studentValue ?: 'no value').", while this program accepts ".($requirement ?: 'a different value').'.',
-            'missing' => 'This program checks '.($requirement ?: 'this information').', but it is missing from your profile.',
-            default => filled($requirement)
+            'fail' => 'Your profile lists '.($displayStudentValue ?: 'no value').', while this program accepts '.($displayRequirement ?: 'a different value').'.',
+            'missing' => 'This program checks '.($displayRequirement ?: 'this information').', but it is missing from your profile.',
+            default => filled($displayRequirement)
                 ? 'This program is open to all applicants for this criterion.'
                 : 'The provider did not set a restriction for this criterion.',
         };
+    }
+
+    private function displayCriterionValue(?string $value): ?string
+    {
+        if (! filled($value)) {
+            return $value;
+        }
+
+        return collect(explode(',', $value))
+            ->map(function (string $part): string {
+                $part = trim($part);
+
+                return str_contains($part, '_')
+                    ? str($part)->replace('_', ' ')->squish()->title()->toString()
+                    : $part;
+            })
+            ->implode(', ');
     }
 
     private function eligibilityConditionResults(array $conditions, array $criteria): array

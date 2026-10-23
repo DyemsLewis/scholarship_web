@@ -426,7 +426,7 @@ class ApplicationStageOperationController extends Controller
         ActivityLog::record(
             $request->user(),
             $action,
-            "{$request->user()->name} updated a {$session->stage_key} session for {$scholarship->title}.",
+            "{$request->user()->name} updated a ".(ApplicationStageCatalog::definitions()[$session->stage_key]['label'] ?? str($session->stage_key)->headline())." session for {$scholarship->title}.",
             $request,
             [
                 'scholarship_id' => $scholarship->id,

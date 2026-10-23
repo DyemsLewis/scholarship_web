@@ -696,7 +696,7 @@ class SupportReportController extends Controller
             ActivityLog::record(
                 $user,
                 'support_report_status_updated',
-                "{$user->name} marked the {$viewerRole} handling state for support report #{$report->id} as {$validated['status']}.",
+                "{$user->name} marked the {$viewerRole} handling state for support report #{$report->id} as ".Str::headline($validated['status']).'.',
                 $request,
                 [
                     'support_report_id' => $report->id,

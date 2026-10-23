@@ -4,6 +4,7 @@ import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import { labelFromKey } from '../../../support/display';
 
 const query = new URLSearchParams(window.location.search);
 const loading = ref(true);
@@ -79,7 +80,7 @@ onMounted(loadExceptions);
                         <td class="px-5 py-3.5 font-mono text-xs font-bold text-slate-900">{{ item.reference_number }}</td>
                         <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-building-columns" aria-hidden="true"></i><img v-if="item.provider_logo_url" :src="item.provider_logo_url" :alt="`${item.provider} logo`" class="absolute inset-0 h-full w-full bg-white object-contain p-1" @error="$event.currentTarget.remove()"></span><span class="min-w-0"><span class="block max-w-xs truncate text-sm font-bold text-slate-900">{{ item.provider }}</span><span class="mt-0.5 block max-w-xs truncate text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
                         <td class="px-4 py-3.5 text-sm font-semibold text-slate-700">{{ item.service }}</td>
-                        <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(item.status)]">{{ item.status }}</span><p v-if="item.reason" class="mt-1 max-w-md text-xs leading-5 text-slate-500">{{ item.reason }}</p></td>
+                        <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(item.status)]">{{ labelFromKey(item.status) }}</span><p v-if="item.reason" class="mt-1 max-w-md text-xs leading-5 text-slate-500">{{ item.reason }}</p></td>
                         <td class="px-4 py-3.5 text-sm font-black text-slate-950">{{ money(item.amount, item.currency) }}</td>
                         <td class="px-5 py-3.5 text-sm text-slate-600">{{ item.failed_at || item.created_at }}</td>
                     </tr>

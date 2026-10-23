@@ -962,11 +962,12 @@ class MobileAuthController extends Controller
 
         if ($schedule->applicant_acknowledged_at === null) {
             $schedule->update(['applicant_acknowledged_at' => now()]);
+            $scheduleLabel = Str::of($schedule->type)->replace('_', ' ')->lower()->toString();
 
             ActivityLog::record(
                 $user,
                 'application_schedule_acknowledged',
-                "{$user->name} acknowledged the {$schedule->type} schedule for application #{$application->id} from the mobile app.",
+                "{$user->name} acknowledged the {$scheduleLabel} schedule for application #{$application->id} from the mobile app.",
                 $request,
                 ['application_id' => $application->id, 'schedule_id' => $schedule->id, 'source' => 'mobile'],
             );
@@ -975,8 +976,8 @@ class MobileAuthController extends Controller
                 PortalNotification::create([
                     'user_id' => $application->scholarship->provider_id,
                     'type' => 'schedule_acknowledged',
-                    'title' => ucfirst($schedule->type).' schedule acknowledged',
-                    'message' => "{$user->name} confirmed through the mobile app that they saw the {$schedule->type} schedule for {$application->scholarship->title}.",
+                    'title' => ucfirst($scheduleLabel).' schedule acknowledged',
+                    'message' => "{$user->name} confirmed through the mobile app that they saw the {$scheduleLabel} schedule for {$application->scholarship->title}.",
                     'action_url' => route('provider.applications.show', $application, false),
                 ]);
             }

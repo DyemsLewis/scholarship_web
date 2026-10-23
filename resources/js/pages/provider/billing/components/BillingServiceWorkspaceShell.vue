@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { formatServiceDateTime } from '../../../../composables/useProviderServiceWorkspace.js';
+import { labelFromKey } from '../../../../support/display';
 import ProviderSidebar from '../../ProviderSidebar.vue';
 
 const props = defineProps({
@@ -26,7 +27,7 @@ const sections = computed(() => {
 
 function statusLabel(purchase) {
     if (!purchase) return 'Loading';
-    if (purchase.status !== 'paid') return `${purchase.status} payment`;
+    if (purchase.status !== 'paid') return `${labelFromKey(purchase.status)} payment`;
     return {
         queued: 'Waiting to start',
         ready: 'Waiting to start',
@@ -70,7 +71,7 @@ function dueClass(status) {
                     <div v-if="purchase" class="grid grid-cols-3 divide-x divide-slate-200 border-t border-slate-200 bg-slate-50">
                         <div class="px-6 py-3.5">
                             <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Payment</p>
-                            <p class="mt-1 text-sm font-bold capitalize text-slate-900">{{ purchase.status }}</p>
+                            <p class="mt-1 text-sm font-bold text-slate-900">{{ labelFromKey(purchase.status) }}</p>
                         </div>
                         <div class="px-6 py-3.5">
                             <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Support owner</p>

@@ -76,6 +76,34 @@ class ApplicantDashboardOverviewTest extends TestCase
             ->assertJsonCount(0, 'dashboard.onboarding');
     }
 
+    public function test_formal_application_without_a_schedule_still_loads_the_dashboard(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship($provider, 'Provider Application Grant');
+        $scholarship->update([
+            'selection_stages' => ['screening', 'formal_application', 'decision'],
+        ]);
+        ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'approved',
+            'application_state' => 'in_provider_process',
+            'workflow_stage' => 'formal_application',
+            'decision_reason' => 'passed_prescreening',
+            'submitted_at' => now()->subDay(),
+        ]);
+
+        $this->actingAs($applicant)
+            ->getJson('/dashboard/overview-data')
+            ->assertOk()
+            ->assertJsonPath('dashboard.mode', 'applying')
+            ->assertJsonPath('dashboard.primary_action.kind', 'application')
+            ->assertJsonPath('dashboard.primary_action.cta', 'Open application')
+            ->assertJsonPath('dashboard.primary_action.due_at', null)
+            ->assertJsonPath('dashboard.primary_action.due_label', null);
+    }
+
     public function test_selected_recipient_sees_an_open_monitoring_requirement_first(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);

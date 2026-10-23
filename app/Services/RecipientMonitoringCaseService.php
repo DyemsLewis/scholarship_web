@@ -90,7 +90,7 @@ final class RecipientMonitoringCaseService
 
         if (! RecipientSupportCatalog::canTransitionCase($case->status, $status)) {
             throw ValidationException::withMessages([
-                'status' => "The monitoring case cannot move from {$case->status} to {$status}.",
+                'status' => 'The monitoring case cannot move from '.Str::headline($case->status).' to '.Str::headline($status).'.',
             ]);
         }
 
