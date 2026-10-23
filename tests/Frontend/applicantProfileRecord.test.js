@@ -185,6 +185,23 @@ test('staff review surfaces reuse the same applicant record without duplicate pr
     assert.match(superAdminReview, /trigger-only/);
 });
 
+test('provider review records identify applicant profile details as self-declared', () => {
+    const record = readFileSync(new URL('../../resources/js/components/profile/ApplicantProfileRecord.vue', import.meta.url), 'utf8');
+    const providerPages = [
+        '../../resources/js/pages/provider/reviews/ApplicationReviewRecordPage.vue',
+        '../../resources/js/pages/provider/decisions/FinalDecisionRecordPage.vue',
+    ];
+
+    assert.match(record, /showDataSourceNotice/);
+    assert.match(record, /Self-declared profile information/);
+    assert.match(record, /does not automatically confirm every profile field/);
+
+    for (const relativePath of providerPages) {
+        const source = readFileSync(new URL(relativePath, import.meta.url), 'utf8');
+        assert.match(source, /show-data-source-notice/);
+    }
+});
+
 test('applicant page headers use one centered icon treatment without a font baseline gap', () => {
     const header = readFileSync(new URL('../../resources/js/components/TaskPageHeader.vue', import.meta.url), 'utf8');
     const styles = readFileSync(new URL('../../resources/css/app.css', import.meta.url), 'utf8');

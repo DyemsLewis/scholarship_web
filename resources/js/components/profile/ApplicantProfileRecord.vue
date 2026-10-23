@@ -28,6 +28,10 @@ defineProps({
         type: Boolean,
         default: true,
     },
+    showDataSourceNotice: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 defineEmits(['edit']);
@@ -81,6 +85,16 @@ function hasValue(value) {
         <div v-if="showTrustNotice && verificationStatus !== 'approved'" class="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-5 text-amber-950 sm:px-5">
             <i class="fa-solid fa-shield-halved mt-0.5 shrink-0 text-amber-700" aria-hidden="true"></i>
             <p><strong>Profile not yet verified.</strong> Providers may give self-declared details less weight until the supporting evidence has been reviewed.</p>
+        </div>
+
+        <div v-if="showDataSourceNotice" class="flex items-start gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
+            <span class="grid h-9 w-9 shrink-0 place-items-center bg-amber-100 text-amber-800">
+                <i class="fa-solid fa-user-pen text-sm" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0">
+                <p class="text-sm font-bold text-slate-950">Self-declared profile information</p>
+                <p class="mt-0.5 text-xs leading-5 text-slate-600">The applicant entered these details. The verification status applies to reviewed supporting evidence and does not automatically confirm every profile field.</p>
+            </div>
         </div>
 
         <div class="divide-y divide-slate-200">

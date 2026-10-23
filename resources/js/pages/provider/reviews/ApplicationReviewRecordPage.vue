@@ -431,6 +431,7 @@ onMounted(loadApplication);
                             :verification-status="applicant.profile_verification_status"
                             :verification-label="labelize(applicant.profile_verification_status)"
                             :show-trust-notice="false"
+                            show-data-source-notice
                         >
                             <template v-if="canEditReview && applicant.profile_photo_url" #actions>
                                 <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700" :disabled="actionBusy" @click="reviewPhoto('approve')"><i class="fa-solid fa-check text-[9px]" aria-hidden="true"></i>Accept photo</button>

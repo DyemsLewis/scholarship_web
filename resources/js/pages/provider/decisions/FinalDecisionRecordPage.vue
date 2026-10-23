@@ -351,6 +351,7 @@ onMounted(loadApplication);
                             :verification-status="applicant.profile_verification_status"
                             :verification-label="labelize(applicant.profile_verification_status)"
                             :show-trust-notice="false"
+                            show-data-source-notice
                         />
                         <section class="border border-slate-200 bg-white px-6 py-5 shadow-sm">
                             <h3 class="text-base font-bold text-slate-950">Application responses</h3>
