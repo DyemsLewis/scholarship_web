@@ -1,6 +1,5 @@
 <script setup>
 import { computed } from 'vue';
-import ProviderAccountSidebarLink from '../pages/provider/ProviderAccountSidebarLink.vue';
 import RoleSidebar from './RoleSidebar.vue';
 import { supplementalProviderWorkspaceLinks } from '../support/providerWorkspaceNavigation';
 
@@ -237,7 +236,7 @@ const entryLinks = computed(() => {
         ],
     }] : [])];
 });
-const navLinks = computed(() => usesDedicatedWorkspace
+const workspaceNavLinks = computed(() => usesDedicatedWorkspace
     ? [...entryLinks.value, ...supplementalWorkspaceLinks.value]
     : [
     ...entryLinks.value,
@@ -298,6 +297,15 @@ const navLinks = computed(() => usesDedicatedWorkspace
         ],
     }] : []),
 ]);
+const navLinks = computed(() => [
+    ...workspaceNavLinks.value,
+    {
+        href: '/provider/account',
+        label: 'My profile',
+        icon: 'fa-solid fa-id-card',
+        exact: true,
+    },
+]);
 </script>
 
 <template>
@@ -312,9 +320,5 @@ const navLinks = computed(() => usesDedicatedWorkspace
         neutral-accent
         sharp
         navigation-label="Provider workspace"
-    >
-        <template #account-actions>
-            <ProviderAccountSidebarLink />
-        </template>
-    </RoleSidebar>
+    />
 </template>

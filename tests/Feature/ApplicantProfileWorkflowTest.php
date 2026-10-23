@@ -138,6 +138,49 @@ class ApplicantProfileWorkflowTest extends TestCase
         $this->assertTrue($profile->guardian_is_account_owner);
     }
 
+    public function test_invalid_profile_section_cannot_update_profile_data(): void
+    {
+        $applicant = $this->completeAdultApplicant();
+        $originalFirstName = $applicant->studentProfile->first_name;
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                'profile_section' => 'unknown_section',
+                'first_name' => 'Unexpected',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('profile_section');
+
+        $this->assertSame($originalFirstName, $applicant->fresh()->studentProfile->first_name);
+    }
+
+    public function test_location_coordinates_must_be_saved_as_a_pair(): void
+    {
+        $applicant = $this->completeAdultApplicant();
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                'profile_section' => 'location',
+                'city' => 'Quezon City',
+                'province' => 'Metro Manila',
+                'region' => 'NCR',
+                'latitude' => 14.6760,
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('longitude');
+
+        $this->actingAs($applicant)
+            ->patchJson('/dashboard/profile', [
+                'profile_section' => 'location',
+                'city' => 'Quezon City',
+                'province' => 'Metro Manila',
+                'region' => 'NCR',
+                'latitude' => 14.6760,
+                'longitude' => 121.0437,
+            ])
+            ->assertOk();
+    }
+
     public function test_account_household_and_enrollment_context_are_required_for_profile_readiness(): void
     {
         $applicant = $this->completeAdultApplicant();

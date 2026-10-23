@@ -21,6 +21,7 @@ test('provider account page compiles with personal and security forms', () => {
 
     assert.deepEqual(template.errors, []);
     assert.match(source, /\/provider\/account\/data/);
+    assert.match(source, />My profile</);
     assert.match(source, /Password security/);
     assert.match(source, /without changing the organization profile/);
 });

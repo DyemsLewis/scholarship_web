@@ -24,5 +24,6 @@ test('provider sidebar compiles with one dashboard entry', () => {
     assert.deepEqual(template.errors, []);
     assert.equal((source.match(/label: 'Dashboard'/g) ?? []).length, 1);
     assert.doesNotMatch(source, /roleDashboardLink/);
-    assert.match(source, /ProviderAccountSidebarLink/);
+    assert.match(source, /href: '\/provider\/account'/);
+    assert.match(source, /label: 'My profile'/);
 });

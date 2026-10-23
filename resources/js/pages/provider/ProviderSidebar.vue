@@ -1,5 +1,4 @@
 <script setup>
-import ProviderAccountSidebarLink from './ProviderAccountSidebarLink.vue';
 import RoleSidebar from '../../components/RoleSidebar.vue';
 
 const permissions = new Set(window.portalUser?.permissions ?? []);
@@ -189,6 +188,13 @@ if (permissions.has('manage_billing')) {
         ],
     });
 }
+
+navLinks.push({
+    href: '/provider/account',
+    label: 'My profile',
+    icon: 'fa-solid fa-id-card',
+    exact: true,
+});
 </script>
 
 <template>
@@ -201,9 +207,5 @@ if (permissions.has('manage_billing')) {
         logout-message="You will need to sign in again to continue using the provider portal."
         sharp
         navigation-label="Workspace"
-    >
-        <template #account-actions>
-            <ProviderAccountSidebarLink />
-        </template>
-    </RoleSidebar>
+    />
 </template>

@@ -128,7 +128,7 @@ onMounted(loadAccount);
                             <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true"><i class="fa-solid fa-user-gear"></i></span>
                             <div class="min-w-0">
                                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Personal account</p>
-                                <h1 id="provider-account-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">My account</h1>
+                                <h1 id="provider-account-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">My profile</h1>
                                 <p class="mt-2 text-sm leading-6 text-slate-600">Manage your own identity and sign-in details without changing the organization profile.</p>
                             </div>
                         </div>
