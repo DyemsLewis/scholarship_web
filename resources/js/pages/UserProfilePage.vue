@@ -604,7 +604,7 @@ const overviewProfileAction = computed(() => {
         return {
             eyebrow: 'Profile status',
             label: 'Supporting evidence is being reviewed',
-            detail: 'Your required profile details are complete. You can still update information while the records are reviewed.',
+            detail: 'Your required profile details are complete. Your profile must be verified before you can submit a new application.',
             actionable: false,
         };
     }

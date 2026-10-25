@@ -171,6 +171,8 @@ class ApplicantScholarshipDetailService
         if ($view === 'eligibility') {
             $detail['content']['profile'] = [
                 'complete' => $scenario !== 'general',
+                'verified' => $scenario !== 'general',
+                'verification_status' => $scenario === 'general' ? 'unsubmitted' : 'approved',
                 'percent' => $scenario === 'general' ? 0 : 100,
                 'missing' => $scenario === 'general' ? ['Applicant profile information'] : [],
             ];
@@ -247,6 +249,7 @@ class ApplicantScholarshipDetailService
             $scholarship->hasReachedApplicationLimit() => 'full',
             ! $scholarship->isDiscoverable() => 'closed',
             ! ($profileReadiness['complete'] ?? false) => 'profile_incomplete',
+            ! ($profileReadiness['verified'] ?? false) => 'profile_unverified',
             ! ($eligibility['is_eligible'] ?? false) => 'blocked',
             default => 'eligible',
         };
@@ -293,6 +296,19 @@ class ApplicantScholarshipDetailService
                     'kind' => 'link',
                     'label' => 'Complete profile',
                     'href' => '/dashboard/profile',
+                ],
+            ],
+            'profile_unverified' => [
+                'tone' => 'attention',
+                'eyebrow' => 'Profile verification required',
+                'title' => 'Verify your profile before applying',
+                'description' => ($profileReadiness['verification_status'] ?? null) === 'pending'
+                    ? 'Your supporting evidence is awaiting review. You can apply once your profile is verified.'
+                    : 'Upload or replace the required supporting evidence in your profile. An authorized reviewer must verify your profile before you can apply.',
+                'action' => [
+                    'kind' => 'link',
+                    'label' => 'Review supporting evidence',
+                    'href' => '/dashboard/profile?section=verification',
                 ],
             ],
             'blocked' => [
@@ -470,6 +486,12 @@ class ApplicantScholarshipDetailService
                 'title' => 'Complete your eligibility check',
                 'description' => count($profile['missing'] ?? []).' profile detail(s) are still missing.',
             ],
+            ! ($profile['verified'] ?? false) => [
+                'state' => 'attention',
+                'status' => 'Verification required',
+                'title' => 'Your profile needs verification',
+                'description' => 'An authorized reviewer must approve your supporting evidence before you can apply.',
+            ],
             $blockers !== [] => [
                 'state' => 'blocked',
                 'status' => count($blockers).' to review',
@@ -639,6 +661,8 @@ class ApplicantScholarshipDetailService
             'provider_review' => $providerReview->all(),
             'profile' => [
                 'complete' => (bool) ($profileReadiness['complete'] ?? false),
+                'verified' => (bool) ($profileReadiness['verified'] ?? false),
+                'verification_status' => $profileReadiness['verification_status'] ?? 'unsubmitted',
                 'percent' => (int) ($profileReadiness['percent'] ?? 0),
                 'missing' => $profileReadiness['missing'] ?? [],
             ],

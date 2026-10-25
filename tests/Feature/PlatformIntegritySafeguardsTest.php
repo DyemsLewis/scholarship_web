@@ -64,7 +64,7 @@ class PlatformIntegritySafeguardsTest extends TestCase
     public function test_programs_from_a_rejected_provider_are_hidden_and_cannot_receive_applications(): void
     {
         $provider = User::factory()->create(['role' => 'provider']);
-        $applicant = $this->completeApplicant();
+        $applicant = $this->completeApplicant(verified: true);
         $scholarship = $this->scholarship($provider);
         $provider->providerProfile()->update(['verification_status' => 'rejected']);
 
@@ -310,9 +310,10 @@ class PlatformIntegritySafeguardsTest extends TestCase
         );
     }
 
-    private function completeApplicant(): User
+    private function completeApplicant(bool $verified = false): User
     {
-        $applicant = User::factory()->create();
+        $factory = User::factory();
+        $applicant = ($verified ? $factory->verifiedProfile() : $factory)->create();
         $applicant->studentProfile()->update([
             'birthdate' => '2005-06-01',
             'account_managed_by' => 'learner',

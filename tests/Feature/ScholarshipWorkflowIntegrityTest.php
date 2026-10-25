@@ -273,7 +273,7 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
 
     private function completeApplicant(): User
     {
-        $applicant = User::factory()->create();
+        $applicant = User::factory()->verifiedProfile()->create();
         $applicant->studentProfile()->update([
             'birthdate' => '2005-06-01',
             'account_managed_by' => 'learner',

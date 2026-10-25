@@ -459,7 +459,7 @@ class ApplicantProfileWorkflowTest extends TestCase
 
     private function completeAdultApplicant(): User
     {
-        $applicant = User::factory()->create();
+        $applicant = User::factory()->verifiedProfile()->create();
         $applicant->studentProfile()->update([
             'birthdate' => '2000-05-10',
             'account_managed_by' => 'learner',

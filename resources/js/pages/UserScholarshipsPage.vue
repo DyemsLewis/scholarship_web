@@ -459,6 +459,10 @@ const localTodayDate = new Date(Date.now() - new Date().getTimezoneOffset() * 60
     .slice(0, 10);
 
 function canStartApplication(scholarship) {
+    if (!user.value?.is_profile_verified) {
+        return false;
+    }
+
     if (scholarship?.can_start_application !== undefined) {
         return Boolean(scholarship.can_start_application);
     }
@@ -476,6 +480,10 @@ function isUpcomingProgram(scholarship) {
 function applicationBlockedLabel(scholarship) {
     if (scholarship?.application_limit_reached) {
         return 'This scholarship has reached its application limit.';
+    }
+
+    if (!user.value?.is_profile_verified) {
+        return 'Your applicant profile must be verified before you can apply. Review Supporting Evidence in your profile.';
     }
 
     const blockers = scholarship?.eligibility_match?.blocking_criteria ?? [];
@@ -496,6 +504,10 @@ function applicationBlockedActionLabel(scholarship) {
 
     if (scholarship?.application_limit_reached) {
         return 'Applications full';
+    }
+
+    if (!user.value?.is_profile_verified) {
+        return 'Verify profile first';
     }
 
     return scholarship?.eligibility_match?.is_eligible === false

@@ -110,7 +110,10 @@ const answeredApplicationQuestionCount = computed(() => selectedApplicationQuest
 const appliedScholarshipIds = computed(() => new Set(applications.value.map((application) => application.scholarship?.id).filter(Boolean)));
 const selectedAlreadyApplied = computed(() => selectedScholarship.value && appliedScholarshipIds.value.has(selectedScholarship.value.id));
 const allDocumentsChecked = computed(() => selectedRequirements.value.every((requirement) => documentChecklist.value.includes(requirement)));
-const canApply = computed(() => profileReadiness.value.complete);
+const canApply = computed(() => profileReadiness.value.complete && profileReadiness.value.verified === true);
+const profileApplicationMessage = computed(() => !profileReadiness.value.complete
+    ? 'Complete your student profile before applying.'
+    : 'Your applicant profile must be verified before you can apply. Review Supporting Evidence in your profile.');
 const selectedEligibilityBlockers = computed(() => selectedScholarship.value?.eligibility_match?.blocking_criteria ?? []);
 const selectedEligibilityConditions = computed(() => selectedScholarship.value?.eligibility_match?.condition_results ?? []);
 const selectedIsEligible = computed(() => selectedScholarship.value?.eligibility_match?.is_eligible !== false);
@@ -120,7 +123,7 @@ const selectedCanStartApplication = computed(() => {
     }
 
     if (selectedScholarship.value.can_start_application !== undefined) {
-        return Boolean(selectedScholarship.value.can_start_application);
+        return canApply.value && Boolean(selectedScholarship.value.can_start_application);
     }
 
     return canApply.value && selectedIsEligible.value && !selectedAlreadyApplied.value;
@@ -233,6 +236,10 @@ const canGoNext = computed(() => {
         return false;
     }
 
+    if (!canApply.value) {
+        return false;
+    }
+
     if (currentStep.value === 0) {
         return true;
     }
@@ -258,7 +265,7 @@ function canOpenWizardStep(index) {
     }
 
     if (index === 1) {
-        return Boolean(selectedScholarship.value);
+        return canApply.value && Boolean(selectedScholarship.value);
     }
 
     if (!selectedCanStartApplication.value) {
@@ -311,7 +318,7 @@ function goToWizardStep(index) {
     }
 
     if (!canApply.value) {
-        errorMessage.value = 'Complete your student profile before starting an application.';
+        errorMessage.value = profileApplicationMessage.value;
         return;
     }
 
@@ -875,7 +882,7 @@ async function loadApplications() {
                     errorMessage.value = 'You already submitted an application for this scholarship.';
                     currentStep.value = 0;
                 } else if (!canApply.value) {
-                    errorMessage.value = 'Complete your student profile before starting an application.';
+                    errorMessage.value = profileApplicationMessage.value;
                     currentStep.value = 0;
                 } else if (requestedScholarship.eligibility_match?.is_eligible === false) {
                     const labels = (requestedScholarship.eligibility_match.blocking_criteria ?? [])
@@ -906,7 +913,7 @@ async function submitApplication() {
     }
 
     if (!canApply.value) {
-        errorMessage.value = 'Complete your student profile before submitting an application.';
+        errorMessage.value = profileApplicationMessage.value;
         return;
     }
 
@@ -952,6 +959,7 @@ async function submitApplication() {
         if (error.response?.data?.profile_readiness) {
             profileReadiness.value = error.response.data.profile_readiness;
         }
+        errorMessage.value = error.response?.data?.message ?? 'Unable to submit your application. Please try again.';
     } finally {
         isSubmitting.value = false;
     }
@@ -1068,21 +1076,26 @@ watch(selectedScholarship, (scholarship) => {
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div>
                                 <p class="text-xs font-bold uppercase text-amber-700">
-                                    Profile required
+                                    {{ profileReadiness.complete ? 'Profile verification required' : 'Profile required' }}
                                 </p>
                                 <h3 class="mt-2 text-lg font-bold text-slate-950">
-                                    Complete your student profile before applying
+                                    {{ profileReadiness.complete ? 'Verify your profile before applying' : 'Complete your student profile before applying' }}
                                 </h3>
-                                <p class="mt-2 text-sm leading-5 text-slate-700">
+                                <p v-if="!profileReadiness.complete" class="mt-2 text-sm leading-5 text-slate-700">
                                     Your profile is {{ profileReadiness.percent }}% complete. Missing:
                                     {{ profileReadiness.missing.slice(0, 4).map((field) => field.label).join(', ') }}{{ profileReadiness.missing.length > 4 ? ', and more' : '' }}.
                                 </p>
+                                <p v-else class="mt-2 text-sm leading-5 text-slate-700">
+                                    {{ profileReadiness.verification_status === 'pending'
+                                        ? 'Your supporting evidence is awaiting review. You can apply once your profile is verified.'
+                                        : 'Upload or replace your required supporting evidence, then wait for an authorized reviewer to verify your profile.' }}
+                                </p>
                             </div>
                             <a
-                                href="/dashboard/profile"
+                                :href="profileReadiness.complete ? '/dashboard/profile?section=verification' : '/dashboard/profile'"
                                 class="inline-flex justify-center rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                             >
-                                Complete profile
+                                {{ profileReadiness.complete ? 'Review supporting evidence' : 'Complete profile' }}
                             </a>
                         </div>
                     </div>

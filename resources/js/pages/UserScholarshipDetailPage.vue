@@ -117,6 +117,16 @@ const eligibilityVerdict = computed(() => {
         };
     }
 
+    if (!profile.verified) {
+        return {
+            state: 'attention',
+            eyebrow: 'Profile verification required',
+            title: 'Verify your profile before applying',
+            description: 'You can review the criteria below while an authorized reviewer checks your supporting evidence.',
+            icon: 'fa-solid fa-user-check',
+        };
+    }
+
     if (blockers.length) {
         return {
             state: 'blocked',

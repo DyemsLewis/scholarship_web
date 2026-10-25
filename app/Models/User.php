@@ -669,6 +669,8 @@ class User extends Authenticatable implements MustVerifyEmail
 
         return [
             'complete' => $missing === [],
+            'verified' => (bool) $payload['is_profile_verified'],
+            'verification_status' => $payload['applicant_verification_status'],
             'completed' => $completed,
             'total' => $total,
             'percent' => $total === 0 ? 100 : (int) round(($completed / $total) * 100),

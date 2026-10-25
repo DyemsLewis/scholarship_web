@@ -605,6 +605,15 @@ class MobileAuthController extends Controller
             ], 422);
         }
 
+        if (! $profileReadiness['verified']) {
+            return response()->json([
+                'message' => 'Your applicant profile must be verified before you can apply. Open Supporting Evidence in your profile to upload or review your verification records.',
+                'profile_verification_required' => true,
+                'profile_readiness' => $profileReadiness,
+                'profile_url' => '/dashboard/profile?section=verification',
+            ], 403);
+        }
+
         $validated = $request->validate([
             'scholarship_id' => [
                 'required',
@@ -1167,6 +1176,7 @@ class MobileAuthController extends Controller
             'is_accepting_applications' => $isAcceptingApplications,
             'can_start_application' => $isAcceptingApplications
                 && $profileComplete
+                && $user->applicantAcademicVerificationStatus() === 'approved'
                 && $eligibilityBlockers === []
                 && ! $hasApplied,
             'eligibility_match' => $match,

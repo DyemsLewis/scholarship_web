@@ -28,6 +28,25 @@ class DemoReadinessWorkflowTest extends TestCase
         $provider = $this->registerAndVerifyUser('provider');
         $applicant = $this->completeApplicant($this->registerAndVerifyUser('applicant'));
 
+        foreach (['academic_record', 'recent_school_id'] as $type) {
+            $this->actingAs($applicant)
+                ->post('/dashboard/profile/verification-documents', [
+                    'document_type' => $type,
+                    'document_file' => UploadedFile::fake()->create($type.'.pdf', 100, 'application/pdf'),
+                    'terms_accepted' => '1',
+                ], ['Accept' => 'application/json'])
+                ->assertCreated();
+        }
+
+        $this->actingAs($admin)
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+                'verification_status' => 'approved',
+                'academic_grading_scale' => 'percentage',
+                'academic_result' => 90,
+            ])
+            ->assertOk();
+        $applicant = $applicant->fresh();
+
         $this->actingAs($provider)
             ->patchJson('/provider/profile', [
                 'profile_section' => 'organization',
@@ -205,6 +224,10 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonPath('detail.content.benefits.0.duration', 'Current program cycle');
 
         foreach (['Certificate of enrollment', 'Latest report card or grades'] as $documentName) {
+            if (StudentDocument::query()->where('user_id', $applicant->id)->where('document_name', $documentName)->exists()) {
+                continue;
+            }
+
             $path = "student-documents/{$applicant->id}/".str()->slug($documentName).'.pdf';
             Storage::disk('local')->put($path, 'Demo document content');
             StudentDocument::create([

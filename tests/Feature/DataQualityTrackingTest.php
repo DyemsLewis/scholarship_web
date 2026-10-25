@@ -146,7 +146,7 @@ class DataQualityTrackingTest extends TestCase
     {
         $provider = User::factory()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'approved']);
-        $applicant = User::factory()->create();
+        $applicant = User::factory()->verifiedProfile()->create();
         $applicant->studentProfile()->update([
             'birthdate' => '2005-06-01',
             'account_managed_by' => 'learner',

@@ -99,4 +99,27 @@ class UserFactory extends Factory
             'email_verified_at' => null,
         ]);
     }
+
+    public function verifiedProfile(): static
+    {
+        return $this->afterCreating(function (User $user): void {
+            $user->studentProfile()->update([
+                'verification_status' => 'approved',
+                'verified_at' => now(),
+            ]);
+
+            foreach (['academic_record', 'recent_school_id'] as $type) {
+                $user->applicantVerificationDocuments()->create([
+                    'uploaded_by' => $user->id,
+                    'document_type' => $type,
+                    'original_name' => $type.'.pdf',
+                    'path' => "applicant-verification/{$user->id}/{$type}.pdf",
+                    'mime_type' => 'application/pdf',
+                    'size' => 100,
+                    'status' => 'approved',
+                    'uploaded_at' => now(),
+                ]);
+            }
+        });
+    }
 }

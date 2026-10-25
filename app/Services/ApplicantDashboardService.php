@@ -34,7 +34,7 @@ class ApplicantDashboardService
                 $record['workflow'],
             ))
             ->when(
-                ! $profile['complete'],
+                ! $profile['complete'] || ! $profile['verified'],
                 fn (Collection $items): Collection => $items->push($this->profileAction($profile)),
             );
         $actions = $this->sortActions($actions);
@@ -409,6 +409,25 @@ class ApplicantDashboardService
 
     private function profileAction(array $profile): array
     {
+        if ($profile['complete'] && ! $profile['verified']) {
+            $pending = $profile['verification_status'] === 'pending';
+
+            return $this->action(
+                key: 'verify-profile',
+                kind: 'profile',
+                title: $pending ? 'Your profile is awaiting verification' : 'Verify your applicant profile',
+                description: $pending
+                    ? 'Your supporting evidence is being reviewed. You can submit new applications once your profile is verified.'
+                    : 'Upload or replace your required supporting evidence so an authorized reviewer can verify your profile before you apply.',
+                context: 'Profile verification required',
+                href: '/dashboard/profile?section=verification',
+                cta: 'Review supporting evidence',
+                priority: 58,
+                resourceKey: 'profile',
+                tone: 'attention',
+            );
+        }
+
         $missingCount = count($profile['missing'] ?? []);
 
         return $this->action(
