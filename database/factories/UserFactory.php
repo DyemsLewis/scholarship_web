@@ -108,7 +108,7 @@ class UserFactory extends Factory
                 'verified_at' => now(),
             ]);
 
-            foreach (['academic_record', 'recent_school_id'] as $type) {
+            foreach (\App\Models\ApplicantVerificationDocument::requiredTypesFor($user) as $type) {
                 $user->applicantVerificationDocuments()->create([
                     'uploaded_by' => $user->id,
                     'document_type' => $type,

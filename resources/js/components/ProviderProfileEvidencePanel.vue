@@ -73,6 +73,9 @@ function extractedAcademicResult(proof) {
 }
 
 function proofTypeLabel(type) {
+    const labels = { identity_record: 'Identity and birth record', income_record: 'Household income proof', residency_record: 'Residence proof', guardian_record: 'Parent or guardian ID' };
+    if (labels[type]) return labels[type];
+
     return type === 'no_current_scholarship_proof'
         ? 'Proof of no current scholarship'
         : labelFromKey(type);
@@ -84,7 +87,7 @@ function proofTypeLabel(type) {
         <div class="flex items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
                 <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Profile evidence</p>
-                <h3 class="mt-1 text-lg font-bold text-slate-950">School and academic records</h3>
+                <h3 class="mt-1 text-lg font-bold text-slate-950">Records supporting the applicant profile</h3>
             </div>
             <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                 {{ proofs.length }} record{{ proofs.length === 1 ? '' : 's' }}

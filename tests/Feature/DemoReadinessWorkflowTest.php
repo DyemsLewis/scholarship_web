@@ -28,7 +28,7 @@ class DemoReadinessWorkflowTest extends TestCase
         $provider = $this->registerAndVerifyUser('provider');
         $applicant = $this->completeApplicant($this->registerAndVerifyUser('applicant'));
 
-        foreach (['academic_record', 'recent_school_id'] as $type) {
+        foreach (\App\Models\ApplicantVerificationDocument::requiredTypesFor($applicant) as $type) {
             $this->actingAs($applicant)
                 ->post('/dashboard/profile/verification-documents', [
                     'document_type' => $type,

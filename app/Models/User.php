@@ -530,6 +530,9 @@ class User extends Authenticatable implements MustVerifyEmail
                 ? $this->studentProfile?->verified_at?->format('M d, Y')
                 : null,
             'is_profile_verified' => $this->isApplicant() && $applicantVerificationStatus === 'approved',
+            'profile_evidence_requirements' => $this->isApplicant()
+                ? ApplicantVerificationDocument::requirementsFor($this)
+                : [],
             'education_level' => $this->studentProfile?->education_level,
             'school' => $this->studentProfile?->school,
             'school_type' => $this->studentProfile?->school_type,

@@ -405,14 +405,33 @@ const schoolProofOption = computed(() => {
         description: 'Enrollment certificate, registration form, or admission record.',
         icon: 'fa-solid fa-school',
         context: [form.value.school, form.value.enrollment_status].filter(hasValue),
-        required: false,
+        required: true,
     };
 });
-const verificationDocumentOptions = computed(() => [
-    academicProofOption.value,
-    recentSchoolIdOption.value,
-    schoolProofOption.value,
-]);
+const verificationDocumentOptions = computed(() => (user.value?.profile_evidence_requirements ?? [])
+    .filter((option) => option.value !== 'guardian_record' || option.required || hasGuardianDetails.value)
+    .map((option) => {
+        const schoolOption = {
+            academic_record: academicProofOption.value,
+            recent_school_id: recentSchoolIdOption.value,
+            school_record: schoolProofOption.value,
+        }[option.value];
+        const contexts = {
+            identity_record: [profileDisplayName.value, form.value.birthdate],
+            recent_school_id: [profileDisplayName.value, form.value.school],
+            income_record: [form.value.income_bracket, form.value.household_size ? `${form.value.household_size} household members` : ''],
+            residency_record: [form.value.barangay, form.value.city, form.value.province, form.value.region],
+            guardian_record: [form.value.guardian_name, form.value.guardian_relationship],
+        };
+
+        return {
+            ...option,
+            ...schoolOption,
+            description: option.examples,
+            context: schoolOption?.context?.length ? schoolOption.context : (contexts[option.value] ?? []).filter(hasValue),
+            required: option.required,
+        };
+    }));
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
 const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
 const needsGuardianContext = computed(() => isMinor.value
@@ -447,7 +466,7 @@ const manualAcademicResultComplete = computed(() => Boolean(form.value.grading_s
 const schoolVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'school_record') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
-    .filter((document) => !['academic_record', 'recent_school_id', 'school_record', 'no_current_scholarship_proof', 'achievement_evidence'].includes(document.document_type)));
+    .filter((document) => !['academic_record', 'recent_school_id', 'school_record', 'identity_record', 'income_record', 'residency_record', 'guardian_record', 'no_current_scholarship_proof', 'achievement_evidence'].includes(document.document_type)));
 const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
     ...option,
     document: verificationDocuments.value.find((document) => document.document_type === option.value) ?? null,
@@ -458,7 +477,7 @@ const verificationDocumentGroups = computed(() => [
     {
         id: 'required',
         label: 'Required files',
-        description: 'Needed before the applicant profile can be fully reviewed.',
+        description: 'Each record must match the information saved in your profile.',
         rows: requiredVerificationDocumentRows.value,
     },
     {
@@ -467,14 +486,14 @@ const verificationDocumentGroups = computed(() => [
         description: 'Add these only when a program asks for them or they strengthen the saved profile.',
         rows: optionalVerificationDocumentRows.value,
     },
-]);
+].filter((group) => group.rows.length > 0));
 const missingVerificationDocumentRows = computed(() => verificationDocumentRows.value
     .filter((row) => row.required && !row.document));
 const needsVerificationUpload = computed(() => missingVerificationDocumentRows.value.length > 0);
 const verificationUploadCopy = computed(() => {
     if (profileVerificationStatus.value === 'rejected') {
         return {
-            title: 'Replace the academic record',
+            title: 'Replace the requested supporting records',
             detail: 'Use the reviewer note and upload a clearer file.',
         };
     }
@@ -482,7 +501,7 @@ const verificationUploadCopy = computed(() => {
     if (needsVerificationUpload.value) {
         return {
             title: `Upload ${missingVerificationDocumentRows.value[0].label.toLowerCase()}`,
-            detail: 'This file is required.',
+            detail: 'Match the saved profile details shown under each record.',
         };
     }
 
@@ -496,7 +515,7 @@ const verificationUploadCopy = computed(() => {
 
         return {
             title: 'Records under review',
-            detail: 'You can replace a file if it changes.',
+            detail: 'A reviewer compares these files with your saved profile before approving it.',
         };
     }
 
@@ -626,7 +645,7 @@ const profileEditorCopy = computed(() => ({
     },
     verification: {
         title: 'Supporting evidence',
-        description: 'Manage the records providers use to check the saved profile.',
+        description: 'Upload records supporting your identity, school, household, and residence details.',
     },
 }[activeSection.value] ?? {
     title: 'Applicant profile',
@@ -1870,21 +1889,10 @@ async function retryAcademicRecordScan(document) {
 
 async function deleteVerificationDocument(document) {
     const isAcademicRecord = document.document_type === 'academic_record';
-    const isRecentSchoolId = document.document_type === 'recent_school_id';
-    const isSchoolRecord = document.document_type === 'school_record';
-    const isNoCurrentScholarshipProof = document.document_type === 'no_current_scholarship_proof';
-    const isAchievementEvidence = document.document_type === 'achievement_evidence';
+    const isRequiredEvidence = verificationDocumentRows.value.some((row) => row.value === document.document_type && row.required);
     const confirmed = await requestConfirmation({
-        title: isAcademicRecord
-            ? 'Remove academic record?'
-            : (isRecentSchoolId
-                ? 'Remove recent school ID?'
-                : (isSchoolRecord
-                    ? 'Remove school proof?'
-                    : (isNoCurrentScholarshipProof
-                        ? 'Remove scholarship-status proof?'
-                        : (isAchievementEvidence ? 'Remove achievement evidence?' : 'Remove older proof file?')))),
-        message: `${document.original_name || 'This file'} will be removed from supporting evidence. Its separate copy in Documents will stay available.${isAcademicRecord ? ' Your academic record review will return to not submitted.' : ''}`,
+        title: `Remove ${document.label || 'supporting record'}?`,
+        message: `${document.original_name || 'This file'} will be removed from supporting evidence. Its separate copy in My Documents will stay available.${isAcademicRecord ? ' Your academic record review will return to not submitted.' : isRequiredEvidence ? ' Your profile will need review again after a replacement is uploaded.' : ''}`,
         confirmLabel: 'Remove file',
         tone: 'danger',
     });
@@ -2210,7 +2218,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         <div class="divide-y divide-slate-200">
                             <button type="button" class="flex w-full items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5" @click="openVerificationRecords">
                                 <span :class="['grid h-10 w-10 shrink-0 place-items-center rounded-sm', profileVerificationStatus === 'approved' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800']"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span>
-                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Supporting evidence</span><span class="mt-1 block text-xs text-slate-500">Academic, enrollment, and recent school identification records</span></span>
+                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Supporting evidence</span><span class="mt-1 block text-xs text-slate-500">Records supporting your identity, school, household, and residence</span></span>
                                 <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
                                 <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                             </button>
@@ -2881,6 +2889,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                                         </span>
                                                     </div>
                                                     <p class="mt-1 text-xs leading-5 text-slate-500">{{ row.description }}</p>
+                                                    <p class="mt-1 text-xs font-semibold leading-5 text-slate-700">Supports: {{ row.supports }}</p>
+                                                    <p v-if="row.context?.length" class="mt-1 text-xs leading-5 text-slate-500"><span class="font-semibold">In your profile:</span> {{ row.context.join(' / ') }}</p>
                                                     <p v-if="row.document" class="mt-1 max-w-xl truncate text-xs font-semibold text-slate-700">
                                                         {{ row.document.original_name }} <span class="font-normal text-slate-400">- {{ formatFileSize(row.document.size) }}</span>
                                                     </p>

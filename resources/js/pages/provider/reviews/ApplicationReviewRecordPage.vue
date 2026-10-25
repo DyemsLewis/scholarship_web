@@ -130,6 +130,9 @@ const rejectionReasons = decisionReasonOptions.filter((option) => [
 ].includes(option.value));
 
 function labelize(value) {
+    const evidenceLabels = { identity_record: 'Identity and birth record', income_record: 'Household income proof', residency_record: 'Residence proof', guardian_record: 'Parent or guardian ID' };
+    if (evidenceLabels[value]) return evidenceLabels[value];
+
     if (value === 'no_current_scholarship_proof') {
         return 'Proof of no current scholarship';
     }
@@ -448,7 +451,7 @@ onMounted(loadApplication);
                             <form v-if="canEditReview && applicant.profile_verification_status !== 'approved'" class="mt-4 flex items-end gap-3 bg-slate-50 p-4" @submit.prevent="verifyAcademicRecord">
                                 <label class="w-56"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Grading scale</span><select v-model="academicForm.academic_grading_scale" class="h-10 w-full border border-slate-300 bg-white px-3 text-sm"><option value="">Use scanned result</option><option value="percentage">Percentage</option><option value="grade_point">GWA / grade point</option><option value="pass_fail">Pass / fail</option><option value="other">Other scale</option></select></label>
                                 <label v-if="['percentage', 'grade_point'].includes(academicForm.academic_grading_scale)" class="w-44"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Verified result</span><input v-model="academicForm.academic_result" type="number" step="0.01" class="h-10 w-full border border-slate-300 px-3 text-sm"></label>
-                                <button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-shield-circle-check']" aria-hidden="true"></i>Verify academic record</button>
+                                <button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-shield-circle-check']" aria-hidden="true"></i>Verify profile evidence</button>
                             </form>
                         </section>
                     </div>

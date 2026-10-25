@@ -276,6 +276,9 @@ class MobileAuthController extends Controller
         $studentProfile = $user->studentProfile()->firstOrNew(['user_id' => $user->id]);
         $studentProfile->fill($profileValues);
         $verifiedFields = [
+            'first_name', 'last_name', 'middle_initial', 'suffix', 'birthdate', 'citizenship_status',
+            'income_bracket', 'household_size', 'guardian_name', 'guardian_relationship', 'account_managed_by',
+            'address', 'barangay', 'city', 'province', 'region',
             'education_level',
             'school',
             'school_type',
@@ -289,6 +292,8 @@ class MobileAuthController extends Controller
             'grading_scale',
             'achievements',
         ];
+        $verifiedFields = array_filter($verifiedFields, fn (string $field): bool => ! in_array($field, ['first_name', 'last_name', 'middle_initial', 'suffix'], true)
+            || strcasecmp(trim((string) $studentProfile->getOriginal($field)), trim((string) $studentProfile->getAttribute($field))) !== 0);
         $verificationReset = $studentProfile->verification_status === 'approved'
             && $studentProfile->isDirty($verifiedFields);
 
@@ -1534,6 +1539,8 @@ class MobileAuthController extends Controller
             'Certificate of enrollment',
             'Latest report card or grades',
             'Recent school ID',
+            'Proof of identity',
+            'Proof of residence',
             'Proof of income',
             'Certificate of indigency',
             'Parent or guardian valid ID',

@@ -22,14 +22,14 @@ const isPdf = computed(() => {
 
     return mimeType === 'application/pdf' || /\.pdf$/i.test(fileName);
 });
-const proofLabel = computed(() => ({
+const proofLabel = computed(() => props.proof?.label ?? ({
     academic_record: 'Academic record',
     recent_school_id: 'Recent school ID',
     school_record: 'School enrollment proof',
     no_current_scholarship_proof: 'Proof of no current scholarship',
     achievement_evidence: 'Achievement evidence',
 }[props.proof?.document_type] ?? 'Profile proof'));
-const proofContext = computed(() => ({
+const proofContext = computed(() => props.proof?.supports ? `Compare this document with: ${props.proof.supports}.` : ({
     recent_school_id: 'This file supports the applicant\'s current student identity.',
     school_record: 'This file supports the applicant\'s current school or learning-center information and is separate from the scholarship requirement checklist.',
     no_current_scholarship_proof: 'This file supports the applicant\'s declaration that they do not currently receive another scholarship. Confirm that its issuer and date meet the program\'s rules.',
@@ -82,7 +82,7 @@ onUnmounted(() => {
                     <button
                         type="button"
                         class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-50"
-                        aria-label="Close academic record"
+                        aria-label="Close supporting record"
                         @click="emit('close')"
                     >
                         <i class="fa-solid fa-xmark" aria-hidden="true"></i>

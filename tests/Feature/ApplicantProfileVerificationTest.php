@@ -447,29 +447,14 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->assertNotNull($response->json('prepared_document.id'));
     }
 
-    public function test_optional_school_proof_is_reusable_without_resetting_academic_verification(): void
+    public function test_required_school_proof_is_reusable_and_reopens_profile_verification(): void
     {
         Storage::fake('local');
 
         $admin = User::factory()->create(['role' => 'admin']);
         $provider = User::factory()->create(['role' => 'provider']);
         $otherProvider = User::factory()->create(['role' => 'provider']);
-        $applicant = User::factory()->create(['role' => 'applicant']);
-        $this->createRecentSchoolId($applicant);
-
-        $this->actingAs($applicant)
-            ->post('/dashboard/profile/verification-documents', [
-                'document_type' => 'academic_record',
-                'document_file' => UploadedFile::fake()->create('latest-grades.pdf', 120, 'application/pdf'),
-                'terms_accepted' => '1',
-            ], ['Accept' => 'application/json'])
-            ->assertCreated();
-
-        $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
-                'verification_status' => 'approved',
-            ])
-            ->assertOk();
+        $applicant = User::factory()->verifiedProfile()->create(['role' => 'applicant']);
 
         $schoolProofResponse = $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
@@ -477,11 +462,11 @@ class ApplicantProfileVerificationTest extends TestCase
                 'document_file' => UploadedFile::fake()->create('certificate-of-enrollment.pdf', 120, 'application/pdf'),
                 'terms_accepted' => '1',
             ], ['Accept' => 'application/json'])
-            ->assertCreated()
-            ->assertJsonPath('user.applicant_verification_status', 'approved')
-            ->assertJsonPath('user.is_profile_verified', true)
+            ->assertOk()
+            ->assertJsonPath('user.applicant_verification_status', 'pending')
+            ->assertJsonPath('user.is_profile_verified', false)
             ->assertJsonPath('prepared_document.document_name', 'Certificate of enrollment')
-            ->assertJsonPath('prepared_documents_count', 2);
+            ->assertJsonPath('prepared_documents_count', 1);
 
         $schoolProof = ApplicantVerificationDocument::query()
             ->where('applicant_id', $applicant->id)
@@ -492,7 +477,7 @@ class ApplicantProfileVerificationTest extends TestCase
             'user_id' => $applicant->id,
             'document_name' => 'Certificate of enrollment',
         ]);
-        $this->assertSame('approved', $applicant->studentProfile()->firstOrFail()->verification_status);
+        $this->assertSame('pending', $applicant->studentProfile()->firstOrFail()->verification_status);
 
         $this->actingAs($admin)
             ->getJson("/admin/users/{$applicant->id}")
@@ -540,10 +525,10 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->actingAs($applicant)
             ->deleteJson("/dashboard/profile/verification-documents/{$schoolProof->id}")
             ->assertOk()
-            ->assertJsonPath('user.applicant_verification_status', 'approved')
-            ->assertJsonPath('prepared_documents_count', 2);
+            ->assertJsonPath('user.applicant_verification_status', 'pending')
+            ->assertJsonPath('prepared_documents_count', 1);
 
-        $this->assertSame('approved', $applicant->studentProfile()->firstOrFail()->verification_status);
+        $this->assertSame('pending', $applicant->studentProfile()->firstOrFail()->verification_status);
         $this->assertNotNull($schoolProofResponse->json('prepared_document.id'));
     }
 
@@ -960,7 +945,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->assertDatabaseHas('portal_notifications', [
             'user_id' => $applicant->id,
             'type' => 'applicant_profile_verification',
-            'title' => 'Academic record verified',
+            'title' => 'Applicant profile verified',
         ]);
 
         $this->actingAs($admin)
@@ -1235,6 +1220,18 @@ class ApplicantProfileVerificationTest extends TestCase
 
     private function createRecentSchoolId(User $applicant): ApplicantVerificationDocument
     {
+        foreach (array_diff(ApplicantVerificationDocument::requiredTypesFor($applicant), ['academic_record', 'recent_school_id']) as $type) {
+            $applicant->applicantVerificationDocuments()->firstOrCreate(['document_type' => $type], [
+                'uploaded_by' => $applicant->id,
+                'original_name' => $type.'.pdf',
+                'path' => "applicant-verification/{$applicant->id}/{$type}.pdf",
+                'mime_type' => 'application/pdf',
+                'size' => 100,
+                'status' => 'submitted',
+                'uploaded_at' => now()->subSecond(),
+            ]);
+        }
+
         return ApplicantVerificationDocument::create([
             'applicant_id' => $applicant->id,
             'uploaded_by' => $applicant->id,

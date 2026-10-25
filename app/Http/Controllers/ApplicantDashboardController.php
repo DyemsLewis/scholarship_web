@@ -842,12 +842,16 @@ class ApplicantDashboardController extends Controller
 
         $user = $request->user();
         $isAcademicRecord = $validated['document_type'] === 'academic_record';
-        $isRecentSchoolId = $validated['document_type'] === 'recent_school_id';
+        $isRequiredEvidence = in_array($validated['document_type'], ApplicantVerificationDocument::requiredTypesFor($user), true);
         $isAchievementEvidence = $validated['document_type'] === 'achievement_evidence';
         $documentLabel = match ($validated['document_type']) {
             'academic_record' => 'academic record',
             'recent_school_id' => 'recent school ID',
             'school_record' => 'school enrollment proof',
+            'identity_record' => 'identity and birth record',
+            'income_record' => 'household income proof',
+            'residency_record' => 'residence proof',
+            'guardian_record' => 'parent or guardian ID',
             'no_current_scholarship_proof' => 'proof of no current scholarship',
             'achievement_evidence' => 'achievement evidence',
         };
@@ -866,7 +870,7 @@ class ApplicantDashboardController extends Controller
         }
 
         try {
-            $document = DB::transaction(function () use ($user, $validated, $file, $path, $isAcademicRecord, $isRecentSchoolId, $isAchievementEvidence): ApplicantVerificationDocument {
+            $document = DB::transaction(function () use ($user, $validated, $file, $path, $isAcademicRecord, $isRequiredEvidence, $isAchievementEvidence): ApplicantVerificationDocument {
                 $document = ApplicantVerificationDocument::query()->updateOrCreate([
                     'applicant_id' => $user->id,
                     'document_type' => $validated['document_type'],
@@ -923,7 +927,7 @@ class ApplicantDashboardController extends Controller
                     ]);
                 }
 
-                if ($isRecentSchoolId) {
+                if ($isRequiredEvidence && ! $isAcademicRecord) {
                     $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
                         'verification_status' => 'pending',
                         'verification_notes' => null,
@@ -1055,7 +1059,7 @@ class ApplicantDashboardController extends Controller
         $path = $document->path;
         $user = $request->user();
         $removedAcademicRecord = $document->document_type === 'academic_record';
-        $removedRecentSchoolId = $document->document_type === 'recent_school_id';
+        $removedRequiredEvidence = in_array($document->document_type, ApplicantVerificationDocument::requiredTypesFor($user), true);
         $removedAchievementEvidence = $document->document_type === 'achievement_evidence';
 
         if ($removedAchievementEvidence && filled($user->studentProfile?->achievements)) {
@@ -1063,7 +1067,7 @@ class ApplicantDashboardController extends Controller
                 'document' => 'Clear and save the achievement entry before removing its supporting evidence.',
             ]);
         }
-        DB::transaction(function () use ($document, $user, $removedAcademicRecord, $removedRecentSchoolId): void {
+        DB::transaction(function () use ($document, $user, $removedAcademicRecord, $removedRequiredEvidence): void {
             $document->delete();
             $hasAcademicRecord = $user->applicantVerificationDocuments()
                 ->where('document_type', 'academic_record')
@@ -1099,7 +1103,7 @@ class ApplicantDashboardController extends Controller
                 }
             }
 
-            if ($removedRecentSchoolId) {
+            if ($removedRequiredEvidence && ! $removedAcademicRecord) {
                 $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
                     'verification_status' => $hasAcademicRecord ? 'pending' : 'unsubmitted',
                     'verification_notes' => null,
@@ -1135,7 +1139,8 @@ class ApplicantDashboardController extends Controller
             'message' => match ($document->document_type) {
                 'academic_record' => 'Academic record removed. Upload a current record when you are ready for verification.',
                 'recent_school_id' => 'Recent school ID removed. Upload a current ID to complete your required evidence.',
-                'school_record' => 'School enrollment proof removed. Your academic verification was not changed.',
+                'school_record' => 'School enrollment proof removed. Upload a current record to complete your required evidence.',
+                'identity_record', 'income_record', 'residency_record', 'guardian_record' => 'Supporting record removed. Upload a replacement before your profile can be verified again.',
                 'no_current_scholarship_proof' => 'Proof of no current scholarship removed.',
                 'achievement_evidence' => 'Achievement evidence removed.',
                 default => 'Older proof file removed. Your academic verification was not changed.',
@@ -1457,6 +1462,9 @@ class ApplicantDashboardController extends Controller
             ]);
         }
         $verifiedFields = [
+            'first_name', 'last_name', 'middle_initial', 'suffix', 'birthdate', 'citizenship_status',
+            'income_bracket', 'household_size', 'guardian_name', 'guardian_relationship', 'account_managed_by',
+            'address', 'barangay', 'city', 'province', 'region',
             'education_level',
             'school',
             'school_type',
@@ -1470,6 +1478,8 @@ class ApplicantDashboardController extends Controller
             'grading_scale',
             'achievements',
         ];
+        $verifiedFields = array_filter($verifiedFields, fn (string $field): bool => ! in_array($field, ['first_name', 'last_name', 'middle_initial', 'suffix'], true)
+            || strcasecmp(trim((string) $studentProfile->getOriginal($field)), trim((string) $studentProfile->getAttribute($field))) !== 0);
         $verificationReset = $studentProfile->verification_status === 'approved'
             && $studentProfile->isDirty($verifiedFields);
 
@@ -1545,7 +1555,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'message' => $verificationReset
-                ? 'Academic details updated and returned for verification.'
+                ? 'Verified profile details updated and returned for review.'
                 : 'Applicant profile updated.',
             'user' => $this->userPayload($request),
             'profile_readiness' => $user->applicantProfileReadiness(),
@@ -3671,6 +3681,8 @@ class ApplicantDashboardController extends Controller
             'Latest report card or grades',
             'Certificate of enrollment',
             'Recent school ID',
+            'Proof of identity',
+            'Proof of residence',
             'Proof of income',
             'Certificate of indigency',
             'Birth certificate',
@@ -3826,6 +3838,8 @@ class ApplicantDashboardController extends Controller
         return [
             'id' => $document->id,
             'document_type' => $document->document_type,
+            'label' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$document->document_type]['label'] ?? str($document->document_type)->headline()->toString(),
+            'supports' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$document->document_type]['supports'] ?? null,
             'original_name' => $document->original_name,
             'size' => $document->size,
             'status' => $document->status,

@@ -1195,7 +1195,7 @@ trait HandlesProviderApplicationWorkflow
 
         if ($verificationStatus === 'approved') {
             return response()->json([
-                'message' => 'The applicant academic record is already verified.',
+                'message' => 'The applicant profile is already verified.',
                 'application' => $this->freshApplicationPayload($application, $request->user()),
             ]);
         }
@@ -1241,6 +1241,16 @@ trait HandlesProviderApplicationWorkflow
 
         $academicRecord ??= $applicant->applicantVerificationDocuments
             ->firstWhere('document_type', 'academic_record');
+        $missingEvidence = ApplicantVerificationDocument::missingRequiredTypesFor($applicant);
+
+        if ($missingEvidence !== []) {
+            throw ValidationException::withMessages([
+                'verification' => 'Upload all required profile evidence before verification: '.collect($missingEvidence)
+                    ->map(fn (string $type): string => ApplicantVerificationDocument::EVIDENCE_DETAILS[$type]['label'])
+                    ->implode(', ').'.',
+            ]);
+        }
+
         $previousAcademicResult = [
             'grading_scale' => $applicant->studentProfile?->grading_scale,
             'gwa' => $applicant->studentProfile?->gwa !== null
@@ -1312,8 +1322,8 @@ trait HandlesProviderApplicationWorkflow
         PortalNotification::create([
             'user_id' => $applicant->id,
             'type' => 'applicant_profile_verification',
-            'title' => 'Academic record verified',
-            'message' => "{$providerName} verified your academic record while reviewing your application for {$application->scholarship?->title}.",
+            'title' => 'Applicant profile verified',
+            'message' => "{$providerName} verified your profile supporting records while reviewing your application for {$application->scholarship?->title}.",
             'action_url' => '/dashboard/profile',
         ]);
 
@@ -1952,6 +1962,8 @@ trait HandlesProviderApplicationWorkflow
         return [
             'id' => $document->id,
             'document_type' => $document->document_type,
+            'label' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$document->document_type]['label'] ?? str($document->document_type)->headline()->toString(),
+            'supports' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$document->document_type]['supports'] ?? null,
             'original_name' => $document->original_name,
             'mime_type' => $document->mime_type,
             'size' => $document->size,

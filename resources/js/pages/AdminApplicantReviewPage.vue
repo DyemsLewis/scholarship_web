@@ -51,9 +51,11 @@ const schoolRecord = computed(() => applicant.value?.verification_documents?.fin
 const recentSchoolId = computed(() => applicant.value?.verification_documents?.find(
     (document) => document.document_type === 'recent_school_id',
 ) ?? null);
-const profileEvidenceDocuments = computed(() => [academicRecord.value, recentSchoolId.value, schoolRecord.value].filter(Boolean));
-const profileEvidenceReady = computed(() => Boolean(academicRecord.value)
-    && Boolean(recentSchoolId.value));
+const profileEvidenceDocuments = computed(() => applicant.value?.verification_documents ?? []);
+const profileEvidenceReady = computed(() => (applicant.value?.profile_evidence_requirements ?? [])
+    .filter((requirement) => requirement.required)
+    .every((requirement) => profileEvidenceDocuments.value.some((document) => document.document_type === requirement.value))
+    && Boolean(academicRecord.value) && Boolean(recentSchoolId.value));
 const savedAcademicResult = computed(() => academicResultLabel(applicant.value));
 const academicScanRequired = computed(() => Boolean(applicant.value?.academic_scan_required));
 const academicScanReady = computed(() => !academicScanRequired.value || academicRecord.value?.ocr_status === 'succeeded');
@@ -320,6 +322,10 @@ function documentTypeLabel(type) {
         academic_record: 'Academic record',
         recent_school_id: 'Recent school ID',
         school_record: 'School enrollment proof',
+        identity_record: 'Identity and birth record',
+        income_record: 'Household income proof',
+        residency_record: 'Residence proof',
+        guardian_record: 'Parent or guardian ID',
         no_current_scholarship_proof: 'Proof of no current scholarship',
         achievement_evidence: 'Achievement evidence',
     }[type] ?? 'Older verification file';
@@ -396,7 +402,7 @@ async function updateApplicant(verificationStatus) {
     }
 
     if (!profileEvidenceReady.value) {
-        decisionError.value = 'The applicant must upload the required academic record and recent school ID before profile verification.';
+        decisionError.value = 'The applicant must upload all required profile evidence before verification.';
         return;
     }
 
@@ -757,7 +763,7 @@ onMounted(loadApplicant);
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Admin decision</p>
                                     <h3 class="mt-1 text-xl font-bold text-slate-950">Profile verification decision</h3>
-                                    <p class="mt-1 text-sm leading-6 text-slate-600">Confirm that the applicant's school and academic profile is supported by the submitted records, or request a replacement.</p>
+                                    <p class="mt-1 text-sm leading-6 text-slate-600">Compare the applicant's identity, school, household, and residence details with the submitted records, or request a replacement.</p>
                                 </div>
                             </div>
                             <span :class="['shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase', statusClass(applicantReviewStatus(applicant))]">
@@ -855,7 +861,7 @@ onMounted(loadApplicant);
                         </div>
 
                         <div v-else class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900">
-                            The applicant must upload an academic record and recent school ID before the profile can be verified.
+                            The applicant must upload all required profile evidence before verification.
                         </div>
                     </section>
 

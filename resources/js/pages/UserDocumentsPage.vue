@@ -50,6 +50,8 @@ const documentDescriptions = {
     'Latest report card or grades': 'Your latest available school grades or report card.',
     'Certificate of enrollment': 'Current proof that you are enrolled in school.',
     'Recent school ID': 'A clear copy or photo of your most recent school ID.',
+    'Proof of identity': 'A birth certificate or valid government-issued ID supporting your official name and date of birth.',
+    'Proof of residence': 'A residency certificate or recent utility bill supporting your saved city, province, and region.',
     'Proof of no current scholarship': 'A certificate, clearance, or signed declaration accepted by the provider confirming that you do not currently receive another scholarship.',
     'Proof of income': 'A recent income certificate, payslip, or similar household income proof.',
     'Certificate of indigency': 'A current certificate issued by your barangay or local office.',

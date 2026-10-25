@@ -17,6 +17,9 @@ const gradingScale = ref('percentage');
 const academicResult = ref('');
 const photoReason = ref('');
 const verificationStatus = computed(() => applicant.value?.verification_oversight?.status || applicant.value?.applicant_verification_status || 'pending');
+const missingEvidence = computed(() => (applicant.value?.profile_evidence_requirements ?? [])
+    .filter((requirement) => requirement.required
+        && !applicant.value?.verification_documents?.some((document) => document.document_type === requirement.value)));
 const applicantProfileRecord = computed(() => ({
     name: applicant.value?.name || 'Applicant record',
     initials: String(applicant.value?.name || 'AP')
@@ -130,6 +133,9 @@ async function reviewPhoto(action) {
 }
 
 function documentLabel(type) {
+    const requirement = applicant.value?.profile_evidence_requirements?.find((item) => item.value === type);
+    if (requirement) return requirement.label;
+
     if (type === 'no_current_scholarship_proof') {
         return 'Proof of no current scholarship';
     }
@@ -142,7 +148,7 @@ onMounted(loadRecord);
 <template>
     <AdminWorkspacePage workspace="review_officer">
         <a href="/admin/workspaces/reviews/applicants" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs"></i>Applicant queue</a>
-        <AdminWorkspaceHeader eyebrow="Applicant verification" title="Academic profile record" description="Compare the saved profile with supporting evidence." icon="fa-solid fa-user-check" />
+        <AdminWorkspaceHeader eyebrow="Applicant verification" title="Applicant profile record" description="Compare identity, school, household, and residence details with supporting evidence." icon="fa-solid fa-user-check" />
         <div v-if="loading" class="admin-panel mt-4 px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading applicant record...</div>
         <p v-else-if="errorMessage && !applicant" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{{ errorMessage }}</p>
         <template v-else-if="applicant">
@@ -155,6 +161,8 @@ onMounted(loadRecord);
                 :verification-label="documentLabel(verificationStatus)"
                 :show-trust-notice="false"
             />
+
+            <p v-if="missingEvidence.length" class="mt-4 border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-950"><strong>Evidence still needed:</strong> {{ missingEvidence.map((item) => item.label).join(', ') }}. Approval is available once all required records are uploaded.</p>
 
             <section class="admin-panel mt-4 overflow-hidden"><header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Supporting evidence</h2><p class="mt-0.5 text-sm text-slate-500">Open the record that supports each saved claim.</p></div></header><div v-if="applicant.verification_documents?.length" class="staff-table-viewport"><table class="portal-data-table min-w-[58rem]"><thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><tr><th class="px-6 py-3">Evidence</th><th class="px-4 py-3">Review state</th><th class="px-4 py-3">Extracted result</th><th class="px-6 py-3 text-right">Preview</th></tr></thead><tbody class="divide-y divide-slate-200"><tr v-for="document in applicant.verification_documents" :key="document.id"><td class="px-6 py-4"><p class="text-sm font-bold text-slate-950">{{ documentLabel(document.document_type) }}</p><p class="mt-0.5 text-xs text-slate-500" data-file-name>{{ document.original_name }}</p></td><td class="px-4 py-4 text-sm font-semibold text-slate-700">{{ documentLabel(document.status) }}</td><td class="px-4 py-4 text-sm text-slate-600">{{ document.ocr_grade ?? 'Not extracted' }}</td><td class="px-6 py-4 text-right"><a :href="document.view_url" data-file-preview="true" :data-file-name="document.original_name" class="inline-grid h-9 w-9 place-items-center border border-slate-300 text-slate-700 hover:bg-slate-950 hover:text-white" aria-label="Preview evidence" title="Preview evidence"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a></td></tr></tbody></table></div><p v-else class="px-6 py-10 text-center text-sm font-semibold text-slate-500">No supporting evidence has been uploaded.</p></section>
 

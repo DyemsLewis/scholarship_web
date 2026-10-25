@@ -225,6 +225,10 @@ const applicantVerificationDocumentOptions = {
     academic_record: 'Academic record',
     recent_school_id: 'Recent school ID',
     school_record: 'School enrollment proof',
+    identity_record: 'Identity and birth record',
+    income_record: 'Household income proof',
+    residency_record: 'Residence proof',
+    guardian_record: 'Parent or guardian ID',
     no_current_scholarship_proof: 'Proof of no current scholarship',
     achievement_evidence: 'Achievement evidence',
 };

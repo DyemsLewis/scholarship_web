@@ -1143,6 +1143,19 @@ class AdminController extends Controller
             ], 422);
         }
 
+        if ($validated['verification_status'] === 'approved') {
+            $missingEvidence = ApplicantVerificationDocument::missingRequiredTypesFor($applicant);
+
+            if ($missingEvidence !== []) {
+                return response()->json([
+                    'message' => 'Upload all required profile evidence before verification: '.collect($missingEvidence)
+                        ->map(fn (string $type): string => ApplicantVerificationDocument::EVIDENCE_DETAILS[$type]['label'])
+                        ->implode(', ').'.',
+                    'missing_evidence' => $missingEvidence,
+                ], 422);
+            }
+        }
+
         $previousAcademicResult = [
             'grading_scale' => $applicant->studentProfile?->grading_scale,
             'gwa' => $applicant->studentProfile?->gwa !== null
@@ -1221,7 +1234,7 @@ class AdminController extends Controller
         }
 
         $message = match ($validated['verification_status']) {
-            'approved' => 'Your school and academic profile information has been verified against the supporting records by the platform review team.',
+            'approved' => 'Your applicant profile has been verified against the submitted identity, school, household, and residence records by the platform review team.',
             'rejected' => 'Your profile supporting evidence needs to be replaced before your information can be verified.',
             default => 'Your profile verification was reopened for platform review.',
         };
@@ -3316,6 +3329,8 @@ class AdminController extends Controller
         return [
             'id' => $document->id,
             'document_type' => $document->document_type,
+            'label' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$document->document_type]['label'] ?? str($document->document_type)->headline()->toString(),
+            'supports' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$document->document_type]['supports'] ?? null,
             'original_name' => $document->original_name,
             'mime_type' => $document->mime_type,
             'size' => $document->size,
