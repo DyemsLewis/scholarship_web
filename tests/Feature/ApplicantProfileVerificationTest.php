@@ -547,28 +547,46 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->assertNotNull($schoolProofResponse->json('prepared_document.id'));
     }
 
-    public function test_optional_no_current_scholarship_proof_is_reusable_and_visible_to_the_provider(): void
+    public function test_retired_no_current_scholarship_proof_cannot_be_uploaded(): void
     {
         Storage::fake('local');
 
-        $provider = User::factory()->create(['role' => 'provider']);
         $applicant = User::factory()->create(['role' => 'applicant']);
 
-        $response = $this->actingAs($applicant)
+        $this->actingAs($applicant)
             ->post('/dashboard/profile/verification-documents', [
                 'document_type' => 'no_current_scholarship_proof',
                 'document_file' => UploadedFile::fake()->create('no-current-scholarship.pdf', 120, 'application/pdf'),
                 'terms_accepted' => '1',
             ], ['Accept' => 'application/json'])
-            ->assertCreated()
-            ->assertJsonPath('verification_documents.0.document_type', 'no_current_scholarship_proof')
-            ->assertJsonPath('prepared_document.document_name', 'Proof of no current scholarship')
-            ->assertJsonPath('user.applicant_verification_status', 'unsubmitted');
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('document_type');
 
-        $proof = ApplicantVerificationDocument::query()
-            ->where('applicant_id', $applicant->id)
-            ->where('document_type', 'no_current_scholarship_proof')
-            ->firstOrFail();
+        $this->assertDatabaseCount('applicant_verification_documents', 0);
+        $this->assertDatabaseCount('student_documents', 0);
+        $this->assertSame([], Storage::disk('local')->allFiles());
+    }
+
+    public function test_existing_no_current_scholarship_proof_remains_visible_to_the_provider(): void
+    {
+        Storage::fake('local');
+
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $path = "applicant-verification/{$applicant->id}/no-current-scholarship.pdf";
+        Storage::disk('local')->put($path, 'Existing scholarship-status proof');
+        $proof = ApplicantVerificationDocument::create([
+            'applicant_id' => $applicant->id,
+            'uploaded_by' => $applicant->id,
+            'document_type' => 'no_current_scholarship_proof',
+            'original_name' => 'no-current-scholarship.pdf',
+            'path' => $path,
+            'mime_type' => 'application/pdf',
+            'size' => 32,
+            'status' => 'submitted',
+            'uploaded_at' => now(),
+        ]);
+        $preparedDocument = app(\App\Services\ApplicantDocumentLibraryService::class)->ensureVerificationCopy($applicant, $proof);
 
         $this->assertDatabaseHas('student_documents', [
             'user_id' => $applicant->id,
@@ -610,7 +628,7 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('message', 'Proof of no current scholarship removed.');
 
-        $this->assertNotNull($response->json('prepared_document.id'));
+        $this->assertNotNull($preparedDocument);
     }
 
     public function test_academic_verification_record_is_copied_to_documents_and_survives_verification_deletion(): void

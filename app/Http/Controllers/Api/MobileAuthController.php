@@ -1534,7 +1534,6 @@ class MobileAuthController extends Controller
             'Certificate of enrollment',
             'Latest report card or grades',
             'Recent school ID',
-            'Proof of no current scholarship',
             'Proof of income',
             'Certificate of indigency',
             'Parent or guardian valid ID',
@@ -1556,6 +1555,7 @@ class MobileAuthController extends Controller
             ->merge($applicationRequirements)
             ->map(fn (string $document) => trim($document))
             ->filter()
+            ->reject(fn (string $document): bool => str($document)->lower()->squish()->toString() === 'proof of no current scholarship')
             ->unique()
             ->sort()
             ->values()

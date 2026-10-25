@@ -408,19 +408,10 @@ const schoolProofOption = computed(() => {
         required: false,
     };
 });
-const noCurrentScholarshipProofOption = computed(() => ({
-    value: 'no_current_scholarship_proof',
-    label: 'Proof of no current scholarship',
-    description: 'Certificate, clearance, or signed declaration accepted by the provider.',
-    icon: 'fa-solid fa-award',
-    context: ['Optional unless a program requires it'],
-    required: false,
-}));
 const verificationDocumentOptions = computed(() => [
     academicProofOption.value,
     recentSchoolIdOption.value,
     schoolProofOption.value,
-    noCurrentScholarshipProofOption.value,
 ]);
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
 const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);

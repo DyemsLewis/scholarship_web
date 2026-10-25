@@ -7,12 +7,17 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ApplicantVerificationDocument extends Model
 {
-    public const PROFILE_EVIDENCE_TYPES = [
+    public const PROFILE_UPLOAD_TYPES = [
         'academic_record',
         'recent_school_id',
         'school_record',
-        'no_current_scholarship_proof',
         'achievement_evidence',
+    ];
+
+    // Retired evidence remains accessible in existing review records.
+    public const PROFILE_EVIDENCE_TYPES = [
+        ...self::PROFILE_UPLOAD_TYPES,
+        'no_current_scholarship_proof',
     ];
 
     protected $fillable = [

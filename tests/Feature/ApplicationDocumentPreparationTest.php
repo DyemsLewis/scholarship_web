@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicationDocument;
+use App\Models\MobileApiToken;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
@@ -26,7 +27,7 @@ class ApplicationDocumentPreparationTest extends TestCase
             'provider_id' => $provider->id,
             'title' => 'Provider Paper Test',
             'description' => 'Uses a paper that only applies to this provider.',
-            'requirements' => "Latest report card or grades\nProvider-specific essay form",
+            'requirements' => "Latest report card or grades\nProvider-specific essay form\nProof of no current scholarship",
             'deadline' => now()->addMonth()->toDateString(),
             'status' => 'published',
             'application_mode' => 'online',
@@ -41,7 +42,6 @@ class ApplicationDocumentPreparationTest extends TestCase
             'Latest report card or grades',
             'Certificate of enrollment',
             'Recent school ID',
-            'Proof of no current scholarship',
             'Proof of income',
             'Certificate of indigency',
             'Birth certificate',
@@ -55,6 +55,20 @@ class ApplicationDocumentPreparationTest extends TestCase
             'Other identity or school proof',
         ], $documentOptions);
         $this->assertNotContains('Provider-specific essay form', $documentOptions);
+
+        $token = 'document-catalog-test';
+        MobileApiToken::create([
+            'user_id' => $applicant->id,
+            'name' => 'document-catalog-test',
+            'token_hash' => hash('sha256', $token),
+            'expires_at' => now()->addDay(),
+        ]);
+        $mobileOptions = $this->withToken($token)
+            ->getJson('/api/mobile/documents')
+            ->assertOk()
+            ->json('document_options');
+
+        $this->assertNotContains('Proof of no current scholarship', $mobileOptions);
     }
 
     public function test_applicant_uploads_required_files_before_submitting_and_can_access_them_in_the_wizard(): void

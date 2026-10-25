@@ -835,7 +835,7 @@ class ApplicantDashboardController extends Controller
             : 5120;
         $allowedFileTypes = $requiresImageOrPdf ? 'pdf,jpg,jpeg,png' : 'pdf,jpg,jpeg,png,doc,docx';
         $validated = $request->validate([
-            'document_type' => ['required', Rule::in(ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)],
+            'document_type' => ['required', Rule::in(ApplicantVerificationDocument::PROFILE_UPLOAD_TYPES)],
             'document_file' => ['required', 'file', "max:{$maximumFileSize}", "mimes:{$allowedFileTypes}"],
             'terms_accepted' => ['accepted'],
         ]);
@@ -3671,7 +3671,6 @@ class ApplicantDashboardController extends Controller
             'Latest report card or grades',
             'Certificate of enrollment',
             'Recent school ID',
-            'Proof of no current scholarship',
             'Proof of income',
             'Certificate of indigency',
             'Birth certificate',
