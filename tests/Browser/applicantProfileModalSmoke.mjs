@@ -10,12 +10,16 @@ const password = process.env.APPLICANT_PROFILE_SMOKE_PASSWORD;
 const timeoutMs = Number(process.env.APPLICANT_PROFILE_SMOKE_TIMEOUT_MS ?? 20_000);
 const screenshotPath = process.env.APPLICANT_PROFILE_SMOKE_SCREENSHOT;
 const overviewScreenshotPath = process.env.APPLICANT_PROFILE_SMOKE_OVERVIEW_SCREENSHOT;
+const recordScreenshotPath = process.env.APPLICANT_PROFILE_SMOKE_RECORD_SCREENSHOT;
 const layoutOnly = process.env.APPLICANT_PROFILE_SMOKE_LAYOUT_ONLY === '1';
 const windowSize = process.env.APPLICANT_PROFILE_SMOKE_WINDOW_SIZE ?? '1440,1000';
 const expectedState = process.env.APPLICANT_PROFILE_SMOKE_EXPECTED_STATE;
 const verifySavedDetails = process.env.APPLICANT_PROFILE_SMOKE_SAVED_DETAILS === '1';
 const detailsScreenshotPath = process.env.APPLICANT_PROFILE_SMOKE_DETAILS_SCREENSHOT;
 const addressScreenshotPath = process.env.APPLICANT_PROFILE_SMOKE_ADDRESS_SCREENSHOT;
+const verifyEvidence = process.env.APPLICANT_PROFILE_SMOKE_EVIDENCE === '1';
+const mockUploads = process.env.APPLICANT_PROFILE_SMOKE_MOCK_UPLOADS === '1';
+const modalScreenshotDir = process.env.APPLICANT_PROFILE_SMOKE_MODAL_SCREENSHOT_DIR;
 
 function fail(message) {
     throw new Error(message);
@@ -242,6 +246,17 @@ async function main() {
             await writeFile(path.resolve(overviewScreenshotPath), Buffer.from(screenshot.data, 'base64'));
         }
         console.log(`PASS Applicant profile foundation: ${JSON.stringify(foundation)}`);
+        if (recordScreenshotPath) {
+            await client.evaluate('window.scrollTo(0, 0)');
+            await delay(250);
+            const bounds = await client.evaluate(`(() => {
+                const section = document.querySelector('[data-profile-identity]').closest('section');
+                const rect = section.getBoundingClientRect();
+                return { x: Math.max(0, rect.left - 12), y: rect.top + window.scrollY - 12, width: rect.width + 24, height: rect.height + 24, scale: 1 };
+            })()`);
+            const screenshot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: bounds });
+            await writeFile(path.resolve(recordScreenshotPath), Buffer.from(screenshot.data, 'base64'));
+        }
 
         const details = await client.evaluate(`(() => {
             const sections = [...document.querySelectorAll('[data-profile-details] > [data-profile-section]')];
@@ -285,9 +300,12 @@ async function main() {
             await waitFor(() => client.evaluate("Boolean(document.querySelector('[role=\"dialog\"][aria-labelledby=\"location-map-modal-title\"]'))"), 'the saved-address map');
             const mapTitle = await client.evaluate("document.querySelector('#location-map-modal-title').innerText");
             if (mapTitle !== 'Approximate home location') fail(`The saved location opened the wrong map: ${mapTitle}`);
-            await client.evaluate("document.querySelector('[aria-label=\"Close map\"]').click()");
+            const mapFocused = await client.evaluate("document.querySelector('[aria-labelledby=\"location-map-modal-title\"]').contains(document.activeElement) && document.body.style.overflow === 'hidden'");
+            if (!mapFocused) fail('The address map did not receive focus and lock background scrolling.');
+            await client.evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
             await waitFor(() => client.evaluate("!document.querySelector('[role=\"dialog\"][aria-labelledby=\"location-map-modal-title\"]')"), 'the saved-address map to close');
             if (await client.evaluate('window.__profileMutationCount !== 0')) fail('Viewing the saved address attempted to update profile data.');
+            if (await client.evaluate("document.body.style.overflow !== ''")) fail('Closing the saved map left page scrolling locked.');
             console.log('PASS Saved home address opens a read-only map without modifying the profile');
         }
         console.log(`PASS Applicant profile details: ${JSON.stringify(details)}`);
@@ -297,7 +315,7 @@ async function main() {
             ['personal', 'Personal and contact'],
             ['academic', 'Learning record'],
             ['household', 'Household and guardian'],
-            ['location', 'Home location'],
+            ['location', 'Home address'],
         ];
         const audits = [];
 
@@ -338,6 +356,8 @@ async function main() {
                     dialogVisibility: dialogStyle?.visibility,
                     overlayPosition: overlayStyle?.position,
                     overlayZIndex: overlayStyle?.zIndex,
+                    overflow: dialog.scrollWidth > dialog.clientWidth + 2,
+                    footerVisible: dialog.querySelector('footer').getBoundingClientRect().bottom <= window.innerHeight,
                 };
             })()`);
 
@@ -345,9 +365,14 @@ async function main() {
             if (audit.title !== expectedTitle) fail(`The ${section} modal rendered the wrong title: ${audit.title}`);
             if (audit.bodyOverflow !== 'hidden') fail(`The ${section} modal did not lock background scrolling.`);
             if (!audit.dialogRect || audit.dialogRect.width <= 0 || audit.dialogRect.height <= 0) fail(`The ${section} modal has no visible bounds: ${JSON.stringify(audit)}`);
+            if (audit.overflow || !audit.footerVisible) fail(`The ${section} modal clips fields or its actions: ${JSON.stringify(audit)}`);
             if (runtimeErrors.length) fail(`The ${section} profile editor raised a browser exception: ${runtimeErrors[0]}`);
             if (requestErrors.length) fail(`The ${section} profile editor had failed requests: ${requestErrors.join(', ')}`);
             audits.push(audit);
+            if (modalScreenshotDir) {
+                const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+                await writeFile(path.join(path.resolve(modalScreenshotDir), `profile-part3-${section}-${viewportWidth}.png`), Buffer.from(screenshot.data, 'base64'));
+            }
 
             if (verifySavedDetails && index === 0) {
                 await client.evaluate(`(() => {
@@ -377,9 +402,152 @@ async function main() {
 
         if (verifySavedDetails && await client.evaluate('window.__profileMutationCount !== 0')) fail('The read-only details test saved profile changes.');
 
+        if (verifyEvidence) {
+            await client.evaluate("document.querySelector('[aria-label=\"Close profile editor\"]')?.click()");
+            await waitFor(() => client.evaluate("!document.querySelector('#profile-editor-title')"), 'the location editor to close');
+            await client.evaluate("[...document.querySelectorAll('button')].find((button) => button.innerText.trim().startsWith('Supporting evidence')).click()");
+            await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-profile-evidence-list]'))"), 'the evidence editor');
+            await delay(250);
+            const evidenceAudit = await client.evaluate(`(() => {
+                const dialog = document.querySelector('[aria-labelledby="profile-editor-title"]');
+                const rows = [...dialog.querySelectorAll('[data-evidence-type]')];
+                const statusLefts = rows.map((row) => row.querySelector('[data-evidence-status]').getBoundingClientRect().left);
+                return {
+                    rows: rows.length,
+                    collapsed: rows.every((row) => !row.querySelector('details').open),
+                    statusesAligned: statusLefts.every((left) => Math.abs(left - statusLefts[0]) < 2),
+                    overflow: dialog.scrollWidth > dialog.clientWidth + 2,
+                    message: dialog.querySelector('[data-profile-editor-save-state]').innerText,
+                    actions: [...dialog.querySelector('footer').querySelectorAll('button')].map((button) => button.innerText.trim()),
+                };
+            })()`);
+            if (!evidenceAudit.rows || !evidenceAudit.collapsed || !evidenceAudit.statusesAligned || evidenceAudit.overflow) fail(`Evidence rows are inconsistent: ${JSON.stringify(evidenceAudit)}`);
+            if (!evidenceAudit.message.includes('saved immediately') || JSON.stringify(evidenceAudit.actions) !== '["Close"]') fail(`Evidence save behavior is unclear: ${JSON.stringify(evidenceAudit)}`);
+
+            await client.evaluate("document.querySelector('[data-evidence-help] summary').click()");
+            if (!await client.evaluate("document.querySelector('[data-evidence-help]').open")) fail('Evidence guidance did not expand.');
+            await client.evaluate("[...document.querySelectorAll('#profile-verification button')].find((button) => button.innerText.trim() === 'Read terms').click()");
+            await waitFor(() => client.evaluate("Boolean(document.querySelector('[role=\"dialog\"][aria-label]'))"), 'upload terms');
+            const termsAudit = await client.evaluate(`(() => {
+                const terms = document.querySelector('[role="dialog"][aria-label]');
+                return { layer: Number(getComputedStyle(terms).zIndex), focused: terms.contains(document.activeElement) };
+            })()`);
+            if (termsAudit.layer <= 90 || !termsAudit.focused) fail(`Upload terms are behind the editor or unfocused: ${JSON.stringify(termsAudit)}`);
+            await client.evaluate("document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))");
+            await waitFor(() => client.evaluate("!document.querySelector('[role=\"dialog\"][aria-label]')"), 'upload terms to close');
+            if (!await client.evaluate("Boolean(document.querySelector('[data-profile-evidence-list]')) && document.body.style.overflow === 'hidden'")) fail('Closing terms also closed the editor or unlocked the page.');
+
+            const previewButton = await client.evaluate("Boolean(document.querySelector('[data-evidence-type] button[aria-label^=\"View\"]'))");
+            if (previewButton) {
+                await client.evaluate("document.querySelector('[data-evidence-type] button[aria-label^=\"View\"]').click()");
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[aria-label=\"Close file preview\"]'))"), 'the evidence preview');
+                await client.evaluate("document.querySelector('[aria-label=\"Close file preview\"]').click()");
+                await waitFor(() => client.evaluate("!document.querySelector('[aria-label=\"Close file preview\"]')"), 'the evidence preview to close');
+                if (!await client.evaluate("Boolean(document.querySelector('[data-profile-evidence-list]'))")) fail('Closing a file preview also closed the editor.');
+            }
+
+            if (mockUploads) {
+                // Intercept mutations inside this browser only; never upload test files to demo storage.
+                await client.evaluate(`(async () => {
+                    const response = await window.axios.get('/dashboard/profile/data');
+                    window.__profileUploadPayload = response.data;
+                    window.__mockUploadCalls = 0;
+                    window.__mockUploadSuccess = false;
+                    window.axios.interceptors.request.use((config) => {
+                        if (config.method === 'post' && config.url === '/dashboard/profile/verification-documents') {
+                            config.adapter = () => new Promise((resolve, reject) => {
+                                window.__mockUploadCalls++;
+                                window.__finishMockUpload = () => {
+                                    if (!window.__mockUploadSuccess) {
+                                        reject({ config, response: { status: 422, data: { message: 'Test upload error: choose a clearer file.' } }, message: 'Mock validation error' });
+                                        return;
+                                    }
+                                    const data = structuredClone(window.__profileUploadPayload);
+                                    const type = config.data.get('document_type');
+                                    const document = data.verification_documents.find((file) => file.document_type === type);
+                                    const file = { ...document, id: document?.id ?? 987654, document_type: type, original_name: 'smoke-profile.pdf', size: 1024, status: 'submitted' };
+                                    data.verification_documents = [file, ...data.verification_documents.filter((item) => item.document_type !== type)];
+                                    data.user.applicant_verification_status = 'pending';
+                                    resolve({ data, status: 200, statusText: 'OK', headers: {}, config });
+                                };
+                            });
+                        }
+                        return config;
+                    });
+                    window.__chooseProfileTestFile = () => {
+                        const input = document.querySelector('[data-evidence-type="identity_record"] input[type="file"]');
+                        const transfer = new DataTransfer();
+                        transfer.items.add(new File(['%PDF-1.4 smoke'], 'smoke-profile.pdf', { type: 'application/pdf' }));
+                        input.files = transfer.files;
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                    };
+                    window.__chooseProfileTestFile();
+                })()`);
+                await delay(100);
+                if (!await client.evaluate("document.querySelector('#profile-verification').parentElement.innerText.includes('Agree to the upload terms first.') && window.__mockUploadCalls === 0")) fail('The upload terms gate did not prevent an unconsented upload.');
+                await client.evaluate(`(() => {
+                    const checkbox = document.querySelector('#profile-verification input[type="checkbox"]');
+                    checkbox.checked = true;
+                    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+                })()`);
+                await client.evaluate('window.__chooseProfileTestFile()');
+                await waitFor(() => client.evaluate('window.__mockUploadCalls === 1'), 'the mocked upload');
+                const protectedUpload = await client.evaluate(`(() => {
+                    const close = document.querySelector('[aria-label="Close profile editor"]');
+                    close.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                    return close.disabled && Boolean(document.querySelector('[data-profile-evidence-list]'));
+                })()`);
+                if (!protectedUpload) fail('An in-progress upload can be closed accidentally.');
+                await client.evaluate('window.__finishMockUpload()');
+                await waitFor(() => client.evaluate("document.querySelector('[data-profile-editor-body]').innerText.includes('Test upload error: choose a clearer file.')"), 'the upload error to appear');
+                await client.evaluate('window.__mockUploadSuccess = true; window.__chooseProfileTestFile()');
+                await waitFor(() => client.evaluate('window.__mockUploadCalls === 2'), 'the retry upload');
+                await client.evaluate('window.__finishMockUpload()');
+                await waitFor(() => client.evaluate("document.querySelector('[data-evidence-type=\"identity_record\"]').innerText.includes('smoke-profile.pdf') && !document.querySelector('[aria-label=\"Close profile editor\"]').disabled"), 'the successful upload response');
+                console.log('PASS Browser-mocked uploads: consent gate, busy-close protection, visible validation errors, retry and saved-file response; no database writes');
+            }
+
+            if (screenshotPath) {
+                await client.evaluate("document.querySelector('[data-evidence-help]').open = false; document.querySelector('[data-profile-editor-body]').scrollTop = 0");
+            }
+            console.log(`PASS Supporting evidence, upload terms and file preview: ${JSON.stringify(evidenceAudit)}`);
+            if (runtimeErrors.length) fail(`The evidence editor raised a browser exception: ${runtimeErrors.join(', ')}`);
+        }
+
         if (screenshotPath) {
+            await delay(250);
             const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
             await writeFile(path.resolve(screenshotPath), Buffer.from(screenshot.data, 'base64'));
+        }
+
+        if (verifyEvidence && mockUploads) {
+            await client.evaluate("document.querySelector('[aria-label=\"Close profile editor\"]').click()");
+            await waitFor(() => client.evaluate("!document.querySelector('#profile-editor-title')"), 'the evidence editor to close');
+            await client.evaluate(`(() => {
+                window.axios.interceptors.request.use((config) => {
+                    if (config.method === 'patch' && config.url === '/dashboard/profile') {
+                        config.adapter = () => Promise.reject({ config, response: { status: 422, data: {
+                            message: 'Check the contact number.', errors: { contact_number: ['Enter a valid contact number.'] },
+                        } }, message: 'Mock validation error' });
+                    }
+                    return config;
+                });
+                document.querySelector('[data-profile-section="personal"] button').click();
+            })()`);
+            await waitFor(() => client.evaluate("Boolean(document.querySelector('#profile-contact'))"), 'the personal editor');
+            await client.evaluate(`(() => {
+                const input = document.querySelector('#profile-contact');
+                input.value = '';
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            })()`);
+            await delay(100);
+            await client.evaluate("[...document.querySelectorAll('[aria-labelledby=\"profile-editor-title\"] footer button')].find((button) => button.innerText.trim() === 'Save changes').click()");
+            await waitFor(() => client.evaluate("document.activeElement?.id === 'profile-contact' && document.querySelector('[data-profile-editor-body]').innerText.includes('Enter a valid contact number.')"), 'validation focus to return to the invalid field');
+            await client.evaluate("document.querySelector('[aria-label=\"Close profile editor\"]').click()");
+            await waitFor(() => client.evaluate("Boolean(document.querySelector('[role=\"alertdialog\"]'))"), 'the discard confirmation');
+            await client.evaluate("[...document.querySelectorAll('[role=\"alertdialog\"] button')].find((button) => button.innerText.trim() === 'Discard changes').click()");
+            await waitFor(() => client.evaluate("!document.querySelector('#profile-editor-title')"), 'the invalid edit to be discarded');
+            console.log('PASS Browser-mocked profile validation: rejected saves retain edits, announce the error and focus the invalid field; no database writes');
         }
 
         console.log(`PASS Applicant profile edit modals: ${JSON.stringify(audits)}`);

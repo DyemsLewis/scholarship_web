@@ -16,6 +16,8 @@ const verifyEligibilityBuilder = process.env.PROVIDER_SMOKE_ELIGIBILITY_BUILDER 
 const verifyProgramConsistency = process.env.PROVIDER_SMOKE_PROGRAM_CONSISTENCY === '1';
 const windowSize = process.env.PROVIDER_SMOKE_WINDOW_SIZE ?? '1440,1000';
 const screenshotPath = process.env.PROVIDER_SMOKE_SCREENSHOT;
+const verifyProfileRecord = process.env.PROVIDER_SMOKE_PROFILE_RECORD === '1';
+const expectProfileRedactions = process.env.PROVIDER_SMOKE_PROFILE_REDACTIONS === '1';
 
 const governanceWorkspaces = [
     ['/provider', 'Provider dashboard', 'Loading organization overview...'],
@@ -531,6 +533,26 @@ async function main() {
             }
             if (visualAudit.duplicateActiveNavigations.length) {
                 fail(`${heading} has conflicting active navigation items.`);
+            }
+
+            if (verifyProfileRecord) {
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-profile-details]'))"), 'the shared reviewer profile');
+                const profileAudit = await client.evaluate(`(() => {
+                    const record = document.querySelector('[data-profile-details]');
+                    return {
+                        sections: [...record.querySelectorAll('[data-profile-section]')].map((section) => section.dataset.profileSection),
+                        editable: [...record.querySelectorAll('button')].some((button) => button.innerText.trim() === 'Edit'),
+                        clipped: [...record.querySelectorAll('dd')].some((field) => field.scrollWidth > field.clientWidth + 2),
+                        hasSourceNotice: document.body.innerText.includes('Self-declared profile information'),
+                        guardianEmail: Boolean(record.querySelector('[data-profile-field="guardian_email"]')),
+                        privateAddress: Boolean(record.querySelector('[data-profile-field="address"]')),
+                        rawEnums: /senior_high_school|parent_guardian/.test(record.innerText),
+                    };
+                })()`);
+                if (profileAudit.sections.length !== 4 || profileAudit.editable || profileAudit.clipped || !profileAudit.hasSourceNotice || profileAudit.rawEnums) fail(`Reviewer profile consistency failed: ${JSON.stringify(profileAudit)}`);
+                if (expectProfileRedactions && (profileAudit.guardianEmail || profileAudit.privateAddress)) fail(`Role-redacted profile data was rendered: ${JSON.stringify(profileAudit)}`);
+                if (!expectProfileRedactions && !profileAudit.guardianEmail) fail(`The authorized reviewer is missing guardian contacts: ${JSON.stringify(profileAudit)}`);
+                console.log(`PASS Read-only shared applicant profile: ${JSON.stringify(profileAudit)}`);
             }
 
             if (screenshotPath) {

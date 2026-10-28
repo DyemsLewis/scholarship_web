@@ -49,5 +49,7 @@ test('changing the address clears a stale pin and nested map escape does not clo
     const picker = readFileSync(new URL('../../resources/js/components/LocationPinField.vue', import.meta.url), 'utf8');
     const modal = readFileSync(new URL('../../resources/js/components/LocationMapModal.vue', import.meta.url), 'utf8');
     assert.match(picker, /watch\(\(\) => props.address.trim\(\), clearPin\)/);
-    assert.match(modal, /@keydown.esc.stop="close"/);
+    assert.match(modal, /@keydown="handleKeydown"/);
+    const accessibility = readFileSync(new URL('../../resources/js/composables/useModalAccessibility.js', import.meta.url), 'utf8');
+    assert.match(accessibility, /event.key === 'Escape'[^]*?event.stopPropagation\(\)/);
 });

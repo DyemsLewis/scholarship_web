@@ -38,6 +38,8 @@ class ProviderApplicationWorkspaceTest extends TestCase
             ->assertJsonPath('application.documents', [])
             ->assertJsonPath('application.eligibility_breakdown', null)
             ->assertJsonMissingPath('application.applicant.income_bracket')
+            ->assertJsonMissingPath('application.applicant.birthdate_iso')
+            ->assertJsonMissingPath('application.applicant.barangay')
             ->assertJsonMissingPath('application.applicant.guardian_email');
 
         $decisionOfficer = $this->staff($owner, 'record_final_decisions');
@@ -71,6 +73,31 @@ class ProviderApplicationWorkspaceTest extends TestCase
             ->assertJsonPath('workspace.mode', 'decision')
             ->assertJsonPath('workspace.default_section', 'decision')
             ->assertJsonPath('workspace.capabilities.record_final_outcome', true);
+    }
+
+    public function test_reviewer_profile_has_structured_details_without_changing_role_redactions(): void
+    {
+        [$owner, $application] = $this->applicationRecord();
+        $application->applicant->studentProfile()->update([
+            'birthdate' => '2008-06-15', 'barangay' => 'San Isidro', 'city' => 'Antipolo City',
+            'province' => 'Rizal', 'region' => 'Region IV-A',
+        ]);
+        $reviewer = $this->staff($owner, 'verify_applications');
+        $this->actingAs($reviewer)->getJson("/provider/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonPath('application.applicant.birthdate_iso', '2008-06-15')
+            ->assertJsonPath('application.applicant.birthdate', 'Jun 15, 2008')
+            ->assertJsonPath('application.applicant.city', 'Antipolo City')
+            ->assertJsonPath('application.applicant.barangay', 'San Isidro')
+            ->assertJsonPath('application.applicant.guardian_email', 'guardian@example.test');
+        $decisionOfficer = $this->staff($owner, 'record_final_decisions');
+        $this->actingAs($decisionOfficer)->getJson("/provider/applications/{$application->id}/data")
+            ->assertOk()
+            ->assertJsonMissingPath('application.applicant.address')
+            ->assertJsonMissingPath('application.applicant.latitude')
+            ->assertJsonMissingPath('application.applicant.longitude')
+            ->assertJsonMissingPath('application.applicant.guardian_contact')
+            ->assertJsonMissingPath('application.applicant.guardian_email');
     }
 
     /** @return array{User, ScholarshipApplication} */

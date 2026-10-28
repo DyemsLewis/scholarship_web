@@ -15,6 +15,10 @@ const props = defineProps({
         type: Boolean,
         default: true,
     },
+    modalLayer: {
+        type: Number,
+        default: 50,
+    },
 });
 
 const emit = defineEmits(['update:modelValue']);
@@ -75,6 +79,6 @@ function showNotice(context) {
             </span>
         </label>
 
-        <TermsModal v-model="showTermsModal" :context="activeModalContext" />
+        <TermsModal v-model="showTermsModal" :context="activeModalContext" :layer="modalLayer" />
     </div>
 </template>

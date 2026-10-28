@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onUnmounted, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { formatFileSize } from '../support/display';
+import { useModalAccessibility } from '../composables/useModalAccessibility';
 import ZoomableImagePreview from './ZoomableImagePreview.vue';
 
 const props = defineProps({
@@ -10,6 +11,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+const dialog = ref(null);
+const { handleKeydown } = useModalAccessibility(() => Boolean(props.file), dialog, () => emit('close'));
 const fileName = computed(() => props.file?.original_name || props.title);
 const previewUrl = computed(() => props.file?.view_url || '');
 const downloadUrl = computed(() => props.file?.download_url || props.file?.view_url || '');
@@ -25,25 +28,20 @@ const isPdf = computed(() => {
     return mimeType === 'application/pdf' || /\.pdf$/i.test(fileName.value);
 });
 
-watch(() => props.file, (file) => {
-    document.body.classList.toggle('overflow-hidden', Boolean(file));
-}, { immediate: true });
-
-onUnmounted(() => {
-    document.body.classList.remove('overflow-hidden');
-});
 </script>
 
 <template>
     <Teleport to="body">
         <div
             v-if="file"
+            ref="dialog"
             class="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
             role="dialog"
             aria-modal="true"
+            :aria-label="title"
             tabindex="-1"
             @click.self="emit('close')"
-            @keydown.esc="emit('close')"
+            @keydown="handleKeydown"
         >
             <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
                 <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-3 sm:px-5">

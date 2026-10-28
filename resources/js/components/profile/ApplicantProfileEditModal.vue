@@ -43,6 +43,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    suspended: {
+        type: Boolean,
+        default: false,
+    },
     saveDisabled: {
         type: Boolean,
         default: false,
@@ -67,6 +71,7 @@ const dialog = ref(null);
 const closeButton = ref(null);
 let previouslyFocused = null;
 let previousBodyOverflow = '';
+let nestedOpener = null;
 
 const widthClass = computed(() => ({
     compact: 'max-w-2xl',
@@ -94,6 +99,7 @@ function focusableElements() {
 }
 
 function handleKeydown(event) {
+    if (props.suspended) return;
     if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
@@ -116,7 +122,7 @@ function handleKeydown(event) {
     const first = elements[0];
     const last = elements[elements.length - 1];
 
-    if (event.shiftKey && document.activeElement === first) {
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) {
         event.preventDefault();
         last.focus();
     } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.value)) {
@@ -139,6 +145,21 @@ watch(() => props.open, async (open) => {
     previouslyFocused?.focus?.();
     previouslyFocused = null;
 }, { immediate: true });
+
+watch(() => props.suspended, async (suspended) => {
+    if (!props.open) return;
+    if (suspended) {
+        nestedOpener = document.activeElement;
+        await nextTick();
+        const nested = [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')]
+            .filter((element) => element !== dialog.value && element.offsetParent !== null).at(-1);
+        nested?.focus();
+    } else {
+        await nextTick();
+        nestedOpener?.focus?.();
+        nestedOpener = null;
+    }
+});
 
 onBeforeUnmount(() => {
     document.body.style.overflow = previousBodyOverflow;
@@ -196,7 +217,7 @@ onBeforeUnmount(() => {
                     </header>
 
                     <div data-profile-editor-body class="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
-                        <slot />
+                        <fieldset :disabled="working" class="m-0 min-w-0 border-0 p-0"><slot /></fieldset>
                     </div>
 
                     <footer v-if="showFooter" class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
@@ -238,8 +259,8 @@ onBeforeUnmount(() => {
     transition: opacity 160ms ease;
 }
 
-.profile-modal-enter-active section,
-.profile-modal-leave-active section {
+.profile-modal-enter-active > section,
+.profile-modal-leave-active > section {
     transition: transform 160ms ease, opacity 160ms ease;
 }
 
@@ -248,8 +269,8 @@ onBeforeUnmount(() => {
     opacity: 0;
 }
 
-.profile-modal-enter-from section,
-.profile-modal-leave-to section {
+.profile-modal-enter-from > section,
+.profile-modal-leave-to > section {
     opacity: 0;
     transform: translateY(10px);
 }
@@ -257,8 +278,8 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
     .profile-modal-enter-active,
     .profile-modal-leave-active,
-    .profile-modal-enter-active section,
-    .profile-modal-leave-active section {
+    .profile-modal-enter-active > section,
+    .profile-modal-leave-active > section {
         transition: none;
     }
 }

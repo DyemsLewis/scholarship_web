@@ -7,6 +7,8 @@ import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import ReviewOfficerSidebar from '../components/ReviewOfficerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import ApplicantProfileRecord from '../components/profile/ApplicantProfileRecord.vue';
+import { applicantProfileDetails } from '../support/applicantProfileDetails';
+import { profileEducationSummary, profileVerificationLabel } from '../support/applicantProfileLabels';
 import { formatFileSize } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -76,82 +78,10 @@ const reviewedAcademicResultReady = computed(() => {
 });
 const applicantProfileRecord = computed(() => ({
     name: applicant.value?.name || applicant.value?.username || 'Applicant record',
-    initials: String(applicant.value?.name || applicant.value?.username || 'AP')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part.charAt(0).toUpperCase())
-        .join(''),
     photoUrl: applicant.value?.profile_photo_url,
-    educationSummary: [
-        applicant.value?.education_level ? statusLabel(applicant.value.education_level) : null,
-        applicant.value?.course_or_strand,
-        applicant.value?.year_level,
-    ].filter(Boolean).join(' - '),
+    educationSummary: profileEducationSummary(applicant.value),
 }));
-const applicantProfileSections = computed(() => [
-    {
-        id: 'personal',
-        title: 'Personal and contact',
-        icon: 'fa-solid fa-address-card',
-        description: 'Identity and contact information available during verification.',
-        items: [
-            { label: 'Birthdate', value: applicant.value?.birthdate },
-            { label: 'Age', value: applicant.value?.age !== null && applicant.value?.age !== undefined ? `${applicant.value.age} years old` : null },
-            { label: 'Gender', value: applicant.value?.gender ? statusLabel(applicant.value.gender) : null },
-            { label: 'Contact number', value: applicant.value?.contact_number },
-            { label: 'Email address', value: applicant.value?.email },
-            { label: 'Account managed by', value: applicant.value?.account_managed_by ? statusLabel(applicant.value.account_managed_by) : null },
-            { label: 'Citizenship', value: applicant.value?.citizenship_status ? statusLabel(applicant.value.citizenship_status) : null },
-        ],
-    },
-    {
-        id: 'academic',
-        title: 'Learning record',
-        icon: 'fa-solid fa-graduation-cap',
-        description: 'Academic information to compare with the submitted records.',
-        items: [
-            { label: 'Education level', value: applicant.value?.education_level ? statusLabel(applicant.value.education_level) : null },
-            { label: 'Grade / year / level', value: applicant.value?.year_level },
-            { label: 'Enrollment', value: applicant.value?.enrollment_status ? statusLabel(applicant.value.enrollment_status) : null },
-            { label: 'Institution type', value: applicant.value?.school_type ? statusLabel(applicant.value.school_type) : null },
-            { label: 'School / institution', value: applicant.value?.school, wide: true },
-            { label: 'Track / strand / course', value: applicant.value?.course_or_strand, wide: true },
-            { label: 'Learner / student ID', value: applicant.value?.learner_reference_number },
-            { label: 'Academic year', value: applicant.value?.academic_year },
-            { label: 'Record period', value: applicant.value?.academic_term ? statusLabel(applicant.value.academic_term) : null },
-            { label: 'Saved result', value: savedAcademicResult.value },
-        ],
-    },
-    {
-        id: 'household',
-        title: 'Household and guardian',
-        icon: 'fa-solid fa-house-chimney-user',
-        description: 'Self-declared household and guardian context.',
-        items: [
-            { label: 'Income bracket', value: applicant.value?.income_bracket },
-            { label: 'Household size', value: applicant.value?.household_size ? `${applicant.value.household_size} members` : null },
-            { label: 'Current scholarship', value: applicant.value?.current_scholarship_status ? statusLabel(applicant.value.current_scholarship_status) : null },
-            { label: 'Guardian name', value: applicant.value?.guardian_name },
-            { label: 'Relationship', value: applicant.value?.guardian_relationship ? statusLabel(applicant.value.guardian_relationship) : null },
-            { label: 'Guardian contact', value: applicant.value?.guardian_contact },
-            { label: 'Guardian email', value: applicant.value?.guardian_email },
-        ],
-    },
-    {
-        id: 'location',
-        title: 'Location',
-        icon: 'fa-solid fa-location-dot',
-        description: 'Residence information retained for eligibility checks.',
-        items: [
-            { label: 'Region', value: applicant.value?.region },
-            { label: 'Province', value: applicant.value?.province },
-            { label: 'City / municipality', value: applicant.value?.city },
-            { label: 'Barangay', value: applicant.value?.barangay },
-            { label: 'Street / home address', value: applicant.value?.address, wide: true },
-        ],
-    },
-]);
+const applicantProfileSections = computed(() => applicantProfileDetails(applicant.value, { omitUnavailable: true }));
 const reviewFocus = computed(() => {
     const status = applicantReviewStatus(applicant.value);
 
@@ -576,8 +506,9 @@ onMounted(loadApplicant);
                             :record="applicantProfileRecord"
                             :sections="applicantProfileSections"
                             :verification-status="applicantReviewStatus(applicant)"
-                            :verification-label="applicantReviewStatusLabel(applicant)"
+                            :verification-label="profileVerificationLabel(applicantReviewStatus(applicant))"
                             :show-trust-notice="false"
+                            show-data-source-notice
                         >
                             <template #actions>
                                 <ApplicantReviewIdentityCard

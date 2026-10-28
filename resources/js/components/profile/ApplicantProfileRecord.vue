@@ -1,5 +1,8 @@
 <script setup>
-defineProps({
+import { ref, watch } from 'vue';
+import ApplicantProfileDetails from './ApplicantProfileDetails.vue';
+
+const props = defineProps({
     record: {
         type: Object,
         required: true,
@@ -35,6 +38,8 @@ defineProps({
 });
 
 defineEmits(['edit']);
+const photoUnavailable = ref(false);
+watch(() => props.record.photoUrl, () => { photoUnavailable.value = false; });
 
 function statusClass(status) {
     if (status === 'approved') {
@@ -63,13 +68,13 @@ function hasValue(value) {
         <header class="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex min-w-0 items-center gap-4">
                 <div class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-lg font-bold text-slate-500">
-                    <img v-if="record.photoUrl" :src="record.photoUrl" :alt="`${record.name} applicant photo`" class="h-full w-full object-cover">
-                    <span v-else>{{ record.initials || 'AP' }}</span>
+                    <img v-if="record.photoUrl && !photoUnavailable" :src="record.photoUrl" :alt="`${record.name} applicant photo`" class="h-full w-full object-cover" @error="photoUnavailable = true">
+                    <img v-else :src="'/images/demo/default-applicant-avatar.jpg'" alt="Default applicant portrait" class="h-full w-full object-cover">
                 </div>
                 <div class="min-w-0">
                     <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Applicant record</p>
                     <div class="mt-1 flex flex-wrap items-center gap-2">
-                        <h2 :class="['truncate font-bold text-slate-950', primary ? 'text-2xl' : 'text-xl']">{{ record.name }}</h2>
+                        <h2 :class="['break-words font-display font-bold text-slate-950', primary ? 'text-2xl' : 'text-xl']">{{ record.name }}</h2>
                         <span :class="['px-2 py-1 text-[10px] font-bold uppercase', statusClass(verificationStatus)]">
                             {{ verificationLabel }}
                         </span>
@@ -100,7 +105,8 @@ function hasValue(value) {
         </div>
 
         <slot name="details">
-        <div class="divide-y divide-slate-200">
+        <ApplicantProfileDetails v-if="sections.some((section) => section.groups)" :sections="sections" :editable="editable" @edit="$emit('edit', $event)" />
+        <div v-else class="divide-y divide-slate-200">
             <section v-for="section in sections" :key="section.id" class="px-4 py-5 sm:px-5">
                 <header class="flex min-h-9 items-start justify-between gap-4">
                     <div class="flex min-w-0 items-start gap-3">

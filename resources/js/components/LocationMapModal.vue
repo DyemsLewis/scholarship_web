@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import LeafletMapPreview from './LeafletMapPreview.vue';
+import { useModalAccessibility } from '../composables/useModalAccessibility';
 
 const props = defineProps({
     open: { type: Boolean, default: false },
@@ -25,6 +26,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'resolved', 'picked', 'error']);
+const dialog = ref(null);
+const { handleKeydown } = useModalAccessibility(() => props.open, dialog, () => emit('close'));
 const retryCount = ref(0);
 const mapGeocodeTrigger = computed(() => retryCount.value);
 const googleMapsUrl = computed(() => {
@@ -62,13 +65,14 @@ function retryAddressSearch() {
     <Teleport to="body">
         <div
             v-if="open"
+            ref="dialog"
             class="fixed inset-0 z-[2600] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
             role="dialog"
             aria-modal="true"
             aria-labelledby="location-map-modal-title"
             tabindex="-1"
             @click.self="close"
-            @keydown.esc.stop="close"
+            @keydown="handleKeydown"
         >
             <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
                 <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">

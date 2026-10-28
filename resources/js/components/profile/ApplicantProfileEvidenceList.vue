@@ -33,7 +33,7 @@ const policy = (row) => evidenceFilePolicy(row.value, props.ocr);
             </div>
             <div class="shrink-0 text-xs leading-5 sm:text-right" aria-live="polite" data-evidence-progress>
                 <p class="font-bold text-slate-800">{{ progress.saved }} of {{ progress.total }} required saved</p>
-                <p class="text-slate-500">{{ progress.accepted }} accepted<span v-if="progress.needsReplacement" class="text-rose-700"> · {{ progress.needsReplacement }} need replacement</span></p>
+                <p class="text-slate-500">{{ progress.accepted }} accepted<span v-if="progress.needsReplacement" class="text-rose-700"> | {{ progress.needsReplacement }} need replacement</span></p>
             </div>
         </div>
 
@@ -43,12 +43,12 @@ const policy = (row) => evidenceFilePolicy(row.value, props.ocr);
             <h4 :id="`evidence-group-${group.id}`" class="border-y border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">{{ group.label }}</h4>
             <div class="divide-y divide-slate-200">
                 <article v-for="row in group.rows" :key="row.value" :data-evidence-type="row.value" class="py-4">
-                    <div class="grid min-w-0 gap-x-5 gap-y-3 md:grid-cols-[minmax(0,1fr)_9rem_auto] md:items-center">
+                    <div class="grid min-w-0 gap-x-5 gap-y-3 md:grid-cols-[minmax(0,1fr)_9rem_14rem] md:items-center">
                         <div class="flex min-w-0 items-start gap-3">
                             <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-600"><i :class="row.icon" aria-hidden="true"></i></span>
                             <div class="min-w-0">
                                 <h5 class="text-sm font-bold text-slate-950">{{ row.label }}</h5>
-                                <p v-if="row.document" class="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">{{ row.document.original_name }} <span class="whitespace-nowrap">· {{ formatFileSize(row.document.size) }}</span></p>
+                                <p v-if="row.document" class="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">{{ row.document.original_name }} <span class="whitespace-nowrap">| {{ formatFileSize(row.document.size) }}</span></p>
                                 <p v-else class="mt-1 text-xs leading-5 text-slate-500">{{ row.required ? 'Required to verify your profile.' : 'Optional supporting record.' }}</p>
                             </div>
                         </div>

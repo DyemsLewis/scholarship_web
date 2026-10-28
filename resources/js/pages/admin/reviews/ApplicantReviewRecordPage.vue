@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
+import { applicantProfileDetails } from '../../../support/applicantProfileDetails';
+import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
 
 const applicantId = window.location.pathname.match(/applicants\/(\d+)/)?.[1];
 const loading = ref(true);
@@ -21,74 +23,11 @@ const missingEvidence = computed(() => (applicant.value?.profile_evidence_requir
     .filter((requirement) => requirement.required
         && !applicant.value?.verification_documents?.some((document) => document.document_type === requirement.value)));
 const applicantProfileRecord = computed(() => ({
-    name: applicant.value?.name || 'Applicant record',
-    initials: String(applicant.value?.name || 'AP')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part.charAt(0).toUpperCase())
-        .join(''),
+    name: applicant.value?.name || applicant.value?.username || 'Applicant record',
     photoUrl: applicant.value?.profile_photo_url,
-    educationSummary: [applicant.value?.education_level, applicant.value?.course_or_strand, applicant.value?.year_level]
-        .filter(Boolean)
-        .join(' - '),
+    educationSummary: profileEducationSummary(applicant.value),
 }));
-const applicantProfileSections = computed(() => [
-    {
-        id: 'personal',
-        title: 'Personal and contact',
-        icon: 'fa-solid fa-address-card',
-        description: 'Identity and contact information available during profile verification.',
-        items: [
-            { label: 'Age', value: applicant.value?.age ? `${applicant.value.age} years old` : null },
-            { label: 'Gender', value: applicant.value?.gender ? documentLabel(applicant.value.gender) : null },
-            { label: 'Contact number', value: applicant.value?.contact_number },
-            { label: 'Email address', value: applicant.value?.email },
-            { label: 'Account managed by', value: applicant.value?.account_managed_by ? documentLabel(applicant.value.account_managed_by) : null },
-            { label: 'Citizenship', value: applicant.value?.citizenship_status ? documentLabel(applicant.value.citizenship_status) : null },
-        ],
-    },
-    {
-        id: 'academic',
-        title: 'Learning record',
-        icon: 'fa-solid fa-graduation-cap',
-        description: 'Academic information that must agree with the submitted evidence.',
-        items: [
-            { label: 'School', value: applicant.value?.school },
-            { label: 'Education', value: [applicant.value?.education_level, applicant.value?.course_or_strand, applicant.value?.year_level].filter(Boolean).map(documentLabel).join(' - ') },
-            { label: 'Academic result', value: applicant.value?.gwa ? `${applicant.value.gwa} - ${documentLabel(applicant.value.grading_scale)}` : null },
-            { label: 'Enrollment', value: applicant.value?.enrollment_status },
-            { label: 'Academic year', value: applicant.value?.academic_year },
-            { label: 'Record period', value: applicant.value?.academic_term ? documentLabel(applicant.value.academic_term) : null },
-        ],
-    },
-    {
-        id: 'household',
-        title: 'Household and guardian',
-        icon: 'fa-solid fa-house-chimney-user',
-        description: 'Self-declared household information retained for application context.',
-        items: [
-            { label: 'Income bracket', value: applicant.value?.income_bracket },
-            { label: 'Household size', value: applicant.value?.household_size ? `${applicant.value.household_size} members` : null },
-            { label: 'Current scholarship', value: applicant.value?.current_scholarship_status ? documentLabel(applicant.value.current_scholarship_status) : null },
-            { label: 'Parent or guardian', value: applicant.value?.guardian_name },
-        ],
-    },
-    {
-        id: 'location',
-        title: 'Location',
-        icon: 'fa-solid fa-location-dot',
-        description: 'General residence saved in the applicant profile.',
-        items: [
-            { label: 'Region', value: applicant.value?.region },
-            { label: 'Province', value: applicant.value?.province },
-            { label: 'City / municipality', value: applicant.value?.city },
-            { label: 'Barangay', value: applicant.value?.barangay },
-            { label: 'Street / home address', value: applicant.value?.address, wide: true },
-        ],
-    },
-]);
-
+const applicantProfileSections = computed(() => applicantProfileDetails(applicant.value, { omitUnavailable: true }));
 async function loadRecord() {
     loading.value = true;
     try {
@@ -158,8 +97,9 @@ onMounted(loadRecord);
                 :record="applicantProfileRecord"
                 :sections="applicantProfileSections"
                 :verification-status="verificationStatus"
-                :verification-label="documentLabel(verificationStatus)"
+                :verification-label="profileVerificationLabel(verificationStatus)"
                 :show-trust-notice="false"
+                show-data-source-notice
             />
 
             <p v-if="missingEvidence.length" class="mt-4 border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-950"><strong>Evidence still needed:</strong> {{ missingEvidence.map((item) => item.label).join(', ') }}. Approval is available once all required records are uploaded.</p>

@@ -1,5 +1,6 @@
-import { labelFromKey } from './display.js';
+import { profileValueLabel } from './applicantProfileLabels.js';
 import { hasLocationPin } from './locationPins.js';
+import { findPhilippineRegion } from './philippineLocations.js';
 
 const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== '';
 
@@ -10,12 +11,12 @@ export function profileBirthdateLabel(value) {
     return new Intl.DateTimeFormat('en-PH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date);
 }
 
-export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardian } = {}) {
+export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardian, omitUnavailable = false } = {}) {
     const saved = user ?? {};
     const label = (key, value) => {
         if (!hasValue(value)) return '';
         const result = labels[key]?.(value);
-        return hasValue(result) && result !== value ? result : labelFromKey(value);
+        return hasValue(result) && result !== value ? result : profileValueLabel(key, value);
     };
     const item = (key, title, value, extra = {}) => ({ key, label: title, value: value ?? '', ...extra });
     const level = saved.education_level;
@@ -43,12 +44,12 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
     const outsideDetailsRelevant = saved.current_scholarship_status !== 'none'
         && (['receiving', 'pending'].includes(saved.current_scholarship_status) || hasValue(saved.current_scholarship_details));
 
-    return [
+    const sections = [
         {
             id: 'personal', title: 'Personal and contact', icon: 'fa-regular fa-address-card',
             description: 'Identity and current contact information.',
             groups: [{ id: 'personal', items: [
-                item('birthdate', 'Date of birth', profileBirthdateLabel(saved.birthdate), {
+                item('birthdate', 'Date of birth', profileBirthdateLabel(saved.birthdate_iso || saved.birthdate), {
                     detail: hasValue(saved.age) ? `${saved.age} years old` : '',
                 }),
                 item('gender', 'Gender', label('gender', saved.gender)),
@@ -104,7 +105,7 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
             id: 'location', title: 'Home address', icon: 'fa-solid fa-location-dot',
             description: 'General residence used for residency and distance checks.',
             groups: [{ id: 'location', items: [
-                item('region', 'Region', labels.region?.(saved.region) || saved.region),
+                item('region', 'Region', labels.region?.(saved.region) || findPhilippineRegion(saved.region)?.label || saved.region),
                 item('province', 'Province', saved.province),
                 item('city', 'City / municipality', saved.city),
                 item('barangay', 'Barangay', saved.barangay),
@@ -116,4 +117,13 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
             },
         },
     ];
+    if (!omitUnavailable) return sections;
+    // A redacted field is not a missing applicant detail. Keep role-specific exclusions intact.
+    return sections.map((section) => ({
+        ...section,
+        groups: section.groups.map((group) => ({
+            ...group,
+            items: group.items.filter((field) => Object.hasOwn(saved, field.key) || (field.key === 'birthdate' && Object.hasOwn(saved, 'birthdate_iso'))),
+        })).filter((group) => group.items.length),
+    })).filter((section) => section.groups.length);
 }

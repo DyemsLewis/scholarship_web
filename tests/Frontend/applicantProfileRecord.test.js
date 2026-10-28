@@ -151,8 +151,11 @@ test('supporting evidence distinguishes required completion from optional record
     assert.match(source, /const verificationDocumentGroups = computed/);
     assert.match(source, /label: 'Required files'/);
     assert.match(source, /label: 'Optional records'/);
-    assert.match(evidenceEditor, /v-for="group in verificationDocumentGroups"/);
-    assert.match(evidenceEditor, /requiredVerificationDocumentRows\.filter\(\(row\) => row\.document\)\.length/);
+    assert.match(evidenceEditor, /<ApplicantProfileEvidenceList/);
+    assert.match(evidenceEditor, /:groups="verificationDocumentGroups"/);
+    const list = readFileSync(new URL('../../resources/js/components/profile/ApplicantProfileEvidenceList.vue', import.meta.url), 'utf8');
+    assert.match(list, /v-for="group in groups"/);
+    assert.match(list, /progress\.saved.*progress\.total/);
     assert.match(evidenceEditor, /Only authorized reviewers can access these files/);
     assert.doesNotMatch(evidenceEditor, /verificationDocumentRows\.filter\(\(row\) => row\.document\)\.length \}\} of \{\{ verificationDocumentRows\.length/);
     assert.doesNotMatch(evidenceEditor, /No file uploaded/);

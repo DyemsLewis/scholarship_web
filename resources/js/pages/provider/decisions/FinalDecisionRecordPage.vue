@@ -4,6 +4,8 @@ import ProviderSidebar from '../ProviderSidebar.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
+import { applicantProfileDetails } from '../../../support/applicantProfileDetails';
+import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
 import EligibilityReviewPanel from '../reviews/components/EligibilityReviewPanel.vue';
 
@@ -50,70 +52,11 @@ const slotsFull = computed(() => capacity.value.remaining === 0);
 const acceptedDocuments = computed(() => application.value?.documents?.filter((document) => document.status === 'accepted').length ?? 0);
 const requiredDocuments = computed(() => readiness.value.required ?? application.value?.document_checklist?.length ?? 0);
 const applicantProfileRecord = computed(() => ({
-    name: applicant.value.name || 'Applicant record',
-    initials: String(applicant.value.name || 'AP')
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((part) => part.charAt(0).toUpperCase())
-        .join(''),
-    photoUrl: applicant.value.profile_photo_url,
-    educationSummary: [applicant.value.education_level, applicant.value.course_or_strand, applicant.value.year_level]
-        .filter(Boolean)
-        .join(' - '),
+    name: applicant.value?.name || applicant.value?.username || 'Applicant record',
+    photoUrl: applicant.value?.profile_photo_url,
+    educationSummary: profileEducationSummary(applicant.value),
 }));
-const applicantProfileSections = computed(() => [
-    {
-        id: 'personal',
-        title: 'Personal and contact',
-        icon: 'fa-solid fa-address-card',
-        description: 'Identity and contact details reviewed during screening.',
-        items: [
-            { label: 'Age', value: applicant.value.age ? `${applicant.value.age} years old` : null },
-            { label: 'Gender', value: applicant.value.gender ? labelize(applicant.value.gender) : null },
-            { label: 'Contact number', value: applicant.value.contact_number },
-            { label: 'Email address', value: applicant.value.email },
-            { label: 'Account managed by', value: applicant.value.account_managed_by ? labelize(applicant.value.account_managed_by) : null },
-            { label: 'Citizenship', value: applicant.value.citizenship_status ? labelize(applicant.value.citizenship_status) : null },
-        ],
-    },
-    {
-        id: 'academic',
-        title: 'Learning record',
-        icon: 'fa-solid fa-graduation-cap',
-        description: 'Verified academic information used in the application review.',
-        items: [
-            { label: 'School', value: applicant.value.school },
-            { label: 'Education', value: [applicant.value.education_level, applicant.value.course_or_strand, applicant.value.year_level].filter(Boolean).join(' - ') },
-            { label: 'Academic result', value: applicant.value.gwa ? `${applicant.value.gwa} - ${labelize(applicant.value.grading_scale)}` : null },
-            { label: 'Enrollment', value: applicant.value.enrollment_status },
-            { label: 'Academic year', value: applicant.value.academic_year },
-            { label: 'Record period', value: applicant.value.academic_term ? labelize(applicant.value.academic_term) : null },
-        ],
-    },
-    {
-        id: 'household',
-        title: 'Household and guardian',
-        icon: 'fa-solid fa-house-chimney-user',
-        description: 'Household context retained from the reviewed application.',
-        items: [
-            { label: 'Income bracket', value: applicant.value.income_bracket },
-            { label: 'Household size', value: applicant.value.household_size ? `${applicant.value.household_size} members` : null },
-            { label: 'Current scholarship', value: applicant.value.current_scholarship_status ? labelize(applicant.value.current_scholarship_status) : null },
-            { label: 'Parent or guardian', value: applicant.value.guardian_name },
-        ],
-    },
-    {
-        id: 'location',
-        title: 'Location',
-        icon: 'fa-solid fa-location-dot',
-        description: 'General residence used for location-based eligibility.',
-        items: [
-            { label: 'Home location', value: applicant.value.location, wide: true },
-            { label: 'Street / home address', value: applicant.value.address, wide: true },
-        ],
-    },
-]);
+const applicantProfileSections = computed(() => applicantProfileDetails(applicant.value, { omitUnavailable: true }));
 const responseRows = computed(() => normalizeAnswers(application.value?.application_answers));
 const rejectionReasons = decisionReasonOptions.filter((option) => [
     'funds_limited',
@@ -355,7 +298,7 @@ onMounted(loadApplication);
                             :record="applicantProfileRecord"
                             :sections="applicantProfileSections"
                             :verification-status="applicant.profile_verification_status"
-                            :verification-label="labelize(applicant.profile_verification_status)"
+                            :verification-label="profileVerificationLabel(applicant.profile_verification_status)"
                             :show-trust-notice="false"
                             show-data-source-notice
                         />

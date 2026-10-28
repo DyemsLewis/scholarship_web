@@ -472,8 +472,6 @@ const academicScanNeedsAttention = computed(() => academicOcrActive.value
     && academicVerificationDocument.value
     && ['failed', 'needs_review', 'unavailable'].includes(academicVerificationDocument.value.ocr_status));
 const manualAcademicEntryAllowed = computed(() => academicScanNeedsAttention.value);
-const manualAcademicResultComplete = computed(() => Boolean(form.value.grading_scale)
-    && (!requiresNumericGrade.value || hasValue(form.value.gwa)));
 const schoolVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'school_record') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
@@ -512,7 +510,7 @@ const verificationUploadCopy = computed(() => {
     if (needsVerificationUpload.value) {
         return {
             title: `Upload ${missingVerificationDocumentRows.value[0].label.toLowerCase()}`,
-            detail: 'Match the saved profile details shown under each record.',
+            detail: 'Open What to upload for examples and matching profile details.',
         };
     }
 
@@ -638,7 +636,7 @@ const profileEditorCopy = computed(() => ({
     },
     verification: {
         title: 'Supporting evidence',
-        description: 'Upload records supporting your identity, school, household, and residence details.',
+        description: 'Upload records that support your saved profile.',
     },
 }[activeSection.value] ?? {
     title: 'Applicant profile',
@@ -877,7 +875,9 @@ async function focusProfileField(field) {
     openSection(sectionForField(field), { clearError: false });
     await nextTick();
 
-    const controlId = profileFieldControlIds[field];
+    const controlId = activeSection.value === 'verification'
+        ? ({ gwa: 'fallback-academic-result', grading_scale: 'fallback-grading-scale' }[field] ?? profileFieldControlIds[field])
+        : profileFieldControlIds[field];
     const control = controlId ? document.getElementById(controlId) : null;
 
     if (control) {
@@ -918,7 +918,16 @@ function openProfileEditor(sectionId = profileRecommendedAction.value.section) {
     window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
-function openVerificationRecords() {
+async function openVerificationRecords() {
+    if (showProfileEditorModal.value && activeSection.value !== 'verification' && hasUnsavedChanges.value) {
+        const confirmed = await requestConfirmation({
+            title: 'Save before opening supporting evidence?',
+            message: 'Supporting records are compared with your saved profile. Save your current changes first so they are not lost.',
+            confirmLabel: 'Save and continue',
+            cancelLabel: 'Keep editing',
+        });
+        if (!confirmed || !await saveProfile(false)) return;
+    }
     openProfileEditor('verification');
 }
 
@@ -1890,6 +1899,7 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
 
         return true;
     } catch (error) {
+        isSaving.value = false;
         fieldErrors.value = error.response?.data?.errors ?? {};
         errorMessage.value = error.response?.data?.message ?? 'Unable to save this profile section. Check your connection and try again.';
         const firstError = Object.keys(fieldErrors.value)[0];
@@ -2094,7 +2104,7 @@ watch(() => form.value.grading_scale, (scale) => {
                 </div>
 
                 <div v-else class="space-y-5">
-                    <div v-if="errorMessage" class="student-card p-4">
+                    <div v-if="errorMessage && !showProfileEditorModal" class="student-card p-4">
                         <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
                     </div>
 
@@ -2113,7 +2123,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             <ApplicantProfileReadiness :state="profileOverview" @continue="continueProfileOverview" />
                         </template>
                         <template #details>
-                            <ApplicantProfileDetails :sections="applicantProfileSections" @edit="openProfileEditor" />
+                            <ApplicantProfileDetails :sections="applicantProfileSections" editable @edit="openProfileEditor" />
                         </template>
                     </ApplicantProfileRecord>
 
@@ -2158,6 +2168,7 @@ watch(() => form.value.grading_scale, (scale) => {
                     :size="profileEditorSize"
                     :saving="isSaving"
                     :busy="profileEditorBusy"
+                    :suspended="showProfileMapModal || Boolean(previewDocument) || showProfileCamera || confirmation.open"
                     :instant-changes="activeSection === 'verification'"
                     :dirty="hasUnsavedChanges"
                     :save-disabled="activeSection !== 'verification' && !hasUnsavedChanges"
@@ -2165,9 +2176,8 @@ watch(() => form.value.grading_scale, (scale) => {
                     @close="closeProfileEditor"
                     @save="finishProfileEditor"
                 >
-                    <template #status>
+                    <template v-if="activeSection === 'verification'" #status>
                                 <span
-                                    v-if="activeSection === 'verification'"
                                     :class="[sectionStatusPillClass, needsVerificationUpload ? 'bg-amber-100 text-amber-800' : verificationStatusClass(profileVerificationStatus)]"
                                 >
                                     {{ needsVerificationUpload ? 'Files needed' : verificationStatusLabel(profileVerificationStatus) }}
@@ -2193,7 +2203,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                     class="rounded-md border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700"
                                     @click="focusProfileField(error.key)"
                                 >
-                                    Review {{ error.label }}
+                                    {{ error.label }}: {{ error.message }}
                                 </button>
                             </div>
                         </div>
@@ -2505,16 +2515,16 @@ watch(() => form.value.grading_scale, (scale) => {
                                                 <option v-for="option in educationLevelOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                             </select>
                                         </div>
-                                        <div class="md:col-span-2 md:row-start-2">
-                                            <label :class="labelClass" for="profile-school">School / learning institution</label>
-                                            <input id="profile-school" v-model="form.school" placeholder="School or learning center" :class="inputClass">
-                                        </div>
                                         <div>
                                             <label :class="labelClass" for="profile-enrollment">Enrollment status <span class="font-normal text-slate-400">(required)</span></label>
                                             <select id="profile-enrollment" v-model="form.enrollment_status" required :class="inputClass">
                                                 <option value="">Select status</option>
                                                 <option v-for="option in enrollmentOptions" :key="option" :value="option">{{ option }}</option>
                                             </select>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label :class="labelClass" for="profile-school">School / learning institution</label>
+                                            <input id="profile-school" v-model="form.school" placeholder="School or learning center" :class="inputClass">
                                         </div>
                                     </div>
                                     <div class="mt-5 border-t border-slate-200 pt-5">
@@ -2803,18 +2813,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         </div>
                                     </div>
 
-                                    <div class="mt-4 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
-                                        <p class="text-xs leading-5 text-slate-500">Manual entry helps matching but does not replace review of the original record.</p>
-                                        <button
-                                            type="button"
-                                            :disabled="isSaving || !manualAcademicResultComplete"
-                                            class="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                                            @click="saveProfile(false)"
-                                        >
-                                            <i :class="isSaving ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-floppy-disk'" aria-hidden="true"></i>
-                                            {{ isSaving ? 'Saving...' : 'Save entered result' }}
-                                        </button>
-                                    </div>
+                                    <p class="mt-3 text-xs leading-5 text-slate-500">Use Save changes below to submit this result for review.</p>
                                 </div>
 
                             <div v-if="legacyVerificationDocuments.length" :class="formPanelClass">

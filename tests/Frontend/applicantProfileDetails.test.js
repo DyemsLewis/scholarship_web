@@ -103,7 +103,7 @@ test('technical IDs, goals, activities and support requests do not become profil
 
 test('missing values and older enum keys remain readable instead of becoming false declarations', () => {
     const sections = applicantProfileDetails({ gender: 'prefer_not_to_say', enrollment_status: 'not_currently_enrolled' });
-    assert.equal(findField(sections, 'gender').value, 'Prefer Not To Say');
+    assert.equal(findField(sections, 'gender').value, 'Prefer not to say');
     assert.equal(findField(sections, 'enrollment_status').value, 'Not Currently Enrolled');
     assert.equal(findField(sections, 'current_scholarship_status').value, '');
     assert.equal(findField(sections, 'household_size').value, '');
@@ -113,6 +113,35 @@ test('missing values and older enum keys remain readable instead of becoming fal
 test('date-only birthdates are not shifted or silently repaired', () => {
     assert.equal(profileBirthdateLabel('2008-06-15'), 'Jun 15, 2008');
     for (const value of [null, '', 'invalid', '2008-02-31', '2008-06-15T00:00:00Z']) assert.equal(profileBirthdateLabel(value), '');
+});
+
+test('reviewer records use the same labels, guardian contacts and numeric scales as the applicant', () => {
+    const profile = savedProfile();
+    const sections = applicantProfileDetails(profile, { omitUnavailable: true });
+    assert.equal(findField(sections, 'current_scholarship_status').value, 'No scholarship outside this portal');
+    assert.equal(findField(sections, 'account_managed_by').value, 'Learner / student');
+    assert.equal(findField(sections, 'gwa').detail, 'General average / percentage');
+    assert.equal(findField(sections, 'guardian_email').value, profile.guardian_email);
+    assert.equal(findField(sections, 'academic_term').value, 'First semester / term');
+});
+
+test('redacted staff fields stay absent rather than looking like missing applicant information', () => {
+    const redacted = savedProfile();
+    for (const field of ['address', 'latitude', 'longitude', 'guardian_contact', 'guardian_email']) delete redacted[field];
+    const sections = applicantProfileDetails(redacted, { omitUnavailable: true });
+    assert.equal(findField(sections, 'address'), undefined);
+    assert.equal(findField(sections, 'guardian_email'), undefined);
+    assert.equal(findField(sections, 'guardian_contact'), undefined);
+    assert.equal(findField(sections, 'guardian_name').value, redacted.guardian_name);
+    assert.equal(findSection(sections, 'location').map.hasPin, false);
+    assert.equal(findField(applicantProfileDetails({ email: null }, { omitUnavailable: true }), 'email').value, '');
+    assert.deepEqual(applicantProfileDetails({}, { omitUnavailable: true }), []);
+});
+
+test('staff records accept an additive ISO birthdate without changing the legacy display field', () => {
+    const saved = { ...savedProfile(), birthdate: 'Jun 15, 2008', birthdate_iso: '2008-06-15' };
+    assert.equal(findField(applicantProfileDetails(saved), 'birthdate').value, 'Jun 15, 2008');
+    assert.equal(saved.birthdate, 'Jun 15, 2008');
 });
 
 test('the detailed record compiles with consistent field grids and read-only map access', () => {

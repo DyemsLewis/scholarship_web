@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onUnmounted, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { getTermsContent } from '../support/termsContent';
 
 const props = defineProps({
@@ -11,22 +11,59 @@ const props = defineProps({
         type: String,
         default: 'general',
     },
+    layer: { type: Number, default: 50 },
 });
 
 const emit = defineEmits(['update:modelValue']);
 
 const selectedContent = computed(() => getTermsContent(props.context));
+const dialog = ref(null);
+let previouslyFocused = null;
+let ownedScrollLock = false;
 
 function closeModal() {
     emit('update:modelValue', false);
 }
 
-watch(() => props.modelValue, (isOpen) => {
-    document.body.classList.toggle('overflow-hidden', isOpen);
+function handleKeydown(event) {
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        closeModal();
+    } else if (event.key === 'Tab') {
+        const elements = [...dialog.value.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex="0"]')]
+            .filter((element) => element.offsetParent !== null);
+        const first = elements[0];
+        const last = elements.at(-1);
+        if (!first) {
+            event.preventDefault();
+        } else if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.value)) {
+            event.preventDefault();
+            first.focus();
+        }
+    }
+}
+
+watch(() => props.modelValue, async (isOpen) => {
+    if (isOpen) {
+        previouslyFocused = document.activeElement;
+        ownedScrollLock = !document.body.classList.contains('overflow-hidden');
+        document.body.classList.add('overflow-hidden');
+        await nextTick();
+        dialog.value?.focus();
+    } else {
+        if (ownedScrollLock) document.body.classList.remove('overflow-hidden');
+        ownedScrollLock = false;
+        previouslyFocused?.focus?.();
+        previouslyFocused = null;
+    }
 }, { immediate: true });
 
 onUnmounted(() => {
-    document.body.classList.remove('overflow-hidden');
+    if (ownedScrollLock) document.body.classList.remove('overflow-hidden');
 });
 </script>
 
@@ -34,12 +71,15 @@ onUnmounted(() => {
     <Teleport to="body">
         <div
             v-if="modelValue"
+            ref="dialog"
             class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4"
+            :style="{ zIndex: layer }"
             role="dialog"
             aria-modal="true"
+            :aria-label="selectedContent.title"
             tabindex="-1"
             @click.self="closeModal"
-            @keydown.esc="closeModal"
+            @keydown="handleKeydown"
         >
             <section class="flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white text-slate-900 shadow-2xl">
                 <header class="relative shrink-0 overflow-hidden bg-slate-950 px-5 py-5 text-white sm:px-6">

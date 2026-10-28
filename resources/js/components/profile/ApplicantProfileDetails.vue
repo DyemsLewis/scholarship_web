@@ -1,7 +1,10 @@
 <script setup>
 import LocationMapLink from '../LocationMapLink.vue';
 
-defineProps({ sections: { type: Array, default: () => [] } });
+defineProps({
+    sections: { type: Array, default: () => [] },
+    editable: { type: Boolean, default: false },
+});
 defineEmits(['edit']);
 const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== '';
 const spanClasses = { two: 'sm:col-span-2 lg:col-span-2', full: 'sm:col-span-2 lg:col-span-3' };
@@ -18,7 +21,7 @@ const spanClasses = { two: 'sm:col-span-2 lg:col-span-2', full: 'sm:col-span-2 l
                         <p class="mt-1 text-xs leading-5 text-slate-500">{{ section.description }}</p>
                     </div>
                 </div>
-                <button type="button" class="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2" :aria-label="`Edit ${section.title.toLowerCase()}`" @click="$emit('edit', section.id)"><i class="fa-solid fa-pen text-[10px] leading-none" aria-hidden="true"></i>Edit</button>
+                <button v-if="editable && section.editable !== false" type="button" class="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2" :aria-label="`Edit ${section.title.toLowerCase()}`" @click="$emit('edit', section.id)"><i class="fa-solid fa-pen text-[10px] leading-none" aria-hidden="true"></i>Edit</button>
             </header>
 
             <div class="mt-5 space-y-5">
