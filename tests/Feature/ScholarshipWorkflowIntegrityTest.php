@@ -39,6 +39,25 @@ class ScholarshipWorkflowIntegrityTest extends TestCase
             ->assertJsonPath('scholarship.status', 'published');
     }
 
+    public function test_changing_required_rules_to_preferred_returns_a_published_program_for_review(): void
+    {
+        [$provider, $scholarship] = $this->publishedScholarship(['eligible_courses' => 'BSIT']);
+
+        $this->actingAs($provider)->putJson("/provider/scholarships/{$scholarship->id}", $this->scholarshipUpdatePayload($scholarship, [
+            'eligibility_rule_modes' => ['course' => 'preferred'],
+        ]))->assertOk()->assertJsonPath('scholarship.status', 'pending_review')
+            ->assertJsonPath('scholarship.eligibility_rule_modes.course', 'preferred');
+    }
+
+    public function test_explicit_required_defaults_do_not_trigger_a_material_program_change(): void
+    {
+        [$provider, $scholarship] = $this->publishedScholarship(['eligible_courses' => 'BSIT']);
+
+        $this->actingAs($provider)->putJson("/provider/scholarships/{$scholarship->id}", $this->scholarshipUpdatePayload($scholarship, [
+            'eligibility_rule_modes' => ['course' => 'required'],
+        ]))->assertOk()->assertJsonPath('scholarship.status', 'published');
+    }
+
     public function test_web_applicant_cannot_apply_after_deadline(): void
     {
         $applicant = $this->completeApplicant();

@@ -375,6 +375,8 @@ class ReviewQueueQuery
             'mode' => str($session->mode)->headline()->toString(),
             'venue' => $session->venue,
             'location_address' => $session->location_address,
+            'latitude' => $session->latitude,
+            'longitude' => $session->longitude,
             'instructions' => $session->instructions,
             'capacity' => $session->capacity === null ? null : (int) $session->capacity,
             'proof_required' => (bool) $session->proof_required,

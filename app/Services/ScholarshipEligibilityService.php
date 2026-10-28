@@ -8,6 +8,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Support\AcademicRequirement;
+use App\Support\EligibilityRulePolicy;
 use App\Support\LearnerProgramPath;
 use App\Support\ScholarshipEligibilityCondition;
 
@@ -22,12 +23,13 @@ class ScholarshipEligibilityService
 
     private array $activePlatformScholarshipsByUser = [];
 
-    public function evaluate(Scholarship $scholarship, ?User $user): array
+    public function evaluate(Scholarship $scholarship, ?User $user, bool $includeReadiness = true): array
     {
         $profile = $user?->studentProfile;
         $criteria = [];
         $passed = 0;
         $applicable = 0;
+        $ruleModes = $scholarship->eligibilityRuleModes();
 
         $addCriterion = function (
             string $key,
@@ -39,7 +41,9 @@ class ScholarshipEligibilityService
             bool $counts = true,
             ?string $comparisonMode = null,
             string $category = 'eligibility',
-        ) use (&$criteria, &$passed, &$applicable): void {
+            array $metadata = [],
+        ) use (&$criteria, &$passed, &$applicable, $ruleModes): void {
+            $ruleMode = $category === 'eligibility' ? ($ruleModes[$key] ?? 'required') : null;
             $criteria[] = [
                 'key' => $key,
                 'label' => $label,
@@ -47,10 +51,18 @@ class ScholarshipEligibilityService
                 'student_value' => $studentValue,
                 'requirement' => $requirement,
                 'note' => $note,
-                'comparison' => $this->criterionComparison($status, $studentValue, $requirement, $category),
+                'comparison' => match (true) {
+                    $comparisonMode === 'scale_mismatch' => 'Your academic record and this program use different grading scales. The provider must review your evidence; this is not an automatic match or failure.',
+                    $comparisonMode === 'manual_review' => $note,
+                    $ruleMode === 'preferred' && $status === 'fail' => 'Your profile lists '.($this->displayCriterionValue($studentValue) ?: 'no value').', while the provider prefers '.($this->displayCriterionValue($requirement) ?: 'a different value').'. This preference does not block applying.',
+                    default => $this->criterionComparison($status, $studentValue, $requirement, $category),
+                },
                 'comparison_mode' => $comparisonMode,
                 'category' => $category,
-                'is_blocking' => $status === 'fail' && $category === 'eligibility',
+                ...$metadata,
+                'rule_mode' => $ruleMode,
+                'is_blocking' => $status === 'fail' && $category === 'eligibility' && $ruleMode === 'required',
+                'needs_review' => in_array($comparisonMode, ['scale_mismatch', 'manual_review'], true),
             ];
 
             if (! $counts) {
@@ -74,6 +86,12 @@ class ScholarshipEligibilityService
             $academicMatch['note'],
             $academicMatch['counts'],
             $academicMatch['comparison_mode'] ?? null,
+            metadata: [
+                'student_scale' => $academicMatch['student_scale'],
+                'requirement_scale' => $academicMatch['requirement_scale'],
+                'is_comparable' => $academicMatch['is_comparable'],
+                'equivalence' => $academicMatch['equivalence'] ?? null,
+            ],
         );
 
         $this->addOptionCriterion(
@@ -201,8 +219,8 @@ class ScholarshipEligibilityService
             );
         }
 
-        $documentReadiness = $this->preparedDocumentReadiness($scholarship, $user);
-        if ($documentReadiness['required'] > 0) {
+        $documentReadiness = $includeReadiness ? $this->preparedDocumentReadiness($scholarship, $user) : null;
+        if ($documentReadiness !== null && $documentReadiness['required'] > 0) {
             $documentsReady = $documentReadiness['uploaded'] >= $documentReadiness['required'];
             $addCriterion(
                 'documents',
@@ -217,7 +235,7 @@ class ScholarshipEligibilityService
                 null,
                 'readiness',
             );
-        } else {
+        } elseif ($includeReadiness) {
             $addCriterion('documents', 'Prepared documents', 'info', null, null, 'No document requirements listed.', false, null, 'readiness');
         }
 
@@ -250,6 +268,8 @@ class ScholarshipEligibilityService
         $conditionResults = $this->eligibilityConditionResults($eligibilityConditions, $criteria);
         $eligibilityCriteria = collect($criteria)->where('category', 'eligibility');
         $missingCriteria = $eligibilityCriteria->where('status', 'missing');
+        $preferredMismatches = $eligibilityCriteria->where('rule_mode', 'preferred')->where('status', 'fail')->values();
+        $reviewCriteria = $eligibilityCriteria->where('needs_review', true)->values();
         $statusCounts = [
             'matched' => $eligibilityCriteria->where('status', 'pass')->count(),
             'different' => $eligibilityCriteria->where('status', 'fail')->count(),
@@ -257,23 +277,37 @@ class ScholarshipEligibilityService
             'open' => $eligibilityCriteria->where('status', 'info')->count(),
         ];
         $differenceSummary = match (true) {
-            $blockingCriteria !== [] => 'Your profile differs from this program in: '.collect($blockingCriteria)->pluck('label')->implode(', ').'.',
+            $blockingCriteria !== [] => 'You cannot apply because your profile does not meet these required rules: '.collect($blockingCriteria)->pluck('label')->implode(', ').'. Review the comparison and correct your profile only if its information is inaccurate.',
+            $reviewCriteria->isNotEmpty() => 'The provider needs to review: '.$reviewCriteria->pluck('label')->implode(', ').'. These checks are not confirmed matches.',
             $missingCriteria->isNotEmpty() => 'Add '.str($missingCriteria->pluck('label')->implode(', '))->lower().' to your profile for a complete comparison.',
+            $preferredMismatches->isNotEmpty() => 'Your profile does not match these provider preferences: '.$preferredMismatches->pluck('label')->implode(', ').'. Preferred differences do not block an application.',
             $eligibilityCriteria->whereIn('status', ['pass', 'fail', 'missing'])->isEmpty() => 'This program is open for the structured eligibility criteria shown.',
             default => 'Your profile matches every restrictive eligibility rule published for this program.',
         };
+        $guidance = match (true) {
+            $blockingCriteria !== [] => ['state' => 'blocked', 'label' => 'Required rules not met', 'title' => 'Some required rules do not match'],
+            $reviewCriteria->isNotEmpty() => ['state' => 'attention', 'label' => 'Needs review', 'title' => 'Some checks need provider review'],
+            $missingCriteria->isNotEmpty() => ['state' => 'attention', 'label' => 'Profile information needed', 'title' => 'Complete your profile comparison'],
+            $preferredMismatches->isNotEmpty() => ['state' => 'attention', 'label' => 'Preferences differ', 'title' => 'Some preferences do not match'],
+            default => ['state' => 'ready', 'label' => 'No required mismatches', 'title' => 'No required rule mismatches found'],
+        };
 
         return [
+            'policy_version' => EligibilityRulePolicy::VERSION,
+            'rule_modes' => $ruleModes,
             'score' => $score,
             'passed' => $passed,
             'applicable' => $applicable,
             'is_eligible' => $blockingCriteria === [],
             'blocking_criteria' => $blockingCriteria,
+            'preferred_mismatches' => $preferredMismatches->all(),
+            'review_criteria' => $reviewCriteria->all(),
             'label' => $score >= 80 ? 'Strong match' : ($score >= 50 ? 'Needs review' : 'Low match'),
             'summary' => $applicable === 0
                 ? 'This scholarship has no structured matching rules yet.'
                 : "{$passed} of {$applicable} structured criteria match your profile.",
             'difference_summary' => $differenceSummary,
+            'guidance' => [...$guidance, 'description' => $differenceSummary],
             'status_counts' => $statusCounts,
             'condition_results' => $conditionResults,
             'criteria' => $criteria,
@@ -316,13 +350,14 @@ class ScholarshipEligibilityService
     public function blockers(array $eligibilityMatch): array
     {
         return collect($eligibilityMatch['criteria'] ?? [])
-            ->filter(fn (array $criterion) => ($criterion['status'] ?? null) === 'fail' && ($criterion['key'] ?? null) !== 'documents')
+            ->filter(fn (array $criterion): bool => EligibilityRulePolicy::isBlocking($criterion))
             ->map(fn (array $criterion) => [
                 'key' => $criterion['key'] ?? null,
                 'label' => $criterion['label'] ?? 'Eligibility requirement',
                 'student_value' => $criterion['student_value'] ?? null,
                 'requirement' => $criterion['requirement'] ?? null,
                 'note' => $criterion['note'] ?? null,
+                'rule_mode' => 'required',
             ])
             ->values()
             ->all();
@@ -694,14 +729,23 @@ class ScholarshipEligibilityService
             $attentionCheck = $checks->first(
                 fn (array $criterion): bool => $criterion['status'] === $status,
             ) ?? $checks->first();
+            $needsReview = $checks->contains(fn (array $criterion): bool => $criterion['needs_review'] ?? false);
+            $isBlocking = $checks->contains(fn (array $criterion): bool => EligibilityRulePolicy::isBlocking($criterion));
+            if ($status === 'pass' && $needsReview) {
+                $status = 'provider_review';
+            }
 
             return [
                 ...$base,
                 'status' => $status,
-                'is_blocking' => $status === 'fail',
-                'note' => $status === 'pass'
+                'is_blocking' => $isBlocking,
+                'rule_mode' => $isBlocking ? 'required' : ($attentionCheck['rule_mode'] ?? 'required'),
+                'needs_review' => $needsReview,
+                'note' => $needsReview && $status !== 'fail'
+                    ? 'The provider must review the academic evidence. This condition is not a confirmed match.'
+                    : ($status === 'pass'
                     ? 'Your profile satisfies this automatically checked condition.'
-                    : ($attentionCheck['comparison'] ?? $attentionCheck['note'] ?? 'Review this condition.'),
+                    : ($attentionCheck['comparison'] ?? $attentionCheck['note'] ?? 'Review this condition.')),
                 'criteria_keys' => $keys,
             ];
         })->values()->all();

@@ -562,7 +562,16 @@ trait HandlesProviderRecipientLifecycle
             ]);
         }
 
-        $dueAt = CarbonImmutable::parse($validated['due_at']);
+        $opensAt = filled($validated['opens_at'] ?? null)
+            ? CarbonImmutable::parse($validated['opens_at'])->startOfDay()
+            : CarbonImmutable::today();
+        if ($plan->starts_on && $opensAt->isBefore($plan->starts_on->startOfDay())) {
+            throw ValidationException::withMessages([
+                'opens_at' => 'The opening date must be within the monitoring plan period.',
+            ]);
+        }
+
+        $dueAt = CarbonImmutable::parse($validated['due_at'])->startOfDay();
         if ($plan->starts_on && $dueAt->isBefore($plan->starts_on)) {
             throw ValidationException::withMessages([
                 'due_at' => 'The due date must be within the monitoring plan period.',
@@ -1362,6 +1371,8 @@ trait HandlesProviderRecipientLifecycle
             'amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
             'release_method' => ['required', Rule::in(['in_person', 'bank_transfer', 'e_wallet', 'other'])],
             'location' => [Rule::requiredIf($request->input('release_method') === 'in_person'), 'nullable', 'string', 'max:255'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
             'instructions' => ['nullable', 'string', 'max:2000'],
             'requires_original_verification' => ['required', 'boolean'],
             'benefit_ids' => ['sometimes', 'array', 'max:10'],
@@ -1435,7 +1446,9 @@ trait HandlesProviderRecipientLifecycle
                 'benefit_description' => $validated['benefit_description'],
                 'amount' => $validated['amount'] ?? null,
                 'release_method' => $validated['release_method'],
-                'location' => $validated['location'] ?? null,
+                'location' => $validated['release_method'] === 'in_person' ? ($validated['location'] ?? null) : null,
+                'latitude' => $validated['release_method'] === 'in_person' ? ($validated['latitude'] ?? null) : null,
+                'longitude' => $validated['release_method'] === 'in_person' ? ($validated['longitude'] ?? null) : null,
                 'instructions' => $validated['instructions'] ?? null,
                 'requires_original_verification' => $validated['requires_original_verification'],
                 'status' => 'scheduled',
@@ -3573,6 +3586,8 @@ trait HandlesProviderRecipientLifecycle
                 default => 'In person',
             },
             'location' => $release->location,
+            'latitude' => $release->latitude,
+            'longitude' => $release->longitude,
             'instructions' => $release->instructions,
             'requires_original_verification' => $release->requires_original_verification,
             'status' => $release->status,

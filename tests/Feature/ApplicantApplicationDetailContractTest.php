@@ -208,6 +208,8 @@ class ApplicantApplicationDetailContractTest extends TestCase
             'handoff_deadline' => now()->addWeeks(2)->toDateString(),
             'handoff_location_name' => 'Harborlight Student Desk',
             'handoff_location_address' => 'Antipolo City, Rizal',
+            'handoff_latitude' => 14.5861,
+            'handoff_longitude' => 121.1756,
             'handoff_url' => 'https://apply.example.test/harborlight',
             'contact_person' => 'Scholarship Coordinator',
             'contact_email' => 'scholarships@example.test',
@@ -220,6 +222,8 @@ class ApplicantApplicationDetailContractTest extends TestCase
             ->assertOk()
             ->assertJsonPath('detail.content.formal_application.mode', 'hybrid')
             ->assertJsonPath('detail.content.formal_application.location_name', 'Harborlight Student Desk')
+            ->assertJsonPath('detail.content.formal_application.latitude', '14.5861000')
+            ->assertJsonPath('detail.content.formal_application.longitude', '121.1756000')
             ->assertJsonPath('detail.content.formal_application.requirements.0', 'Original school ID')
             ->assertJsonPath('detail.content.formal_application.contact.email', 'scholarships@example.test')
             ->assertJsonPath('detail.content.formal_application.notice', 'This step continues the provider application process. It is not a final scholarship award.');

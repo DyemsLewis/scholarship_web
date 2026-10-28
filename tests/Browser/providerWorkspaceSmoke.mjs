@@ -11,6 +11,9 @@ const sessionCookie = process.env.PROVIDER_SMOKE_SESSION_COOKIE;
 const sessionCookieName = process.env.PROVIDER_SMOKE_SESSION_COOKIE_NAME;
 const timeoutMs = Number(process.env.PROVIDER_SMOKE_TIMEOUT_MS ?? 20_000);
 const verifyFilePreview = process.env.PROVIDER_SMOKE_FILE_PREVIEW === '1';
+const verifyMapPin = process.env.PROVIDER_SMOKE_MAP_PIN === '1';
+const verifyEligibilityBuilder = process.env.PROVIDER_SMOKE_ELIGIBILITY_BUILDER === '1';
+const verifyProgramConsistency = process.env.PROVIDER_SMOKE_PROGRAM_CONSISTENCY === '1';
 const windowSize = process.env.PROVIDER_SMOKE_WINDOW_SIZE ?? '1440,1000';
 const screenshotPath = process.env.PROVIDER_SMOKE_SCREENSHOT;
 
@@ -406,6 +409,54 @@ async function main() {
                 fail(`${heading} raised a browser exception: ${runtimeErrors[0]}`);
             }
 
+            if (verifyProgramConsistency && /\/provider\/programs\/\d+\/edit\/support$/.test(workspacePath)) {
+                await waitFor(() => client.evaluate(`Boolean([...document.querySelectorAll('label')].find((label) => label.textContent.includes('Recipient slots'))?.querySelector('input'))`), 'the capacity form');
+                await client.evaluate(`(() => {
+                    window.__programConsistencyWrites = 0;
+                    window.axios.interceptors.request.use((config) => {
+                        if (/^\\/provider\\/scholarships(?:\\/|$)/.test(config.url) && ['post', 'put', 'patch'].includes(config.method)) window.__programConsistencyWrites++;
+                        return config;
+                    });
+                    const setInput = (labelText, value) => {
+                        const input = [...document.querySelectorAll('label')].find((label) => label.textContent.includes(labelText))?.querySelector('input');
+                        if (!input) throw new Error('Missing capacity input: ' + labelText);
+                        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                    };
+                    setInput('Recipient slots', '30');
+                    setInput('Application limit', '20');
+                })()`);
+                await delay(100);
+                await client.evaluate(`(() => {
+                    const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === 'Save draft');
+                    if (!button) throw new Error('Missing Save draft button');
+                    button.click();
+                })()`);
+                await waitFor(() => client.evaluate(`document.querySelector('[role="alertdialog"]')?.textContent.includes('The application limit must be at least the number of recipient slots.')`), 'the capacity conflict alert');
+                if (await client.evaluate('window.__programConsistencyWrites !== 0')) fail('An inconsistent program was submitted despite its client validation.');
+                console.log('PASS Capacity conflict shows an alert without saving');
+                await client.evaluate(`(() => {
+                    document.querySelector('[role="alertdialog"] button').click();
+                    const setInput = (labelText, value) => {
+                        const input = [...document.querySelectorAll('label')].find((label) => label.textContent.includes(labelText)).querySelector('input');
+                        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                    };
+                    setInput('Application limit', '30');
+                    setInput('Support starts', '2027-10-02');
+                    setInput('Support ends', '2027-10-01');
+                })()`);
+                await delay(100);
+                await client.evaluate(`(() => {
+                    const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === 'Save and continue');
+                    if (!button) throw new Error('Missing Save and continue button');
+                    button.click();
+                })()`);
+                await waitFor(() => client.evaluate(`document.querySelector('[role="alertdialog"]')?.textContent.includes('The support end date must be on or after the support start date.')`), 'the support date conflict alert');
+                if (await client.evaluate('window.__programConsistencyWrites !== 0')) fail('An invalid support period was submitted despite its client validation.');
+                console.log('PASS Support date conflict blocks continuation without saving');
+            }
+
             const visualAudit = await client.evaluate(`(() => {
                 const visible = (element) => {
                     const style = getComputedStyle(element);
@@ -538,6 +589,122 @@ async function main() {
                 );
                 filePreviewVerified = true;
                 console.log('PASS Staff file preview modal');
+            }
+
+            if (verifyEligibilityBuilder) {
+                if (!['127.0.0.1', 'localhost'].includes(baseUrl.hostname)) fail('Eligibility builder write tests are limited to the local demo.');
+                const draft = await client.evaluate(`(async () => {
+                    const response = await window.axios.post('/provider/scholarships', {
+                        title: 'QA eligibility controls ' + Date.now(), status: 'draft',
+                        eligibility: 'Applicants may apply when they meet the required rules. STEM is preferred.',
+                        eligible_education_levels: 'senior_high_school', eligible_courses: 'STEM', eligible_locations: 'Rizal',
+                    });
+                    return { id: response.data.scholarship.id, title: response.data.scholarship.title };
+                })()`);
+                if (!Number.isInteger(draft.id) || !draft.title.startsWith('QA eligibility controls ')) fail('The isolated test draft could not be identified.');
+                try {
+                    const editUrl = new URL('/provider/programs/' + draft.id + '/edit/eligibility', baseUrl).href;
+                    await client.send('Page.navigate', { url: editUrl });
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-eligibility-mode=course]'))"), 'the rule mode selectors');
+                    const defaults = await client.evaluate("[...document.querySelectorAll('[data-eligibility-mode]')].every((select) => select.value === 'required')");
+                    if (!defaults) fail('Newly configured rules did not default to Required.');
+                    await client.evaluate(`(() => {
+                        const select = document.querySelector('[data-eligibility-mode=course]');
+                        select.value = 'preferred';
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    })()`);
+                    await waitFor(() => client.evaluate("document.querySelector('[data-eligibility-mode-counts]').textContent.includes('1 preferred')"), 'the updated rule counts');
+                    await client.evaluate("[...document.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Save draft').click()");
+                    await waitFor(() => client.evaluate("!document.querySelector('fieldset').disabled && document.querySelector('[data-eligibility-mode=course]')?.value === 'preferred'"), 'the saved rule preference');
+                    const saved = await client.evaluate(`(async () => (await window.axios.get('/provider/scholarships/${draft.id}')).data.scholarship.eligibility_rule_modes)()`);
+                    if (saved.course !== 'preferred' || saved.location !== 'required') fail('Saving the form did not preserve the required/preferred policy.');
+                    await client.send('Page.navigate', { url: editUrl });
+                    await waitFor(() => client.evaluate("document.querySelector('[data-eligibility-mode=course]')?.value === 'preferred'"), 'the reloaded preference');
+                    await client.evaluate(`(() => {
+                        const input = document.querySelector('#program-eligible-courses');
+                        input.value = 'Any'; input.dispatchEvent(new Event('input', { bubbles: true }));
+                    })()`);
+                    await waitFor(() => client.evaluate("!document.querySelector('[data-eligibility-mode=course]')"), 'the unrestricted field state');
+                    await client.evaluate(`(() => {
+                        const input = document.querySelector('#program-eligible-courses');
+                        input.value = 'STEM'; input.dispatchEvent(new Event('input', { bubbles: true }));
+                    })()`);
+                    await waitFor(() => client.evaluate("document.querySelector('[data-eligibility-mode=course]')?.value === 'preferred'"), 'the preserved inactive preference');
+                    await client.evaluate(`(() => {
+                        const select = document.querySelector('#program-academic-rule');
+                        select.value = 'percentage'; select.dispatchEvent(new Event('change', { bubbles: true }));
+                    })()`);
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-eligibility-mode=academic]'))"), 'the academic rule selector');
+                    await client.evaluate(`(() => {
+                        const input = document.querySelector('input[type="number"][max="100"]');
+                        input.value = '85'; input.dispatchEvent(new Event('input', { bubbles: true }));
+                        const select = document.querySelector('#program-academic-rule');
+                        select.value = ''; select.dispatchEvent(new Event('change', { bubbles: true }));
+                    })()`);
+                    await waitFor(() => client.evaluate("!document.querySelector('[data-eligibility-mode=academic]')"), 'the removed academic minimum');
+                    if (screenshotPath) {
+                        const screenshot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+                        await writeFile(path.resolve(screenshotPath.replace(/\.png$/i, '-eligibility.png')), Buffer.from(screenshot.data, 'base64'));
+                    }
+                    await client.evaluate(`(() => {
+                        const buttons = [...document.querySelectorAll('[aria-label="Program builder steps"] button')];
+                        buttons.find((button) => button.querySelector('.truncate.text-xs.font-bold')?.textContent.trim() === 'Review').click();
+                    })()`);
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-eligibility-policy-summary]'))"), 'the eligibility review summary');
+                    const summary = await client.evaluate(`({
+                        preferred: document.querySelector('[data-rule-group="preferred"]').textContent,
+                        required: document.querySelector('[data-rule-group="required"]').textContent,
+                    })`);
+                    if (!summary.preferred.includes('Courses, tracks, or strands') || !summary.required.includes('Residency')) fail('The review summary did not separate preferences from required rules.');
+                    if (screenshotPath) {
+                        const screenshot = await client.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true });
+                        await writeFile(path.resolve(screenshotPath.replace(/\.png$/i, '-review.png')), Buffer.from(screenshot.data, 'base64'));
+                    }
+                    if (runtimeErrors.length) fail('Eligibility builder runtime errors: ' + runtimeErrors.join('; '));
+                    console.log('PASS Eligibility selectors, save/reload, unrestricted fields, and grouped review');
+                } finally {
+                    const removed = await client.evaluate(`(async () => {
+                        const current = (await window.axios.get('/provider/scholarships/${draft.id}')).data.scholarship;
+                        if (current.title !== ${JSON.stringify(draft.title)} || current.status !== 'draft' || current.applications_count > 0) return false;
+                        await window.axios.delete('/provider/scholarships/${draft.id}');
+                        return true;
+                    })()`);
+                    if (!removed) fail('The isolated eligibility test draft could not be safely removed.');
+                    console.log('PASS Isolated eligibility test draft removed');
+                }
+            }
+
+            if (verifyMapPin) {
+                await client.evaluate(`(() => {
+                    const button = [...document.querySelectorAll('button')].find((item) => /^(Set map pin|Review map pin)$/.test(item.textContent.trim()));
+                    if (!button) throw new Error('No map pin control found.');
+                    button.click();
+                })()`);
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[aria-labelledby=\"location-map-modal-title\"] .leaflet-container'))"), 'the interactive map');
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[aria-labelledby=\"location-map-modal-title\"] .leaflet-tile-loaded'))"), 'the map tiles to render');
+                const point = await client.evaluate(`(() => {
+                    const bounds = document.querySelector('[aria-labelledby="location-map-modal-title"] .leaflet-container').getBoundingClientRect();
+                    return { x: bounds.x + bounds.width * 0.6, y: bounds.y + bounds.height * 0.55 };
+                })()`);
+                await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...point, button: 'left', clickCount: 1 });
+                await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...point, button: 'left', clickCount: 1 });
+                await waitFor(() => client.evaluate("document.body.innerText.includes('Map pin selected. Save the form to keep this location.')"), 'the selected map pin');
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[aria-labelledby=\"location-map-modal-title\"] .leaflet-marker-icon')) && !document.querySelector('[aria-labelledby=\"location-map-modal-title\"]').innerText.includes('Finding address from selected pin')"), 'the selected pin marker');
+                if (screenshotPath) {
+                    const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+                    await writeFile(path.resolve(screenshotPath.replace(/\.png$/i, '-map.png')), Buffer.from(screenshot.data, 'base64'));
+                }
+                await client.evaluate("document.querySelector('[aria-label=\"Close map\"]').click()");
+                await waitFor(() => client.evaluate("!document.querySelector('[aria-labelledby=\"location-map-modal-title\"]')"), 'the map modal to close');
+                const cleared = await client.evaluate(`(() => {
+                    const button = [...document.querySelectorAll('button')].find((item) => item.textContent.trim() === 'Clear pin');
+                    button?.click();
+                    return Boolean(button);
+                })()`);
+                if (!cleared) fail('The selected map pin could not be cleared.');
+                await waitFor(() => client.evaluate("[...document.querySelectorAll('button')].some((item) => item.textContent.trim() === 'Set map pin')"), 'the cleared pin state');
+                if (runtimeErrors.length) fail(`Map runtime errors: ${runtimeErrors.join('; ')}`);
+                console.log('PASS Map pin selection and clearing without saving');
             }
 
             console.log(`PASS ${heading}`);

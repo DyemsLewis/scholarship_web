@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Scholarship;
+use App\Support\ProgramConfigurationRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
 
@@ -13,7 +14,7 @@ class ScholarshipPublicationGuard
         $scholarship->loadMissing(['provider.providerProfile', 'benefits']);
 
         $provider = $scholarship->provider;
-        $errors = [];
+        $errors = ProgramConfigurationRules::errors([], $scholarship);
 
         if (! $provider?->isProvider() || ! $provider->isActive()) {
             $errors['status'] = 'The provider account must be active before this program can be published.';
@@ -49,9 +50,6 @@ class ScholarshipPublicationGuard
 
         if (! $scholarship->support_ends_at) {
             $errors['support_ends_at'] = 'Add the recipient support end date before publication.';
-        } elseif ($scholarship->support_starts_at
-            && $scholarship->support_ends_at->isBefore($scholarship->support_starts_at)) {
-            $errors['support_ends_at'] = 'The support end date must be on or after the support start date.';
         }
 
         if (blank($scholarship->category)) {

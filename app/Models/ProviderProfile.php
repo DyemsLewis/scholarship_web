@@ -19,6 +19,8 @@ class ProviderProfile extends Model
         'provider_type',
         'provider_website',
         'provider_address',
+        'latitude',
+        'longitude',
         'provider_description',
         'mission',
         'year_established',
@@ -44,6 +46,8 @@ class ProviderProfile extends Model
     protected function casts(): array
     {
         return [
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
             'year_established' => 'integer',
             'registration_date' => 'date',
             'verified_at' => 'datetime',

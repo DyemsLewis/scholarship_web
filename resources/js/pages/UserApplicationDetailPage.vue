@@ -374,6 +374,8 @@ function openFormalHandoffMap() {
         eyebrow: 'Formal application location',
         title: handoff.location_name || 'Where to continue',
         address: handoff.location_address || handoff.location_name || '',
+        latitude: handoff.latitude,
+        longitude: handoff.longitude,
         markerText: handoff.location_name || 'Formal application location',
         note: 'Use this location when the provider asks you to continue the formal application in person.',
     };

@@ -15,7 +15,9 @@ use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
 use App\Support\CoverImageCatalog;
+use App\Support\EligibilityRulePolicy;
 use App\Support\LearnerProgramPath;
+use App\Support\ProgramConfigurationRules;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEligibilityCondition;
 use App\Support\ScholarshipEventPayload;
@@ -316,6 +318,7 @@ trait HandlesProviderProgramManagement
         $validated = $this->normalizeScholarshipApplicationQuestions($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
         $validated = $this->normalizeScholarshipExamDetails($validated);
+        $validated = $this->normalizeScholarshipLocationPins($validated);
         $validated = $this->applyProviderProgramContactDefaults($validated, $request->user());
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request);
@@ -398,7 +401,7 @@ trait HandlesProviderProgramManagement
         abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
         $this->ensureProviderCanPost($request);
 
-        $validated = $this->validateScholarship($request);
+        $validated = $this->validateScholarship($request, $scholarship);
         $validated = $this->normalizeScholarshipProviderObjectives($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipRecipientAgreement($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
@@ -409,6 +412,7 @@ trait HandlesProviderProgramManagement
         $validated = $this->normalizeScholarshipApplicationQuestions($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipExamDetails($validated);
+        $validated = $this->normalizeScholarshipLocationPins($validated, $scholarship);
         $validated = $this->applyProviderProgramContactDefaults($validated, $request->user(), $scholarship);
         [$validated, $benefits] = app(SB::class)->normalize($validated, $request);
         $programEvents = $this->normalizeScholarshipProgramEvents($validated, $request, $scholarship);
@@ -464,12 +468,15 @@ trait HandlesProviderProgramManagement
         $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated, $benefitsChanged);
         try {
             DB::transaction(function () use ($scholarship, $validated, $programEvents, $benefits, $request): void {
+                $locked = Scholarship::query()->whereKey($scholarship->id)->lockForUpdate()->firstOrFail();
+                $scholarship->refresh();
+                ProgramConfigurationRules::assertConsistent($validated, $locked);
                 $requestedSlots = array_key_exists('slots_available', $validated)
                     ? $validated['slots_available']
-                    : $scholarship->slots_available;
+                    : $locked->slots_available;
                 $requestedApplicationLimit = array_key_exists('application_limit', $validated)
                     ? $validated['application_limit']
-                    : $scholarship->application_limit;
+                    : $locked->application_limit;
 
                 $this->ensureScholarshipAwardCapacity($scholarship, $requestedSlots);
                 $this->ensureScholarshipApplicationCapacity($scholarship, $requestedApplicationLimit);
@@ -552,25 +559,8 @@ trait HandlesProviderProgramManagement
             : $scholarship?->{$field};
         $errors = [];
         $deadline = $value('deadline');
-        $applicationOpensAt = $value('application_opens_at');
-        $expectedResultsAt = $value('expected_results_at');
         $supportStartsAt = $value('support_starts_at');
         $supportEndsAt = $value('support_ends_at');
-
-        if (filled($applicationOpensAt) && filled($deadline)
-            && CarbonImmutable::parse($applicationOpensAt)->startOfDay()->isAfter(CarbonImmutable::parse($deadline)->startOfDay())) {
-            $errors['application_opens_at'] = 'The application opening date must be on or before the deadline.';
-        }
-
-        if (filled($expectedResultsAt) && filled($deadline)
-            && CarbonImmutable::parse($expectedResultsAt)->startOfDay()->isBefore(CarbonImmutable::parse($deadline)->startOfDay())) {
-            $errors['expected_results_at'] = 'The expected results date must be on or after the application deadline.';
-        }
-
-        if (filled($supportStartsAt) && filled($supportEndsAt)
-            && CarbonImmutable::parse($supportEndsAt)->startOfDay()->isBefore(CarbonImmutable::parse($supportStartsAt)->startOfDay())) {
-            $errors['support_ends_at'] = 'The support end date must be on or after the support start date.';
-        }
 
         $this->addScholarshipEligibilityConsistencyErrors($errors, $value);
 
@@ -712,13 +702,6 @@ trait HandlesProviderProgramManagement
             $errors['handoff_url'] = 'Add the official link qualified applicants should use.';
         }
 
-        $handoffDeadline = $value('handoff_deadline');
-
-        if (filled($handoffDeadline) && filled($deadline)
-            && CarbonImmutable::parse($handoffDeadline)->startOfDay()->isBefore(CarbonImmutable::parse($deadline)->startOfDay())) {
-            $errors['handoff_deadline'] = 'The formal application deadline must be on or after the pre-screening deadline.';
-        }
-
         foreach ([
             'location_name' => 'Add the program location name.',
             'location_address' => 'Add the program address.',
@@ -771,15 +754,20 @@ trait HandlesProviderProgramManagement
             $hasEducationRestriction = $educationLevels->isNotEmpty()
                 && ($educationLevels->count() !== $allEducationLevels->count()
                     || $educationLevels->diff($allEducationLevels)->isNotEmpty());
-            $hasFinderRestriction = $hasEducationRestriction
-                || ! $this->isOpenScholarshipRule($value('eligible_courses'))
-                || filled($value('eligible_school_types'))
-                || ! $this->isOpenScholarshipRule($value('eligible_year_levels'))
-                || ! $this->isOpenScholarshipRule($value('eligible_locations'))
-                || ! $this->isOpenScholarshipRule($value('income_requirement'))
-                || (bool) $value('exclude_current_scholarship_recipients')
-                || filled($value('minimum_grade_scale'))
-                || filled($value('minimum_gwa'));
+            $ruleModes = EligibilityRulePolicy::normalize($value('eligibility_rule_modes'));
+            $restrictions = [
+                'education_level' => $hasEducationRestriction,
+                'course' => ! $this->isOpenScholarshipRule($value('eligible_courses')),
+                'school_type' => filled($value('eligible_school_types')),
+                'year_level' => ! $this->isOpenScholarshipRule($value('eligible_year_levels')),
+                'location' => ! $this->isOpenScholarshipRule($value('eligible_locations')),
+                'income' => ! $this->isOpenScholarshipRule($value('income_requirement')),
+                'current_scholarship_support' => (bool) $value('exclude_current_scholarship_recipients'),
+                'academic' => filled($value('minimum_grade_scale')) || filled($value('minimum_gwa')),
+            ];
+            $hasFinderRestriction = collect($restrictions)->contains(
+                fn (bool $restricted, string $key): bool => $restricted && $ruleModes[$key] === 'required',
+            );
 
             if (count($conditions) > 1 || $hasFinderRestriction) {
                 $errors['eligibility_conditions'] = 'Open to all learners cannot be combined with other conditions or restrictive matching fields.';
@@ -831,8 +819,16 @@ trait HandlesProviderProgramManagement
         ], true);
     }
 
-    private function validateScholarship(Request $request): array
+    private function validateScholarship(Request $request, ?Scholarship $scholarship = null): array
     {
+        if (is_string($request->input('eligibility_rule_modes'))) {
+            try {
+                $modes = json_decode($request->input('eligibility_rule_modes'), true, flags: JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                throw ValidationException::withMessages(['eligibility_rule_modes' => 'Choose Required or Preferred for each configured eligibility rule.']);
+            }
+            $request->merge(['eligibility_rule_modes' => $modes]);
+        }
         $requiresCompleteSubmission = ! in_array($request->input('status'), ['draft', 'closed'], true);
 
         $validated = $request->validate([
@@ -849,6 +845,8 @@ trait HandlesProviderProgramManagement
             'provider_objective_notes' => ['nullable', 'string', 'max:1500'],
             'eligibility' => ['nullable', 'string', 'max:5000'],
             'eligibility_conditions' => ['nullable', 'string', 'max:15000', 'json'],
+            'eligibility_rule_modes' => ['sometimes', 'array:'.implode(',', EligibilityRulePolicy::KEYS)],
+            'eligibility_rule_modes.*' => ['required', Rule::in(EligibilityRulePolicy::MODES)],
             'eligible_education_levels' => ['nullable', 'string', 'max:2000'],
             'eligible_courses' => ['nullable', 'string', 'max:3000'],
             'eligible_school_types' => ['nullable', 'string', 'max:2000'],
@@ -868,6 +866,8 @@ trait HandlesProviderProgramManagement
             'handoff_deadline' => ['nullable', 'date'],
             'handoff_location_name' => ['nullable', 'string', 'max:255'],
             'handoff_location_address' => ['nullable', 'string', 'max:500'],
+            'handoff_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:handoff_longitude'],
+            'handoff_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:handoff_latitude'],
             'handoff_url' => ['nullable', 'url:http,https', 'max:2048'],
             'award_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'benefits' => ['nullable', 'string', 'max:20000', 'json'],
@@ -887,7 +887,7 @@ trait HandlesProviderProgramManagement
             'application_opens_at' => ['nullable', 'date'],
             'expected_results_at' => ['nullable', 'date'],
             'support_starts_at' => ['nullable', 'date'],
-            'support_ends_at' => ['nullable', 'date', 'after_or_equal:support_starts_at'],
+            'support_ends_at' => ['nullable', 'date'],
             'official_program_url' => ['nullable', 'url:http,https', 'max:2048'],
             'contact_person' => ['nullable', 'string', 'max:150'],
             'contact_department' => ['nullable', 'string', 'max:150'],
@@ -912,6 +912,12 @@ trait HandlesProviderProgramManagement
             'review_rubric' => ['nullable', 'string', 'max:8000', 'json'],
             'application_questions' => ['nullable', 'string', 'max:10000', 'json'],
         ]);
+
+        ProgramConfigurationRules::assertConsistent($validated, $scholarship);
+
+        if (array_key_exists('eligibility_rule_modes', $validated)) {
+            $validated['eligibility_rule_modes'] = EligibilityRulePolicy::normalize($validated['eligibility_rule_modes']);
+        }
 
         return $validated;
     }
@@ -1016,6 +1022,26 @@ trait HandlesProviderProgramManagement
         }
 
         $validated['minimum_grade_scale'] = $scale;
+
+        return $validated;
+    }
+
+    private function normalizeScholarshipLocationPins(array $validated, ?Scholarship $scholarship = null): array
+    {
+        if (array_key_exists('handoff_latitude', $validated) || array_key_exists('handoff_longitude', $validated)) {
+            $validated['handoff_latitude'] = $validated['handoff_latitude'] ?? null;
+            $validated['handoff_longitude'] = $validated['handoff_longitude'] ?? null;
+        }
+
+        if (! in_array($validated['handoff_mode'] ?? $scholarship?->handoff_mode, ['onsite', 'hybrid'], true)) {
+            $validated['handoff_latitude'] = null;
+            $validated['handoff_longitude'] = null;
+        } elseif ($scholarship && array_key_exists('handoff_location_address', $validated)
+            && $validated['handoff_location_address'] !== $scholarship->handoff_location_address
+            && ! array_key_exists('handoff_latitude', $validated)) {
+            $validated['handoff_latitude'] = null;
+            $validated['handoff_longitude'] = null;
+        }
 
         return $validated;
     }
@@ -1409,6 +1435,7 @@ trait HandlesProviderProgramManagement
             'provider_objectives',
             'provider_objective_notes',
             'eligibility',
+            'eligibility_rule_modes',
             'eligible_education_levels',
             'eligible_courses',
             'eligible_school_types',
@@ -1428,6 +1455,8 @@ trait HandlesProviderProgramManagement
             'handoff_deadline',
             'handoff_location_name',
             'handoff_location_address',
+            'handoff_latitude',
+            'handoff_longitude',
             'handoff_url',
             'review_rubric',
             'application_questions',
@@ -1465,6 +1494,11 @@ trait HandlesProviderProgramManagement
             $nextValue = $field === 'selection_stages'
                 ? ScholarshipSelectionPlan::normalize($validated[$field])
                 : $validated[$field];
+
+            if ($field === 'eligibility_rule_modes') {
+                $currentValue = EligibilityRulePolicy::normalize($currentValue);
+                $nextValue = EligibilityRulePolicy::normalize($nextValue);
+            }
 
             if ($this->comparableScholarshipValue($currentValue)
                 !== $this->comparableScholarshipValue($nextValue)) {
@@ -1775,6 +1809,7 @@ trait HandlesProviderProgramManagement
             'provider_objective_notes' => $scholarship->provider_objective_notes,
             'eligibility' => $scholarship->eligibility,
             'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
+            'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
             'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligible_courses' => $scholarship->eligible_courses,
             'eligible_school_types' => $scholarship->eligible_school_types,
@@ -1796,6 +1831,8 @@ trait HandlesProviderProgramManagement
             'handoff_deadline' => $scholarship->handoff_deadline?->format('Y-m-d'),
             'handoff_location_name' => $scholarship->handoff_location_name,
             'handoff_location_address' => $scholarship->handoff_location_address,
+            'handoff_latitude' => $scholarship->handoff_latitude,
+            'handoff_longitude' => $scholarship->handoff_longitude,
             'handoff_url' => $scholarship->handoff_url,
             'handoff_map_url' => $this->handoffMapUrl($scholarship),
             'review_rubric' => $scholarship->review_rubric ?? [],
@@ -1958,10 +1995,6 @@ trait HandlesProviderProgramManagement
 
     private function handoffMapUrl(Scholarship $scholarship): ?string
     {
-        $query = $scholarship->handoff_location_address ?: $scholarship->handoff_location_name;
-
-        return filled($query)
-            ? 'https://www.openstreetmap.org/search?query='.rawurlencode($query)
-            : null;
+        return $scholarship->handoffMapUrl();
     }
 }

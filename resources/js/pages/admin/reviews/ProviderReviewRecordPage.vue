@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import LocationMapLink from '../../../components/LocationMapLink.vue';
 
 const providerId = window.location.pathname.match(/providers\/(\d+)/)?.[1];
 const loading = ref(true);
@@ -76,6 +77,7 @@ onMounted(loadRecord);
                     <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Programs</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.programs_count }}</dd></div>
                     <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Team accounts</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.team_members_count }}</dd></div>
                 </dl>
+                <div v-if="provider.provider_address" class="border-t border-slate-200 px-6 py-4"><p class="text-xs font-semibold text-slate-500">Office address</p><p class="mt-1 text-sm font-bold text-slate-950">{{ provider.provider_address }}</p><LocationMapLink :address="provider.provider_address" :latitude="provider.provider_latitude" :longitude="provider.provider_longitude" :title="provider.provider_name || 'Organization office'" /></div>
             </section>
 
             <section class="admin-panel mt-4 overflow-hidden">

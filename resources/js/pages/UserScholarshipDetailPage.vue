@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPreviewToolbar.vue';
+import { eligibilityCriterionPresentation, eligibilityOverview } from '../support/applicantEligibility';
 
 const props = defineProps({
     embedded: { type: Boolean, default: false },
@@ -105,7 +106,6 @@ const sectionVisual = computed(() => ({
 
 const eligibilityVerdict = computed(() => {
     const profile = content.value?.profile ?? {};
-    const blockers = content.value?.blockers ?? [];
 
     if (!profile.complete) {
         return {
@@ -127,22 +127,11 @@ const eligibilityVerdict = computed(() => {
         };
     }
 
-    if (blockers.length) {
-        return {
-            state: 'blocked',
-            eyebrow: 'Review needed',
-            title: 'Some published rules do not match',
-            description: 'Review the comparison below before deciding whether to continue.',
-            icon: 'fa-solid fa-triangle-exclamation',
-        };
-    }
-
+    const overview = eligibilityOverview({ ...content.value, blocking_criteria: content.value?.blockers });
     return {
-        state: 'ready',
-        eyebrow: 'Profile match',
-        title: 'No automatic blockers were found',
-        description: 'The provider will still verify your information and supporting records.',
-        icon: 'fa-solid fa-check',
+        ...overview,
+        eyebrow: overview.label,
+        icon: overview.state === 'ready' ? 'fa-solid fa-check' : 'fa-solid fa-circle-info',
     };
 });
 
@@ -227,19 +216,7 @@ function benefitDetails(benefit) {
 }
 
 function criterionStatus(criterion) {
-    if (criterion.status === 'pass') {
-        return { label: 'Matched', state: 'ready' };
-    }
-
-    if (criterion.status === 'fail') {
-        return { label: 'Not matched', state: 'blocked' };
-    }
-
-    if (criterion.status === 'missing') {
-        return { label: 'Missing info', state: 'attention' };
-    }
-
-    return { label: criterion.key === 'academic' && criterion.requirement ? 'Provider review' : 'Open', state: 'neutral' };
+    return eligibilityCriterionPresentation(criterion);
 }
 
 function displayValue(value, fallback = 'Not specified') {
@@ -560,6 +537,7 @@ onMounted(loadScholarship);
                                     <p class="student-kicker">{{ eligibilityVerdict.eyebrow }}</p>
                                     <h3 class="mt-1 text-2xl font-bold text-slate-950">{{ eligibilityVerdict.title }}</h3>
                                     <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ eligibilityVerdict.description }}</p>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">Required mismatches prevent applying. Preferred differences do not. A check needing review is not a confirmed match; profile verification is still required.</p>
                                 </div>
                                 <figure class="relative h-44 overflow-hidden bg-slate-900 lg:h-auto">
                                     <img :src="sectionVisual.image" :alt="sectionVisual.alt" class="absolute inset-0 h-full w-full object-cover">
@@ -581,7 +559,8 @@ onMounted(loadScholarship);
                                         </div>
                                         <div>
                                             <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Program rule</p>
-                                            <p class="mt-1 text-sm font-semibold text-slate-800">{{ criterion.status === 'info' ? 'Open to all' : displayValue(criterion.requirement, 'No restriction') }}</p>
+                                            <p class="mt-1 text-sm font-semibold text-slate-800">{{ criterionStatus(criterion).status === 'info' ? 'Open to all' : displayValue(criterion.requirement, 'No restriction') }}</p>
+                                            <p v-if="criterionStatus(criterion).modeLabel" class="mt-1 text-xs font-semibold text-slate-500">{{ criterionStatus(criterion).modeLabel }}</p>
                                         </div>
                                         <span :class="['w-fit px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(criterionStatus(criterion).state).badge]">
                                             {{ criterionStatus(criterion).label }}

@@ -58,7 +58,8 @@ function hasValue(value) {
 </script>
 
 <template>
-    <section :class="['overflow-hidden border border-slate-300 bg-white', primary ? 'border-t-4 border-t-amber-400 shadow-md' : 'shadow-sm']">
+    <section :class="['overflow-hidden border border-slate-300 bg-white', primary ? 'rounded-md border-t-4 border-t-amber-400 shadow-sm' : 'shadow-sm']">
+        <slot name="header">
         <header class="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex min-w-0 items-center gap-4">
                 <div class="grid h-16 w-16 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-lg font-bold text-slate-500">
@@ -81,6 +82,7 @@ function hasValue(value) {
                 <slot name="actions" />
             </div>
         </header>
+        </slot>
 
         <div v-if="showTrustNotice && verificationStatus !== 'approved'" class="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-5 text-amber-950 sm:px-5">
             <i class="fa-solid fa-shield-halved mt-0.5 shrink-0 text-amber-700" aria-hidden="true"></i>
@@ -97,6 +99,7 @@ function hasValue(value) {
             </div>
         </div>
 
+        <slot name="details">
         <div class="divide-y divide-slate-200">
             <section v-for="section in sections" :key="section.id" class="px-4 py-5 sm:px-5">
                 <header class="flex min-h-9 items-start justify-between gap-4">
@@ -134,6 +137,8 @@ function hasValue(value) {
                 </dl>
             </section>
         </div>
+
+        </slot>
 
         <slot name="footer" />
     </section>

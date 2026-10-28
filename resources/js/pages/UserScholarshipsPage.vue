@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import { labelFromKey } from '../support/display';
+import { eligibilityOverview } from '../support/applicantEligibility';
 import { programPathListMatches } from '../support/learnerProgramPaths';
 
 const isLoading = ref(true);
@@ -493,7 +494,7 @@ function applicationBlockedLabel(scholarship) {
         .slice(0, 2);
 
     return labels.length
-        ? `Not eligible: ${labels.join(', ')}`
+        ? `Required rules not met: ${labels.join(', ')}`
         : 'Complete your profile or review eligibility first.';
 }
 
@@ -511,7 +512,7 @@ function applicationBlockedActionLabel(scholarship) {
     }
 
     return scholarship?.eligibility_match?.is_eligible === false
-        ? 'Not eligible'
+        ? 'Required rules not met'
         : 'Complete profile first';
 }
 
@@ -1304,12 +1305,12 @@ onBeforeUnmount(() => {
 
                         <div :class="['mt-4 flex items-start gap-3 rounded-md border p-3', previewScholarship.eligibility_match?.is_eligible === false ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50']">
                             <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', previewScholarship.eligibility_match?.is_eligible === false ? 'bg-rose-100 text-rose-700' : 'bg-slate-950 text-amber-300']">
-                                <i :class="previewScholarship.eligibility_match?.is_eligible === false ? 'fa-solid fa-triangle-exclamation' : 'fa-solid fa-check'" aria-hidden="true"></i>
+                                <i :class="eligibilityOverview(previewScholarship.eligibility_match).state === 'ready' ? 'fa-solid fa-check' : 'fa-solid fa-circle-info'" aria-hidden="true"></i>
                             </span>
                             <div>
-                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Compared with your profile</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{{ eligibilityOverview(previewScholarship.eligibility_match).label }}</p>
                                 <p class="mt-1 text-sm leading-6 text-slate-700">
-                                    {{ previewScholarship.eligibility_match?.difference_summary || previewScholarship.eligibility_match?.summary || 'Open the full details to compare each eligibility rule.' }}
+                                    {{ eligibilityOverview(previewScholarship.eligibility_match).description }} Profile verification and application availability still apply.
                                 </p>
                             </div>
                         </div>

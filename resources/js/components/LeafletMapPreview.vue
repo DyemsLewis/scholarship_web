@@ -480,6 +480,7 @@ async function previewAddress() {
     const coordinates = savedCoordinates || await geocodeAddress();
 
     if (!coordinates) {
+        if (props.picker) await renderMap(null);
         return;
     }
 

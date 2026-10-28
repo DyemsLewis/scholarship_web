@@ -89,6 +89,8 @@ trait HandlesProviderProfileManagement
                 'provider_type' => ['nullable', Rule::in(['school', 'foundation', 'government', 'company', 'non_profit', 'other'])],
                 'provider_website' => ['nullable', 'string', 'max:255'],
                 'provider_address' => ['nullable', 'string', 'max:500'],
+                'provider_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:provider_longitude'],
+                'provider_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:provider_latitude'],
                 'provider_description' => ['nullable', 'string', 'max:1500'],
                 'provider_mission' => ['nullable', 'string', 'max:1000'],
                 'provider_year_established' => ['nullable', 'integer', 'min:1800', 'max:'.now()->year],
@@ -144,6 +146,16 @@ trait HandlesProviderProfileManagement
             'verified_by' => $profile?->verified_by,
             'verified_at' => $profile?->verified_at,
         ] : [];
+        if ($editingOrganization) {
+            $addressChanged = $profile?->provider_address !== ($validated['provider_address'] ?? null);
+            $pinProvided = array_key_exists('provider_latitude', $validated) || array_key_exists('provider_longitude', $validated);
+            $organizationProfile['latitude'] = $pinProvided
+                ? ($validated['provider_latitude'] ?? null)
+                : ($addressChanged ? null : $profile?->latitude);
+            $organizationProfile['longitude'] = $pinProvided
+                ? ($validated['provider_longitude'] ?? null)
+                : ($addressChanged ? null : $profile?->longitude);
+        }
         $organizationChanged = $editingOrganization
             && $profile?->verification_status === 'approved'
             && collect([
@@ -424,6 +436,8 @@ trait HandlesProviderProfileManagement
                 'provider_contact_department' => ['nullable', 'string', 'max:255'],
                 'provider_office_hours' => ['nullable', 'string', 'max:255'],
                 'provider_address' => ['required', 'string', 'max:500'],
+                'provider_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:provider_longitude'],
+                'provider_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:provider_latitude'],
                 'provider_service_area' => ['required', 'string', 'max:500'],
             ],
             'legal' => [
@@ -467,6 +481,16 @@ trait HandlesProviderProfileManagement
         $manager = $request->user();
         $owner = $manager->providerOrganizationOwner();
         $profile = $owner->providerProfile()->firstOrCreate(['user_id' => $owner->id]);
+        if ($section === 'contact') {
+            $addressChanged = $profile->provider_address !== $validated['provider_address'];
+            if (array_key_exists('provider_latitude', $validated) || array_key_exists('provider_longitude', $validated)) {
+                $updates['latitude'] = $validated['provider_latitude'] ?? null;
+                $updates['longitude'] = $validated['provider_longitude'] ?? null;
+            } else {
+                $updates['latitude'] = $addressChanged ? null : $profile->latitude;
+                $updates['longitude'] = $addressChanged ? null : $profile->longitude;
+            }
+        }
         $verificationReset = $profile->verification_status === 'approved'
             && collect($reviewedFields)->contains(fn (string $field): bool => $this->comparableScholarshipValue($profile->{$field})
                 !== $this->comparableScholarshipValue($updates[$field] ?? null));
@@ -775,6 +799,8 @@ trait HandlesProviderProfileManagement
             'provider_type' => $profile?->provider_type,
             'provider_website' => $profile?->provider_website,
             'provider_address' => $profile?->provider_address,
+            'provider_latitude' => $profile?->latitude,
+            'provider_longitude' => $profile?->longitude,
             'provider_description' => $profile?->provider_description,
             'provider_mission' => $profile?->mission,
             'provider_year_established' => $profile?->year_established,

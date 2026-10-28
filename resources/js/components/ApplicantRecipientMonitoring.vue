@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import FilePreviewModal from './FilePreviewModal.vue';
+import LocationMapLink from './LocationMapLink.vue';
 import ApplicantMonitoringChecklist from './ApplicantMonitoringChecklist.vue';
 import { showPortalToast } from '../support/portalToast';
 
@@ -428,7 +429,11 @@ async function saveManualGrade(cycle) {
                 <div class="space-y-3">
                     <article v-for="release in activeReleases" :key="release.record_id" class="overflow-hidden rounded-md border border-slate-200 bg-white">
                         <div class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:justify-between"><div class="flex min-w-0 items-start gap-3"><span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md border', releaseStatusClass(release.status)]"><i :class="releaseStatusIcon(release.status)" aria-hidden="true"></i></span><div class="min-w-0"><div class="flex flex-wrap items-center gap-2"><h5 class="font-bold text-slate-950">{{ release.title }}</h5><span :class="['rounded border px-2 py-1 text-[10px] font-bold uppercase', releaseStatusClass(release.status)]">{{ release.status_label }}</span></div><p class="mt-1 text-sm text-slate-600">{{ release.benefit_description }}<span v-if="release.amount_label"> · {{ release.amount_label }}</span></p></div></div><p class="shrink-0 text-sm font-bold text-slate-800">{{ release.release_label }}</p></div>
-                        <dl class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-3"><div class="bg-slate-50 px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Method</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ release.release_method_label }}</dd></div><div class="bg-slate-50 px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Location</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ release.location || 'Provider-coordinated' }}</dd></div><div class="bg-slate-50 px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Original records</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ release.requires_original_verification ? (release.originals_verified ? 'Verified' : 'Bring to release') : 'Not required' }}</dd></div></dl>
+                        <dl class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-3">
+                            <div class="bg-slate-50 px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Method</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ release.release_method_label }}</dd></div>
+                            <div class="bg-slate-50 px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Location</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ release.location || 'Provider-coordinated' }}</dd><LocationMapLink v-if="release.release_method === 'in_person'" :address="release.location || ''" :latitude="release.latitude" :longitude="release.longitude" :title="release.title" /></div>
+                            <div class="bg-slate-50 px-4 py-3"><dt class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Original records</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ release.requires_original_verification ? (release.originals_verified ? 'Verified' : 'Bring to release') : 'Not required' }}</dd></div>
+                        </dl>
                         <div v-if="release.instructions || release.notes || release.receipt" class="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><p class="text-sm leading-6 text-slate-600">{{ release.notes || release.instructions }}</p><button v-if="release.receipt" type="button" class="shrink-0 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="previewFile = release.receipt">View receipt</button></div>
                     </article>
                 </div>

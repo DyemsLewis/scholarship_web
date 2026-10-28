@@ -6,12 +6,13 @@ use App\Models\ApplicationDocument;
 use App\Models\DssCalculationSnapshot;
 use App\Models\ScholarshipApplication;
 use App\Support\AcademicRequirement;
-use App\Support\LearnerProgramPath;
+use App\Support\EligibilityRulePolicy;
+use App\Support\EligibilityReviewSummary;
 use App\Support\ScholarshipSelectionPlan;
 
 class DecisionSupportService
 {
-    public const METHODOLOGY_VERSION = '2.1';
+    public const METHODOLOGY_VERSION = '2.2';
 
     private const WEIGHTS = [
         'eligibility' => 65,
@@ -59,7 +60,7 @@ class DecisionSupportService
                 'label' => $this->statusLabel($application->status),
                 'summary' => 'Shows where the provider is in the review workflow. It does not change applicant suitability.',
             ],
-            'decision_notice' => 'This score supports screening only. The scholarship provider makes the final decision.',
+            'decision_notice' => 'Advisory only, not an approval or rejection. Confirm required rules and evidence; preferred differences are review context. The scholarship provider makes the final decision.',
         ];
     }
 
@@ -129,8 +130,11 @@ class DecisionSupportService
 
         $score ??= $this->scoreApplication($application);
         $eligibility = $application->eligibility_breakdown ?? $this->currentEligibilitySnapshot($application) ?? [];
-        $eligibilityCriteria = collect($eligibility['criteria'] ?? []);
+        $eligibilityCriteria = collect($eligibility['criteria'] ?? [])
+            ->filter(fn (array $criterion): bool => ($criterion['category'] ?? 'eligibility') === 'eligibility'
+                && ($criterion['key'] ?? null) !== 'documents');
         $comparison = $this->eligibilityComparisonSummary($eligibilityCriteria);
+        $comparisonContext = $this->eligibilityComparisonContext($application, $eligibility);
         $requirements = app(ScholarshipEligibilityService::class)
             ->applicationDocumentRequirements($application);
         $uploadedDocuments = $application->documents->pluck('document_name')->all();
@@ -151,7 +155,7 @@ class DecisionSupportService
 
         $strengths = $strengths->merge(
             $eligibilityCriteria
-                ->where('status', 'pass')
+                ->filter(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'pass' && ! EligibilityReviewSummary::needsReview($criterion))
                 ->pluck('note')
         );
 
@@ -165,8 +169,14 @@ class DecisionSupportService
 
         $needsAttention = $needsAttention->merge(
             $eligibilityCriteria
-                ->filter(fn (array $criterion) => in_array($criterion['status'] ?? '', ['fail', 'missing'], true))
-                ->pluck('note')
+                ->filter(fn (array $criterion): bool => ($criterion['category'] ?? 'eligibility') === 'eligibility'
+                    && (in_array($criterion['status'] ?? '', ['fail', 'missing'], true) || EligibilityReviewSummary::needsReview($criterion)))
+                ->map(fn (array $criterion): string => match (true) {
+                    EligibilityRulePolicy::isBlocking($criterion) => 'Required rule discrepancy: '.($criterion['label'] ?? 'Eligibility rule').'. Confirm the saved value against evidence.',
+                    EligibilityReviewSummary::needsReview($criterion) => 'Evidence review: '.($criterion['label'] ?? 'Eligibility rule').'. This is not an automatic match or failure.',
+                    ($criterion['status'] ?? null) === 'fail' => 'Preference not matched: '.($criterion['label'] ?? 'Eligibility rule').'. This did not block submission.',
+                    default => 'Profile information needed: '.($criterion['label'] ?? 'Eligibility rule').'.',
+                })
         );
 
         if ($missingUploads->isNotEmpty()) {
@@ -176,11 +186,16 @@ class DecisionSupportService
         }
 
         return [
-            'headline' => $comparison['state'] === 'provisional'
-                ? 'Suitability score is provisional.'
-                : $this->explanationHeadline($score['recommendation'] ?? 'needs_review', $application->status),
-            'summary' => $score['summary'] ?? 'DSS reviewed the current application data.',
+            'headline' => match ($comparison['state']) {
+                'required_mismatch' => 'Confirm required rule discrepancies before deciding.',
+                'provisional' => 'Suitability score is provisional.',
+                'manual_review' => 'Review the evidence before interpreting the score.',
+                'preferred_difference' => 'Preferences differ; review the complete applicant record.',
+                default => $this->explanationHeadline($score['recommendation'] ?? 'needs_review', $application->status),
+            },
+            'summary' => $comparison['interpretation'],
             'comparison' => $comparison,
+            'eligibility_context' => $comparisonContext,
             'score_interpretation' => $comparison['interpretation'],
             'strengths' => $strengths
                 ->filter()
@@ -194,59 +209,71 @@ class DecisionSupportService
                 ->take(4)
                 ->values()
                 ->all(),
-            'next_action' => $this->recommendedNextAction($application, $score, $missingUploads->all(), $missingAccepted->all()),
+            'next_action' => $this->recommendedNextAction($application, $score, $missingUploads->all(), $missingAccepted->all(), $comparison),
         ];
     }
 
     private function eligibilityComparisonSummary(iterable $criteria): array
     {
-        $criteria = collect($criteria);
-        $met = $criteria->where('status', 'pass')->count();
-        $notMet = $criteria->where('status', 'fail')->count();
-        $missing = $criteria->where('status', 'missing')->count();
-        $manualReview = $criteria
-            ->filter(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'info'
-                && ($criterion['comparison_mode'] ?? null) === 'manual_review')
-            ->count();
-        $notApplicable = $criteria
-            ->filter(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'info'
-                && ($criterion['comparison_mode'] ?? null) !== 'manual_review')
-            ->count();
-        $applicable = $met + $notMet + $missing;
-        $comparable = $met + $notMet;
-        $completeness = $applicable === 0
-            ? 100
-            : (int) round(($comparable / $applicable) * 100);
+        return EligibilityReviewSummary::from(['criteria' => collect($criteria)->all()]);
+    }
 
-        if ($missing > 0) {
-            $state = 'provisional';
-            $label = 'Missing information';
-            $interpretation = "{$missing} applicable ".str('criterion')->plural($missing).' cannot be compared because profile data is missing or uses an incompatible grading scale. Treat the score as provisional and confirm these items before deciding.';
-        } elseif ($manualReview > 0) {
-            $state = 'manual_review';
-            $label = 'Manual review needed';
-            $interpretation = "{$manualReview} ".str('criterion')->plural($manualReview).' requires evidence review and is excluded from the automatic eligibility percentage.';
-        } elseif ($applicable === 0) {
-            $state = 'open_criteria';
-            $label = 'Open criteria';
-            $interpretation = 'The program has no restrictive structured criteria. A high score means no listed mismatch; it is not an applicant ranking or selection decision.';
-        } else {
-            $state = 'complete';
-            $label = 'Comparison complete';
-            $interpretation = 'All applicable structured criteria have enough profile data for comparison. Confirm the values against uploaded proof before deciding.';
+    private function eligibilityComparisonContext(ScholarshipApplication $application, array $saved): array
+    {
+        $current = $this->currentEligibilitySnapshot($application);
+        $hasSaved = is_array($application->eligibility_breakdown);
+        $basis = ! $hasSaved ? 'current'
+            : (is_array(data_get($application->submission_snapshot, 'current')) ? 'submission' : 'saved');
+        $checks = fn (array $value) => collect($value['criteria'] ?? [])
+            ->filter(fn (array $item): bool => ($item['category'] ?? 'eligibility') === 'eligibility'
+                && ($item['key'] ?? null) !== 'documents')
+            ->keyBy('key');
+        $ruleChanges = [];
+        $profileChanges = [];
+
+        if ($hasSaved && $current !== null) {
+            $oldChecks = $checks($saved);
+            $newChecks = $checks($current);
+            $normalize = fn ($value): string => str((string) $value)->replace('_', ' ')->lower()->squish()->toString();
+            foreach ($oldChecks->keys()->merge($newChecks->keys())->unique() as $key) {
+                $old = $oldChecks->get($key);
+                $new = $newChecks->get($key);
+                $label = $old['label'] ?? $new['label'] ?? $key;
+                $isOpen = fn (?array $item): bool => $item === null
+                    || (($item['status'] ?? null) === 'info' && ! EligibilityReviewSummary::needsReview($item));
+                if (! ($isOpen($old) && $isOpen($new))
+                    && ($old === null || $new === null
+                        || ($old['rule_mode'] ?? 'required') !== ($new['rule_mode'] ?? 'required')
+                        || $normalize($old['requirement'] ?? null) !== $normalize($new['requirement'] ?? null))) {
+                    $ruleChanges[] = $label;
+                }
+                if ($old !== null && $new !== null
+                    && $normalize($old['student_value'] ?? null) !== $normalize($new['student_value'] ?? null)) {
+                    $profileChanges[] = $label;
+                }
+            }
         }
 
+        $hasChanges = $ruleChanges !== [] || $profileChanges !== [];
+
         return [
-            'state' => $state,
-            'label' => $label,
-            'completeness' => $completeness,
-            'met' => $met,
-            'not_met' => $notMet,
-            'missing' => $missing,
-            'manual_review' => $manualReview,
-            'not_applicable' => $notApplicable,
-            'applicable' => $applicable,
-            'interpretation' => $interpretation,
+            'basis' => $basis,
+            'legacy_required_defaults' => $hasSaved && $checks($saved)->contains(
+                fn (array $item): bool => ! in_array($item['rule_mode'] ?? null, EligibilityRulePolicy::MODES, true),
+            ),
+            'label' => match ($basis) {
+                'submission' => 'Saved submission comparison',
+                'saved' => 'Saved application comparison',
+                default => 'Current comparison - no saved snapshot',
+            },
+            'rule_changes' => $ruleChanges,
+            'profile_changes' => $profileChanges,
+            'has_changes' => $hasChanges,
+            'score_basis' => 'The DSS suitability score uses current rules and profile data. It is advisory and may differ from the saved application comparison.',
+            'current_comparison' => $hasChanges ? [
+                'criteria' => $current['criteria'],
+                'summary' => EligibilityReviewSummary::from($current),
+            ] : null,
         ];
     }
 
@@ -352,6 +379,8 @@ class DecisionSupportService
             'year_level' => $profile->year_level,
             'gwa' => $profile->gwa,
             'grading_scale' => AcademicRequirement::normalizeScale($profile->grading_scale, $profile->gwa),
+            'enrollment_status' => $profile->enrollment_status,
+            'current_scholarship_status' => $profile->current_scholarship_status,
             'income_bracket' => $profile->income_bracket,
             'barangay' => $profile->barangay,
             'city' => $profile->city,
@@ -370,6 +399,9 @@ class DecisionSupportService
             'income_requirement' => $scholarship->income_requirement,
             'minimum_gwa' => $scholarship->minimum_gwa,
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
+            'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
+            'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
+            'exclude_current_scholarship_recipients' => (bool) $scholarship->exclude_current_scholarship_recipients,
             'requirements' => $scholarship->requirements,
         ];
         $documentInputs = $application->documents
@@ -448,131 +480,16 @@ class DecisionSupportService
 
     private function currentEligibilitySnapshot(ScholarshipApplication $application): ?array
     {
-        $profile = $application->applicant?->studentProfile;
-        $scholarship = $application->scholarship;
-
-        if (! $profile || ! $scholarship) {
+        if (! $application->applicant?->studentProfile || ! $application->scholarship) {
             return null;
         }
 
-        $criteria = [];
-        $passed = 0;
-        $applicable = 0;
-
-        $addCriterion = function (
-            string $key,
-            string $label,
-            string $status,
-            ?string $studentValue,
-            ?string $requirement,
-            string $note,
-            bool $counts = true,
-            array $metadata = [],
-        ) use (&$criteria, &$passed, &$applicable): void {
-            $criteria[] = [
-                'key' => $key,
-                'label' => $label,
-                'status' => $status,
-                'student_value' => $studentValue,
-                'requirement' => $requirement,
-                'note' => $note,
-                ...$metadata,
-            ];
-
-            if (! $counts) {
-                return;
-            }
-
-            $applicable++;
-
-            if ($status === 'pass') {
-                $passed++;
-            }
-        };
-
-        $addOptionCriterion = function (string $key, string $label, ?string $studentValue, ?string $requirements, string $openNote) use ($addCriterion): void {
-            $options = $this->splitOptions($requirements);
-
-            if ($this->hasOpenOption($options)) {
-                $addCriterion($key, $label, 'info', $studentValue, implode(', ', $options), $openNote, false);
-
-                return;
-            }
-
-            if ($options === []) {
-                $addCriterion($key, $label, 'info', $studentValue, null, "No {$label} restriction listed.", false);
-
-                return;
-            }
-
-            $matches = filled($studentValue) && ($key === 'course'
-                ? LearnerProgramPath::matchesAny($studentValue, $options)
-                : $this->matchesAnyOption($studentValue, $options));
-            $addCriterion(
-                $key,
-                $label,
-                filled($studentValue) ? ($matches ? 'pass' : 'fail') : 'missing',
-                $studentValue,
-                implode(', ', $options),
-                $matches ? "{$label} matches this scholarship." : "{$label} needs reviewer confirmation.",
-            );
-        };
-
-        $academicMatch = AcademicRequirement::match($profile->gwa, $profile->grading_scale, $scholarship->minimum_gwa, $scholarship->minimum_grade_scale);
-        $addCriterion(
-            'academic',
-            $academicMatch['label'],
-            $academicMatch['status'],
-            $academicMatch['student_value'],
-            $academicMatch['requirement'],
-            $academicMatch['note'],
-            $academicMatch['counts'],
-            [
-                'student_scale' => $academicMatch['student_scale'],
-                'requirement_scale' => $academicMatch['requirement_scale'],
-                'comparison_mode' => $academicMatch['comparison_mode'],
-                'is_comparable' => $academicMatch['is_comparable'],
-                'equivalence' => $academicMatch['equivalence'] ?? null,
-            ],
+        // File preparation is readiness, not suitability. Keep it outside this score.
+        return app(ScholarshipEligibilityService::class)->evaluate(
+            $application->scholarship,
+            $application->applicant,
+            includeReadiness: false,
         );
-
-        $addOptionCriterion('education_level', 'Education level', $profile->education_level, $scholarship->eligible_education_levels, 'This scholarship is open to all education levels.');
-        $addOptionCriterion('course', 'Track / strand / course', $profile->course_or_strand, $scholarship->eligible_courses, 'This scholarship accepts any track, strand, or course.');
-        $addOptionCriterion('school_type', 'School type', $profile->school_type, $scholarship->eligible_school_types, 'This scholarship accepts any school type.');
-        $addOptionCriterion('year_level', 'Grade / year level', $profile->year_level, $scholarship->eligible_year_levels, 'This scholarship accepts any grade or year level.');
-
-        $studentLocation = collect([$profile->barangay, $profile->city, $profile->province, $profile->region, $profile->address])
-            ->filter()
-            ->implode(', ');
-        $addOptionCriterion('location', 'Location', $studentLocation ?: null, $scholarship->eligible_locations, 'This scholarship is open nationwide or has no location restriction.');
-
-        if (filled($scholarship->income_requirement) && ! $this->isOpenOption($scholarship->income_requirement)) {
-            $income = $profile->income_bracket;
-            $matchesIncome = filled($income) && $this->matchesAnyOption($income, [$scholarship->income_requirement]);
-            $addCriterion(
-                'income',
-                'Income bracket',
-                filled($income) ? ($matchesIncome ? 'pass' : 'fail') : 'missing',
-                $income,
-                $scholarship->income_requirement,
-                $matchesIncome ? 'Income bracket matches the listed preference.' : 'Income bracket needs provider review.',
-            );
-        } else {
-            $addCriterion('income', 'Income bracket', 'info', $profile->income_bracket, $scholarship->income_requirement, 'No income restriction listed.', false);
-        }
-
-        $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);
-
-        return [
-            'score' => $score,
-            'passed' => $passed,
-            'applicable' => $applicable,
-            'label' => $score >= 80 ? 'Strong match' : ($score >= 50 ? 'Needs review' : 'Low match'),
-            'summary' => $applicable === 0
-                ? 'This scholarship has no structured matching rules yet.'
-                : "{$passed} of {$applicable} structured criteria match the applicant profile.",
-            'criteria' => $criteria,
-        ];
     }
 
     private function documentScore(ScholarshipApplication $application): int
@@ -753,7 +670,7 @@ class DecisionSupportService
         };
     }
 
-    private function recommendedNextAction(ScholarshipApplication $application, array $score, array $missingUploads, array $missingAccepted): string
+    private function recommendedNextAction(ScholarshipApplication $application, array $score, array $missingUploads, array $missingAccepted, array $comparison = []): string
     {
         $workflow = app(ApplicationWorkflowService::class)->payload($application);
 
@@ -781,6 +698,14 @@ class DecisionSupportService
 
         if ($missingAccepted !== []) {
             return 'Provider should review and accept or return the uploaded documents.';
+        }
+
+        if (($comparison['required_not_met'] ?? 0) > 0) {
+            return 'Confirm the required rule discrepancies using the saved application and supporting evidence before recording the screening result.';
+        }
+
+        if (in_array($comparison['state'] ?? null, ['provisional', 'manual_review'], true)) {
+            return 'Resolve the missing information or manually review the academic evidence before recording the screening result.';
         }
 
         if (($score['recommendation'] ?? '') === 'needs_review') {
@@ -885,19 +810,6 @@ class DecisionSupportService
                 || str_contains($normalizedDocument, $normalizedRequirement)
                 || str_contains($normalizedRequirement, $normalizedDocument);
         });
-    }
-
-    private function splitOptions(?string $value): array
-    {
-        if (! $value) {
-            return [];
-        }
-
-        return collect(preg_split('/\r\n|\r|\n|,/', $value))
-            ->map(fn (string $option) => trim($option))
-            ->filter()
-            ->values()
-            ->all();
     }
 
     private function matchesAnyOption(string $value, array $options): bool

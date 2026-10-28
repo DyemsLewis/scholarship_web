@@ -493,6 +493,29 @@ class ProviderProgramSafeguardsTest extends TestCase
             ->assertJsonValidationErrors('eligibility_conditions');
     }
 
+    public function test_open_to_all_can_have_preferences_but_cannot_hide_a_required_restriction(): void
+    {
+        $provider = $this->verifiedProvider();
+        $payload = $this->completeSubmissionPayload([
+            'image_file' => UploadedFile::fake()->image('eligibility-policy-logo.png'),
+            'eligibility_conditions' => json_encode([[
+                'key' => 'open_to_all', 'statement' => 'Open to all learners.', 'verification_type' => 'information',
+            ]]),
+            'eligibility_rule_modes' => ['education_level' => 'preferred', 'location' => 'preferred'],
+        ]);
+        $response = $this->actingAs($provider)->postJson('/provider/scholarships', $payload)
+            ->assertCreated()->assertJsonPath('scholarship.eligibility_rule_modes.location', 'preferred');
+        $imagePath = public_path($response->json('scholarship.image_path'));
+        if (is_file($imagePath)) {
+            unlink($imagePath);
+        }
+
+        $payload['eligibility_rule_modes']['location'] = 'required';
+        $payload['image_file'] = UploadedFile::fake()->image('eligibility-policy-required-logo.png');
+        $this->postJson('/provider/scholarships', $payload)->assertUnprocessable()
+            ->assertJsonValidationErrors('eligibility_conditions');
+    }
+
     public function test_required_document_condition_cannot_use_profile_only_review(): void
     {
         $provider = $this->verifiedProvider();

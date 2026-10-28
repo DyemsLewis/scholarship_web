@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\CoverImageCatalog;
+use App\Support\EligibilityRulePolicy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,7 @@ class Scholarship extends Model
         'provider_objective_notes',
         'eligibility',
         'eligibility_conditions',
+        'eligibility_rule_modes',
         'eligible_education_levels',
         'eligible_courses',
         'eligible_school_types',
@@ -44,6 +46,8 @@ class Scholarship extends Model
         'handoff_deadline',
         'handoff_location_name',
         'handoff_location_address',
+        'handoff_latitude',
+        'handoff_longitude',
         'handoff_url',
         'review_rubric',
         'application_questions',
@@ -88,6 +92,8 @@ class Scholarship extends Model
             'exclude_current_scholarship_recipients' => 'boolean',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',
+            'handoff_latitude' => 'decimal:7',
+            'handoff_longitude' => 'decimal:7',
             'application_opens_at' => 'date',
             'expected_results_at' => 'date',
             'support_starts_at' => 'date',
@@ -98,6 +104,7 @@ class Scholarship extends Model
             'provider_objectives' => 'array',
             'recipient_agreement' => 'array',
             'eligibility_conditions' => 'array',
+            'eligibility_rule_modes' => 'array',
             'application_questions' => 'array',
             'selection_stages' => 'array',
             'exam_duration_minutes' => 'integer',
@@ -322,6 +329,22 @@ class Scholarship extends Model
     {
         return $this->application_limit !== null
             && $this->applicationCount() >= $this->application_limit;
+    }
+
+    public function eligibilityRuleModes(): array
+    {
+        return EligibilityRulePolicy::normalize($this->eligibility_rule_modes);
+    }
+
+    public function handoffMapUrl(): ?string
+    {
+        if ($this->handoff_latitude !== null && $this->handoff_longitude !== null) {
+            return "https://www.openstreetmap.org/?mlat={$this->handoff_latitude}&mlon={$this->handoff_longitude}#map=16/{$this->handoff_latitude}/{$this->handoff_longitude}";
+        }
+
+        $query = $this->handoff_location_address ?: $this->handoff_location_name;
+
+        return filled($query) ? 'https://www.openstreetmap.org/search?query='.rawurlencode($query) : null;
     }
 
     public function isDiscoverable(): bool

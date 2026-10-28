@@ -2317,6 +2317,7 @@ class AdminController extends Controller
             'provider_objective_notes' => $scholarship->provider_objective_notes,
             'eligibility' => $scholarship->eligibility,
             'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
+            'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
             'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
             'provider_email' => $scholarship->provider?->email,
             'provider_type' => $scholarship->provider?->provider_type,

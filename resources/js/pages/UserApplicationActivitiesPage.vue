@@ -77,6 +77,8 @@ function openHandoffMap(handoff) {
         eyebrow: 'Provider location',
         title: handoff.location_name || detail.value.identity.provider.name,
         address: handoff.location_address || handoff.location_name || '',
+        latitude: handoff.latitude,
+        longitude: handoff.longitude,
         markerText: handoff.location_name || detail.value.identity.provider.name,
     };
 }

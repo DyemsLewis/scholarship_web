@@ -163,7 +163,9 @@ class AuthController extends Controller
             $profile = [
                 'first_name' => $profileData['first_name'],
                 'last_name' => $profileData['last_name'],
-                'middle_initial' => strtoupper($profileData['middle_initial']),
+                'middle_initial' => filled($profileData['middle_initial'] ?? null)
+                    ? strtoupper($profileData['middle_initial'])
+                    : null,
                 'contact_number' => $profileData['number'],
             ];
 
@@ -615,7 +617,7 @@ class AuthController extends Controller
         return [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
             'number' => ['required', 'string', 'max:30', new PhoneNumber],

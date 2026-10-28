@@ -287,6 +287,8 @@ class RecipientMonitoringWorkflowTest extends TestCase
             'amount' => 5000,
             'release_method' => 'in_person',
             'location' => 'Tulay Aral Community Desk',
+            'latitude' => 14.5861,
+            'longitude' => 121.1756,
             'instructions' => 'Bring the original grade record and a valid school ID.',
             'requires_original_verification' => true,
             'recipient_ids' => [$application->id],
@@ -319,6 +321,8 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->postJson("/provider/scholarships/{$scholarship->id}/benefit-releases", $releasePayload)
             ->assertCreated()
             ->assertJsonPath('release.recipient_count', 1)
+            ->assertJsonPath('release.latitude', '14.5861000')
+            ->assertJsonPath('release.longitude', '121.1756000')
             ->assertJsonPath('release.records.0.status', 'scheduled')
             ->assertJsonPath('release.requires_original_verification', true);
         $recordId = $releaseResponse->json('release.records.0.id');
@@ -327,6 +331,7 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->getJson("/dashboard/applications/{$application->id}/data")
             ->assertOk()
             ->assertJsonPath('application.recipient_monitoring.benefit_releases.0.status', 'scheduled')
+            ->assertJsonPath('application.recipient_monitoring.benefit_releases.0.latitude', '14.5861000')
             ->assertJsonPath('application.recipient_monitoring.benefit_releases.0.benefit_description', 'PHP 5,000 learning allowance');
 
         $this->actingAs($applicant)
@@ -783,6 +788,38 @@ class RecipientMonitoringWorkflowTest extends TestCase
         $this->actingAs($otherProvider)
             ->getJson("/provider/applications/{$application->id}/recipient-record")
             ->assertForbidden();
+    }
+
+    public function test_remote_benefit_release_does_not_keep_an_in_person_map_pin(): void
+    {
+        [$provider, , $scholarship, $application] = $this->selectedApplication();
+        $application->update([
+            'student_response_status' => 'accepted',
+            'student_responded_at' => now(),
+            'student_response_terms_accepted_at' => now(),
+            'provider_contract_terms_accepted_at' => now(),
+        ]);
+
+        $payload = [
+            'title' => 'Remote learning allowance',
+            'release_at' => now()->addDay()->format('Y-m-d H:i:s'),
+            'benefit_description' => 'Learning allowance by bank transfer',
+            'amount' => 5000,
+            'release_method' => 'bank_transfer',
+            'location' => 'Previously selected venue',
+            'latitude' => 14.5861,
+            'longitude' => 121.1756,
+            'requires_original_verification' => false,
+            'recipient_ids' => [$application->id],
+        ];
+
+        $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/benefit-releases", $payload)
+            ->assertCreated()->assertJsonPath('release.location', null)
+            ->assertJsonPath('release.latitude', null)->assertJsonPath('release.longitude', null);
+
+        unset($payload['longitude']);
+        $this->postJson("/provider/scholarships/{$scholarship->id}/benefit-releases", $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('longitude');
     }
 
     private function selectedApplication(): array

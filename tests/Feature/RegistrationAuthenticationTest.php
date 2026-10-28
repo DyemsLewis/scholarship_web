@@ -7,6 +7,7 @@ use App\Models\PendingRegistration;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class RegistrationAuthenticationTest extends TestCase
@@ -102,6 +103,76 @@ class RegistrationAuthenticationTest extends TestCase
             'email' => $user->email,
             'password' => 'password123',
         ])->assertOk()->assertJsonPath('redirect', '/provider');
+    }
+
+    #[DataProvider('middleInitialCases')]
+    public function test_registration_accepts_an_optional_middle_initial_through_email_verification(array $initialPayload, ?string $expectedInitial): void
+    {
+        Mail::fake();
+
+        foreach ([$this->applicantPayload(), $this->providerPayload()] as $payload) {
+            unset($payload['middle_initial']);
+            $payload = array_merge($payload, $initialPayload);
+
+            $registration = $this->postJson('/register', $payload)->assertStatus(202);
+            $mail = $this->sentRegistrationMail($payload['email']);
+
+            $this->postJson('/register/verify', [
+                'registration_token' => $registration->json('registration_token'),
+                'code' => $mail->verificationCode,
+            ])->assertCreated();
+
+            $user = User::query()->where('email', $payload['email'])->firstOrFail();
+            $profile = $user->isProvider() ? $user->providerProfile : $user->studentProfile;
+            $this->assertNotNull($profile);
+            $this->assertSame($expectedInitial, $profile->middle_initial);
+            $this->assertSame(
+                implode(' ', array_filter(['Demo', $expectedInitial ? $expectedInitial.'.' : null, $payload['last_name']])),
+                $user->name,
+            );
+        }
+    }
+
+    #[DataProvider('middleInitialCases')]
+    public function test_mobile_registration_accepts_an_optional_middle_initial(array $initialPayload, ?string $expectedInitial): void
+    {
+        $payload = $this->applicantPayload();
+        unset($payload['middle_initial']);
+        $payload['contact_number'] = $payload['number'];
+
+        $this->postJson('/api/mobile/register', array_merge($payload, $initialPayload))
+            ->assertCreated();
+
+        $user = User::query()->where('email', $payload['email'])->firstOrFail();
+        $this->assertSame($expectedInitial, $user->studentProfile->middle_initial);
+    }
+
+    public function test_registration_rejects_invalid_middle_initials_when_provided(): void
+    {
+        Mail::fake();
+
+        foreach ([$this->applicantPayload(), $this->providerPayload()] as $payload) {
+            $this->postJson('/register', array_merge($payload, ['middle_initial' => 'AB']))
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('middle_initial');
+
+            $this->postJson('/register', array_merge($payload, ['middle_initial' => '1']))
+                ->assertUnprocessable()
+                ->assertJsonValidationErrors('middle_initial');
+        }
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseCount('pending_registrations', 0);
+    }
+
+    public static function middleInitialCases(): array
+    {
+        return [
+            'omitted' => [[], null],
+            'blank' => [['middle_initial' => ''], null],
+            'null' => [['middle_initial' => null], null],
+            'lowercase' => [['middle_initial' => 'q'], 'Q'],
+        ];
     }
 
     public function test_incorrect_code_does_not_create_an_account(): void

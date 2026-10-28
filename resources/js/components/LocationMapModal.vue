@@ -68,7 +68,7 @@ function retryAddressSearch() {
             aria-labelledby="location-map-modal-title"
             tabindex="-1"
             @click.self="close"
-            @keydown.esc="close"
+            @keydown.esc.stop="close"
         >
             <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
                 <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">

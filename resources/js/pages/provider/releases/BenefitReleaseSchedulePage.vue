@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import LocationPinField from '../../../components/LocationPinField.vue';
 
 const programs = ref([]);
 const candidates = ref([]);
@@ -19,6 +20,8 @@ const form = ref({
     amount: '',
     release_method: 'in_person',
     location: '',
+    latitude: null,
+    longitude: null,
     instructions: '',
     requires_original_verification: false,
 });
@@ -84,6 +87,9 @@ async function saveRelease() {
     try {
         const response = await window.axios.post(`/provider/scholarships/${selectedProgram.value}/benefit-releases`, {
             ...form.value,
+            location: form.value.release_method === 'in_person' ? form.value.location : null,
+            latitude: form.value.release_method === 'in_person' ? form.value.latitude : null,
+            longitude: form.value.release_method === 'in_person' ? form.value.longitude : null,
             amount: form.value.amount === '' ? null : Number(form.value.amount),
             requires_original_verification: Boolean(form.value.requires_original_verification),
             recipient_ids: selectedRecipients.value,
@@ -124,6 +130,7 @@ onBeforeUnmount(() => window.clearTimeout(reloadTimer));
                             <label class="text-sm font-semibold text-slate-700">Amount <span class="font-normal text-slate-400">(optional)</span><input v-model="form.amount" type="number" min="0" step="0.01" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="PHP"></label>
                             <label class="text-sm font-semibold text-slate-700">Release method<select v-model="form.release_method" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="in_person">In person</option><option value="bank_transfer">Bank transfer</option><option value="e_wallet">E-wallet</option><option value="other">Other arrangement</option></select></label>
                             <label v-if="form.release_method === 'in_person'" class="col-span-2 text-sm font-semibold text-slate-700">Location<input v-model="form.location" required maxlength="255" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="Distribution venue"></label>
+                            <LocationPinField v-if="form.release_method === 'in_person'" v-model:latitude="form.latitude" v-model:longitude="form.longitude" class="col-span-3" :address="form.location" title="Benefit release venue" />
                             <label v-else class="col-span-2 text-sm font-semibold text-slate-700">Instructions <span class="font-normal text-slate-400">(optional)</span><input v-model="form.instructions" maxlength="2000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="Transfer or collection instructions"></label>
                         </div>
                         <label class="flex items-start gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 text-sm font-semibold text-slate-700"><input v-model="form.requires_original_verification" type="checkbox" class="mt-0.5 h-4 w-4">Require original-document verification before a release can be marked received.</label>

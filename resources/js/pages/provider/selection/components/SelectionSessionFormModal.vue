@@ -1,5 +1,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue';
+import LocationPinField from '../../../../components/LocationPinField.vue';
+import { sessionScheduleError } from '../../../../support/selectionSessionValidation';
 
 const props = defineProps({
     open: { type: Boolean, default: false },
@@ -17,6 +19,7 @@ const isSaving = ref(false);
 const errorMessage = ref('');
 const firstField = ref(null);
 const form = ref(emptyForm());
+const assignedCount = ref(0);
 
 const selectedProgram = computed(() => programs.value.find((program) => String(program.id) === String(form.value.program_id)) ?? null);
 const availableStages = computed(() => selectedProgram.value?.stages ?? []);
@@ -50,6 +53,8 @@ function emptyForm() {
         mode: 'onsite',
         venue: '',
         location_address: '',
+        latitude: null,
+        longitude: null,
         meeting_url: '',
         capacity: '',
         instructions: '',
@@ -76,8 +81,9 @@ function continueToDelivery() {
         errorMessage.value = 'Complete the program, stage, title, and start time before continuing.';
         return;
     }
-    if (form.value.ends_at && new Date(form.value.ends_at) <= new Date(form.value.starts_at)) {
-        errorMessage.value = 'The end time must be later than the start time.';
+    const scheduleError = sessionScheduleError(form.value, assignedCount.value);
+    if (scheduleError) {
+        errorMessage.value = scheduleError;
         return;
     }
     step.value = 2;
@@ -93,6 +99,8 @@ function sessionPayload() {
         mode: form.value.mode,
         venue: usesVenue.value ? form.value.venue.trim() : null,
         location_address: usesVenue.value ? form.value.location_address.trim() || null : null,
+        latitude: usesVenue.value ? form.value.latitude : null,
+        longitude: usesVenue.value ? form.value.longitude : null,
         meeting_url: usesMeetingLink.value ? form.value.meeting_url.trim() : null,
         capacity: form.value.capacity === '' ? null : Number(form.value.capacity),
         instructions: form.value.instructions.trim() || null,
@@ -104,6 +112,7 @@ async function loadForm() {
     isLoading.value = true;
     errorMessage.value = '';
     form.value = emptyForm();
+    assignedCount.value = 0;
     step.value = 1;
     try {
         const endpoint = props.sessionId
@@ -112,6 +121,7 @@ async function loadForm() {
         const response = await window.axios.get(endpoint);
         programs.value = response.data.programs ?? [];
         const session = response.data.session;
+        assignedCount.value = Number(session?.capacity?.assigned ?? 0);
         if (session) {
             form.value = {
                 program_id: String(session.program.id),
@@ -123,6 +133,8 @@ async function loadForm() {
                 mode: session.mode,
                 venue: session.venue || '',
                 location_address: session.location_address || '',
+                latitude: session.latitude ?? null,
+                longitude: session.longitude ?? null,
                 meeting_url: session.meeting_url || '',
                 capacity: session.capacity.limit ?? '',
                 instructions: session.instructions || '',
@@ -142,6 +154,12 @@ async function loadForm() {
 
 async function saveSession() {
     errorMessage.value = '';
+    const scheduleError = sessionScheduleError(form.value, assignedCount.value);
+    if (scheduleError) {
+        step.value = 1;
+        errorMessage.value = scheduleError;
+        return;
+    }
     if (usesVenue.value && !form.value.venue.trim()) {
         errorMessage.value = 'Add the venue for an on-site or hybrid session.';
         return;
@@ -216,8 +234,8 @@ watch(() => form.value.stage_key, () => {
                             <label class="text-sm font-semibold text-slate-700">Stage<select v-model="form.stage_key" required :disabled="Boolean(sessionId) || !form.program_id" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950 disabled:bg-slate-100"><option value="" disabled>Select a stage</option><option v-for="stage in availableStages" :key="stage.key" :value="stage.key">{{ stage.label }}</option></select></label>
                             <label class="col-span-2 text-sm font-semibold text-slate-700">Session title<input v-model="form.title" type="text" required maxlength="255" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="Example: Morning examination group"></label>
                             <label class="text-sm font-semibold text-slate-700">Starts<input v-model="form.starts_at" type="datetime-local" required class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
-                            <label class="text-sm font-semibold text-slate-700">Ends <span class="font-normal text-slate-400">(optional)</span><input v-model="form.ends_at" type="datetime-local" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
-                            <label class="text-sm font-semibold text-slate-700">Capacity <span class="font-normal text-slate-400">(optional)</span><input v-model="form.capacity" type="number" min="1" max="10000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="No limit"></label>
+                            <label class="text-sm font-semibold text-slate-700">Ends <span class="font-normal text-slate-400">(optional)</span><input v-model="form.ends_at" type="datetime-local" :min="form.starts_at || undefined" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
+                            <label class="text-sm font-semibold text-slate-700">Capacity <span class="font-normal text-slate-400">(optional)</span><input v-model="form.capacity" type="number" :min="Math.max(1, assignedCount)" max="10000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="No limit"></label>
                             <div class="border border-slate-200 bg-slate-50 px-4 py-3"><p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Current stage</p><p class="mt-1 text-sm font-semibold text-slate-900">{{ selectedStage?.label || labelize(form.stage_key) }}</p></div>
                         </div>
                     </section>
@@ -227,6 +245,7 @@ watch(() => form.value.stage_key, () => {
                             <label class="text-sm font-semibold text-slate-700">Method<select v-model="form.mode" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="onsite">On-site</option><option value="online">Online</option><option value="hybrid">Hybrid</option><option value="provider_managed">Managed outside the portal</option></select></label>
                             <label v-if="usesVenue" class="text-sm font-semibold text-slate-700">Venue<input v-model="form.venue" type="text" maxlength="500" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="Building or room"></label>
                             <label v-if="usesVenue" class="col-span-2 text-sm font-semibold text-slate-700">Address <span class="font-normal text-slate-400">(optional)</span><input v-model="form.location_address" type="text" maxlength="1000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
+                            <LocationPinField v-if="usesVenue" v-model:latitude="form.latitude" v-model:longitude="form.longitude" class="col-span-2" :address="form.location_address || form.venue" title="Session venue" />
                             <label v-if="usesMeetingLink" class="col-span-2 text-sm font-semibold text-slate-700">Meeting link<input v-model="form.meeting_url" type="url" maxlength="2000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="https://"></label>
                             <label class="col-span-2 text-sm font-semibold text-slate-700">Applicant instructions <span class="font-normal text-slate-400">(optional)</span><textarea v-model="form.instructions" rows="3" maxlength="3000" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950" placeholder="What to bring or how to prepare"></textarea></label>
                             <label class="col-span-2 flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3"><input v-model="form.proof_required" type="checkbox" class="mt-1 h-4 w-4 border-slate-300 text-slate-950 focus:ring-slate-950"><span><span class="block text-sm font-bold text-slate-900">Require provider proof before completion</span><span class="mt-1 block text-xs leading-5 text-slate-500">For attendance sheets, score sheets, or interview records.</span></span></label>

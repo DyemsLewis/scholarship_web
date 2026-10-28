@@ -179,6 +179,15 @@ class ApplicantScholarshipDetailService
             $detail['content']['blockers'] = $scenario === 'ineligible'
                 ? [['label' => 'A published eligibility rule does not match this sample applicant.']]
                 : [];
+            // Preview scenarios must not reuse the provider account's live comparison guidance.
+            $detail['content']['guidance'] = [
+                'state' => $scenario === 'ineligible' ? 'blocked' : 'ready',
+                'label' => 'Applicant example',
+                'title' => $scenario === 'ineligible'
+                    ? 'A required rule does not match this example'
+                    : 'No required mismatches in this example',
+                'description' => 'This is a sample outcome, not an actual eligibility decision. Live results use each applicant\'s verified profile and the program\'s Required and Preferred rules.',
+            ];
         }
 
         if ($view === 'application') {
@@ -207,7 +216,7 @@ class ApplicantScholarshipDetailService
                 'state' => 'blocked',
                 'tone' => 'blocked',
                 'eyebrow' => 'Ineligible applicant example',
-                'title' => 'Some eligibility rules do not match',
+                'title' => 'Some required rules do not match',
                 'description' => 'The applicant is directed to review the published requirements before continuing.',
                 'can_apply' => false,
             ],
@@ -314,7 +323,7 @@ class ApplicantScholarshipDetailService
             'blocked' => [
                 'tone' => 'blocked',
                 'eyebrow' => 'Review eligibility',
-                'title' => 'Some eligibility rules do not match',
+                'title' => 'Some required rules do not match',
                 'description' => $eligibility['difference_summary'] ?? 'Review the eligibility comparison before applying.',
                 'action' => [
                     'kind' => 'link',
@@ -326,10 +335,12 @@ class ApplicantScholarshipDetailService
                 ],
             ],
             default => [
-                'tone' => 'positive',
+                'tone' => ($eligibility['guidance']['state'] ?? 'ready') === 'attention' ? 'attention' : 'positive',
                 'eyebrow' => 'Ready to begin',
                 'title' => 'Start with pre-screening',
-                'description' => 'Your profile meets the published eligibility rules for this program.',
+                'description' => ($eligibility['guidance']['state'] ?? 'ready') === 'attention'
+                    ? ($eligibility['difference_summary'].' You may start pre-screening; the provider still reviews your evidence and conditions.')
+                    : 'No required rule mismatches were found. The provider will still verify your evidence and conditions.',
                 'action' => [
                     'kind' => 'link',
                     'label' => 'Start pre-screening',
@@ -494,9 +505,15 @@ class ApplicantScholarshipDetailService
             ],
             $blockers !== [] => [
                 'state' => 'blocked',
-                'status' => count($blockers).' to review',
-                'title' => 'Some published rules do not match',
-                'description' => 'Open the comparison to see the exact differences.',
+                'status' => count($blockers).' required rule(s) not met',
+                'title' => 'Some required rules do not match',
+                'description' => $eligibility['guidance']['description'] ?? 'Open the comparison to see what prevents applying.',
+            ],
+            ($eligibility['guidance']['state'] ?? null) === 'attention' => [
+                'state' => 'attention',
+                'status' => $eligibility['guidance']['label'],
+                'title' => $eligibility['guidance']['title'],
+                'description' => $eligibility['guidance']['description'],
             ],
             default => [
                 'state' => 'ready',
@@ -645,11 +662,14 @@ class ApplicantScholarshipDetailService
 
         return [
             'criteria' => $criteria->values()->all(),
+            'guidance' => $eligibility['guidance'] ?? null,
+            'preferred_mismatches' => $eligibility['preferred_mismatches'] ?? [],
+            'review_criteria' => $eligibility['review_criteria'] ?? [],
             'blockers' => $this->eligibilityService->blockers($eligibility),
             'missing_checks' => $criteria
                 ->where('category', 'eligibility')
                 ->where('status', 'missing')
-                ->reject(fn (array $criterion): bool => ($criterion['key'] ?? null) === 'documents')
+                ->reject(fn (array $criterion): bool => ($criterion['key'] ?? null) === 'documents' || ($criterion['needs_review'] ?? false))
                 ->map(fn (array $criterion): array => [
                     'key' => $criterion['key'] ?? null,
                     'label' => $criterion['label'] ?? 'Eligibility detail',

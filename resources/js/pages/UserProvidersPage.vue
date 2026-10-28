@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import LocationMapLink from '../components/LocationMapLink.vue';
 import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPreviewToolbar.vue';
 
 const props = defineProps({
@@ -329,6 +330,7 @@ onMounted(loadPage);
                             <div class="px-5 py-4">
                                 <dt class="text-xs font-semibold text-slate-500">Office address</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.address || 'Not listed' }}</dd>
+                                <LocationMapLink :address="provider.address || ''" :latitude="provider.latitude" :longitude="provider.longitude" :title="provider.name" />
                             </div>
                         </dl>
                     </section>

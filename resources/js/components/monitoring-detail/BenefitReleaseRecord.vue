@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import FilePreviewModal from '../FilePreviewModal.vue';
+import LocationMapLink from '../LocationMapLink.vue';
 import BenefitReceiptResponseModal from './BenefitReceiptResponseModal.vue';
 
 const props = defineProps({
@@ -157,6 +158,7 @@ function iconClass(tone) {
                 <div class="border-t border-slate-200 px-5 py-3 sm:border-l sm:border-t-0">
                     <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Location</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ release.location || 'Provider-coordinated' }}</dd>
+                    <LocationMapLink v-if="release.release_method === 'in_person'" :address="release.location || ''" :latitude="release.latitude" :longitude="release.longitude" :title="release.title" />
                 </div>
             </dl>
         </article>

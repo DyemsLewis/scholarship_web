@@ -9,6 +9,13 @@ const login = process.env.APPLICANT_PROFILE_SMOKE_LOGIN;
 const password = process.env.APPLICANT_PROFILE_SMOKE_PASSWORD;
 const timeoutMs = Number(process.env.APPLICANT_PROFILE_SMOKE_TIMEOUT_MS ?? 20_000);
 const screenshotPath = process.env.APPLICANT_PROFILE_SMOKE_SCREENSHOT;
+const overviewScreenshotPath = process.env.APPLICANT_PROFILE_SMOKE_OVERVIEW_SCREENSHOT;
+const layoutOnly = process.env.APPLICANT_PROFILE_SMOKE_LAYOUT_ONLY === '1';
+const windowSize = process.env.APPLICANT_PROFILE_SMOKE_WINDOW_SIZE ?? '1440,1000';
+const expectedState = process.env.APPLICANT_PROFILE_SMOKE_EXPECTED_STATE;
+const verifySavedDetails = process.env.APPLICANT_PROFILE_SMOKE_SAVED_DETAILS === '1';
+const detailsScreenshotPath = process.env.APPLICANT_PROFILE_SMOKE_DETAILS_SCREENSHOT;
+const addressScreenshotPath = process.env.APPLICANT_PROFILE_SMOKE_ADDRESS_SCREENSHOT;
 
 function fail(message) {
     throw new Error(message);
@@ -129,7 +136,7 @@ async function main() {
         '--disable-gpu',
         '--no-first-run',
         '--no-default-browser-check',
-        '--window-size=1440,1000',
+        `--window-size=${windowSize}`,
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${profileDir}`,
         'about:blank',
@@ -161,6 +168,8 @@ async function main() {
             client.send('Network.enable'),
             client.send('Log.enable'),
         ]);
+        const [viewportWidth, viewportHeight] = windowSize.split(',').map(Number);
+        await client.send('Emulation.setDeviceMetricsOverride', { width: viewportWidth, height: viewportHeight, deviceScaleFactor: 1, mobile: viewportWidth < 640 });
 
         await client.send('Page.navigate', { url: new URL('/login', baseUrl).href });
         await waitFor(() => client.evaluate("document.readyState === 'complete' && Boolean(document.querySelector('#login'))"), 'the login form');
@@ -200,9 +209,91 @@ async function main() {
             fail(`${error.message}: ${JSON.stringify({ profileSnapshot, runtimeErrors, browserLogs, requestErrors })}`);
         }
         await delay(300);
+        await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-profile-identity] img')?.naturalWidth)"), 'the applicant identity photo');
+
+        const foundation = await client.evaluate(`(() => {
+            const identity = document.querySelector('[data-profile-identity]');
+            const readiness = document.querySelector('[data-profile-readiness]');
+            const firstSection = identity?.parentElement.querySelector('.divide-y > section');
+            const photo = identity?.querySelector('img');
+            return {
+                identityCount: document.querySelectorAll('[data-profile-identity]').length,
+                readinessCount: document.querySelectorAll('[data-profile-readiness]').length,
+                state: readiness?.dataset.state,
+                viewportWidth: window.innerWidth,
+                status: identity?.querySelector('[data-profile-status]')?.innerText.trim(),
+                photoLoaded: Boolean(photo?.complete && photo?.naturalWidth),
+                readinessBeforeDetails: Boolean(firstSection && readiness.getBoundingClientRect().top < firstSection.getBoundingClientRect().top),
+                horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
+                headerHasPrivateContact: identity?.innerText.includes('@') || /City|Province|Barangay/.test(identity?.innerText || ''),
+                hasEditAction: Boolean([...identity.querySelectorAll('button')].find((button) => button.innerText.trim() === 'Edit profile')),
+                continueAction: readiness?.querySelector('button')?.innerText.trim() ?? null,
+            };
+        })()`);
+        if (foundation.identityCount !== 1 || foundation.readinessCount !== 1) fail(`The profile does not have one identity area and one readiness strip: ${JSON.stringify(foundation)}`);
+        if (!foundation.photoLoaded || !foundation.readinessBeforeDetails || !foundation.hasEditAction) fail(`The profile foundation is incomplete: ${JSON.stringify(foundation)}`);
+        if (foundation.horizontalOverflow || foundation.headerHasPrivateContact) fail(`The profile identity layout has overflow or misplaced contact details: ${JSON.stringify(foundation)}`);
+        if (expectedState && foundation.state !== expectedState) fail(`Expected ${expectedState}, received ${foundation.state}`);
+        if (overviewScreenshotPath) {
+            if (Number(windowSize.split(',')[0]) < 640) {
+                await client.evaluate("window.scrollTo(0, document.querySelector('.student-page').getBoundingClientRect().top + window.scrollY - 12)");
+            }
+            const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+            await writeFile(path.resolve(overviewScreenshotPath), Buffer.from(screenshot.data, 'base64'));
+        }
+        console.log(`PASS Applicant profile foundation: ${JSON.stringify(foundation)}`);
+
+        const details = await client.evaluate(`(() => {
+            const sections = [...document.querySelectorAll('[data-profile-details] > [data-profile-section]')];
+            const grids = [...document.querySelectorAll('[data-profile-field-grid]')];
+            const firstRow = sections.map((section) => section.querySelector('[data-profile-field]')?.getBoundingClientRect().left);
+            return {
+                ids: sections.map((section) => section.dataset.profileSection),
+                fullWidth: sections.every((section) => Math.abs(section.getBoundingClientRect().width - sections[0].getBoundingClientRect().width) < 2),
+                aligned: firstRow.every((left) => Math.abs(left - firstRow[0]) < 2),
+                columns: grids.map((grid) => getComputedStyle(grid).gridTemplateColumns.split(/\\s+/).length),
+                guardianContact: Boolean(document.querySelector('[data-profile-field="guardian_contact"]')),
+                addressHeading: document.querySelector('#profile-record-location-title')?.innerText,
+                clippedFields: [...document.querySelectorAll('[data-profile-field] dd')].some((field) => field.scrollWidth > field.clientWidth + 2),
+            };
+        })()`);
+        if (JSON.stringify(details.ids) !== JSON.stringify(['personal', 'academic', 'household', 'location'])) fail(`Profile detail sections are missing or out of order: ${JSON.stringify(details)}`);
+        if (!details.fullWidth || !details.aligned || details.clippedFields) fail(`Profile field alignment or wrapping is incorrect: ${JSON.stringify(details)}`);
+        const expectedColumns = viewportWidth >= 1024 ? 3 : viewportWidth >= 640 ? 2 : 1;
+        if (details.columns.some((columns) => columns !== expectedColumns)) fail(`Profile fields have inconsistent column counts: ${JSON.stringify(details)}`);
+        if (details.addressHeading !== 'Home address') fail('The address section is not labelled consistently.');
+        if (detailsScreenshotPath) {
+            await client.evaluate("document.querySelector('[data-profile-section=\"personal\"]').scrollIntoView({ block: 'start' })");
+            const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+            await writeFile(path.resolve(detailsScreenshotPath), Buffer.from(screenshot.data, 'base64'));
+        }
+        if (addressScreenshotPath) {
+            await client.evaluate("document.querySelector('[data-profile-section=\"location\"]').scrollIntoView({ block: 'start' })");
+            const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+            await writeFile(path.resolve(addressScreenshotPath), Buffer.from(screenshot.data, 'base64'));
+        }
+        if (verifySavedDetails) {
+            await client.evaluate(`(() => {
+                window.__profileMutationCount = 0;
+                window.axios.interceptors.request.use((config) => {
+                    if (/^\\/dashboard\\/profile(?:\\/|$)/.test(config.url) && ['post', 'patch', 'put', 'delete'].includes(config.method)) window.__profileMutationCount++;
+                    return config;
+                });
+                window.__savedProfileContact = document.querySelector('[data-profile-field="contact_number"] dd').innerText.trim();
+                document.querySelector('[data-profile-saved-map] button')?.click();
+            })()`);
+            await waitFor(() => client.evaluate("Boolean(document.querySelector('[role=\"dialog\"][aria-labelledby=\"location-map-modal-title\"]'))"), 'the saved-address map');
+            const mapTitle = await client.evaluate("document.querySelector('#location-map-modal-title').innerText");
+            if (mapTitle !== 'Approximate home location') fail(`The saved location opened the wrong map: ${mapTitle}`);
+            await client.evaluate("document.querySelector('[aria-label=\"Close map\"]').click()");
+            await waitFor(() => client.evaluate("!document.querySelector('[role=\"dialog\"][aria-labelledby=\"location-map-modal-title\"]')"), 'the saved-address map to close');
+            if (await client.evaluate('window.__profileMutationCount !== 0')) fail('Viewing the saved address attempted to update profile data.');
+            console.log('PASS Saved home address opens a read-only map without modifying the profile');
+        }
+        console.log(`PASS Applicant profile details: ${JSON.stringify(details)}`);
 
         const buttonLabels = await client.evaluate("[...document.querySelectorAll('button')].filter((button) => button.offsetParent !== null).map((button) => button.innerText.trim()).filter(Boolean)");
-        const expectedSections = [
+        const expectedSections = layoutOnly ? [] : [
             ['personal', 'Personal and contact'],
             ['academic', 'Learning record'],
             ['household', 'Household and guardian'],
@@ -258,8 +349,23 @@ async function main() {
             if (requestErrors.length) fail(`The ${section} profile editor had failed requests: ${requestErrors.join(', ')}`);
             audits.push(audit);
 
+            if (verifySavedDetails && index === 0) {
+                await client.evaluate(`(() => {
+                    const input = document.querySelector('#profile-contact');
+                    if (!input) throw new Error('The personal contact input was not found');
+                    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '09179998888');
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                })()`);
+                await delay(150);
+                if (await client.evaluate("document.querySelector('[data-profile-field=\"contact_number\"] dd').innerText.trim() !== window.__savedProfileContact")) fail('An unsaved edit leaked into the saved applicant record.');
+            }
+
             if (index < expectedSections.length - 1) {
                 await client.evaluate("document.querySelector('[aria-label=\"Close profile editor\"]')?.click()");
+                if (verifySavedDetails && index === 0) {
+                    await waitFor(() => client.evaluate("[...document.querySelectorAll('[role=\"alertdialog\"] button')].some((button) => button.innerText.trim() === 'Discard changes')"), 'the unsaved profile confirmation');
+                    await client.evaluate("[...document.querySelectorAll('[role=\"alertdialog\"] button')].find((button) => button.innerText.trim() === 'Discard changes').click()");
+                }
                 await waitFor(
                     () => client.evaluate("!document.querySelector('[role=\"dialog\"][aria-labelledby=\"profile-editor-title\"]')"),
                     `${section} profile edit modal to close`,
@@ -268,6 +374,8 @@ async function main() {
                 if (bodyOverflowAfterClose) fail(`Closing the ${section} modal left body overflow set to ${bodyOverflowAfterClose}.`);
             }
         }
+
+        if (verifySavedDetails && await client.evaluate('window.__profileMutationCount !== 0')) fail('The read-only details test saved profile changes.');
 
         if (screenshotPath) {
             const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });

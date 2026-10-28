@@ -35,6 +35,14 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    busy: {
+        type: Boolean,
+        default: false,
+    },
+    instantChanges: {
+        type: Boolean,
+        default: false,
+    },
     saveDisabled: {
         type: Boolean,
         default: false,
@@ -67,6 +75,13 @@ const widthClass = computed(() => ({
 }[props.size]));
 
 const actionLabel = computed(() => props.saving ? 'Saving...' : props.saveLabel);
+const working = computed(() => props.saving || props.busy);
+const footerMessage = computed(() => props.dirty ? 'Profile changes not saved'
+    : props.instantChanges ? 'Uploads and removals are saved immediately.' : 'Changes are saved when you select Save changes.');
+
+function close() {
+    if (!working.value) emit('close');
+}
 
 function focusableElements() {
     if (!dialog.value) {
@@ -74,14 +89,15 @@ function focusableElements() {
     }
 
     return [...dialog.value.querySelectorAll(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'a[href], summary, button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     )].filter((element) => !element.hasAttribute('hidden') && element.offsetParent !== null);
 }
 
 function handleKeydown(event) {
     if (event.key === 'Escape') {
         event.preventDefault();
-        emit('close');
+        event.stopPropagation();
+        close();
         return;
     }
 
@@ -103,7 +119,7 @@ function handleKeydown(event) {
     if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialog.value)) {
         event.preventDefault();
         first.focus();
     }
@@ -136,40 +152,42 @@ onBeforeUnmount(() => {
                 v-if="open"
                 class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/70 p-2 sm:p-5"
                 role="presentation"
-                @mousedown.self="$emit('close')"
+                @mousedown.self="close"
             >
                 <section
                     ref="dialog"
-                    :class="['flex max-h-[96vh] w-full flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl outline-none sm:max-h-[92vh]', widthClass]"
+                    :class="['flex max-h-[96dvh] w-full flex-col overflow-hidden rounded-md border border-slate-300 bg-white shadow-2xl outline-none sm:max-h-[92dvh]', widthClass]"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="profile-editor-title"
                     aria-describedby="profile-editor-description"
+                    :aria-busy="working"
                     tabindex="-1"
                     @keydown="handleKeydown"
                 >
-                    <header class="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
+                    <header class="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5">
                         <div class="flex items-start justify-between gap-4">
                             <div class="flex min-w-0 items-start gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm text-amber-300">
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-700">
                                     <i :class="icon" aria-hidden="true"></i>
                                 </span>
                                 <div class="min-w-0">
                                     <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">{{ eyebrow }}</p>
-                                    <h2 id="profile-editor-title" class="mt-1 text-xl font-bold leading-tight text-slate-950">{{ title }}</h2>
+                                    <h2 id="profile-editor-title" class="mt-1 font-display text-2xl font-bold leading-tight text-slate-950">{{ title }}</h2>
                                     <p v-if="description" id="profile-editor-description" class="mt-1 max-w-3xl text-sm leading-5 text-slate-500">{{ description }}</p>
+                                    <div v-if="$slots.status" class="mt-2"><slot name="status" /></div>
                                 </div>
                             </div>
 
                             <div class="flex shrink-0 items-center gap-2">
-                                <slot name="status" />
                                 <button
                                     ref="closeButton"
                                     type="button"
                                     class="grid h-10 w-10 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
                                     aria-label="Close profile editor"
                                     title="Close profile editor"
-                                    @click="$emit('close')"
+                                    :disabled="working"
+                                    @click="close"
                                 >
                                     <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                                 </button>
@@ -177,31 +195,32 @@ onBeforeUnmount(() => {
                         </div>
                     </header>
 
-                    <div class="min-h-0 flex-1 overflow-y-auto bg-white">
+                    <div data-profile-editor-body class="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white">
                         <slot />
                     </div>
 
-                    <footer v-if="showFooter" class="shrink-0 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-8px_20px_rgba(15,23,42,0.06)] sm:px-5">
-                        <div class="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <p :class="['text-xs font-semibold', dirty ? 'text-amber-700' : 'text-slate-400']" aria-live="polite">
-                                {{ dirty ? 'Unsaved changes' : 'No unsaved changes' }}
+                    <footer v-if="showFooter" class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <p data-profile-editor-save-state :class="['text-xs leading-5', dirty ? 'font-semibold text-amber-800' : 'text-slate-500']" aria-live="polite">
+                                {{ working ? 'Please wait for the current change to finish.' : footerMessage }}
                             </p>
-                            <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <div class="flex shrink-0 items-center justify-end gap-2">
                                 <button
+                                    v-if="!instantChanges || dirty"
                                     type="button"
                                     class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="saving"
-                                    @click="$emit('close')"
+                                    :disabled="working"
+                                    @click="close"
                                 >
                                     {{ closeLabel }}
                                 </button>
                                 <button
                                     type="button"
                                     class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                    :disabled="saving || saveDisabled"
+                                    :disabled="working || saveDisabled"
                                     @click="$emit('save')"
                                 >
-                                    <i :class="saving ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-floppy-disk'" aria-hidden="true"></i>
+                                    <i v-if="dirty || saving" :class="saving ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-floppy-disk'" aria-hidden="true"></i>
                                     {{ actionLabel }}
                                 </button>
                             </div>

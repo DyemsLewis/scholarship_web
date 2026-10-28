@@ -5,9 +5,14 @@ import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewM
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import CoverImagePickerModal from '../../../components/CoverImagePickerModal.vue';
 import LocationMapModal from '../../../components/LocationMapModal.vue';
+import LocationPinField from '../../../components/LocationPinField.vue';
 import { useConfirmationDialog } from '../../../composables/useConfirmationDialog';
 import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import EligibilityRuleModeSelect from './components/EligibilityRuleModeSelect.vue';
+import EligibilityRulesSummary from './components/EligibilityRulesSummary.vue';
+import { configuredEligibilityRules, normalizeEligibilityRuleModes } from '../../../support/providerEligibilityRules';
+import { programConfigurationErrors } from '../../../support/programConfiguration';
 
 const pathMatch = window.location.pathname.match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
 const portalUser = window.portalUser ?? {};
@@ -121,6 +126,7 @@ function emptyForm() {
         eligibility: '', eligibleEducationLevels: [], eligibleCourses: '', eligibleSchoolTypes: [],
         eligibleYearLevels: '', eligibleLocations: '', incomeRequirement: 'Any',
         minimumGradeScale: '', minimumGwa: '', excludeCurrentRecipients: false,
+        eligibilityRuleModes: normalizeEligibilityRuleModes(), eligibilityConditions: [],
         applicationMode: 'online',
         requirements: 'Certificate of enrollment\nLatest report card or grades\nRecent school ID',
         optionalRequirements: '',
@@ -128,6 +134,7 @@ function emptyForm() {
         handoffMode: 'onsite',
         handoffInstructions: 'Bring the listed original records for final verification.',
         handoffDeadline: '', handoffLocationName: '', handoffLocationAddress: '', handoffUrl: '',
+        handoffLatitude: null, handoffLongitude: null,
         selectionStages: ['screening', 'formal_application', 'decision'],
         reviewRubric: structuredClone(defaultRubric),
         recipientAgreement: {
@@ -167,6 +174,30 @@ const coverSourceLabel = computed(() => ({
 const mapAddress = computed(() => form.value.locationAddress.trim());
 const requiresAgreementDetails = computed(() => !['provider_briefing', 'none'].includes(form.value.recipientAgreement.commitment_type));
 const selectedStages = computed(() => stageOptions.filter((stage) => form.value.selectionStages.includes(stage.id)));
+const eligibilityRules = computed(() => configuredEligibilityRules(form.value, { educationLevels, schoolTypes }));
+const eligibilityCounts = computed(() => ({
+    required: eligibilityRules.value.filter((rule) => rule.mode === 'required').length,
+    preferred: eligibilityRules.value.filter((rule) => rule.mode === 'preferred').length,
+}));
+
+function hasEligibilityRule(key) {
+    return eligibilityRules.value.some((rule) => rule.key === key);
+}
+
+const configurationErrors = computed(() => programConfigurationErrors({
+    slots_available: form.value.slotsAvailable,
+    application_limit: form.value.applicationLimit,
+    application_opens_at: form.value.applicationOpensAt,
+    deadline: form.value.deadline,
+    expected_results_at: form.value.expectedResultsAt,
+    handoff_deadline: form.value.handoffDeadline,
+    support_starts_at: form.value.supportStartsAt,
+    support_ends_at: form.value.supportEndsAt,
+}));
+
+function configurationErrorForStep(stepId) {
+    return Object.entries(configurationErrors.value).find(([field]) => stepForBackendField(field) === stepId)?.[1];
+}
 
 const stepChecks = computed(() => ({
     basics: Boolean(
@@ -184,6 +215,7 @@ const stepChecks = computed(() => ({
         && form.value.supportStartsAt
         && form.value.supportEndsAt
         && form.value.supportEndsAt >= form.value.supportStartsAt
+        && !configurationErrorForStep('support')
     ),
     'dates-location': Boolean(
         form.value.deadline
@@ -192,6 +224,7 @@ const stepChecks = computed(() => ({
         && String(form.value.latitude).trim()
         && String(form.value.longitude).trim()
         && (form.value.contactEmail.trim() || form.value.contactNumber.trim())
+        && !configurationErrorForStep('dates-location')
     ),
     eligibility: Boolean(
         form.value.eligibility.trim()
@@ -215,6 +248,7 @@ const stepChecks = computed(() => ({
         && form.value.handoffInstructions.trim()
         && (form.value.handoffMode !== 'onsite' || form.value.handoffLocationAddress.trim())
         && (form.value.handoffMode !== 'online' || validWebUrl(form.value.handoffUrl))
+        && !configurationErrorForStep('application')
     ),
     selection: Boolean(
         ['screening', 'formal_application', 'decision'].every((stage) => form.value.selectionStages.includes(stage))
@@ -262,6 +296,7 @@ function closeAlert() {
 }
 
 function stepMessage(stepId) {
+    if (configurationErrorForStep(stepId)) return configurationErrorForStep(stepId);
     return {
         basics: 'Add the title, category, cycle, summary, scholarship logo, and background image.',
         support: 'Add at least one benefit, both capacity limits, and a valid support period.',
@@ -488,13 +523,17 @@ function fillForm(program) {
         contactDepartment: program.contact_department ?? '',
         officialProgramUrl: program.official_program_url ?? '',
         eligibility: program.eligibility ?? '',
+        eligibilityRuleModes: normalizeEligibilityRuleModes(program.eligibility_rule_modes),
+        eligibilityConditions: program.eligibility_conditions ?? [],
         eligibleEducationLevels: splitList(program.eligible_education_levels),
         eligibleCourses: program.eligible_courses ?? '',
         eligibleSchoolTypes: splitList(program.eligible_school_types),
         eligibleYearLevels: program.eligible_year_levels ?? '',
         eligibleLocations: program.eligible_locations ?? '',
         incomeRequirement: program.income_requirement || 'Any',
-        minimumGradeScale: program.minimum_grade_scale ?? '',
+        minimumGradeScale: program.minimum_grade_scale || (numericValue(program.minimum_gwa) !== null
+            ? (Number(program.minimum_gwa) <= 5 ? 'grade_point' : 'percentage')
+            : ''),
         minimumGwa: program.minimum_gwa ?? '',
         excludeCurrentRecipients: Boolean(program.exclude_current_scholarship_recipients),
         applicationMode: program.application_mode || 'online',
@@ -506,6 +545,8 @@ function fillForm(program) {
         handoffDeadline: program.handoff_deadline ?? '',
         handoffLocationName: program.handoff_location_name ?? '',
         handoffLocationAddress: program.handoff_location_address ?? '',
+        handoffLatitude: program.handoff_latitude ?? null,
+        handoffLongitude: program.handoff_longitude ?? null,
         handoffUrl: program.handoff_url ?? '',
         selectionStages: program.selection_stages?.length ? program.selection_stages : ['screening', 'formal_application', 'decision'],
         reviewRubric: program.review_rubric?.length ? program.review_rubric : structuredClone(defaultRubric),
@@ -545,6 +586,7 @@ function createPayload(status, termsAccepted = false) {
         contact_email: form.value.contactEmail.trim(), contact_number: form.value.contactNumber.trim(),
         contact_person: form.value.contactPerson.trim(), contact_department: form.value.contactDepartment.trim(),
         official_program_url: form.value.officialProgramUrl.trim(), eligibility: form.value.eligibility.trim(),
+        eligibility_rule_modes: JSON.stringify(normalizeEligibilityRuleModes(form.value.eligibilityRuleModes)),
         eligible_education_levels: form.value.eligibleEducationLevels.join('\n'),
         eligible_courses: form.value.eligibleCourses.trim(), eligible_school_types: form.value.eligibleSchoolTypes.join('\n'),
         eligible_year_levels: form.value.eligibleYearLevels.trim(), eligible_locations: form.value.eligibleLocations.trim(),
@@ -556,6 +598,8 @@ function createPayload(status, termsAccepted = false) {
         handoff_mode: form.value.handoffMode, handoff_instructions: form.value.handoffInstructions.trim(),
         handoff_deadline: form.value.handoffDeadline, handoff_location_name: form.value.handoffLocationName.trim(),
         handoff_location_address: form.value.handoffLocationAddress.trim(), handoff_url: form.value.handoffUrl.trim(),
+        handoff_latitude: form.value.handoffMode === 'onsite' ? form.value.handoffLatitude : null,
+        handoff_longitude: form.value.handoffMode === 'onsite' ? form.value.handoffLongitude : null,
         selection_stages: JSON.stringify(form.value.selectionStages), review_rubric: JSON.stringify(form.value.reviewRubric),
         recipient_agreement: JSON.stringify(form.value.recipientAgreement), status,
         terms_accepted: termsAccepted ? 1 : 0,
@@ -594,6 +638,12 @@ function showBackendError(error) {
 }
 
 async function save(status = 'draft', termsAccepted = false) {
+    const conflict = Object.entries(configurationErrors.value)[0];
+    if (conflict) {
+        openStep(stepForBackendField(conflict[0]));
+        showAlert('Check the program details', conflict[1]);
+        return null;
+    }
     isSaving.value = true;
     savedMessage.value = '';
     try {
@@ -790,7 +840,7 @@ onBeforeUnmount(() => {
                         </button>
                     </nav>
 
-                    <form class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="nextStep">
+                    <form novalidate class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="nextStep">
                         <header class="flex items-center gap-4 border-b border-slate-200 px-7 py-5">
                             <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-950 text-amber-300">
                                 <i :class="[currentStep.icon, 'text-sm']" aria-hidden="true"></i>
@@ -895,9 +945,9 @@ onBeforeUnmount(() => {
 
                                 <div class="mt-6 grid w-full grid-cols-2 gap-5 border-t border-slate-200 pt-6">
                                     <label><span :class="labelClass">Recipient slots <span class="text-amber-700">Required</span></span><input v-model="form.slotsAvailable" type="number" min="1" max="1000000" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Application limit <span class="text-amber-700">Required</span></span><input v-model="form.applicationLimit" type="number" min="1" max="1000000" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Support starts <span class="text-amber-700">Required</span></span><input v-model="form.supportStartsAt" type="date" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Support ends <span class="text-amber-700">Required</span></span><input v-model="form.supportEndsAt" type="date" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Application limit <span class="text-amber-700">Required</span></span><input v-model="form.applicationLimit" type="number" :min="Number(form.slotsAvailable) || 1" max="1000000" :class="inputClass"><span class="mt-1.5 block text-xs text-slate-500">Must be at least the number of recipient slots.</span></label>
+                                    <label><span :class="labelClass">Support starts <span class="text-amber-700">Required</span></span><input v-model="form.supportStartsAt" type="date" :max="form.supportEndsAt || undefined" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Support ends <span class="text-amber-700">Required</span></span><input v-model="form.supportEndsAt" type="date" :min="form.supportStartsAt || undefined" :class="inputClass"></label>
                                 </div>
                             </section>
 
@@ -907,9 +957,9 @@ onBeforeUnmount(() => {
                                     <p class="mt-1 text-sm text-slate-500">Applicants use these details before they submit.</p>
                                 </div>
                                 <div class="mt-6 grid w-full grid-cols-3 gap-5">
-                                    <label><span :class="labelClass">Applications open <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.applicationOpensAt" type="date" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Application deadline <span class="text-amber-700">Required</span></span><input v-model="form.deadline" type="date" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Expected results <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.expectedResultsAt" type="date" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Applications open <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.applicationOpensAt" type="date" :max="form.deadline || undefined" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Application deadline <span class="text-amber-700">Required</span></span><input v-model="form.deadline" type="date" :min="form.applicationOpensAt || undefined" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Expected results <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.expectedResultsAt" type="date" :min="form.deadline || undefined" :class="inputClass"></label>
                                 </div>
 
                                 <div class="mt-7 w-full border-t border-slate-200 pt-6">
@@ -942,15 +992,16 @@ onBeforeUnmount(() => {
                             </section>
 
                             <section v-else-if="activeStep === 'eligibility'" class="px-7 py-6">
-                                <div>
-                                    <h3 class="text-base font-bold text-slate-950">Describe who can apply</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Only add rules that the provider will actually verify.</p>
+                                <div class="flex items-start justify-between gap-6">
+                                    <div><h3 class="text-base font-bold text-slate-950">Describe who can apply</h3><p class="mt-1 text-sm text-slate-500">Only add rules that the provider will actually verify.</p></div>
+                                    <p class="shrink-0 text-xs font-semibold text-slate-600" aria-live="polite" data-eligibility-mode-counts>{{ eligibilityCounts.required }} required <span class="mx-2 text-slate-300">/</span> {{ eligibilityCounts.preferred }} preferred</p>
                                 </div>
+                                <p id="eligibility-mode-guide" class="mt-4 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-600"><strong class="text-slate-900">Required</strong> blocks a confirmed mismatch. <strong class="text-slate-900">Preferred</strong> highlights fit without blocking. Leave a rule empty for no restriction.</p>
                                 <div class="mt-6 w-full">
                                     <label><span :class="labelClass">Eligibility summary <span class="text-amber-700">Required</span></span><textarea v-model="form.eligibility" rows="4" maxlength="5000" :class="textareaClass" placeholder="Example: Open to enrolled Grade 12 STEM students who meet the stated academic requirement."></textarea></label>
 
                                     <div class="mt-6 border-t border-slate-200 pt-6">
-                                        <p class="text-xs font-bold text-slate-700">Education levels</p>
+                                        <div class="flex items-center justify-between gap-4"><p class="text-xs font-bold text-slate-700">Education levels</p><EligibilityRuleModeSelect v-if="hasEligibilityRule('education_level')" v-model="form.eligibilityRuleModes.education_level" rule-key="education_level" label="Education levels" /></div>
                                         <div class="mt-3 grid grid-cols-4 gap-2">
                                             <label v-for="([value, label]) in educationLevels" :key="value" class="flex min-h-11 items-center gap-2 border border-slate-200 px-3 text-xs font-semibold text-slate-700">
                                                 <input type="checkbox" :checked="form.eligibleEducationLevels.includes(value)" class="border-slate-300 text-slate-950 focus:ring-slate-700" @change="toggleArrayValue('eligibleEducationLevels', value)">
@@ -960,14 +1011,14 @@ onBeforeUnmount(() => {
                                     </div>
 
                                     <div class="mt-6 grid grid-cols-2 gap-5">
-                                        <label><span :class="labelClass">Courses, tracks, or strands <span class="font-normal text-slate-400">Optional</span></span><textarea v-model="form.eligibleCourses" rows="3" :class="textareaClass" placeholder="One per line, or Any"></textarea></label>
-                                        <label><span :class="labelClass">Grade or year levels <span class="font-normal text-slate-400">Optional</span></span><textarea v-model="form.eligibleYearLevels" rows="3" :class="textareaClass" placeholder="Example: Grade 12"></textarea></label>
-                                        <label><span :class="labelClass">Covered locations <span class="font-normal text-slate-400">Optional</span></span><textarea v-model="form.eligibleLocations" rows="3" :class="textareaClass" placeholder="Example: Antipolo City, Rizal"></textarea></label>
-                                        <label><span :class="labelClass">Household income rule</span><select v-model="form.incomeRequirement" :class="inputClass"><option>Any</option><option>Below PHP 10,000</option><option>PHP 10,000 - 20,000</option><option>PHP 20,001 - 40,000</option><option>PHP 40,001 - 60,000</option><option>Above PHP 60,000</option></select></label>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-courses" class="text-xs font-bold text-slate-700">Courses, tracks, or strands</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('course')" v-model="form.eligibilityRuleModes.course" rule-key="course" label="Courses, tracks, or strands" /></div><textarea id="program-eligible-courses" v-model="form.eligibleCourses" rows="3" :class="textareaClass" placeholder="One per line, or Any"></textarea></div>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-years" class="text-xs font-bold text-slate-700">Grade or year levels</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('year_level')" v-model="form.eligibilityRuleModes.year_level" rule-key="year_level" label="Grade or year levels" /></div><textarea id="program-eligible-years" v-model="form.eligibleYearLevels" rows="3" :class="textareaClass" placeholder="Example: Grade 12"></textarea></div>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-locations" class="text-xs font-bold text-slate-700">Covered locations</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('location')" v-model="form.eligibilityRuleModes.location" rule-key="location" label="Covered locations" /></div><textarea id="program-eligible-locations" v-model="form.eligibleLocations" rows="3" :class="textareaClass" placeholder="Example: Antipolo City, Rizal, or Nationwide"></textarea></div>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-income-rule" class="text-xs font-bold text-slate-700">Household income rule</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('income')" v-model="form.eligibilityRuleModes.income" rule-key="income" label="Household income" /></div><select id="program-income-rule" v-model="form.incomeRequirement" :class="inputClass"><option>Any</option><option>Below PHP 10,000</option><option>PHP 10,000 - 20,000</option><option>PHP 20,001 - 40,000</option><option>PHP 40,001 - 60,000</option><option>Above PHP 60,000</option></select></div>
                                     </div>
 
                                     <div class="mt-6 border-t border-slate-200 pt-6">
-                                        <p class="text-xs font-bold text-slate-700">School types <span class="font-normal text-slate-400">Optional</span></p>
+                                        <div class="flex items-center justify-between gap-4"><p class="text-xs font-bold text-slate-700">School types</p><EligibilityRuleModeSelect v-if="hasEligibilityRule('school_type')" v-model="form.eligibilityRuleModes.school_type" rule-key="school_type" label="School types" /></div>
                                         <div class="mt-3 grid grid-cols-4 gap-2">
                                             <label v-for="([value, label]) in schoolTypes" :key="value" class="flex min-h-11 items-center gap-2 border border-slate-200 px-3 text-xs font-semibold text-slate-700">
                                                 <input type="checkbox" :checked="form.eligibleSchoolTypes.includes(value)" class="border-slate-300 text-slate-950 focus:ring-slate-700" @change="toggleArrayValue('eligibleSchoolTypes', value)">
@@ -977,9 +1028,10 @@ onBeforeUnmount(() => {
                                     </div>
 
                                     <div class="mt-6 grid grid-cols-2 gap-5 border-t border-slate-200 pt-6">
-                                        <label><span :class="labelClass">Academic rule</span><select v-model="form.minimumGradeScale" :class="inputClass"><option value="">No academic minimum</option><option value="percentage">General average / percentage</option><option value="grade_point">GWA / GPA grade point</option><option value="pass_fail">Pass/fail or competency</option><option value="other">Other / manual review</option></select></label>
-                                        <label v-if="['percentage', 'grade_point'].includes(form.minimumGradeScale)"><span :class="labelClass">{{ form.minimumGradeScale === 'grade_point' ? 'Maximum GWA / GPA' : 'Minimum average' }}</span><input v-model="form.minimumGwa" type="number" min="0" :max="form.minimumGradeScale === 'grade_point' ? 5 : 100" step="0.01" :class="inputClass"></label>
-                                        <label class="col-span-2 flex items-center gap-3 border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"><input v-model="form.excludeCurrentRecipients" type="checkbox" class="border-slate-300 text-slate-950 focus:ring-slate-700">Exclude applicants who currently receive another scholarship</label>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-academic-rule" class="text-xs font-bold text-slate-700">Academic rule</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('academic')" v-model="form.eligibilityRuleModes.academic" rule-key="academic" label="Academic performance" /></div><select id="program-academic-rule" v-model="form.minimumGradeScale" :class="inputClass" @change="form.minimumGwa = ''"><option value="">No academic minimum</option><option value="percentage">General average / percentage</option><option value="grade_point">GWA / GPA grade point</option><option value="pass_fail">Pass/fail or competency</option><option value="other">Other / manual review</option></select></div>
+                                        <label v-if="['percentage', 'grade_point'].includes(form.minimumGradeScale)"><span class="mb-2 flex min-h-8 items-center text-xs font-bold text-slate-700">{{ form.minimumGradeScale === 'grade_point' ? 'Maximum GWA / GPA' : 'Minimum average' }}</span><input v-model="form.minimumGwa" type="number" min="0" :max="form.minimumGradeScale === 'grade_point' ? 5 : 100" step="0.01" :class="inputClass"></label>
+                                        <div class="col-span-2 flex items-center justify-between gap-4 border-t border-slate-200 py-4"><label class="flex items-center gap-3 text-sm font-semibold text-slate-700"><input v-model="form.excludeCurrentRecipients" type="checkbox" class="border-slate-300 text-slate-950 focus:ring-slate-700">Applicant is not receiving another active scholarship</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('current_scholarship_support')" v-model="form.eligibilityRuleModes.current_scholarship_support" rule-key="current_scholarship_support" label="Other active scholarship support" /></div>
+                                        <div v-if="hasEligibilityRule('enrollment_status')" class="col-span-2 flex items-center justify-between gap-4 border-t border-slate-200 py-4"><div><p class="text-sm font-semibold text-slate-700">Current enrollment</p><p class="mt-1 text-xs text-slate-500">This program already includes an automatic enrollment check.</p></div><EligibilityRuleModeSelect v-model="form.eligibilityRuleModes.enrollment_status" rule-key="enrollment_status" label="Current enrollment" /></div>
                                     </div>
                                 </div>
                             </section>
@@ -1018,11 +1070,12 @@ onBeforeUnmount(() => {
                                         </div>
                                         <div class="mt-5 grid grid-cols-2 gap-5">
                                             <label class="col-span-2"><span :class="labelClass">Instructions <span class="text-amber-700">Required</span></span><textarea v-model="form.handoffInstructions" rows="3" maxlength="3000" :class="textareaClass"></textarea></label>
-                                            <label><span :class="labelClass">Formal application deadline <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.handoffDeadline" type="date" :class="inputClass"></label>
+                                            <label><span :class="labelClass">Formal application deadline <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.handoffDeadline" type="date" :min="form.deadline || undefined" :class="inputClass"></label>
                                             <label v-if="form.handoffMode === 'online'"><span :class="labelClass">Official link <span class="text-amber-700">Required</span></span><input v-model="form.handoffUrl" type="url" :class="inputClass" placeholder="https://"></label>
                                             <template v-if="form.handoffMode === 'onsite'">
                                                 <label><span :class="labelClass">Location name <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.handoffLocationName" type="text" :class="inputClass"></label>
                                                 <label class="col-span-2"><span :class="labelClass">Address <span class="text-amber-700">Required</span></span><input v-model="form.handoffLocationAddress" type="text" maxlength="500" :class="inputClass"></label>
+                                                <LocationPinField v-model:latitude="form.handoffLatitude" v-model:longitude="form.handoffLongitude" class="col-span-2" :address="form.handoffLocationAddress || form.handoffLocationName" title="Formal application venue" />
                                             </template>
                                         </div>
                                     </div>
@@ -1084,6 +1137,10 @@ onBeforeUnmount(() => {
                                         <i class="fa-solid fa-arrow-right text-xs text-slate-400" aria-hidden="true"></i>
                                     </button>
                                 </div>
+
+                                <EligibilityRulesSummary class="mt-6" :rules="eligibilityRules" />
+
+                                <p v-if="originalStatus === 'published'" class="mt-3 text-xs leading-5 text-slate-600">Changing a rule between Required and Preferred sends this program back for administrator review. Submitted application records keep their original rules.</p>
 
                                 <div class="mt-6 w-full border-l-4 border-amber-400 bg-amber-50 px-5 py-4">
                                     <label class="flex items-start gap-3">

@@ -42,10 +42,14 @@ class ApplicationStageOperationsApiTest extends TestCase
                 'mode' => 'online',
                 'meeting_url' => 'https://meet.example.test/exam-room',
                 'venue' => null,
+                'latitude' => 14.5861,
+                'longitude' => 121.1756,
             ]),
         )->assertCreated()
             ->assertJsonPath('session.status', 'draft')
             ->assertJsonPath('session.mode', 'online')
+            ->assertJsonPath('session.latitude', null)
+            ->assertJsonPath('session.longitude', null)
             ->assertJsonPath('session.meeting_url', 'https://meet.example.test/exam-room');
 
         $session = ApplicationStageSession::findOrFail($response->json('session.id'));
@@ -70,6 +74,52 @@ class ApplicationStageOperationsApiTest extends TestCase
         $this->actingAs($reviewer)
             ->getJson("/provider/scholarships/{$program->id}/stage-sessions")
             ->assertForbidden();
+    }
+
+    public function test_onsite_session_pin_can_be_saved_and_reloaded_for_editing(): void
+    {
+        [, $officer, $program] = $this->programContext();
+        $session = $this->createSession($officer, $program, ['latitude' => 14.5861, 'longitude' => 121.1756]);
+        $this->assertSame('14.5861000', $session->latitude);
+        $this->actingAs($officer)->getJson("/provider/workspaces/selection/sessions/{$session->id}/edit/data")
+            ->assertOk()->assertJsonPath('session.longitude', '121.1756000');
+
+        $this->patchJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}", $this->sessionPayload([
+            'latitude' => 14.6, 'longitude' => 121.2,
+        ]))->assertOk()->assertJsonPath('session.latitude', '14.6000000');
+        $this->postJson("/provider/scholarships/{$program->id}/stage-sessions", $this->sessionPayload(['latitude' => 14.5]))
+            ->assertUnprocessable()->assertJsonValidationErrors('longitude');
+    }
+
+    public function test_draft_capacity_cannot_be_reduced_below_assigned_applicants(): void
+    {
+        [, $officer, $program] = $this->programContext();
+        $session = $this->createSession($officer, $program, ['capacity' => 3]);
+        $first = $this->applicationAtExam($program);
+        $second = $this->applicationAtExam($program);
+        $this->actingAs($officer)->postJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}/assignments", [
+            'application_ids' => [$first->id, $second->id],
+        ])->assertCreated();
+
+        $url = "/provider/scholarships/{$program->id}/stage-sessions/{$session->id}";
+        $this->patchJson($url, $this->sessionPayload(['capacity' => 1]))
+            ->assertUnprocessable()->assertJsonValidationErrors('capacity');
+        $this->assertSame(3, $session->fresh()->capacity);
+        $this->patchJson($url, $this->sessionPayload(['capacity' => 2]))
+            ->assertOk()->assertJsonPath('session.capacity.limit', 2);
+        $this->patchJson($url, $this->sessionPayload(['capacity' => null]))
+            ->assertOk()->assertJsonPath('session.capacity.limit', null);
+    }
+
+    public function test_session_end_must_be_after_start_on_both_create_and_edit(): void
+    {
+        [, $officer, $program] = $this->programContext();
+        $session = $this->createSession($officer, $program);
+        $payload = $this->sessionPayload(['ends_at' => now()->addWeek()->toIso8601String()]);
+        $this->actingAs($officer)->postJson("/provider/scholarships/{$program->id}/stage-sessions", $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('ends_at');
+        $this->patchJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}", $payload)
+            ->assertUnprocessable()->assertJsonValidationErrors('ends_at');
     }
 
     public function test_assignment_requires_current_stage_and_never_advances_the_application(): void

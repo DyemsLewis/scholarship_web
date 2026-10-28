@@ -3,6 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ApplicantProfileEditModal from '../components/profile/ApplicantProfileEditModal.vue';
+import ApplicantProfileEvidenceList from '../components/profile/ApplicantProfileEvidenceList.vue';
+import ApplicantProfileDetails from '../components/profile/ApplicantProfileDetails.vue';
+import ApplicantProfileIdentity from '../components/profile/ApplicantProfileIdentity.vue';
+import ApplicantProfileReadiness from '../components/profile/ApplicantProfileReadiness.vue';
 import ApplicantProfileRecord from '../components/profile/ApplicantProfileRecord.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -10,7 +14,6 @@ import LocationMapModal from '../components/LocationMapModal.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
-import { formatFileSize } from '../support/display';
 import { limitPhoneNumber } from '../support/phoneNumber';
 import {
     alsPathOptions,
@@ -27,6 +30,9 @@ import {
     provincesForRegion,
 } from '../support/philippineLocations';
 import { showPortalToast } from '../support/portalToast';
+import { applicantProfileOverview } from '../support/applicantProfileOverview';
+import { applicantProfileDetails } from '../support/applicantProfileDetails';
+import { hasLocationPin } from '../support/locationPins';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -34,6 +40,7 @@ const errorMessage = ref('');
 const locationMessage = ref('');
 const showProfileMapModal = ref(false);
 const user = ref(null);
+const savedProfileReadiness = ref(null);
 const form = ref(emptyForm());
 const profileSearchParams = new URLSearchParams(window.location.search);
 const requestedProfileSection = profileSearchParams.get('section');
@@ -101,6 +108,9 @@ const sectionStatusPillClass = 'w-fit rounded-md px-2.5 py-1.5 text-xs font-bold
 const formPanelClass = 'border-b border-slate-200 py-5 first:pt-0 last:border-b-0 last:pb-0';
 const formPanelTitleClass = 'text-sm font-bold text-slate-950';
 const formPanelDescriptionClass = 'mt-1 text-xs leading-5 text-slate-500';
+const profileEditorBusy = computed(() => isSaving.value || isUploadingProfilePhoto.value || isDeletingProfilePhoto.value
+    || Boolean(uploadingVerificationDocumentType.value) || deletingVerificationDocumentId.value !== null || rescanningAcademicDocumentId.value !== null);
+const profileFormHasPin = computed(() => hasLocationPin(form.value.latitude, form.value.longitude));
 const optionButtonBaseClass = 'inline-flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-semibold transition';
 const birthdateMaximum = new Date();
 birthdateMaximum.setFullYear(birthdateMaximum.getFullYear() - 5);
@@ -324,8 +334,9 @@ const requiresProgramPath = computed(() => courseRequiredLevels.includes(form.va
 const requiresGrades = computed(() => gradesRequiredLevels.includes(form.value.education_level));
 const requiresNumericGrade = computed(() => ['percentage', 'grade_point'].includes(form.value.grading_scale));
 const academicProofOption = computed(() => {
-    const educationLevel = form.value.education_level;
-    const gradingScale = form.value.grading_scale;
+    const saved = user.value ?? {};
+    const educationLevel = saved.education_level;
+    const gradingScale = saved.grading_scale;
     const educationLabel = educationLevelOptions.find((option) => option.value === educationLevel)?.label;
     const gradingLabel = gradingScaleOptions.find((option) => option.value === gradingScale)?.label;
     const recordCopy = {
@@ -367,16 +378,16 @@ const academicProofOption = computed(() => {
     };
     const context = [
         educationLabel,
-        form.value.year_level,
-        form.value.academic_year ? `AY ${form.value.academic_year}` : '',
-        academicTermLabel(form.value.academic_term),
+        saved.year_level,
+        saved.academic_year ? `AY ${saved.academic_year}` : '',
+        academicTermLabel(saved.academic_term),
         gradingLabel,
     ].filter(hasValue);
 
-    if (requiresNumericGrade.value && hasValue(form.value.gwa)) {
+    if (['percentage', 'grade_point'].includes(gradingScale) && hasValue(saved.gwa)) {
         context.push(gradingScale === 'percentage'
-            ? `Saved average: ${form.value.gwa}%`
-            : `Saved GWA / grade point: ${form.value.gwa}`);
+            ? `Saved average: ${saved.gwa}%`
+            : `Saved GWA / grade point: ${saved.gwa}`);
     }
 
     return {
@@ -397,31 +408,34 @@ const recentSchoolIdOption = computed(() => ({
     required: true,
 }));
 const schoolProofOption = computed(() => {
-    const educationLevel = form.value.education_level;
+    const educationLevel = user.value?.education_level;
 
     return {
         value: 'school_record',
         label: educationLevel === 'tvet' ? 'Training enrollment proof' : 'School enrollment proof',
         description: 'Enrollment certificate, registration form, or admission record.',
         icon: 'fa-solid fa-school',
-        context: [form.value.school, form.value.enrollment_status].filter(hasValue),
+        context: [user.value?.school, user.value?.enrollment_status].filter(hasValue),
         required: true,
     };
 });
 const verificationDocumentOptions = computed(() => (user.value?.profile_evidence_requirements ?? [])
-    .filter((option) => option.value !== 'guardian_record' || option.required || hasGuardianDetails.value)
+    .filter((option) => option.value !== 'guardian_record' || option.required
+        || [user.value?.guardian_name, user.value?.guardian_relationship, user.value?.guardian_contact, user.value?.guardian_email].some(hasValue)
+        || user.value?.guardian_is_account_owner)
     .map((option) => {
+        const saved = user.value ?? {};
         const schoolOption = {
             academic_record: academicProofOption.value,
             recent_school_id: recentSchoolIdOption.value,
             school_record: schoolProofOption.value,
         }[option.value];
         const contexts = {
-            identity_record: [profileDisplayName.value, form.value.birthdate],
-            recent_school_id: [profileDisplayName.value, form.value.school],
-            income_record: [form.value.income_bracket, form.value.household_size ? `${form.value.household_size} household members` : ''],
-            residency_record: [form.value.barangay, form.value.city, form.value.province, form.value.region],
-            guardian_record: [form.value.guardian_name, form.value.guardian_relationship],
+            identity_record: [saved.name, saved.birthdate],
+            recent_school_id: [saved.name, saved.school],
+            income_record: [saved.income_bracket, saved.household_size ? `${saved.household_size} household members` : ''],
+            residency_record: [saved.barangay, saved.city, saved.province, findPhilippineRegion(saved.region)?.label || saved.region],
+            guardian_record: [saved.guardian_name, saved.guardian_relationship],
         };
 
         return {
@@ -449,10 +463,7 @@ const requiredFieldData = computed(() => requiredProfileFields.value.map((key) =
     label: fieldLabel(key),
     value: profileFieldValue(key),
 })));
-const completedRequiredFields = computed(() => requiredFieldData.value.filter((field) => hasValue(field.value)).length);
-const profileCompletion = computed(() => requiredFieldData.value.length === 0 ? 100 : Math.round((completedRequiredFields.value / requiredFieldData.value.length) * 100));
 const missingProfileFields = computed(() => requiredFieldData.value.filter((field) => !hasValue(field.value)));
-const profileComplete = computed(() => missingProfileFields.value.length === 0);
 const profileVerificationStatus = computed(() => user.value?.applicant_verification_status ?? 'unsubmitted');
 const academicVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'academic_record') ?? null);
@@ -545,11 +556,6 @@ const profileInitials = computed(() => [form.value.first_name, form.value.last_n
 const profilePhotoUrl = computed(() => user.value?.has_profile_photo
     ? `/dashboard/profile/photo?v=${encodeURIComponent(user.value.profile_photo_updated_at ?? '')}`
     : '');
-const profileEducationSummary = computed(() => [
-    educationLevelLabel(form.value.education_level),
-    form.value.course_or_strand,
-    form.value.year_level,
-].filter(hasValue).join(' - ') || 'Learning details not completed');
 const profileRecommendedAction = computed(() => {
     const nextMissing = missingProfileFields.value[0];
 
@@ -601,31 +607,18 @@ const profileRecommendedAction = computed(() => {
         detail: 'Your required information is complete. Check the saved details before applying.',
     };
 });
-const overviewProfileAction = computed(() => {
-    if (profileRecommendedAction.value.section !== 'review') {
-        return {
-            ...profileRecommendedAction.value,
-            eyebrow: 'Next step',
-            actionable: true,
-        };
-    }
+const profileOverview = computed(() => applicantProfileOverview({
+    readiness: savedProfileReadiness.value,
+    verificationStatus: profileVerificationStatus.value,
+    requirements: user.value?.profile_evidence_requirements ?? [],
+    documents: verificationDocuments.value,
+    photoReviewStatus: user.value?.profile_photo_review_status,
+    scanNeedsAttention: academicScanNeedsAttention.value,
+}));
 
-    if (profileVerificationStatus.value === 'pending') {
-        return {
-            eyebrow: 'Profile status',
-            label: 'Supporting evidence is being reviewed',
-            detail: 'Your required profile details are complete. Your profile must be verified before you can submit a new application.',
-            actionable: false,
-        };
-    }
-
-    return {
-        eyebrow: 'Profile status',
-        label: 'Your profile is ready for applications',
-        detail: 'Required details are complete and can be reused when you apply.',
-        actionable: false,
-    };
-});
+function continueProfileOverview(action) {
+    openProfileEditor(action.field ? sectionForField(action.field) : action.section);
+}
 const profileEditorCopy = computed(() => ({
     personal: {
         title: 'Personal and contact',
@@ -640,7 +633,7 @@ const profileEditorCopy = computed(() => ({
         description: 'Update eligibility, guardian, and outside-scholarship details.',
     },
     location: {
-        title: 'Home location',
+        title: 'Home address',
         description: 'Update the general address used for residency and distance checks.',
     },
     verification: {
@@ -930,6 +923,7 @@ function openVerificationRecords() {
 }
 
 async function closeProfileEditor() {
+    if (profileEditorBusy.value) return;
     if (hasUnsavedChanges.value) {
         const confirmed = await requestConfirmation({
             eyebrow: 'Unsaved profile changes',
@@ -1163,66 +1157,21 @@ const guardianRequirementText = computed(() => {
         : 'Add a trusted contact if someone else helps with applications.';
 });
 const applicantProfileRecord = computed(() => ({
-    name: profileDisplayName.value,
+    name: user.value?.name || 'Student applicant',
     initials: profileInitials.value,
     photoUrl: profilePhotoUrl.value,
-    educationSummary: profileEducationSummary.value,
+    educationSummary: [educationLevelLabel(user.value?.education_level), user.value?.course_or_strand, user.value?.year_level]
+        .filter(hasValue).join(' - '),
 }));
-const applicantProfileSections = computed(() => [
-    {
-        id: 'personal',
-        title: 'Personal and contact',
-        icon: 'fa-solid fa-address-card',
-        description: 'Identity and contact details available during application review.',
-        items: [
-            { label: 'Age', value: applicantAge.value !== null ? `${applicantAge.value} years old` : '' },
-            { label: 'Gender', value: genderLabel(form.value.gender) },
-            { label: 'Contact number', value: form.value.contact_number },
-            { label: 'Email address', value: user.value?.email },
-            { label: 'Account managed by', value: accountManagerLabel(form.value.account_managed_by) },
-            { label: 'Citizenship', value: citizenshipLabel(form.value.citizenship_status) },
-        ],
+const applicantProfileSections = computed(() => applicantProfileDetails(user.value, {
+    requiresGuardian: savedProfileReadiness.value?.requires_guardian,
+    labels: {
+        gender: genderLabel, citizenship: citizenshipLabel, accountManager: accountManagerLabel,
+        educationLevel: educationLevelLabel, schoolType: schoolTypeLabel, gradingScale: gradingScaleLabel,
+        academicTerm: academicTermLabel, currentScholarship: currentScholarshipLabel, relationship: relationshipLabel,
+        region: (value) => findPhilippineRegion(value)?.label || value,
     },
-    {
-        id: 'academic',
-        title: 'Learning record',
-        icon: 'fa-solid fa-graduation-cap',
-        description: 'Current education and academic information used for eligibility review.',
-        items: [
-            { label: 'School', value: form.value.school },
-            { label: 'Education', value: profileEducationSummary.value },
-            { label: 'Academic result', value: form.value.gwa ? `${form.value.gwa} - ${gradingScaleLabel(form.value.grading_scale)}` : '' },
-            { label: 'Enrollment', value: form.value.enrollment_status },
-            { label: 'Academic year', value: form.value.academic_year },
-            { label: 'Record period', value: academicTermLabel(form.value.academic_term) },
-        ],
-    },
-    {
-        id: 'household',
-        title: 'Household and guardian',
-        icon: 'fa-solid fa-house-chimney-user',
-        description: 'Household context considered by programs with financial or guardian requirements.',
-        items: [
-            { label: 'Income bracket', value: form.value.income_bracket },
-            { label: 'Household size', value: form.value.household_size ? `${form.value.household_size} members` : '' },
-            { label: 'Current scholarship', value: currentScholarshipLabel(form.value.current_scholarship_status) },
-            { label: 'Parent or guardian', value: (needsGuardianContext.value || hasGuardianDetails.value) ? form.value.guardian_name : 'Not required' },
-        ],
-    },
-    {
-        id: 'location',
-        title: 'Location',
-        icon: 'fa-solid fa-location-dot',
-        description: 'General residence used for location and distance eligibility rules.',
-        items: [
-            { label: 'Region', value: form.value.region },
-            { label: 'Province', value: form.value.province },
-            { label: 'City / municipality', value: form.value.city },
-            { label: 'Barangay', value: form.value.barangay },
-            { label: 'Street / home address', value: form.value.address, wide: true },
-        ],
-    },
-]);
+}));
 const yearLevelOptions = computed(() => {
     switch (form.value.education_level) {
         case 'preschool':
@@ -1397,6 +1346,7 @@ async function saveProfilePhoto(file, input = null) {
         });
 
         user.value = response.data.user;
+        savedProfileReadiness.value = response.data.profile_readiness ?? null;
         return true;
     } catch (error) {
         errorMessage.value = error.response?.data?.errors?.profile_photo?.[0]
@@ -1540,6 +1490,7 @@ async function deleteProfilePhoto() {
     try {
         const response = await window.axios.delete('/dashboard/profile/photo');
         user.value = response.data.user;
+        savedProfileReadiness.value = response.data.profile_readiness ?? null;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to remove the applicant photo.';
     } finally {
@@ -1548,14 +1499,9 @@ async function deleteProfilePhoto() {
 }
 
 function handleProfileEscape(event) {
-    if (event.key === 'Escape') {
+    if (event.key === 'Escape' && !event.defaultPrevented) {
         if (showProfileCamera.value) {
             closeProfileCamera();
-            return;
-        }
-
-        if (showProfileEditorModal.value && !showProfileMapModal.value) {
-            void closeProfileEditor();
         }
     }
 }
@@ -1731,26 +1677,6 @@ function verificationStatusClass(status) {
     return 'bg-slate-100 text-slate-600';
 }
 
-function verificationDocumentStatusLabel(status) {
-    return {
-        submitted: 'Awaiting review',
-        approved: 'Accepted',
-        rejected: 'Needs replacement',
-    }[status] ?? 'Submitted';
-}
-
-function verificationDocumentStatusClass(status) {
-    if (status === 'approved') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
-}
-
 function academicScanStatusLabel(status) {
     return {
         succeeded: 'Result extracted',
@@ -1759,18 +1685,6 @@ function academicScanStatusLabel(status) {
         unavailable: 'Scanner unavailable',
         not_requested: 'Waiting to scan',
     }[status] ?? 'Waiting to scan';
-}
-
-function academicScanStatusClass(status) {
-    if (status === 'succeeded') {
-        return 'bg-sky-100 text-sky-800';
-    }
-
-    if (['failed', 'needs_review'].includes(status)) {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    return 'bg-amber-100 text-amber-800';
 }
 
 function extractedAcademicResult(document = academicVerificationDocument.value) {
@@ -1803,16 +1717,9 @@ function extractedAcademicResult(document = academicVerificationDocument.value) 
     return 'No result extracted yet';
 }
 
-function verificationFileAccept(documentType) {
-    if ((academicOcrActive.value && documentType === 'academic_record') || documentType === 'recent_school_id') {
-        return '.pdf,.jpg,.jpeg,.png';
-    }
-
-    return '.pdf,.jpg,.jpeg,.png,.doc,.docx';
-}
-
 function applyAcademicResponse(payload) {
     user.value = payload.user;
+    savedProfileReadiness.value = payload.profile_readiness ?? null;
     verificationDocuments.value = payload.verification_documents ?? [];
     academicOcr.value = payload.academic_ocr ?? academicOcr.value;
     const savedForm = savedFormSnapshot.value ? JSON.parse(savedFormSnapshot.value) : null;
@@ -1862,8 +1769,8 @@ async function uploadVerificationDocument(documentType, event) {
 
         applyAcademicResponse(response.data);
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to upload this record. Check the file and try again.';
     } finally {
         uploadingVerificationDocumentType.value = '';
         input.value = '';
@@ -1909,8 +1816,8 @@ async function deleteVerificationDocument(document) {
 
         applyAcademicResponse(response.data);
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message ?? 'Unable to remove this record. Please try again.';
     } finally {
         deletingVerificationDocumentId.value = null;
     }
@@ -1925,6 +1832,7 @@ async function loadProfile() {
 
         user.value = response.data.user;
         fillForm(response.data.user);
+        savedProfileReadiness.value = response.data.profile_readiness ?? null;
         await loadApplicantLocationHierarchy();
         matchSummary.value = response.data.match_summary ?? matchSummary.value;
         platformActiveScholarships.value = response.data.platform_active_scholarships ?? [];
@@ -1968,6 +1876,7 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
 
         user.value = response.data.user;
         fillForm(response.data.user);
+        savedProfileReadiness.value = response.data.profile_readiness ?? null;
         await loadApplicantLocationHierarchy();
         matchSummary.value = response.data.match_summary ?? matchSummary.value;
         platformActiveScholarships.value = response.data.platform_active_scholarships ?? platformActiveScholarships.value;
@@ -2171,8 +2080,17 @@ watch(() => form.value.grading_scale, (scale) => {
                     compact
                 />
 
-                <div v-if="isLoading" class="student-card p-6 text-sm text-slate-500">
-                    Loading profile...
+                <div v-if="isLoading" class="overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm" aria-busy="true" aria-label="Loading applicant record" role="status">
+                    <span class="sr-only">Loading profile...</span>
+                    <div class="flex items-center gap-5 px-5 py-6 motion-safe:animate-pulse sm:px-6"><div class="h-20 w-20 shrink-0 rounded-sm bg-slate-100"></div><div class="flex-1 space-y-3"><div class="h-3 w-24 rounded-sm bg-slate-100"></div><div class="h-6 w-2/3 rounded-sm bg-slate-100"></div><div class="h-3 w-1/2 rounded-sm bg-slate-100"></div></div></div>
+                    <div class="h-20 border-y border-slate-200 bg-slate-50"></div>
+                    <div class="h-32 bg-white"></div>
+                </div>
+
+                <div v-else-if="!user" class="student-card rounded-md border-slate-300 p-5 sm:p-6" role="alert">
+                    <h2 class="font-bold text-slate-950">Your profile could not be loaded</h2>
+                    <p class="mt-2 text-sm text-slate-600">{{ errorMessage || 'Please try again to view your saved applicant record.' }}</p>
+                    <button type="button" class="mt-4 inline-flex min-h-10 items-center gap-2 rounded-sm bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800" @click="loadProfile"><i class="fa-solid fa-rotate-right text-xs" aria-hidden="true"></i>Try again</button>
                 </div>
 
                 <div v-else class="space-y-5">
@@ -2185,35 +2103,26 @@ watch(() => form.value.grading_scale, (scale) => {
                         :sections="applicantProfileSections"
                         :verification-status="profileVerificationStatus"
                         :verification-label="verificationStatusLabel(profileVerificationStatus)"
+                        :show-trust-notice="false"
                         primary
                         editable
                         @edit="openProfileEditor"
                     >
-                        <template #actions>
-                            <button type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white transition hover:bg-slate-800" @click="openProfileEditor(profileComplete ? 'personal' : profileRecommendedAction.section)">
-                                <i class="fa-solid fa-pen text-xs" aria-hidden="true"></i>
-                                {{ profileComplete ? 'Edit profile' : 'Continue setup' }}
-                            </button>
+                        <template #header>
+                            <ApplicantProfileIdentity :record="applicantProfileRecord" :status="profileOverview" @edit="openProfileEditor('personal')" />
+                            <ApplicantProfileReadiness :state="profileOverview" @continue="continueProfileOverview" />
+                        </template>
+                        <template #details>
+                            <ApplicantProfileDetails :sections="applicantProfileSections" @edit="openProfileEditor" />
                         </template>
                     </ApplicantProfileRecord>
-
-                    <section :class="['border border-l-4 p-4 shadow-sm sm:p-5', overviewProfileAction.actionable ? 'border-amber-200 border-l-amber-400 bg-amber-50' : 'border-emerald-200 border-l-emerald-500 bg-emerald-50/60']">
-                        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div class="flex min-w-0 items-start gap-3">
-                                <span :class="['grid h-10 w-10 shrink-0 place-items-center', overviewProfileAction.actionable ? 'bg-amber-200 text-amber-900' : 'bg-emerald-100 text-emerald-800']"><i :class="overviewProfileAction.actionable ? 'fa-solid fa-arrow-right' : 'fa-solid fa-check'" aria-hidden="true"></i></span>
-                                <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ overviewProfileAction.eyebrow }}</p><h2 class="mt-1 font-bold text-slate-950">{{ overviewProfileAction.label }}</h2><p class="mt-1 text-sm text-slate-600">{{ overviewProfileAction.detail }}</p></div>
-                            </div>
-                            <button v-if="overviewProfileAction.actionable" type="button" class="shrink-0 bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="openProfileEditor(overviewProfileAction.section)">Continue</button>
-                        </div>
-                    </section>
 
                     <section class="student-card overflow-hidden rounded-md border-slate-300">
                         <header class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                             <div>
-                                <p class="text-sm font-bold text-slate-950">Records and readiness</p>
-                                <p class="mt-1 text-xs text-slate-500">Required profile details are {{ profileCompletion }}% complete.</p>
+                                <p class="text-sm font-bold text-slate-950">Profile resources</p>
+                                <p class="mt-1 text-xs text-slate-500">Supporting records and reusable application files.</p>
                             </div>
-                            <span class="w-fit rounded-sm bg-white px-2.5 py-1 text-xs font-bold text-slate-700 ring-1 ring-slate-200">{{ missingProfileFields.length ? `${missingProfileFields.length} details remaining` : 'Profile complete' }}</span>
                         </header>
                         <div class="divide-y divide-slate-200">
                             <button type="button" class="flex w-full items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5" @click="openVerificationRecords">
@@ -2248,6 +2157,8 @@ watch(() => form.value.grading_scale, (scale) => {
                     :icon="profileEditorIcon"
                     :size="profileEditorSize"
                     :saving="isSaving"
+                    :busy="profileEditorBusy"
+                    :instant-changes="activeSection === 'verification'"
                     :dirty="hasUnsavedChanges"
                     :save-disabled="activeSection !== 'verification' && !hasUnsavedChanges"
                     :save-label="activeSection === 'verification' && !hasUnsavedChanges ? 'Close' : 'Save changes'"
@@ -2313,16 +2224,16 @@ watch(() => form.value.grading_scale, (scale) => {
                                                 :alt="`${profileDisplayName} applicant photo`"
                                                 class="h-full w-full object-cover"
                                             >
-                                            <span v-else>{{ profileInitials }}</span>
+                                            <img v-else :src="'/images/demo/default-applicant-avatar.jpg'" alt="No applicant photo uploaded" class="h-full w-full object-cover">
                                         </div>
 
                                         <div class="min-w-0 flex-1">
-                                            <div class="flex flex-wrap items-center gap-2">
+                                        <div class="flex flex-wrap items-center gap-2">
                                                 <h4 :class="formPanelTitleClass">Applicant photo</h4>
                                                 <span class="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800">Required</span>
                                             </div>
                                             <p :class="formPanelDescriptionClass">Use a recent square photo that clearly shows the applicant.</p>
-                                            <p class="mt-1 text-xs text-slate-500">JPG or PNG, 300 to 4000 pixels square, up to 5 MB.</p>
+                                            <p class="mt-1 text-xs leading-5 text-slate-500">JPG or PNG, 300 to 4000 pixels square, up to 5 MB. Photo changes save immediately.</p>
 
                                             <div class="mt-3 flex flex-wrap gap-2">
                                                 <label
@@ -2381,7 +2292,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                             <input id="profile-first-name" v-model="form.first_name" :class="inputClass">
                                         </div>
                                         <div :class="[fieldClass, 'md:col-span-2']">
-                                            <label :class="[labelClass, 'text-center']" for="profile-middle">M.I.</label>
+                                            <label :class="[labelClass, 'text-center']" for="profile-middle">M.I. <span class="font-normal text-slate-400">(optional)</span></label>
                                             <input
                                                 id="profile-middle"
                                                 :value="form.middle_initial"
@@ -2580,16 +2491,13 @@ watch(() => form.value.grading_scale, (scale) => {
                         <section v-if="activeSection === 'academic'" id="profile-academic" :class="sectionCardClass">
                             <div :class="sectionBodyClass">
                                 <div :class="formPanelClass">
-                                    <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="mb-4">
                                         <div>
                                             <h4 :class="formPanelTitleClass">Current studies</h4>
                                             <p :class="formPanelDescriptionClass">Add the learner's current school, level, and study path.</p>
                                         </div>
-                                        <span class="w-fit rounded-md bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                                            {{ form.education_level ? educationLevelLabel(form.education_level) : 'Level not selected' }}
-                                        </span>
                                     </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-3">
+                                    <div class="grid items-start gap-4 md:grid-cols-2">
                                         <div>
                                             <label :class="labelClass" for="profile-education-level">Education level</label>
                                             <select id="profile-education-level" v-model="form.education_level" :class="inputClass">
@@ -2597,7 +2505,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                                 <option v-for="option in educationLevelOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                                             </select>
                                         </div>
-                                        <div>
+                                        <div class="md:col-span-2 md:row-start-2">
                                             <label :class="labelClass" for="profile-school">School / learning institution</label>
                                             <input id="profile-school" v-model="form.school" placeholder="School or learning center" :class="inputClass">
                                         </div>
@@ -2651,7 +2559,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                         <h4 :class="formPanelTitleClass">Record period and result</h4>
                                         <p :class="formPanelDescriptionClass">Match the saved result to its school year and grading period.</p>
                                     </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
+                                    <div class="grid items-start gap-4 md:grid-cols-2">
                                         <div>
                                             <label :class="labelClass" for="profile-academic-year">Academic year</label>
                                             <select id="profile-academic-year" v-model="form.academic_year" :class="inputClass">
@@ -2802,8 +2710,8 @@ watch(() => form.value.grading_scale, (scale) => {
                                                 <h5 class="text-sm font-bold text-slate-950">Approximate map pin <span class="font-normal text-slate-400">(optional)</span></h5>
                                                 <p :class="formPanelDescriptionClass">Use a nearby point for distance estimates; it does not need to identify your exact home.</p>
                                             </div>
-                                            <span :class="['w-fit rounded px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em]', form.latitude && form.longitude ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500']">
-                                                {{ form.latitude && form.longitude ? 'Pin saved' : 'Not set' }}
+                                            <span :class="['w-fit rounded px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em]', profileFormHasPin ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500']">
+                                                {{ profileFormHasPin ? 'Pin set in form' : 'Not set' }}
                                             </span>
                                         </div>
                                         <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2812,11 +2720,11 @@ watch(() => form.value.grading_scale, (scale) => {
                                                     <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
                                                 </span>
                                                 <div class="min-w-0">
-                                                    <p class="text-sm font-bold text-slate-950">{{ form.latitude && form.longitude ? 'Location ready for distance checks' : 'No map location saved' }}</p>
+                                                    <p class="text-sm font-bold text-slate-950">{{ profileFormHasPin ? 'Location ready for distance checks' : 'No map location selected' }}</p>
                                                     <p class="mt-1 text-xs leading-5 text-slate-500">{{ locationMessage || profileMapAddress || 'The map uses your city, province, and region.' }}</p>
                                                 </div>
                                             </div>
-                                            <button type="button" class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="showProfileMapModal = true"><i class="fa-solid fa-map-location-dot mr-2" aria-hidden="true"></i>{{ form.latitude ? 'Review map pin' : 'Set map pin' }}</button>
+                                            <button type="button" class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="showProfileMapModal = true"><i class="fa-solid fa-map-location-dot mr-2" aria-hidden="true"></i>{{ profileFormHasPin ? 'Review map pin' : 'Set map pin' }}</button>
                                         </div>
                                     </div>
                                 </div>
@@ -2845,128 +2753,26 @@ watch(() => form.value.grading_scale, (scale) => {
                                     </div>
                                 </div>
 
-                                <div :class="formPanelClass">
-                                    <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                        <div>
-                                            <h4 :class="formPanelTitleClass">{{ verificationUploadCopy.title }}</h4>
-                                            <p :class="formPanelDescriptionClass">{{ verificationUploadCopy.detail }}</p>
-                                        </div>
-                                        <span class="shrink-0 rounded-md bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-600">
-                                            {{ requiredVerificationDocumentRows.filter((row) => row.document).length }} of {{ requiredVerificationDocumentRows.length }} required saved
-                                        </span>
-                                    </div>
-
-                                    <div class="mt-4">
-                                        <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" />
-                                    </div>
-
-                                    <div class="mt-5 space-y-6">
-                                        <section v-for="group in verificationDocumentGroups" :key="group.id">
-                                            <div class="mb-2 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                                                <div>
-                                                    <h5 class="text-sm font-bold text-slate-950">{{ group.label }}</h5>
-                                                    <p class="mt-0.5 text-xs leading-5 text-slate-500">{{ group.description }}</p>
-                                                </div>
-                                                <span class="text-xs font-bold text-slate-500">
-                                                    {{ group.rows.filter((row) => row.document).length }} of {{ group.rows.length }} saved
-                                                </span>
-                                            </div>
-                                            <div class="divide-y divide-slate-200 border-y border-slate-200">
-                                        <article
-                                            v-for="row in group.rows"
-                                            :key="row.value"
-                                            class="flex flex-col gap-4 py-4 sm:flex-row sm:items-center sm:justify-between"
-                                        >
-                                            <div class="flex min-w-0 items-start gap-3">
-                                                <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', row.document ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600']">
-                                                    <i :class="row.icon" aria-hidden="true"></i>
-                                                </span>
-                                                <div class="min-w-0">
-                                                    <div class="flex flex-wrap items-center gap-2">
-                                                        <h5 class="text-sm font-bold text-slate-950">{{ row.label }}</h5>
-                                                        <span :class="['rounded px-2 py-0.5 text-[10px] font-bold uppercase', row.document ? verificationDocumentStatusClass(row.document.status) : 'bg-slate-100 text-slate-500']">
-                                                            {{ row.document ? verificationDocumentStatusLabel(row.document.status) : 'Not uploaded' }}
-                                                        </span>
-                                                    </div>
-                                                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ row.description }}</p>
-                                                    <p class="mt-1 text-xs font-semibold leading-5 text-slate-700">Supports: {{ row.supports }}</p>
-                                                    <p v-if="row.context?.length" class="mt-1 text-xs leading-5 text-slate-500"><span class="font-semibold">In your profile:</span> {{ row.context.join(' / ') }}</p>
-                                                    <p v-if="row.document" class="mt-1 max-w-xl truncate text-xs font-semibold text-slate-700">
-                                                        {{ row.document.original_name }} <span class="font-normal text-slate-400">- {{ formatFileSize(row.document.size) }}</span>
-                                                    </p>
-                                                    <div
-                                                        v-if="academicOcrActive && row.value === 'academic_record' && row.document"
-                                                        class="mt-2 flex flex-wrap items-center gap-2 text-xs"
-                                                    >
-                                                        <span :class="['rounded px-2 py-1 font-bold', academicScanStatusClass(row.document.ocr_status)]">
-                                                            {{ academicScanStatusLabel(row.document.ocr_status) }}
-                                                        </span>
-                                                        <strong v-if="row.document.ocr_status === 'succeeded'" class="text-slate-900">
-                                                            {{ extractedAcademicResult(row.document) }}
-                                                        </strong>
-                                                        <span class="basis-full leading-5 text-slate-500">{{ row.document.ocr_message }}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                                                <button
-                                                    v-if="academicOcrActive && row.value === 'academic_record' && row.document && ['failed', 'needs_review', 'unavailable', 'not_requested'].includes(row.document.ocr_status)"
-                                                    type="button"
-                                                    :disabled="rescanningAcademicDocumentId === row.document.id"
-                                                    class="inline-flex h-9 items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
-                                                    @click="retryAcademicRecordScan(row.document)"
-                                                >
-                                                    <i :class="rescanningAcademicDocumentId === row.document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrows-rotate'" aria-hidden="true"></i>
-                                                    {{ rescanningAcademicDocumentId === row.document.id ? 'Scanning...' : 'Retry scan' }}
-                                                </button>
-                                                <button
-                                                    v-if="row.document"
-                                                    type="button"
-                                                    class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
-                                                    @click="previewDocument = row.document"
-                                                >
-                                                    <i class="fa-solid fa-eye" aria-hidden="true"></i>
-                                                    View
-                                                </button>
-                                                <label
-                                                    :class="[
-                                                        'inline-flex h-9 items-center gap-2 rounded-md px-3 text-xs font-bold transition',
-                                                        row.document ? 'cursor-pointer border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'cursor-pointer bg-slate-900 text-white hover:bg-slate-800',
-                                                        uploadingVerificationDocumentType ? 'pointer-events-none opacity-50' : '',
-                                                    ]"
-                                                >
-                                                    <input
-                                                        type="file"
-                                                        :accept="verificationFileAccept(row.value)"
-                                                        class="sr-only"
-                                                        :disabled="uploadingVerificationDocumentType !== ''"
-                                                        @change="uploadVerificationDocument(row.value, $event)"
-                                                    >
-                                                    <i :class="uploadingVerificationDocumentType === row.value ? 'fa-solid fa-spinner fa-spin' : row.document ? 'fa-solid fa-rotate' : 'fa-solid fa-upload'" aria-hidden="true"></i>
-                                                    {{ uploadingVerificationDocumentType === row.value
-                                                        ? 'Uploading...'
-                                                        : row.document
-                                                            ? 'Replace'
-                                                            : 'Upload' }}
-                                                </label>
-                                                <button
-                                                    v-if="row.document"
-                                                    type="button"
-                                                    :disabled="deletingVerificationDocumentId === row.document.id"
-                                                    class="grid h-9 w-9 place-items-center rounded-md border border-rose-200 bg-white text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                                    :aria-label="`Remove ${row.label}`"
-                                                    @click="deleteVerificationDocument(row.document)"
-                                                >
-                                                    <i :class="deletingVerificationDocumentId === row.document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can'" aria-hidden="true"></i>
-                                                </button>
-                                            </div>
-                                        </article>
-                                            </div>
-                                        </section>
-                                    </div>
-
-                                </div>
+                                <ApplicantProfileEvidenceList
+                                    :groups="verificationDocumentGroups"
+                                    :title="verificationUploadCopy.title"
+                                    :description="verificationUploadCopy.detail"
+                                    :ocr="academicOcr"
+                                    :uploading-type="uploadingVerificationDocumentType"
+                                    :deleting-id="deletingVerificationDocumentId"
+                                    :scanning-id="rescanningAcademicDocumentId"
+                                    :disabled="isSaving"
+                                    :scan-label="academicScanStatusLabel"
+                                    :result-label="extractedAcademicResult"
+                                    @upload="uploadVerificationDocument"
+                                    @preview="previewDocument = $event"
+                                    @remove="deleteVerificationDocument"
+                                    @scan="retryAcademicRecordScan"
+                                >
+                                    <template #terms>
+                                        <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" :modal-layer="2700" />
+                                    </template>
+                                </ApplicantProfileEvidenceList>
 
                                 <div v-if="manualAcademicEntryAllowed" :class="formPanelClass">
                                     <div>

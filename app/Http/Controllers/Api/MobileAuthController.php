@@ -51,7 +51,9 @@ class MobileAuthController extends Controller
             'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        $middleInitial = strtoupper($validated['middle_initial']);
+        $middleInitial = filled($validated['middle_initial'] ?? null)
+            ? strtoupper($validated['middle_initial'])
+            : null;
 
         $user = User::create([
             'email' => $validated['email'],
@@ -1128,6 +1130,7 @@ class MobileAuthController extends Controller
             'provider_objective_notes' => $scholarship->provider_objective_notes,
             'eligibility' => $scholarship->eligibility,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
+            'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
             'eligible_courses' => $scholarship->eligible_courses,
             'eligible_school_types' => $scholarship->eligible_school_types,
             'eligible_year_levels' => $scholarship->eligible_year_levels,

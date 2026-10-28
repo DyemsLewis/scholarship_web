@@ -268,6 +268,82 @@ class ApplicantScholarshipDetailContractTest extends TestCase
             ->assertJsonPath('detail.decision.can_apply', $canApply);
     }
 
+    public function test_preferred_mismatch_has_an_attention_brief_but_allows_starting(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship([
+            'eligible_courses' => 'BS Nursing', 'eligibility_rule_modes' => ['course' => 'preferred'],
+        ]);
+        $this->actingAs($applicant)->getJson(route('dashboard.scholarships.show.data', $scholarship))
+            ->assertOk()->assertJsonPath('detail.decision.can_apply', true)
+            ->assertJsonPath('detail.decision.tone', 'attention')
+            ->assertJsonPath('detail.content.readiness.0.status', 'Preferences differ');
+        $response = $this->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=eligibility')
+            ->assertOk()->assertJsonCount(0, 'detail.content.blockers')
+            ->assertJsonPath('detail.content.guidance.label', 'Preferences differ')
+            ->assertJsonPath('detail.content.preferred_mismatches.0.key', 'course');
+        $this->assertStringNotContainsString('Your profile meets', $response->json('detail.decision.description'));
+    }
+
+    public function test_required_rule_names_explain_why_applying_is_blocked_even_with_a_preference(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship([
+            'eligible_courses' => 'BS Nursing', 'eligible_locations' => 'Cebu City',
+            'eligibility_rule_modes' => ['course' => 'preferred'],
+        ]);
+        $response = $this->actingAs($applicant)->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=eligibility')
+            ->assertOk()->assertJsonPath('detail.decision.can_apply', false)
+            ->assertJsonPath('detail.content.guidance.label', 'Required rules not met')
+            ->assertJsonCount(1, 'detail.content.blockers')
+            ->assertJsonPath('detail.content.blockers.0.key', 'location')
+            ->assertJsonPath('detail.content.preferred_mismatches.0.key', 'course');
+        $this->assertStringContainsString('Location', $response->json('detail.decision.description'));
+        $this->assertStringContainsString('required rules', $response->json('detail.decision.description'));
+    }
+
+    public function test_different_grade_scales_are_not_reported_as_missing_profile_data(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship(['minimum_gwa' => 1.75, 'minimum_grade_scale' => 'grade_point']);
+        $response = $this->actingAs($applicant)->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=eligibility')
+            ->assertOk()->assertJsonPath('detail.decision.can_apply', true)
+            ->assertJsonPath('detail.content.guidance.label', 'Needs review')
+            ->assertJsonCount(0, 'detail.content.missing_checks')
+            ->assertJsonPath('detail.content.review_criteria.0.key', 'academic');
+        $academic = collect($response->json('detail.content.criteria'))->firstWhere('key', 'academic');
+        $this->assertStringContainsString('different grading scales', $academic['comparison']);
+        $this->assertStringNotContainsString('missing from your profile', $academic['comparison']);
+        $this->getJson(route('dashboard.scholarships.show.data', $scholarship))
+            ->assertOk()->assertJsonPath('detail.content.readiness.0.status', 'Needs review');
+    }
+
+    public function test_preference_guidance_does_not_claim_application_permission_for_an_unverified_profile(): void
+    {
+        $applicant = $this->completeApplicant();
+        $applicant->studentProfile()->update(['verification_status' => 'pending']);
+        $scholarship = $this->publishedScholarship([
+            'eligible_courses' => 'BS Nursing', 'eligibility_rule_modes' => ['course' => 'preferred'],
+        ]);
+        $response = $this->actingAs($applicant->fresh())->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=eligibility')
+            ->assertOk()->assertJsonPath('detail.decision.can_apply', false)
+            ->assertJsonPath('detail.decision.state', 'profile_unverified')
+            ->assertJsonPath('detail.content.guidance.label', 'Preferences differ');
+        $this->assertStringNotContainsString('You can apply', $response->json('detail.content.guidance.description'));
+    }
+
+    public function test_missing_essential_information_still_requires_profile_completion(): void
+    {
+        $applicant = $this->completeApplicant();
+        $applicant->studentProfile()->update(['gwa' => null]);
+        $scholarship = $this->publishedScholarship(['minimum_gwa' => 85, 'minimum_grade_scale' => 'percentage']);
+        $this->actingAs($applicant->fresh())->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=eligibility')
+            ->assertOk()->assertJsonPath('detail.decision.can_apply', false)
+            ->assertJsonPath('detail.decision.state', 'profile_incomplete')
+            ->assertJsonPath('detail.content.missing_checks.0.key', 'academic')
+            ->assertJsonPath('detail.content.guidance.label', 'Profile information needed');
+    }
+
     private function completeApplicant(): User
     {
         $applicant = User::factory()->verifiedProfile()->create();

@@ -36,6 +36,37 @@ class RecipientMonitoringChecklistTest extends TestCase
         config()->set('services.academic_ocr.max_file_size_kb', 1024);
     }
 
+    public function test_check_in_cannot_open_before_its_monitoring_plan_even_when_the_due_date_is_valid(): void
+    {
+        [$provider, , $scholarship, , $plan] = $this->selectedRecipientWithPlan();
+        $plan->update(['starts_on' => now()->addWeek()->toDateString()]);
+        foreach ([now()->toDateString(), null] as $opensAt) {
+            $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+                'title' => 'Future monitoring period', 'opens_at' => $opensAt,
+                'due_at' => now()->addMonth()->toDateString(),
+            ])->assertUnprocessable()->assertJsonValidationErrors('opens_at');
+        }
+        $this->assertDatabaseCount('recipient_monitoring_cycles', 0);
+        $this->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+            'title' => 'Future monitoring period', 'opens_at' => $plan->fresh()->starts_on->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ])->assertCreated();
+    }
+
+    public function test_check_in_due_date_cannot_precede_opening_or_exceed_the_plan_end(): void
+    {
+        [$provider, , $scholarship, , $plan] = $this->selectedRecipientWithPlan();
+        foreach ([
+            ['opens_at' => now()->addMonth()->toDateString(), 'due_at' => now()->addWeek()->toDateString()],
+            ['opens_at' => now()->toDateString(), 'due_at' => $plan->ends_on->addDay()->toDateString()],
+        ] as $dates) {
+            $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+                'title' => 'Invalid monitoring period', ...$dates,
+            ])->assertUnprocessable()->assertJsonValidationErrors('due_at');
+        }
+        $this->assertDatabaseCount('recipient_monitoring_cycles', 0);
+    }
+
     public function test_provider_publishes_active_plan_as_a_versioned_recipient_checklist(): void
     {
         [$provider, $applicant, $scholarship, $application, $plan] = $this->selectedRecipientWithPlan();

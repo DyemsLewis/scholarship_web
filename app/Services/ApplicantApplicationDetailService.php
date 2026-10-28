@@ -866,7 +866,6 @@ class ApplicantApplicationDetailService
         }
 
         $scholarship = $application->scholarship;
-        $mapQuery = $scholarship?->handoff_location_address ?: $scholarship?->handoff_location_name;
 
         return [
             'requirements' => $this->eligibilityService->splitDocumentRequirements($scholarship?->post_qualification_requirements),
@@ -875,9 +874,9 @@ class ApplicantApplicationDetailService
             'deadline' => $scholarship?->handoff_deadline?->format('M d, Y'),
             'location_name' => $scholarship?->handoff_location_name,
             'location_address' => $scholarship?->handoff_location_address,
-            'map_url' => filled($mapQuery)
-                ? 'https://www.openstreetmap.org/search?query='.rawurlencode($mapQuery)
-                : null,
+            'latitude' => $scholarship?->handoff_latitude,
+            'longitude' => $scholarship?->handoff_longitude,
+            'map_url' => $scholarship?->handoffMapUrl(),
             'url' => $scholarship?->handoff_url,
             'contact' => [
                 'name' => $scholarship?->contact_person,

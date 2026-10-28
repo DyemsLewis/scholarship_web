@@ -4,6 +4,7 @@ import ProviderSidebar from '../ProviderSidebar.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
+import EligibilityReviewPanel from './components/EligibilityReviewPanel.vue';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
 const returnTo = new URLSearchParams(window.location.search).get('return_to');
@@ -41,7 +42,6 @@ const scholarship = computed(() => application.value?.scholarship ?? {});
 const workflow = computed(() => application.value?.workflow ?? {});
 const decisionReopen = computed(() => application.value?.decision_reopen ?? {});
 const readiness = computed(() => application.value?.document_readiness ?? {});
-const criteria = computed(() => application.value?.eligibility_breakdown?.criteria ?? []);
 const rubricCriteria = computed(() => application.value?.rubric_review?.criteria ?? []);
 const currentUserId = computed(() => Number(window.portalUser?.id));
 const assignedReviewerId = computed(() => Number(application.value?.assigned_reviewer?.id || 0));
@@ -361,7 +361,7 @@ onMounted(loadApplication);
                         </div>
                         <div class="grid grid-cols-4 border-t border-slate-200 bg-slate-50">
                             <div class="border-r border-slate-200 px-5 py-3"><p class="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Stage</p><p class="mt-1 text-sm font-bold text-slate-900">{{ workflow.current_stage_label || labelize(application.workflow_stage) }}</p></div>
-                            <div class="border-r border-slate-200 px-5 py-3"><p class="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Eligibility</p><p class="mt-1 text-sm font-bold text-slate-900">{{ application.eligibility_score ?? 0 }}% match</p></div>
+                            <div class="border-r border-slate-200 px-5 py-3"><p class="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Eligibility comparison</p><p class="mt-1 text-sm font-bold text-slate-900">{{ application.dss_explanation?.comparison?.label || 'Comparison unavailable' }}</p></div>
                             <div class="border-r border-slate-200 px-5 py-3"><p class="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Evidence</p><p class="mt-1 text-sm font-bold text-slate-900">{{ acceptedDocuments }} of {{ requiredDocuments }} accepted</p></div>
                             <div class="px-5 py-3"><p class="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500">Waiting</p><p class="mt-1 text-sm font-bold text-slate-900">{{ application.waiting_days }} day{{ application.waiting_days === 1 ? '' : 's' }}</p></div>
                         </div>
@@ -390,21 +390,12 @@ onMounted(loadApplication);
                         </button>
                     </nav>
 
-                    <section v-if="activeSection === 'eligibility'" class="mt-4 border border-slate-200 bg-white shadow-sm">
-                        <header class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-                            <div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-scale-balanced text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Eligibility comparison</h2><p class="mt-1 text-sm text-slate-500">Compare the saved profile with the published program rules.</p></div></div>
-                            <div class="text-right"><p class="text-2xl font-bold text-slate-950">{{ application.eligibility_breakdown?.score ?? application.eligibility_score ?? 0 }}%</p><p class="text-xs font-semibold text-slate-500">{{ application.eligibility_breakdown?.label || 'Needs review' }}</p></div>
-                        </header>
-                        <div class="divide-y divide-slate-200">
-                            <div v-for="criterion in criteria" :key="criterion.key" class="grid grid-cols-[minmax(12rem,.65fr)_minmax(14rem,1fr)_minmax(14rem,1fr)_8rem] items-center gap-5 px-6 py-4">
-                                <div><p class="text-sm font-bold text-slate-900">{{ criterion.label }}</p><p v-if="criterion.category === 'readiness'" class="mt-1 text-xs text-slate-500">Readiness only</p></div>
-                                <div><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Applicant</p><p class="mt-1 text-sm text-slate-700">{{ criterion.student_value || 'Not provided' }}</p></div>
-                                <div><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Program rule</p><p class="mt-1 text-sm text-slate-700">{{ criterion.requirement || 'No restriction' }}</p></div>
-                                <span :class="['justify-self-end border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(criterion.status)]">{{ labelize(criterion.status) }}</span>
-                            </div>
-                            <div v-if="!criteria.length" class="px-6 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-scale-balanced text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">No structured eligibility rules were configured.</p></div>
-                        </div>
-                    </section>
+                    <EligibilityReviewPanel
+                        v-if="activeSection === 'eligibility'"
+                        :breakdown="application.eligibility_breakdown ?? {}"
+                        :explanation="application.dss_explanation ?? {}"
+                        :score="application.dss_breakdown ?? {}"
+                    />
 
                     <section v-else-if="activeSection === 'documents'" class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
@@ -458,6 +449,10 @@ onMounted(loadApplication);
 
                     <section v-else-if="activeSection === 'decision'" class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-center justify-between border-b border-slate-200 px-6 py-5"><div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Screening result</h2><p class="mt-1 text-sm text-slate-500">Score the published rubric, then record one result.</p></div></div><button v-if="canEditReview" type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 px-4 text-xs font-bold text-slate-700" @click="showCorrectionForm = true"><i class="fa-solid fa-pen-to-square text-[10px]" aria-hidden="true"></i>Request correction</button></header>
+                        <div v-if="['required_mismatch', 'preferred_difference', 'manual_review', 'provisional'].includes(application.dss_explanation?.comparison?.state)" class="flex items-start justify-between gap-6 border-b border-amber-200 bg-amber-50 px-6 py-4">
+                            <div><p class="text-sm font-bold text-amber-950">{{ application.dss_explanation.comparison.label }}</p><p class="mt-1 text-xs leading-5 text-amber-900">{{ application.dss_explanation.comparison.interpretation }}</p></div>
+                            <button type="button" class="shrink-0 border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="updateSection('eligibility')">Review comparison</button>
+                        </div>
                         <div v-if="application.correction_status" class="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-6 py-4"><div><p class="text-sm font-bold text-amber-900">Correction {{ labelize(application.correction_status) }}</p><p class="mt-1 text-xs text-amber-800">{{ application.correction_message }}</p></div><button v-if="application.correction_status === 'submitted' && canEditReview" type="button" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white" :disabled="actionBusy" @click="resolveCorrection"><i class="fa-solid fa-check text-[9px]" aria-hidden="true"></i>Accept update</button></div>
                         <form v-if="canEditReview" class="divide-y divide-slate-200" @submit.prevent="recordResult">
                             <div class="px-6 py-5"><h3 class="font-bold text-slate-950">Review rubric</h3><div class="mt-4 divide-y divide-slate-200 border border-slate-200"><label v-for="criterion in rubricCriteria" :key="criterion.key" class="grid grid-cols-[1fr_8rem] items-center gap-6 px-4 py-3"><span><span class="block text-sm font-bold text-slate-900">{{ criterion.label }} <span class="font-normal text-slate-500">({{ criterion.weight }}%)</span></span><span class="mt-1 block text-xs text-slate-500">{{ criterion.guidance }}</span></span><input v-model.number="rubricScores[criterion.key]" type="number" min="0" max="100" required class="h-10 border border-slate-300 px-3 text-sm" placeholder="0-100"></label><p v-if="!rubricCriteria.length" class="px-4 py-6 text-sm text-slate-500">This program does not use a scored rubric.</p></div></div>

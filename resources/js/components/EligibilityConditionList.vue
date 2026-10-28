@@ -1,5 +1,7 @@
 <script setup>
-defineProps({
+import { eligibilityCriterionPresentation } from '../support/applicantEligibility';
+
+const props = defineProps({
     conditions: {
         type: Array,
         default: () => [],
@@ -24,6 +26,16 @@ function conditionStatus(condition) {
 }
 
 function statusMeta(condition) {
+    if (['pass', 'fail', 'missing'].includes(condition?.status)) {
+        const result = eligibilityCriterionPresentation(condition);
+        const tone = { ready: 'emerald', blocked: 'rose', attention: 'amber' }[result.state];
+        const styles = {
+            emerald: ['bg-emerald-100 text-emerald-700', 'bg-emerald-50 text-emerald-800 ring-emerald-200'],
+            rose: ['bg-rose-100 text-rose-700', 'bg-rose-50 text-rose-800 ring-rose-200'],
+            amber: ['bg-amber-100 text-amber-800', 'bg-amber-50 text-amber-900 ring-amber-200'],
+        }[tone];
+        return { label: result.label, icon: result.state === 'ready' ? 'fa-solid fa-check' : 'fa-solid fa-circle-info', iconClass: styles[0], badgeClass: styles[1] };
+    }
     const statuses = {
         pass: {
             label: 'Matched automatically',
@@ -73,6 +85,13 @@ function statusMeta(condition) {
 }
 
 function conditionNote(condition, audience) {
+    if (audience !== 'applicant' && ['pass', 'fail', 'missing'].includes(condition?.status)) {
+        const result = eligibilityCriterionPresentation(condition);
+        if (result.status === 'preferred') return 'This preference did not block submission. Consider it with the complete applicant record.';
+        if (result.status === 'fail') return 'Confirm this required rule discrepancy using the saved application and supporting evidence.';
+        if (result.status === 'review') return 'Review the academic evidence manually. This condition is not an automatic match or failure.';
+        if (result.status === 'pass') return 'The saved applicant profile matches this automatic condition. Confirm the supporting evidence.';
+    }
     if (condition?.note) {
         return condition.note;
     }

@@ -68,7 +68,7 @@ class ApplicationStageOperationsService
                 ]);
             }
 
-            $locked->update([
+            $locked->fill([
                 ...$this->sessionAttributes([
                     ...$locked->only([
                         'stage_key',
@@ -90,6 +90,8 @@ class ApplicationStageOperationsService
                 'proof_required' => $data['proof_required'] ?? $locked->proof_required,
                 'updated_by' => $actor->id,
             ]);
+            $this->assertCapacity($locked, 0, 'capacity');
+            $locked->save();
 
             $this->audit($locked, $actor, 'session_updated', 'draft', 'draft');
 
@@ -675,7 +677,7 @@ class ApplicationStageOperationsService
         $this->assertCapacity($session, 0);
     }
 
-    private function assertCapacity(ApplicationStageSession $session, int $additional): void
+    private function assertCapacity(ApplicationStageSession $session, int $additional, string $field = 'application_ids'): void
     {
         if ($session->capacity === null) {
             return;
@@ -687,7 +689,9 @@ class ApplicationStageOperationsService
 
         if ($activeCount + $additional > $session->capacity) {
             throw ValidationException::withMessages([
-                'application_ids' => 'This session does not have enough remaining capacity.',
+                $field => $field === 'capacity'
+                    ? "Keep capacity at {$activeCount} or higher to accommodate the applicants already assigned."
+                    : 'This session does not have enough remaining capacity.',
             ]);
         }
     }

@@ -350,8 +350,8 @@ onBeforeUnmount(() => {
                         <input id="first-name" v-model="form.firstName" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass">
                     </div>
                     <div class="sm:mx-auto sm:w-[5.5rem]">
-                        <label :class="[labelClass, 'sm:text-center']" for="middle-initial">M.I.</label>
-                        <input id="middle-initial" :value="form.middleInitial" type="text" inputmode="text" maxlength="1" pattern="[A-Za-z]" required placeholder="M" :class="compactInputClass" @input="handleMiddleInitialInput">
+                        <label :class="[labelClass, 'sm:text-center']" for="middle-initial">M.I. <span class="text-xs font-normal text-slate-500">(optional)</span></label>
+                        <input id="middle-initial" :value="form.middleInitial" aria-label="Middle initial (optional)" type="text" inputmode="text" maxlength="1" pattern="[A-Za-z]" placeholder="M" :class="compactInputClass" @input="handleMiddleInitialInput">
                     </div>
                     <div>
                         <label :class="labelClass" for="last-name">Last name</label>

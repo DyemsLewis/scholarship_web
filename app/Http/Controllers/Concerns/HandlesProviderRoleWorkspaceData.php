@@ -1246,6 +1246,8 @@ trait HandlesProviderRoleWorkspaceData
                     'provider_contact_department' => $profile?->contact_department,
                     'provider_office_hours' => $profile?->office_hours,
                     'provider_address' => $profile?->provider_address,
+                    'provider_latitude' => $profile?->latitude,
+                    'provider_longitude' => $profile?->longitude,
                     'provider_service_area' => $profile?->service_area,
                     'legal_name' => $profile?->legal_name,
                     'registration_authority' => $profile?->registration_authority,
@@ -2028,6 +2030,8 @@ trait HandlesProviderRoleWorkspaceData
             'amount_label' => $payload['amount_label'] ?? null,
             'release_method_label' => $payload['release_method_label'] ?? 'Release arrangement',
             'location' => $release->location,
+            'latitude' => $release->latitude,
+            'longitude' => $release->longitude,
             'requires_original_verification' => $release->requires_original_verification,
             'counts' => [
                 'recipients' => (int) ($payload['recipient_count'] ?? 0),

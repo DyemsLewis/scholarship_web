@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import LocationMapLink from '../../../components/LocationMapLink.vue';
 import { labelFromKey } from '../../../support/display';
 
 const sessionId = window.location.pathname.match(/selection-activities\/(\d+)/)?.[1];
@@ -104,6 +105,7 @@ onMounted(loadSession);
                     </dl>
                     <div v-if="session.venue || session.location_address || session.instructions" class="px-6 py-4 text-sm text-slate-700">
                         <p v-if="session.venue || session.location_address"><strong class="text-slate-950">Location:</strong> {{ [session.venue, session.location_address].filter(Boolean).join(' · ') }}</p>
+                        <LocationMapLink :address="session.location_address || session.venue || ''" :latitude="session.latitude" :longitude="session.longitude" :title="session.title" />
                         <p v-if="session.instructions" class="mt-2"><strong class="text-slate-950">Instructions:</strong> {{ session.instructions }}</p>
                     </div>
                 </section>

@@ -5,6 +5,7 @@ import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
+import EligibilityReviewPanel from '../reviews/components/EligibilityReviewPanel.vue';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
 const returnTo = new URLSearchParams(window.location.search).get('return_to');
@@ -306,6 +307,10 @@ onMounted(loadApplication);
                         </div>
 
                         <form v-else class="px-7 py-7" @submit.prevent="askToRecordOutcome">
+                            <div v-if="['required_mismatch', 'preferred_difference', 'manual_review', 'provisional'].includes(application.dss_explanation?.comparison?.state)" class="mb-5 flex items-start justify-between gap-6 border-l-4 border-amber-400 bg-amber-50 px-4 py-3">
+                                <div><p class="text-sm font-bold text-amber-950">{{ application.dss_explanation.comparison.label }}</p><p class="mt-1 text-xs leading-5 text-amber-900">{{ application.dss_explanation.comparison.interpretation }}</p></div>
+                                <button type="button" class="shrink-0 border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="activeSection = 'summary'">Review comparison</button>
+                            </div>
                             <div :class="['grid gap-3', isWaitlisted ? 'grid-cols-2' : 'grid-cols-3']">
                                 <label v-if="!isWaitlisted" :class="['cursor-pointer border px-4 py-4', decisionForm.outcome === 'selected' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700', slotsFull ? 'cursor-not-allowed opacity-40' : '']"><input v-model="decisionForm.outcome" class="sr-only" type="radio" value="selected" :disabled="slotsFull"><span class="text-sm font-bold">Selected</span><span class="mt-1 block text-xs opacity-70">Offer the scholarship award.</span></label>
                                 <label v-if="!isWaitlisted" :class="['cursor-pointer border px-4 py-4', decisionForm.outcome === 'waitlisted' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700']"><input v-model="decisionForm.outcome" class="sr-only" type="radio" value="waitlisted"><span class="text-sm font-bold">Waitlisted</span><span class="mt-1 block text-xs opacity-70">Keep as an eligible alternate.</span></label>
@@ -324,13 +329,14 @@ onMounted(loadApplication);
                     <section v-else-if="activeSection === 'summary'" class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-start gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-check text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Verified review summary</h2><p class="mt-1 text-sm text-slate-500">Read-only results from the teams that completed earlier stages.</p></div></header>
                         <dl class="grid grid-cols-4 border-b border-slate-200 bg-slate-50">
-                            <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Eligibility</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ application.eligibility_score ?? 0 }}% match</dd></div>
+                            <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Eligibility comparison</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ application.dss_explanation?.comparison?.label || 'Comparison unavailable' }}</dd></div>
                             <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Evidence</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ acceptedDocuments }} of {{ requiredDocuments }} accepted</dd></div>
                             <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Profile</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ labelize(applicant.profile_verification_status) }}</dd></div>
                             <div class="px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Review score</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ rubric.total_score === null || rubric.total_score === undefined ? 'Not scored' : `${rubric.total_score}%` }}</dd></div>
                         </dl>
 
                         <div class="px-6 py-5">
+                            <EligibilityReviewPanel :breakdown="application.eligibility_breakdown ?? {}" :explanation="application.dss_explanation ?? {}" :score="application.dss_breakdown ?? {}" embedded compact class="mb-5 border-y border-slate-200" />
                             <h3 class="text-base font-bold text-slate-950">Completed selection path</h3>
                             <ol class="mt-4 divide-y divide-slate-200 border-y border-slate-200">
                                 <li v-for="step in workflow.steps" :key="step.key" class="grid grid-cols-[13rem_10rem_1fr_12rem] items-center gap-5 py-4"><p class="text-sm font-bold text-slate-900">{{ step.label }}</p><p class="text-xs font-bold uppercase tracking-wide text-slate-500">{{ labelize(step.status) }}</p><p class="truncate text-sm text-slate-600">{{ step.notes || step.description }}</p><p class="text-right text-xs font-semibold text-slate-500">{{ step.completed_at || step.started_at || 'Pending' }}</p></li>

@@ -501,6 +501,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'provider_type' => $providerProfile?->provider_type,
             'provider_website' => $providerProfile?->provider_website,
             'provider_address' => $providerProfile?->provider_address,
+            'provider_latitude' => $providerProfile?->latitude,
+            'provider_longitude' => $providerProfile?->longitude,
             'provider_description' => $providerProfile?->provider_description,
             'provider_mission' => $providerProfile?->mission,
             'provider_year_established' => $providerProfile?->year_established,

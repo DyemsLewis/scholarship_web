@@ -9,6 +9,7 @@ import RecipientAgreementPanel from '../components/RecipientAgreementPanel.vue';
 import ScholarshipBenefitsPanel from '../components/ScholarshipBenefitsPanel.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
+import { eligibilityCriterionPresentation, eligibilityOverview } from '../support/applicantEligibility';
 import { showPortalToast } from '../support/portalToast';
 import { progressStateLabel, selectionPlanFor } from '../support/selectionPlan';
 
@@ -114,9 +115,9 @@ const canApply = computed(() => profileReadiness.value.complete && profileReadin
 const profileApplicationMessage = computed(() => !profileReadiness.value.complete
     ? 'Complete your student profile before applying.'
     : 'Your applicant profile must be verified before you can apply. Review Supporting Evidence in your profile.');
-const selectedEligibilityBlockers = computed(() => selectedScholarship.value?.eligibility_match?.blocking_criteria ?? []);
 const selectedEligibilityConditions = computed(() => selectedScholarship.value?.eligibility_match?.condition_results ?? []);
 const selectedIsEligible = computed(() => selectedScholarship.value?.eligibility_match?.is_eligible !== false);
+const selectedEligibilityOverview = computed(() => eligibilityOverview(selectedScholarship.value?.eligibility_match));
 const selectedCanStartApplication = computed(() => {
     if (!selectedScholarship.value) {
         return false;
@@ -128,24 +129,7 @@ const selectedCanStartApplication = computed(() => {
 
     return canApply.value && selectedIsEligible.value && !selectedAlreadyApplied.value;
 });
-const selectedEligibilityMessage = computed(() => {
-    if (selectedIsEligible.value) {
-        return selectedScholarship.value?.eligibility_match?.difference_summary || '';
-    }
-
-    if (selectedScholarship.value?.eligibility_match?.difference_summary) {
-        return selectedScholarship.value.eligibility_match.difference_summary;
-    }
-
-    const labels = selectedEligibilityBlockers.value
-        .map((criterion) => criterion.label)
-        .filter(Boolean)
-        .slice(0, 3);
-
-    return labels.length
-        ? `Your profile does not meet: ${labels.join(', ')}.`
-        : 'Your profile does not meet this scholarship eligibility.';
-});
+const selectedEligibilityMessage = computed(() => selectedEligibilityOverview.value.description);
 const preparedDocumentsByName = computed(() => new Map(
     preparedDocuments.value.map((document) => [document.document_name, document]),
 ));
@@ -182,16 +166,20 @@ const selectedEligibilityCriteria = computed(() => {
         { key: 'location', label: 'Location coverage', value: scholarship.eligible_locations, icon: 'fa-solid fa-location-dot' },
         { key: 'income', label: 'Household income', value: scholarship.income_requirement, icon: 'fa-solid fa-wallet' },
         { key: 'academic', label: 'Academic requirement', value: academicRequirementLabel(scholarship), icon: 'fa-solid fa-chart-line', formatted: true },
+        { key: 'current_scholarship_support', label: 'Other scholarship support', value: checks.get('current_scholarship_support')?.requirement, icon: 'fa-solid fa-hand-holding-heart' },
+        { key: 'enrollment_status', label: 'Current enrollment', value: checks.get('enrollment_status')?.requirement, icon: 'fa-solid fa-user-graduate' },
     ];
 
-    return rules.map((rule) => {
+    return rules.filter((rule) => checks.has(rule.key)).map((rule) => {
         const check = checks.get(rule.key);
+        const presentation = eligibilityCriterionPresentation(check);
 
         return {
             ...rule,
             value: rule.formatted ? rule.value : eligibilityRuleLabel(rule.value, check),
-            status: check?.status ?? 'info',
-            statusLabel: eligibilityCriterionStatusLabel(check),
+            status: presentation.status,
+            statusLabel: presentation.label,
+            modeLabel: presentation.modeLabel,
             comparison: check?.comparison || check?.note || '',
         };
     });
@@ -673,29 +661,11 @@ function criteriaLabel(value) {
 }
 
 function eligibilityRuleLabel(value, criterion) {
-    if (criterion?.status === 'info') {
+    if (eligibilityCriterionPresentation(criterion).status === 'info') {
         return 'Open to all';
     }
 
     return criteriaLabel(value);
-}
-
-function eligibilityCriterionStatusLabel(criterion) {
-    if (criterion?.status === 'pass') {
-        return 'Matched';
-    }
-
-    if (criterion?.status === 'fail') {
-        return 'Not matched';
-    }
-
-    if (criterion?.status === 'missing') {
-        return 'Profile needed';
-    }
-
-    return criterion?.key === 'academic' && criterion?.requirement
-        ? 'Provider review'
-        : 'Open to all';
 }
 
 function eligibilityCriterionCardClass(status) {
@@ -703,6 +673,8 @@ function eligibilityCriterionCardClass(status) {
         pass: 'border-emerald-200 bg-emerald-50/50',
         fail: 'border-rose-300 bg-rose-50/60',
         missing: 'border-amber-300 bg-amber-50/60',
+        preferred: 'border-amber-300 bg-amber-50/60',
+        review: 'border-amber-300 bg-amber-50/60',
         info: 'border-sky-200 bg-sky-50/60',
     }[status] ?? 'border-slate-200 bg-white';
 }
@@ -712,6 +684,8 @@ function eligibilityCriterionIconClass(status) {
         pass: 'bg-emerald-100 text-emerald-700',
         fail: 'bg-rose-100 text-rose-700',
         missing: 'bg-amber-100 text-amber-800',
+        preferred: 'bg-amber-100 text-amber-800',
+        review: 'bg-amber-100 text-amber-800',
         info: 'bg-sky-100 text-sky-700',
     }[status] ?? 'bg-slate-100 text-slate-700';
 }
@@ -721,6 +695,8 @@ function eligibilityCriterionBadgeClass(status) {
         pass: 'bg-emerald-100 text-emerald-800',
         fail: 'bg-rose-100 text-rose-700',
         missing: 'bg-amber-100 text-amber-800',
+        preferred: 'bg-amber-100 text-amber-800',
+        review: 'bg-amber-100 text-amber-800',
         info: 'bg-sky-100 text-sky-800',
     }[status] ?? 'bg-slate-100 text-slate-600';
 }
@@ -885,13 +861,7 @@ async function loadApplications() {
                     errorMessage.value = profileApplicationMessage.value;
                     currentStep.value = 0;
                 } else if (requestedScholarship.eligibility_match?.is_eligible === false) {
-                    const labels = (requestedScholarship.eligibility_match.blocking_criteria ?? [])
-                        .map((criterion) => criterion.label)
-                        .filter(Boolean)
-                        .slice(0, 3);
-                    errorMessage.value = labels.length
-                        ? `Your profile does not meet: ${labels.join(', ')}.`
-                        : 'Your profile does not meet this scholarship eligibility.';
+                    errorMessage.value = selectedEligibilityMessage.value;
                     currentStep.value = 0;
                 }
             } else {
@@ -1171,7 +1141,7 @@ watch(selectedScholarship, (scholarship) => {
                                             </div>
                                         </div>
                                         <div class="relative flex w-full shrink-0 flex-row gap-2 sm:w-auto sm:items-center">
-                                            <span :class="['rounded-md px-3 py-2 text-center text-xs font-bold ring-1', selectedIsEligible ? 'bg-emerald-400/15 text-emerald-200 ring-emerald-300/25' : 'bg-rose-400/15 text-rose-200 ring-rose-300/25']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% profile match</span>
+                                            <span :class="['rounded-md px-3 py-2 text-center text-xs font-bold ring-1', selectedEligibilityOverview.state === 'ready' ? 'bg-emerald-400/15 text-emerald-200 ring-emerald-300/25' : (selectedIsEligible ? 'bg-amber-400/15 text-amber-200 ring-amber-300/25' : 'bg-rose-400/15 text-rose-200 ring-rose-300/25')]">{{ selectedEligibilityOverview.label }}</span>
                                             <a :href="`/dashboard/scholarships/${selectedScholarship.id}`" class="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-bold text-slate-900 transition hover:bg-amber-100 sm:flex-none">
                                                 More details
                                                 <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
@@ -1212,14 +1182,14 @@ watch(selectedScholarship, (scholarship) => {
                                 <section :class="['overflow-hidden rounded-lg border', selectedIsEligible ? 'border-slate-200 bg-white' : 'border-rose-200 bg-rose-50']">
                                     <header :class="['flex flex-col gap-4 border-b p-5 sm:flex-row sm:items-center sm:justify-between', selectedIsEligible ? 'border-slate-200 bg-slate-50' : 'border-white/80']">
                                         <div class="flex items-start gap-3">
-                                            <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md', selectedIsEligible ? 'bg-slate-950 text-amber-300' : 'bg-rose-600 text-white']"><i :class="selectedIsEligible ? 'fa-solid fa-check' : 'fa-solid fa-exclamation'" aria-hidden="true"></i></span>
+                                            <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md', selectedIsEligible ? 'bg-slate-950 text-amber-300' : 'bg-rose-600 text-white']"><i :class="selectedEligibilityOverview.state === 'ready' ? 'fa-solid fa-check' : 'fa-solid fa-circle-info'" aria-hidden="true"></i></span>
                                             <div>
                                                 <p :class="['text-xs font-bold uppercase tracking-[0.14em]', selectedIsEligible ? 'text-amber-700' : 'text-rose-700']">DSS profile comparison</p>
-                                                <h3 :class="['mt-1 text-xl font-bold', selectedIsEligible ? 'text-slate-950' : 'text-rose-950']">{{ selectedIsEligible ? 'Your profile matches the structured restrictions' : 'Some structured restrictions are different' }}</h3>
-                                                <p :class="['mt-1 text-sm leading-6', selectedIsEligible ? 'text-slate-600' : 'text-rose-800']">{{ selectedEligibilityMessage || selectedScholarship.eligibility || 'Your profile meets the published eligibility rules.' }}</p>
+                                                <h3 :class="['mt-1 text-xl font-bold', selectedIsEligible ? 'text-slate-950' : 'text-rose-950']">{{ selectedEligibilityOverview.title }}</h3>
+                                                <p :class="['mt-1 text-sm leading-6', selectedIsEligible ? 'text-slate-600' : 'text-rose-800']">{{ selectedEligibilityMessage }}</p>
                                             </div>
                                         </div>
-                                        <span :class="['w-fit shrink-0 rounded-md px-3 py-2 text-sm font-bold', selectedIsEligible ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-800']">{{ selectedScholarship.eligibility_match?.score ?? 0 }}% profile match</span>
+                                        <span :class="['w-fit shrink-0 rounded-md px-3 py-2 text-sm font-bold', selectedIsEligible ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-800']">{{ selectedEligibilityOverview.label }}</span>
                                     </header>
 
                                     <div class="border-b border-amber-200 bg-amber-50 p-4">
@@ -1228,16 +1198,16 @@ watch(selectedScholarship, (scholarship) => {
                                                 <i class="fa-solid fa-file-circle-check" aria-hidden="true"></i>
                                             </span>
                                             <div>
-                                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Provider-required eligibility</p>
+                                                <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Published conditions</p>
                                                 <p class="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-slate-900">{{ selectedScholarship.eligibility || 'No separate written conditions were provided.' }}</p>
-                                                <p class="mt-2 text-xs leading-5 text-amber-900">You must meet these written conditions too. The provider verifies them during pre-screening even when the DSS profile match is high.</p>
+                                                <p class="mt-2 text-xs leading-5 text-amber-900">Required rules must be met. Preferred rules do not block applying. The provider checks your evidence and any additional conditions during pre-screening.</p>
                                             </div>
                                         </div>
                                     </div>
 
                                     <div v-if="selectedEligibilityConditions.length" class="border-b border-slate-200 p-4">
                                         <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Required condition checks</p>
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Condition checks</p>
                                             <p class="mt-1 text-xs leading-5 text-slate-500">See which conditions are automatic and which the provider will review.</p>
                                         </div>
                                         <EligibilityConditionList class="mt-3" :conditions="selectedEligibilityConditions" />
@@ -1245,8 +1215,8 @@ watch(selectedScholarship, (scholarship) => {
 
                                     <div class="flex flex-col gap-3 px-4 pt-4 sm:flex-row sm:items-end sm:justify-between">
                                         <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Structured matching restrictions</p>
-                                            <p class="mt-1 text-xs text-slate-500">A summary of the rules and their current status.</p>
+                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Eligibility rules</p>
+                                            <p class="mt-1 text-xs text-slate-500">The result of each rule matters, not a match percentage. Applying does not guarantee selection.</p>
                                         </div>
                                         <a :href="selectedEligibilityUrl" class="inline-flex w-fit shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-950 hover:text-slate-950">
                                             View full eligibility
@@ -1264,8 +1234,8 @@ watch(selectedScholarship, (scholarship) => {
                                         >
                                             <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', eligibilityCriterionIconClass(criterion.status)]"><i :class="criterion.icon" aria-hidden="true"></i></span>
                                             <div class="flex min-w-0 flex-1 flex-col self-stretch">
-                                                <dt class="text-[11px] font-semibold text-slate-500">{{ criterion.label }}</dt>
-                                                <dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ criterion.value }}</dd>
+                                                <dt class="text-[11px] font-semibold text-slate-500">{{ criterion.label }}<span v-if="criterion.modeLabel" class="mt-1 block text-[10px] font-bold uppercase tracking-wide">{{ criterion.modeLabel }}</span></dt>
+                                                <dd class="mt-1 flex-1 text-sm font-bold leading-5 text-slate-900">{{ criterion.value }}</dd>
                                                 <span :class="['mt-3 inline-flex w-fit rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', eligibilityCriterionBadgeClass(criterion.status)]">{{ criterion.statusLabel }}</span>
                                             </div>
                                         </div>
@@ -1415,7 +1385,7 @@ watch(selectedScholarship, (scholarship) => {
                                             </div>
                                             <div class="flex items-start gap-3 p-4">
                                                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
-                                                <div><p class="text-xs font-semibold text-slate-500">Eligibility check</p><p class="mt-1 font-bold text-slate-950">Structured profile restrictions matched</p><p class="mt-1 text-xs text-slate-500">Provider-required eligibility will still be verified · {{ selectedScholarship.eligibility_match?.score ?? 0 }}% profile match</p></div>
+                                                <div><p class="text-xs font-semibold text-slate-500">Eligibility check</p><p class="mt-1 font-bold text-slate-950">{{ selectedEligibilityOverview.title }}</p><p class="mt-1 text-xs leading-5 text-slate-500">{{ selectedEligibilityMessage }} The provider still reviews your evidence and conditions.</p></div>
                                             </div>
                                             <div class="flex items-start gap-3 p-4">
                                                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-100 text-emerald-700"><i class="fa-solid fa-check" aria-hidden="true"></i></span>

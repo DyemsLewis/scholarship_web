@@ -17,6 +17,8 @@ class RecipientBenefitRelease extends Model
         'amount',
         'release_method',
         'location',
+        'latitude',
+        'longitude',
         'instructions',
         'requires_original_verification',
         'status',
@@ -26,6 +28,8 @@ class RecipientBenefitRelease extends Model
     protected function casts(): array
     {
         return [
+            'latitude' => 'decimal:7',
+            'longitude' => 'decimal:7',
             'release_at' => 'datetime',
             'amount' => 'decimal:2',
             'requires_original_verification' => 'boolean',

@@ -14,6 +14,67 @@ class ProviderContactDetailsTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_office_pin_can_be_saved_reloaded_and_cleared_when_the_address_changes(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $payload = [
+            'provider_contact_email' => 'office@example.test',
+            'provider_contact_number' => '09171234567',
+            'provider_address' => 'Antipolo City, Rizal',
+            'provider_service_area' => 'Rizal',
+            'provider_latitude' => 14.5861,
+            'provider_longitude' => 121.1756,
+        ];
+
+        $this->actingAs($provider)->patchJson('/provider/workspaces/organization-profile/contact', $payload)
+            ->assertOk()->assertJsonPath('profile.provider_latitude', '14.5861000');
+        $this->getJson('/provider/workspaces/organization-profile/data')->assertOk()
+            ->assertJsonPath('profile.values.provider_longitude', '121.1756000');
+
+        unset($payload['provider_latitude'], $payload['provider_longitude']);
+        $this->patchJson('/provider/workspaces/organization-profile/contact', $payload)->assertOk();
+        $this->assertSame('14.5861000', $provider->providerProfile->fresh()->latitude);
+
+        $payload['provider_address'] = 'Quezon City, Metro Manila';
+        $this->patchJson('/provider/workspaces/organization-profile/contact', $payload)->assertOk();
+        $this->assertNull($provider->providerProfile->fresh()->latitude);
+        $this->assertNull($provider->providerProfile->fresh()->longitude);
+
+        $this->patchJson('/provider/workspaces/organization-profile/contact', [...$payload, 'provider_latitude' => 14])
+            ->assertUnprocessable()->assertJsonValidationErrors('provider_longitude');
+        $this->patchJson('/provider/workspaces/organization-profile/contact', [...$payload, 'provider_latitude' => 91, 'provider_longitude' => 121])
+            ->assertUnprocessable()->assertJsonValidationErrors('provider_latitude');
+    }
+
+    public function test_formal_application_pin_is_saved_without_replacing_the_program_pin(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $response = $this->actingAs($provider)->postJson('/provider/scholarships', [
+            'title' => 'Distinct locations draft',
+            'status' => 'draft',
+            'latitude' => 14.5,
+            'longitude' => 121.1,
+            'handoff_mode' => 'onsite',
+            'handoff_location_address' => 'Antipolo City, Rizal',
+            'handoff_latitude' => 14.5861,
+            'handoff_longitude' => 121.1756,
+        ])->assertCreated()->assertJsonPath('scholarship.handoff_latitude', '14.5861000')
+            ->assertJsonPath('scholarship.latitude', '14.5000000');
+        $program = Scholarship::findOrFail($response->json('scholarship.id'));
+        $this->assertStringContainsString('mlat=14.5861000', $program->handoffMapUrl());
+
+        $this->putJson("/provider/scholarships/{$program->id}", ['title' => $program->title, 'status' => 'draft'])
+            ->assertOk()->assertJsonPath('scholarship.handoff_latitude', '14.5861000');
+        $this->putJson("/provider/scholarships/{$program->id}", [
+            'title' => $program->title, 'status' => 'draft', 'handoff_location_address' => 'Pasig City',
+        ])->assertOk()->assertJsonPath('scholarship.handoff_latitude', null);
+
+        $this->putJson("/provider/scholarships/{$program->id}", [
+            'title' => $program->title, 'status' => 'draft', 'handoff_mode' => 'online',
+            'handoff_latitude' => 14.5, 'handoff_longitude' => 121.1,
+        ])->assertOk()->assertJsonPath('scholarship.handoff_latitude', null);
+    }
+
     public function test_provider_and_representative_details_can_be_updated_independently(): void
     {
         $provider = User::factory()->create([

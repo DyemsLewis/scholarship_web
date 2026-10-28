@@ -38,6 +38,7 @@ use App\Services\RecipientMonitoringCaseService;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
+use App\Support\EligibilityRulePolicy;
 use App\Support\ApplicantStageActivityPayload;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\PreScreeningHandoffRecord;
@@ -1010,7 +1011,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'message' => $message,
-            'user' => $user->fresh(['studentProfile'])->publicPayload(),
+            ...$this->applicantProfileStatePayload($user),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
             'prepared_document' => $preparedDocument ? $this->studentDocumentPayload($preparedDocument) : null,
             'prepared_documents_count' => $user->studentDocuments()->count(),
@@ -1045,7 +1046,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'message' => $result['message'],
-            'user' => $request->user()->fresh(['studentProfile'])->publicPayload(),
+            ...$this->applicantProfileStatePayload($request->user()),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($request->user()),
             'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
         ]);
@@ -1145,7 +1146,7 @@ class ApplicantDashboardController extends Controller
                 'achievement_evidence' => 'Achievement evidence removed.',
                 default => 'Older proof file removed. Your academic verification was not changed.',
             },
-            'user' => $user->fresh(['studentProfile'])->publicPayload(),
+            ...$this->applicantProfileStatePayload($user),
             'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
             'prepared_documents_count' => $user->studentDocuments()->count(),
             'academic_ocr' => $this->academicRecordOcrService->publicConfiguration(),
@@ -1263,7 +1264,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'message' => 'Applicant photo updated.',
-            'user' => $this->userPayload($request),
+            ...$this->applicantProfileStatePayload($user),
         ]);
     }
 
@@ -1314,7 +1315,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'message' => 'Applicant photo removed.',
-            'user' => $this->userPayload($request),
+            ...$this->applicantProfileStatePayload($user),
         ]);
     }
 
@@ -3241,6 +3242,8 @@ class ApplicantDashboardController extends Controller
             'service_area' => $profile?->service_area,
             'website' => $profile?->provider_website,
             'address' => $profile?->provider_address,
+            'latitude' => $profile?->latitude,
+            'longitude' => $profile?->longitude,
             'contact_email' => $profile?->provider_contact_email,
             'contact_number' => $profile?->provider_contact_number,
             'contact_department' => $profile?->contact_department,
@@ -3266,6 +3269,16 @@ class ApplicantDashboardController extends Controller
     private function userPayload(Request $request): array
     {
         return $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload();
+    }
+
+    private function applicantProfileStatePayload(User $user): array
+    {
+        $user = $user->fresh(['studentProfile']);
+
+        return [
+            'user' => $user->publicPayload(),
+            'profile_readiness' => $user->applicantProfileReadiness(),
+        ];
     }
 
     private function statsPayload(Request $request): array
@@ -3317,6 +3330,7 @@ class ApplicantDashboardController extends Controller
             'provider_objective_notes' => $scholarship->provider_objective_notes,
             'eligibility' => $scholarship->eligibility,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
+            'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
             'eligible_courses' => $scholarship->eligible_courses,
             'eligible_school_types' => $scholarship->eligible_school_types,
             'eligible_year_levels' => $scholarship->eligible_year_levels,
@@ -3644,7 +3658,6 @@ class ApplicantDashboardController extends Controller
             return null;
         }
 
-        $mapQuery = $scholarship->handoff_location_address ?: $scholarship->handoff_location_name;
 
         return [
             'requirements' => $this->splitDocumentRequirements($scholarship->post_qualification_requirements),
@@ -3653,9 +3666,9 @@ class ApplicantDashboardController extends Controller
             'deadline' => $scholarship->handoff_deadline?->format('M d, Y'),
             'location_name' => $scholarship->handoff_location_name,
             'location_address' => $scholarship->handoff_location_address,
-            'map_url' => filled($mapQuery)
-                ? 'https://www.openstreetmap.org/search?query='.rawurlencode($mapQuery)
-                : null,
+            'latitude' => $scholarship->handoff_latitude,
+            'longitude' => $scholarship->handoff_longitude,
+            'map_url' => $scholarship->handoffMapUrl(),
             'url' => $scholarship->handoff_url,
             'contact_person' => $scholarship->contact_person,
             'contact_department' => $scholarship->contact_department,
@@ -4381,6 +4394,8 @@ class ApplicantDashboardController extends Controller
                 default => 'In person',
             },
             'location' => $release?->location,
+            'latitude' => $release?->latitude,
+            'longitude' => $release?->longitude,
             'instructions' => $release?->instructions,
             'requires_original_verification' => (bool) $release?->requires_original_verification,
             'status' => $record->status,
@@ -4762,7 +4777,7 @@ class ApplicantDashboardController extends Controller
                 $score = $profileCriteria->isEmpty()
                     ? 100
                     : (int) round(($passed / $profileCriteria->count()) * 100);
-                $eligible = ! $profileCriteria->contains(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'fail');
+                $eligible = $this->applicationEligibilityBlockers($match) === [];
 
                 return [
                     'eligible' => $eligible,
@@ -4779,7 +4794,7 @@ class ApplicantDashboardController extends Controller
                 'key' => $criteria->first()['key'] ?? null,
                 'label' => $criteria->first()['label'] ?? 'Profile detail',
                 'count' => $criteria->count(),
-                'has_blocker' => $criteria->contains(fn (array $criterion): bool => ($criterion['status'] ?? null) === 'fail'),
+                'has_blocker' => $criteria->contains(fn (array $criterion): bool => EligibilityRulePolicy::isBlocking($criterion)),
             ])
             ->sortByDesc(fn (array $gap): int => ($gap['has_blocker'] ? 1000 : 0) + $gap['count'])
             ->take(4)

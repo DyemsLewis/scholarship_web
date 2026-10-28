@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import LocationMapLink from '../../../components/LocationMapLink.vue';
 
 const appElement = document.getElementById('app');
 const sessionId = appElement?.dataset.sessionId;
@@ -260,7 +261,7 @@ onMounted(loadSession);
                         <dl class="grid grid-cols-4 border-b border-slate-200">
                             <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-500">Date and time</dt><dd class="mt-2 text-sm font-bold text-slate-950">{{ formatDate(session.starts_at) }}</dd></div>
                             <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-500">Method</dt><dd class="mt-2 text-sm font-bold text-slate-950">{{ labelize(session.mode) }}</dd></div>
-                            <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-500">Place or link</dt><dd class="mt-2 truncate text-sm font-bold text-slate-950">{{ session.venue || session.meeting_url || 'Provider managed' }}</dd></div>
+                            <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-500">Place or link</dt><dd class="mt-2 truncate text-sm font-bold text-slate-950">{{ session.venue || session.meeting_url || 'Provider managed' }}</dd><LocationMapLink v-if="['onsite', 'hybrid'].includes(session.mode)" :address="session.location_address || session.venue || ''" :latitude="session.latitude" :longitude="session.longitude" :title="session.title" /></div>
                             <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.13em] text-slate-500">Capacity</dt><dd class="mt-2 text-sm font-bold text-slate-950">{{ session.capacity.assigned }}{{ session.capacity.limit ? ` of ${session.capacity.limit}` : '' }} assigned</dd></div>
                         </dl>
                         <div class="px-6 py-5"><p class="text-xs font-bold uppercase tracking-[0.13em] text-slate-500">Applicant instructions</p><p class="mt-2 max-w-5xl whitespace-pre-line text-sm leading-6 text-slate-700">{{ session.instructions || 'No additional instructions.' }}</p></div>

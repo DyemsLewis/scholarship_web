@@ -39,7 +39,10 @@ class ApplicantProfilePhotoTest extends TestCase
                 'profile_photo' => UploadedFile::fake()->image('applicant-photo.jpg', 600, 600),
             ])
             ->assertOk()
-            ->assertJsonPath('user.has_profile_photo', true);
+            ->assertJsonPath('user.has_profile_photo', true)
+            ->assertJsonStructure(['profile_readiness' => ['complete', 'verified', 'percent', 'missing']]);
+
+        $this->assertSame($applicant->fresh()->applicantProfileReadiness(), $response->json('profile_readiness'));
 
         $profile = $applicant->fresh()->studentProfile;
         Storage::disk('local')->assertExists($profile->profile_photo_path);
@@ -64,10 +67,12 @@ class ApplicantProfilePhotoTest extends TestCase
         $replacementPath = $applicant->fresh()->studentProfile->profile_photo_path;
         Storage::disk('local')->assertExists($replacementPath);
 
-        $this->actingAs($applicant)
+        $removed = $this->actingAs($applicant)
             ->deleteJson('/dashboard/profile/photo')
             ->assertOk()
-            ->assertJsonPath('user.has_profile_photo', false);
+            ->assertJsonPath('user.has_profile_photo', false)
+            ->assertJsonPath('profile_readiness.complete', false);
+        $this->assertContains('has_profile_photo', collect($removed->json('profile_readiness.missing'))->pluck('key'));
 
         Storage::disk('local')->assertMissing($replacementPath);
         $this->actingAs($applicant)->get('/dashboard/profile/photo')->assertNotFound();

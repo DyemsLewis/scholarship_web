@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import LocationMapLink from '../../../components/LocationMapLink.vue';
 
 const releaseId = document.getElementById('app')?.dataset.releaseId;
 const returnTo = new URLSearchParams(window.location.search).get('return_to');
@@ -200,7 +201,17 @@ onMounted(loadRecord);
                         </template>
                     </section>
 
-                    <section class="mt-4 border border-slate-200 bg-white shadow-sm"><details><summary class="flex cursor-pointer list-none items-center justify-between px-6 py-5"><span class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></span><span><span class="block text-base font-bold text-slate-950">Distribution details</span><span class="mt-1 block text-sm text-slate-500">Saved benefit, method, location, and recipient instructions.</span></span></span><i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i></summary><dl class="grid grid-cols-4 border-t border-slate-200 bg-slate-50"><div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Benefit value</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ release.amount_label || 'Not specified' }}</dd></div><div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Method</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ release.release_method_label }}</dd></div><div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Location</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ release.location || 'Not applicable' }}</dd></div><div class="px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Instructions</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ release.instructions || 'No additional instructions' }}</dd></div></dl></details></section>
+                    <section class="mt-4 border border-slate-200 bg-white shadow-sm">
+                        <details>
+                            <summary class="flex cursor-pointer list-none items-center justify-between px-6 py-5"><span class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-circle-info" aria-hidden="true"></i></span><span><span class="block text-base font-bold text-slate-950">Distribution details</span><span class="mt-1 block text-sm text-slate-500">Saved benefit, method, location, and recipient instructions.</span></span></span><i class="fa-solid fa-chevron-down text-xs text-slate-400" aria-hidden="true"></i></summary>
+                            <dl class="grid grid-cols-4 border-t border-slate-200 bg-slate-50">
+                                <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Benefit value</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ release.amount_label || 'Not specified' }}</dd></div>
+                                <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Method</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ release.release_method_label }}</dd></div>
+                                <div class="border-r border-slate-200 px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Location</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ release.location || 'Not applicable' }}</dd><LocationMapLink v-if="release.release_method === 'in_person'" :address="release.location || ''" :latitude="release.latitude" :longitude="release.longitude" :title="release.title" /></div>
+                                <div class="px-5 py-4"><dt class="text-[9px] font-bold uppercase tracking-wide text-slate-400">Instructions</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ release.instructions || 'No additional instructions' }}</dd></div>
+                            </dl>
+                        </details>
+                    </section>
                 </template>
             </div>
         </section>

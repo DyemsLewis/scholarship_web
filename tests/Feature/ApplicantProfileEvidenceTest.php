@@ -57,6 +57,8 @@ class ApplicantProfileEvidenceTest extends TestCase
             ->assertOk()
             ->assertJsonPath('user.applicant_verification_status', 'pending')
             ->assertJsonPath('user.is_profile_verified', false)
+            ->assertJsonPath('profile_readiness.verified', false)
+            ->assertJsonPath('profile_readiness.verification_status', 'pending')
             ->assertJsonFragment([
                 'document_type' => $type,
                 'supports' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$type]['supports'],

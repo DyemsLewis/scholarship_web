@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import LocationPinField from '../../../components/LocationPinField.vue';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -12,6 +13,8 @@ const form = reactive({
     provider_contact_department: '',
     provider_office_hours: '',
     provider_address: '',
+    provider_latitude: null,
+    provider_longitude: null,
     provider_service_area: '',
 });
 const fieldClass = 'mt-2 h-11 w-full border border-slate-300 bg-white px-3.5 text-sm text-slate-900 outline-none focus:border-slate-950';
@@ -86,6 +89,7 @@ onMounted(loadProfile);
                     <section class="px-6 py-6" aria-labelledby="organization-location-title">
                         <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span><div><h2 id="organization-location-title" class="text-lg font-bold text-slate-950">Location and reach</h2><p class="mt-1 text-sm text-slate-500">Use an office address and a simple description of the communities served.</p></div></div>
                         <label class="mt-6 block"><span :class="labelClass">Office address</span><textarea v-model="form.provider_address" rows="3" class="mt-2 w-full border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-950" placeholder="Building, street, city or municipality, province"></textarea><span v-if="firstError('provider_address')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('provider_address') }}</span></label>
+                        <LocationPinField v-model:latitude="form.provider_latitude" v-model:longitude="form.provider_longitude" :address="form.provider_address" title="Organization office" />
                         <label class="mt-5 block"><span :class="labelClass">Service area</span><textarea v-model="form.provider_service_area" rows="3" class="mt-2 w-full border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-950" placeholder="Example: Students residing in Rizal Province"></textarea><span v-if="firstError('provider_service_area')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('provider_service_area') }}</span></label>
                     </section>
 
