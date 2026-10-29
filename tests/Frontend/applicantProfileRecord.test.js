@@ -52,15 +52,19 @@ test('the applicant profile has one record and an accessible section editor', ()
     assert.match(modalSource, /aria-describedby="profile-editor-description"/);
     assert.match(modalSource, /event\.key === 'Escape'/);
     assert.match(modalSource, /event\.key !== 'Tab'/);
-    assert.match(modalSource, /document\.body\.style\.overflow = 'hidden'/);
-    assert.match(modalSource, /previouslyFocused\?\.focus\?\.\(\)/);
+    assert.match(modalSource, /releaseScrollLock \?\?= lockPageScroll\(\)/);
+    assert.doesNotMatch(modalSource, /document\.body\.style\.overflow\s*=/);
+    assert.match(modalSource, /previouslyFocused\?\.focus\?\.\(\{ preventScroll: true \}\)/);
     assert.doesNotMatch(
         source,
         /watch\(showProfileEditorModal,[\s\S]*?document\.body\.style\.overflow/,
         'The modal component must be the only owner of the page scroll lock.',
     );
-    assert.match(source, /const sectionCardClass = 'w-full'/);
-    assert.match(source, /const formPanelClass = 'border-b border-slate-200/);
+    assert.match(source, /<ApplicantPersonalEditor/);
+    assert.match(source, /<ApplicantLearningEditor/);
+    assert.match(source, /<ApplicantHouseholdEditor/);
+    assert.match(source, /<ApplicantAddressEditor/);
+    assert.match(source, /<ApplicantEvidenceEditor/);
     assert.doesNotMatch(source, /sectionHeaderClass/);
     assert.equal(
         (source.match(/@save="finishProfileEditor"/g) ?? []).length,
@@ -87,11 +91,10 @@ test('the applicant profile has one record and an accessible section editor', ()
 });
 
 test('the personal profile editor presents the applicant information in review order', () => {
-    const source = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
-    const modal = source.slice(source.indexOf('<ApplicantProfileEditModal'), source.indexOf('</ApplicantProfileEditModal>'));
+    const modal = readFileSync(new URL('../../resources/js/components/profile/ApplicantPersonalEditor.vue', import.meta.url), 'utf8');
     const photo = modal.indexOf('>Applicant photo<');
     const officialName = modal.indexOf('>Official name<');
-    const identity = modal.indexOf('>Identity details<');
+    const identity = modal.indexOf('>Personal details<');
     const contact = modal.indexOf('>Contact and account<');
 
     assert.ok(photo > -1, 'The personal editor should include the required applicant photo.');
@@ -104,8 +107,9 @@ test('the personal profile editor presents the applicant information in review o
 });
 
 test('learning and household editors use a focused review hierarchy', () => {
-    const source = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
-    const modal = source.slice(source.indexOf('<ApplicantProfileEditModal'), source.indexOf('</ApplicantProfileEditModal>'));
+    const learning = readFileSync(new URL('../../resources/js/components/profile/ApplicantLearningEditor.vue', import.meta.url), 'utf8');
+    const household = readFileSync(new URL('../../resources/js/components/profile/ApplicantHouseholdEditor.vue', import.meta.url), 'utf8');
+    const modal = learning + household;
     const currentStudies = modal.indexOf('>Current studies<');
     const recordResult = modal.indexOf('>Record period and result<');
     const schoolIdentifiers = modal.indexOf('>School identifiers ');
@@ -116,15 +120,13 @@ test('learning and household editors use a focused review hierarchy', () => {
     assert.doesNotMatch(modal, />Current learning stage<|>Academic record period<|>Program and grades<|>Additional school details/);
     assert.match(modal, />Household eligibility</);
     assert.match(modal, />Other scholarship support</);
-    assert.match(modal, /activeSection === 'household' && \(needsGuardianContext \|\| hasGuardianDetails\)/);
+    assert.match(household, /guardianRequired \? 'section' : 'details'/);
+    assert.match(household, /!guardianRequired && hasGuardianDetails/);
     assert.doesNotMatch(modal, />Household context<|>Other scholarship status</);
 });
 
 test('the location editor separates required residence from optional address precision', () => {
-    const source = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
-    const locationStart = source.indexOf(`<section v-if="activeSection === 'location'"`);
-    const locationEnd = source.indexOf(`<section v-if="activeSection === 'verification'"`, locationStart);
-    const locationEditor = source.slice(locationStart, locationEnd);
+    const locationEditor = readFileSync(new URL('../../resources/js/components/profile/ApplicantAddressEditor.vue', import.meta.url), 'utf8');
     const generalLocation = locationEditor.indexOf('>General location<');
     const addressDetails = locationEditor.indexOf('>Address details ');
     const mapPin = locationEditor.indexOf('>Approximate map pin ');
@@ -142,9 +144,7 @@ test('the location editor separates required residence from optional address pre
 
 test('supporting evidence distinguishes required completion from optional records', () => {
     const source = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
-    const evidenceStart = source.indexOf(`<section v-if="activeSection === 'verification'"`);
-    const evidenceEnd = source.indexOf('</ApplicantProfileEditModal>', evidenceStart);
-    const evidenceEditor = source.slice(evidenceStart, evidenceEnd);
+    const evidenceEditor = readFileSync(new URL('../../resources/js/components/profile/ApplicantEvidenceEditor.vue', import.meta.url), 'utf8');
 
     assert.match(source, /const requiredVerificationDocumentRows = computed/);
     assert.match(source, /const optionalVerificationDocumentRows = computed/);
@@ -152,7 +152,7 @@ test('supporting evidence distinguishes required completion from optional record
     assert.match(source, /label: 'Required files'/);
     assert.match(source, /label: 'Optional records'/);
     assert.match(evidenceEditor, /<ApplicantProfileEvidenceList/);
-    assert.match(evidenceEditor, /:groups="verificationDocumentGroups"/);
+    assert.match(source, /:groups="verificationDocumentGroups"/);
     const list = readFileSync(new URL('../../resources/js/components/profile/ApplicantProfileEvidenceList.vue', import.meta.url), 'utf8');
     assert.match(list, /v-for="group in groups"/);
     assert.match(list, /progress\.saved.*progress\.total/);
@@ -171,7 +171,9 @@ test('profile save errors are announced and move focus to the affected field', (
     assert.match(source, /ref="profileValidationAlert"/);
     assert.match(source, /aria-live="assertive"/);
     assert.match(source, /@click="focusProfileField\(error\.key\)"/);
-    assert.match(source, /id="profile-guardian-account-owner"/);
+    const household = readFileSync(new URL('../../resources/js/components/profile/ApplicantHouseholdEditor.vue', import.meta.url), 'utf8');
+    assert.match(household, /id="profile-guardian-account-owner"/);
+    assert.match(source, /ancestor.tagName === 'DETAILS'[^]*?ancestor.open = true/);
 });
 
 test('staff review surfaces reuse the same applicant record without duplicate profile panels', () => {

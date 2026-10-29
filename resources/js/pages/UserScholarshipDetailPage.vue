@@ -3,7 +3,11 @@ import { computed, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPreviewToolbar.vue';
-import { eligibilityCriterionPresentation, eligibilityOverview } from '../support/applicantEligibility';
+import ScholarshipEligibilityPanel from '../components/ScholarshipEligibilityPanel.vue';
+import ScholarshipApplicationGuide from '../components/ScholarshipApplicationGuide.vue';
+import ScholarshipApplicationRequirements from '../components/ScholarshipApplicationRequirements.vue';
+import { eligibilityOverview } from '../support/applicantEligibility';
+import { withPreparationContext } from '../support/scholarshipPreparationContext';
 
 const props = defineProps({
     embedded: { type: Boolean, default: false },
@@ -42,7 +46,6 @@ const snapshot = computed(() => detail.value?.snapshot ?? []);
 const navigation = computed(() => detail.value?.navigation ?? []);
 const activeView = computed(() => detail.value?.view ?? currentView.value);
 const requirements = computed(() => content.value?.requirements ?? {});
-const requirementReadiness = computed(() => requirements.value?.readiness ?? {});
 const process = computed(() => content.value?.process ?? {});
 const provider = computed(() => activeView.value === 'provider' ? content.value : {});
 const providerLocation = computed(() => provider.value?.location ?? {});
@@ -83,8 +86,8 @@ const sectionVisual = computed(() => ({
         caption: 'Support built around a learner\'s education.',
     },
     eligibility: {
-        image: '/images/filipino-senior-high.jpg',
-        alt: 'Senior high school students in the Philippines',
+        image: '/images/filipino-students-group-study.jpg',
+        alt: 'Filipino learners reviewing their schoolwork together in a classroom',
         caption: 'Compare only the requirements that matter.',
     },
     award: {
@@ -118,11 +121,12 @@ const eligibilityVerdict = computed(() => {
     }
 
     if (!profile.verified) {
+        const profileStep = detail.value?.preparation?.steps?.find((step) => step.key === 'profile');
         return {
             state: 'attention',
             eyebrow: 'Profile verification required',
             title: 'Verify your profile before applying',
-            description: 'You can review the criteria below while an authorized reviewer checks your supporting evidence.',
+            description: profileStep?.description || 'Upload the required supporting evidence and wait for profile verification before applying.',
             icon: 'fa-solid fa-user-check',
         };
     }
@@ -153,6 +157,7 @@ const userLocationLabel = computed(() => {
 });
 
 const hasUserMapLocation = computed(() => hasCoordinates(user.value?.latitude, user.value?.longitude));
+const contextualHref = (href) => isPreview ? href : withPreparationContext(href, scholarshipId, activeView.value);
 
 function stateStyle(state) {
     return {
@@ -213,10 +218,6 @@ function benefitDetails(benefit) {
     return [amount || benefit.coverage_label, benefit.frequency_label, benefit.duration]
         .filter(Boolean)
         .join(' | ');
-}
-
-function criterionStatus(criterion) {
-    return eligibilityCriterionPresentation(criterion);
 }
 
 function displayValue(value, fallback = 'Not specified') {
@@ -287,6 +288,7 @@ async function toggleSave() {
             detail.value.decision.action = isSaved
                 ? { kind: 'link', label: 'View saved scholarships', href: '/dashboard/scholarships?view=saved' }
                 : { kind: 'save', label: 'Save scholarship' };
+            if (detail.value.preparation) detail.value.preparation.next_action = { ...detail.value.decision.action };
         }
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to update your saved scholarships.';
@@ -321,12 +323,6 @@ function openPreviewSection(event, section) {
 
     currentView.value = section;
     loadScholarship();
-}
-
-function readinessSection(item) {
-    if (item?.key === 'eligibility') return 'eligibility';
-    if (item?.key === 'files') return 'application';
-    return 'award';
 }
 
 function blockPreviewAction(event) {
@@ -412,7 +408,7 @@ onMounted(loadScholarship);
                                     </button>
                                     <a
                                         v-if="!isPreview && decision.action?.kind === 'link'"
-                                        :href="decision.action.href"
+                                        :href="contextualHref(decision.action.href)"
                                         class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800"
                                     >
                                         {{ decision.action.label }}
@@ -477,6 +473,15 @@ onMounted(loadScholarship);
                     </p>
 
                     <template v-if="activeView === 'summary'">
+                        <ScholarshipApplicationGuide
+                            :preparation="detail.preparation"
+                            :preview="isPreview"
+                            :saving="isSaving"
+                            :scholarship-id="scholarshipId"
+                            @navigate="openPreviewSection"
+                            @save="toggleSave"
+                        />
+
                         <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-overview>
                             <div class="grid lg:grid-cols-[minmax(0,1fr)_24rem]">
                                 <div class="flex flex-col px-5 py-6 sm:px-7 sm:py-7">
@@ -507,89 +512,19 @@ onMounted(loadScholarship);
                             </div>
                         </section>
 
-                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-readiness>
-                            <header class="border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:px-5">
-                                <p class="student-kicker">Before you apply</p>
-                                <h3 class="mt-1 text-lg font-bold text-slate-950">Your readiness</h3>
-                            </header>
-                            <div class="divide-y divide-slate-200">
-                                <a v-for="item in content.readiness" :key="item.key" :href="item.href" class="group flex items-start gap-3 px-4 py-3.5 transition hover:bg-slate-50 sm:px-5" @click="openPreviewSection($event, readinessSection(item))">
-                                    <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-md', stateStyle(item.state).icon]">
-                                        <i :class="item.icon" aria-hidden="true"></i>
-                                    </span>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center justify-between gap-2">
-                                            <p class="text-sm font-bold text-slate-950">{{ item.title }}</p>
-                                            <span :class="['px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(item.state).badge]">{{ item.status }}</span>
-                                        </div>
-                                        <p class="mt-1 text-sm leading-5 text-slate-600">{{ item.description }}</p>
-                                    </div>
-                                    <i class="fa-solid fa-chevron-right mt-2.5 shrink-0 text-xs text-slate-300 transition group-hover:text-slate-700" aria-hidden="true"></i>
-                                </a>
-                            </div>
-                        </section>
                     </template>
 
-                    <template v-else-if="activeView === 'eligibility'">
-                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-eligibility>
-                            <header class="grid border-b border-slate-200 bg-slate-50/70 lg:grid-cols-[minmax(0,1fr)_22rem]">
-                                <div class="px-5 py-6 sm:px-7 sm:py-7">
-                                    <p class="student-kicker">{{ eligibilityVerdict.eyebrow }}</p>
-                                    <h3 class="mt-1 text-2xl font-bold text-slate-950">{{ eligibilityVerdict.title }}</h3>
-                                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ eligibilityVerdict.description }}</p>
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">Required mismatches prevent applying. Preferred differences do not. A check needing review is not a confirmed match; profile verification is still required.</p>
-                                </div>
-                                <figure class="relative h-44 overflow-hidden bg-slate-900 lg:h-auto">
-                                    <img :src="sectionVisual.image" :alt="sectionVisual.alt" class="absolute inset-0 h-full w-full object-cover">
-                                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent"></div>
-                                    <figcaption class="absolute inset-x-0 bottom-0 p-4 text-sm font-bold text-white">{{ sectionVisual.caption }}</figcaption>
-                                </figure>
-                            </header>
-
-                            <div v-if="content.criteria?.length" class="divide-y divide-slate-200">
-                                <article v-for="criterion in content.criteria" :key="criterion.key" class="px-4 py-3.5 sm:px-5">
-                                    <div class="grid gap-3 lg:grid-cols-[minmax(13rem,1.2fr)_minmax(12rem,1fr)_minmax(12rem,1fr)_auto] lg:items-center lg:gap-6">
-                                        <div>
-                                            <p class="text-sm font-bold text-slate-950">{{ displayValue(criterion.label, 'Eligibility requirement') }}</p>
-                                            <p v-if="criterion.comparison || criterion.note" class="mt-1 text-xs leading-5 text-slate-500">{{ criterion.comparison || criterion.note }}</p>
-                                        </div>
-                                        <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Your profile</p>
-                                            <p class="mt-1 text-sm font-semibold text-slate-800">{{ displayValue(criterion.student_value || criterion.studentValue, 'Not provided') }}</p>
-                                        </div>
-                                        <div>
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Program rule</p>
-                                            <p class="mt-1 text-sm font-semibold text-slate-800">{{ criterionStatus(criterion).status === 'info' ? 'Open to all' : displayValue(criterion.requirement, 'No restriction') }}</p>
-                                            <p v-if="criterionStatus(criterion).modeLabel" class="mt-1 text-xs font-semibold text-slate-500">{{ criterionStatus(criterion).modeLabel }}</p>
-                                        </div>
-                                        <span :class="['w-fit px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(criterionStatus(criterion).state).badge]">
-                                            {{ criterionStatus(criterion).label }}
-                                        </span>
-                                    </div>
-                                </article>
-                            </div>
-                            <p v-else class="p-5 text-sm text-slate-600">This program has no structured eligibility restrictions.</p>
-                        </section>
-
-                        <details v-if="content.written_conditions || content.provider_review?.length" class="group student-card overflow-hidden rounded-md border-slate-300">
-                            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden">
-                                <div>
-                                    <p class="student-kicker">Provider review</p>
-                                    <h3 class="mt-1 text-base font-bold text-slate-950">Conditions checked by a person</h3>
-                                </div>
-                                <i class="fa-solid fa-chevron-down text-xs text-slate-400 transition group-open:rotate-180" aria-hidden="true"></i>
-                            </summary>
-                            <div class="border-t border-slate-200">
-                                <p v-if="content.written_conditions" class="whitespace-pre-line px-4 py-4 text-sm leading-7 text-slate-700 sm:px-5">{{ content.written_conditions }}</p>
-                                <div v-if="content.provider_review?.length" class="divide-y divide-slate-200 border-t border-slate-200">
-                                    <div v-for="condition in content.provider_review" :key="condition.key || condition.label" class="px-4 py-3.5 sm:px-5">
-                                        <p class="text-sm font-bold text-slate-900">{{ condition.label || 'Provider condition' }}</p>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ condition.note || condition.comparison || 'The provider confirms this during review.' }}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </details>
-                    </template>
+                    <ScholarshipEligibilityPanel
+                        v-else-if="activeView === 'eligibility'"
+                        :content="content"
+                        :verdict="eligibilityVerdict"
+                        :visual="sectionVisual"
+                        :preview="isPreview"
+                        :preview-scenario="content.preview_scenario || previewScenario"
+                        :application-href="navigation.find((item) => item.key === 'application')?.href || ''"
+                        :scholarship-id="scholarshipId"
+                        @navigate="openPreviewSection"
+                    />
 
                     <template v-else-if="activeView === 'award'">
                         <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-benefits>
@@ -661,54 +596,15 @@ onMounted(loadScholarship);
                     </template>
 
                     <template v-else-if="activeView === 'application'">
-                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-application-files>
-                            <header class="flex flex-col gap-4 border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-5">
-                                <div>
-                                    <p class="student-kicker">Application files</p>
-                                    <h3 class="mt-1 text-lg font-bold text-slate-950">{{ requirementReadiness.title }}</h3>
-                                    <p class="mt-1 text-sm leading-5 text-slate-600">{{ requirementReadiness.description }}</p>
-                                </div>
-                                <a v-if="requirements.manage_files_href" :href="requirements.manage_files_href" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                                    <i class="fa-solid fa-folder-open" aria-hidden="true"></i>
-                                    My Documents
-                                </a>
-                                <span v-else-if="isPreview" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-200 bg-slate-100 px-4 text-sm font-bold text-slate-500">
-                                    <i class="fa-solid fa-lock" aria-hidden="true"></i>
-                                    Applicant files
-                                </span>
-                            </header>
-
-                            <div class="grid gap-3 border-b border-slate-200 px-4 py-3.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:px-5">
-                                <div>
-                                    <p class="text-sm font-bold text-slate-900">{{ requirements.review_method_label }}</p>
-                                    <p class="mt-1 text-sm leading-5 text-slate-600">{{ requirements.review_method_note }}</p>
-                                </div>
-                                <span :class="['w-fit px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(requirementReadiness.state === 'ready' ? 'ready' : requirementReadiness.state === 'needs_files' ? 'attention' : 'neutral').badge]">
-                                    {{ requirementReadiness.ready_count || 0 }} of {{ requirementReadiness.required_count || 0 }} ready
-                                </span>
-                            </div>
-
-                            <div v-if="requirementReadiness.items?.length" class="divide-y divide-slate-200">
-                                <div v-for="item in requirementReadiness.items" :key="item.name" class="flex items-center gap-3 px-4 py-3.5 sm:px-5">
-                                    <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md', item.status === 'ready' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
-                                        <i :class="item.status === 'ready' ? 'fa-solid fa-check' : 'fa-solid fa-upload'" aria-hidden="true"></i>
-                                    </span>
-                                    <p class="min-w-0 flex-1 text-sm font-bold text-slate-900">{{ item.name }}</p>
-                                    <span class="text-xs font-bold text-slate-500">{{ item.status_label }}</span>
-                                </div>
-                            </div>
-                            <p v-else class="px-4 py-4 text-sm text-slate-600 sm:px-5">No files are required before the initial review.</p>
-
-                            <details v-if="requirements.optional_documents?.length || requirements.post_qualification_documents?.length" class="border-t border-slate-200">
-                                <summary class="cursor-pointer px-4 py-4 text-sm font-bold text-slate-800 hover:bg-slate-50 sm:px-5">Files that may be requested later</summary>
-                                <div class="border-t border-slate-200 px-4 py-4 text-sm text-slate-600 sm:px-5">
-                                    <p v-for="item in [...(requirements.optional_documents || []), ...(requirements.post_qualification_documents || [])]" :key="item" class="flex items-start gap-2 py-1.5">
-                                        <i class="fa-regular fa-file mt-1 text-slate-400" aria-hidden="true"></i>
-                                        {{ item }}
-                                    </p>
-                                </div>
-                            </details>
-                        </section>
+                        <ScholarshipApplicationRequirements
+                            :requirements="requirements"
+                            :preparation="detail.preparation"
+                            :decision="decision"
+                            :scholarship-id="scholarshipId"
+                            :preview="isPreview"
+                            :saving="isSaving"
+                            @save="toggleSave"
+                        />
 
                         <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-application-process>
                             <header class="grid border-b border-slate-200 bg-slate-50/70 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -723,6 +619,7 @@ onMounted(loadScholarship);
                                     <figcaption class="absolute inset-x-0 bottom-0 p-4 text-sm font-bold text-white">{{ sectionVisual.caption }}</figcaption>
                                 </figure>
                             </header>
+                            <p v-if="process.schedule_note" class="border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-xs leading-5 text-slate-600 sm:px-6" data-program-schedule-note>{{ process.schedule_note }}</p>
                             <ol class="divide-y divide-slate-200">
                                 <li v-for="stage in process.stages" :key="stage.key" class="grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_minmax(11rem,auto)] sm:items-center sm:gap-4 sm:px-5">
                                     <span class="grid h-9 w-9 place-items-center rounded-md bg-slate-950 text-sm font-bold text-amber-300">{{ stage.step }}</span>

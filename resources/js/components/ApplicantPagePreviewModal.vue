@@ -1,6 +1,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import ApplicantPreviewViewport from './ApplicantPreviewViewport.vue';
+import { usePageScrollLock } from '../composables/usePageScrollLock';
 
 const props = defineProps({
     open: { type: Boolean, default: false },
@@ -16,8 +17,8 @@ const emit = defineEmits(['close', 'update:scenario']);
 const closeButton = ref(null);
 const dialogPanel = ref(null);
 let previousFocus = null;
-let bodyWasLocked = false;
 let modalEnvironmentActive = false;
+usePageScrollLock(() => props.open);
 
 function handleKeydown(event) {
     if (event.key === 'Escape') {
@@ -57,16 +58,11 @@ function releaseModalEnvironment() {
 
     window.removeEventListener('keydown', handleKeydown);
 
-    if (!bodyWasLocked) {
-        document.body.classList.remove('overflow-hidden');
-    }
-
     if (previousFocus instanceof HTMLElement) {
-        previousFocus.focus();
+        previousFocus.focus({ preventScroll: true });
     }
 
     previousFocus = null;
-    bodyWasLocked = false;
     modalEnvironmentActive = false;
 }
 
@@ -77,13 +73,11 @@ watch(() => props.open, async (isOpen) => {
     }
 
     previousFocus = document.activeElement;
-    bodyWasLocked = document.body.classList.contains('overflow-hidden');
     modalEnvironmentActive = true;
-    document.body.classList.add('overflow-hidden');
     window.addEventListener('keydown', handleKeydown);
 
     await nextTick();
-    closeButton.value?.focus();
+    if (props.open) closeButton.value?.focus({ preventScroll: true });
 }, { immediate: true });
 
 onBeforeUnmount(releaseModalEnvironment);

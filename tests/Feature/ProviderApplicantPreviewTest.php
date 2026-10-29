@@ -84,7 +84,7 @@ class ProviderApplicantPreviewTest extends TestCase
     public function test_preview_supports_an_ineligible_sample_and_rejects_invalid_scenarios(): void
     {
         $owner = $this->providerOwner();
-        $program = $this->program($owner);
+        $program = $this->program($owner, ['eligible_education_levels' => 'college']);
 
         $this->actingAs($owner)
             ->getJson("/provider/previews/programs/{$program->id}/data?section=eligibility&scenario=ineligible")
@@ -142,6 +142,47 @@ class ProviderApplicantPreviewTest extends TestCase
         $this->actingAs($applicant)
             ->getJson("/dashboard/scholarships/{$program->id}/data")
             ->assertNotFound();
+    }
+
+    public function test_sample_eligibility_rows_never_use_the_viewing_providers_student_information(): void
+    {
+        $owner = $this->providerOwner();
+        $owner->studentProfile()->create(['school' => 'PRIVATE PROVIDER SCHOOL', 'education_level' => 'private_provider_level', 'gwa' => 42, 'grading_scale' => 'percentage']);
+        $program = $this->program($owner, ['minimum_gwa' => 85, 'minimum_grade_scale' => 'percentage',
+            'eligible_education_levels' => 'college', 'eligible_courses' => 'BS Nursing', 'eligibility_rule_modes' => ['course' => 'preferred']]);
+
+        foreach (['general', 'eligible', 'ineligible'] as $scenario) {
+            $response = $this->actingAs($owner)->getJson("/provider/previews/programs/{$program->id}/data?section=eligibility&scenario={$scenario}")
+                ->assertOk()->assertJsonPath('detail.preparation.can_start_application', false);
+            $content = $response->json('detail.content');
+            $this->assertStringNotContainsString('PRIVATE PROVIDER SCHOOL', json_encode($content));
+            $this->assertStringNotContainsString('private_provider_level', json_encode($content));
+            $this->assertSame([], $content['preferred_mismatches']);
+            $restrictive = collect($content['criteria'])->filter(fn (array $row): bool => filled($row['requirement']) && $row['status'] !== 'info');
+            if ($scenario === 'general') {
+                $this->assertTrue($restrictive->every(fn (array $row): bool => $row['student_value'] === null));
+            } elseif ($scenario === 'eligible') {
+                $this->assertTrue($restrictive->every(fn (array $row): bool => $row['status'] === 'pass'));
+                $this->assertSame([], $content['blockers']);
+            } else {
+                $this->assertCount(1, $content['blockers']);
+                $failed = $restrictive->where('status', 'fail')->values();
+                $this->assertCount(1, $failed);
+                $this->assertSame('required', $failed->first()['rule_mode']);
+            }
+        }
+    }
+
+    public function test_an_unrestricted_program_does_not_get_a_fabricated_required_failure_in_preview(): void
+    {
+        $owner = $this->providerOwner();
+        $program = $this->program($owner);
+        $this->actingAs($owner)->getJson("/provider/previews/programs/{$program->id}/data?section=eligibility&scenario=ineligible")
+            ->assertOk()->assertJsonPath('detail.decision.state', 'preview')
+            ->assertJsonPath('detail.content.preview_scenario', 'general')
+            ->assertJsonCount(0, 'detail.content.blockers')
+            ->assertJsonPath('detail.preparation.can_start_application', false)
+            ->assertJsonPath('detail.preparation.next_step', null);
     }
 
     private function providerOwner(): User

@@ -2,8 +2,13 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ScholarshipPreparationReturn from '../components/ScholarshipPreparationReturn.vue';
+import ApplicantAddressEditor from '../components/profile/ApplicantAddressEditor.vue';
+import ApplicantEvidenceEditor from '../components/profile/ApplicantEvidenceEditor.vue';
+import ApplicantHouseholdEditor from '../components/profile/ApplicantHouseholdEditor.vue';
+import ApplicantLearningEditor from '../components/profile/ApplicantLearningEditor.vue';
+import ApplicantPersonalEditor from '../components/profile/ApplicantPersonalEditor.vue';
 import ApplicantProfileEditModal from '../components/profile/ApplicantProfileEditModal.vue';
-import ApplicantProfileEvidenceList from '../components/profile/ApplicantProfileEvidenceList.vue';
 import ApplicantProfileDetails from '../components/profile/ApplicantProfileDetails.vue';
 import ApplicantProfileIdentity from '../components/profile/ApplicantProfileIdentity.vue';
 import ApplicantProfileReadiness from '../components/profile/ApplicantProfileReadiness.vue';
@@ -12,7 +17,6 @@ import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
-import TermsAgreement from '../components/TermsAgreement.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { limitPhoneNumber } from '../support/phoneNumber';
 import {
@@ -26,13 +30,14 @@ import {
     citiesForLocation,
     findLocationOption,
     findPhilippineRegion,
-    philippineRegionOptions,
     provincesForRegion,
 } from '../support/philippineLocations';
 import { showPortalToast } from '../support/portalToast';
 import { applicantProfileOverview } from '../support/applicantProfileOverview';
 import { applicantProfileDetails } from '../support/applicantProfileDetails';
 import { hasLocationPin } from '../support/locationPins';
+import { profileFormHasChanges } from '../support/profileFormChanges';
+import { preparationQuery, withPreparationContext } from '../support/scholarshipPreparationContext';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -43,6 +48,9 @@ const user = ref(null);
 const savedProfileReadiness = ref(null);
 const form = ref(emptyForm());
 const profileSearchParams = new URLSearchParams(window.location.search);
+const preparationParams = preparationQuery(window.location.search);
+const preparationContext = ref(null);
+const contextualHref = (href) => withPreparationContext(href, preparationContext.value?.scholarship_id, preparationContext.value?.return_section);
 const requestedProfileSection = profileSearchParams.get('section');
 const editableProfileSectionIds = ['personal', 'academic', 'household', 'location', 'verification'];
 const showProfileEditorModal = ref(editableProfileSectionIds.includes(requestedProfileSection));
@@ -98,16 +106,6 @@ const {
     cancelConfirmation,
 } = useConfirmationDialog();
 
-const fieldClass = 'min-w-0';
-const labelClass = 'mb-2 block text-sm font-semibold leading-5 text-slate-700';
-const inputClass = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
-const compactInputClass = 'min-h-11 w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm uppercase text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100';
-const sectionCardClass = 'w-full';
-const sectionBodyClass = 'space-y-0 bg-white px-4 py-5 sm:px-6';
-const sectionStatusPillClass = 'w-fit rounded-md px-2.5 py-1.5 text-xs font-bold';
-const formPanelClass = 'border-b border-slate-200 py-5 first:pt-0 last:border-b-0 last:pb-0';
-const formPanelTitleClass = 'text-sm font-bold text-slate-950';
-const formPanelDescriptionClass = 'mt-1 text-xs leading-5 text-slate-500';
 const profileEditorBusy = computed(() => isSaving.value || isUploadingProfilePhoto.value || isDeletingProfilePhoto.value
     || Boolean(uploadingVerificationDocumentType.value) || deletingVerificationDocumentId.value !== null || rescanningAcademicDocumentId.value !== null);
 const profileFormHasPin = computed(() => hasLocationPin(form.value.latitude, form.value.longitude));
@@ -540,7 +538,7 @@ const verificationUploadCopy = computed(() => {
         detail: 'Use clear, recent documents.',
     };
 });
-const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && savedFormSnapshot.value !== formSnapshot());
+const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && profileFormHasChanges(form.value, JSON.parse(savedFormSnapshot.value)));
 const profileDisplayName = computed(() => [
     form.value.first_name,
     form.value.middle_initial ? `${form.value.middle_initial}.` : '',
@@ -620,19 +618,19 @@ function continueProfileOverview(action) {
 const profileEditorCopy = computed(() => ({
     personal: {
         title: 'Personal and contact',
-        description: 'Update the learner identity and current contact details.',
+        description: 'Update identity and contact details.',
     },
     academic: {
         title: 'Learning record',
-        description: 'Update the current school stage, program path, and academic result.',
+        description: 'Update your school, study path, and academic record.',
     },
     household: {
         title: 'Household and guardian',
-        description: 'Update eligibility, guardian, and outside-scholarship details.',
+        description: 'Update household details and the contact who supports you.',
     },
     location: {
         title: 'Home address',
-        description: 'Update the general address used for residency and distance checks.',
+        description: 'Update where you live for residency and distance checks.',
     },
     verification: {
         title: 'Supporting evidence',
@@ -644,7 +642,7 @@ const profileEditorCopy = computed(() => ({
 }));
 const profileEditorIcon = computed(() => profileSections.find((section) => section.id === activeSection.value)?.icon
     ?? 'fa-solid fa-pen');
-const profileEditorSize = computed(() => ['academic', 'location', 'verification'].includes(activeSection.value)
+const profileEditorSize = computed(() => activeSection.value === 'verification'
     ? 'wide'
     : 'standard');
 const recommendedSection = computed(() => {
@@ -881,13 +879,22 @@ async function focusProfileField(field) {
     const control = controlId ? document.getElementById(controlId) : null;
 
     if (control) {
+        for (let ancestor = control.parentElement; ancestor; ancestor = ancestor.parentElement) {
+            if (ancestor.tagName === 'DETAILS') ancestor.open = true;
+        }
+        await nextTick();
         control.scrollIntoView({ block: 'center' });
-        control.focus();
+        control.focus({ preventScroll: true });
         return;
     }
 
+    await focusProfileAlert();
+}
+
+async function focusProfileAlert() {
+    await nextTick();
     profileValidationAlert.value?.scrollIntoView({ block: 'start' });
-    profileValidationAlert.value?.focus();
+    profileValidationAlert.value?.focus({ preventScroll: true });
 }
 
 function openSection(sectionId, { clearError = true } = {}) {
@@ -1125,14 +1132,9 @@ const learnerPathCopy = computed(() => {
 });
 
 const courseLabel = computed(() => learnerPathCopy.value.courseLabel);
-const coursePlaceholder = computed(() => learnerPathCopy.value.coursePlaceholder);
-const courseHelpText = computed(() => learnerPathCopy.value.courseHelp);
 const yearLabel = computed(() => learnerPathCopy.value.yearLabel);
-const yearPlaceholder = computed(() => learnerPathCopy.value.yearPlaceholder);
 const gwaLabel = computed(() => learnerPathCopy.value.gwaLabel);
 const learnerIdLabel = computed(() => learnerPathCopy.value.idLabel);
-const learnerIdPlaceholder = computed(() => learnerPathCopy.value.idPlaceholder);
-const academicSummary = computed(() => learnerPathCopy.value.summary);
 const coursePathOptions = computed(() => {
     switch (form.value.education_level) {
         case 'junior_high_school':
@@ -1155,15 +1157,6 @@ const guardianRequirementLabel = computed(() => {
     }
 
     return needsGuardianContext.value ? 'Required for this profile' : 'Optional contact';
-});
-const guardianRequirementText = computed(() => {
-    if (isMinor.value) {
-        return `The learner is ${applicantAge.value}. Add the adult who can receive scholarship follow-ups and help manage consent.`;
-    }
-
-    return needsGuardianContext.value
-        ? 'Younger education levels or adult-managed accounts need a guardian contact for scholarship follow-ups.'
-        : 'Add a trusted contact if someone else helps with applications.';
 });
 const applicantProfileRecord = computed(() => ({
     name: user.value?.name || 'Student applicant',
@@ -1670,22 +1663,6 @@ function verificationStatusLabel(status) {
     }[status] ?? 'Not submitted';
 }
 
-function verificationStatusClass(status) {
-    if (status === 'approved') {
-        return 'bg-emerald-100 text-emerald-800';
-    }
-
-    if (status === 'rejected') {
-        return 'bg-rose-100 text-rose-800';
-    }
-
-    if (status === 'pending') {
-        return 'bg-amber-100 text-amber-800';
-    }
-
-    return 'bg-slate-100 text-slate-600';
-}
-
 function academicScanStatusLabel(status) {
     return {
         succeeded: 'Result extracted',
@@ -1759,6 +1736,10 @@ async function uploadVerificationDocument(documentType, event) {
         const message = 'Agree to the upload terms first.';
         errorMessage.value = message;
         showPortalToast({ type: 'error', message });
+        await nextTick();
+        const consent = document.querySelector('[data-profile-evidence-terms] input[type="checkbox"]');
+        consent?.scrollIntoView({ block: 'center' });
+        consent?.focus({ preventScroll: true });
         input.value = '';
         return;
     }
@@ -1780,6 +1761,7 @@ async function uploadVerificationDocument(documentType, event) {
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to upload this record. Check the file and try again.';
+        await focusProfileAlert();
     } finally {
         uploadingVerificationDocumentType.value = '';
         input.value = '';
@@ -1798,6 +1780,7 @@ async function retryAcademicRecordScan(document) {
         const message = error.response?.data?.message ?? 'Unable to scan the academic record right now.';
         errorMessage.value = message;
         showPortalToast({ type: 'error', message });
+        await focusProfileAlert();
     } finally {
         rescanningAcademicDocumentId.value = null;
     }
@@ -1827,6 +1810,7 @@ async function deleteVerificationDocument(document) {
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (error) {
         errorMessage.value = error.response?.data?.message ?? 'Unable to remove this record. Please try again.';
+        await focusProfileAlert();
     } finally {
         deletingVerificationDocumentId.value = null;
     }
@@ -1837,9 +1821,10 @@ async function loadProfile() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/dashboard/profile/data');
+        const response = await window.axios.get('/dashboard/profile/data', { params: preparationParams });
 
         user.value = response.data.user;
+        preparationContext.value = response.data.preparation_context ?? null;
         fillForm(response.data.user);
         savedProfileReadiness.value = response.data.profile_readiness ?? null;
         await loadApplicantLocationHierarchy();
@@ -2090,6 +2075,8 @@ watch(() => form.value.grading_scale, (scale) => {
                     compact
                 />
 
+                <ScholarshipPreparationReturn v-if="!isLoading" :context="preparationContext" :busy="profileEditorBusy" />
+
                 <div v-if="isLoading" class="overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm" aria-busy="true" aria-label="Loading applicant record" role="status">
                     <span class="sr-only">Loading profile...</span>
                     <div class="flex items-center gap-5 px-5 py-6 motion-safe:animate-pulse sm:px-6"><div class="h-20 w-20 shrink-0 rounded-sm bg-slate-100"></div><div class="flex-1 space-y-3"><div class="h-3 w-24 rounded-sm bg-slate-100"></div><div class="h-6 w-2/3 rounded-sm bg-slate-100"></div><div class="h-3 w-1/2 rounded-sm bg-slate-100"></div></div></div>
@@ -2141,7 +2128,7 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
                                 <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                             </button>
-                            <a href="/dashboard/documents" class="flex items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5">
+                            <a :href="contextualHref('/dashboard/documents')" class="flex items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5">
                                 <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span>
                                 <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Prepared documents</span><span class="mt-1 block text-xs text-slate-500">Reusable files for future applications</span></span>
                                 <span class="shrink-0 text-xs font-bold text-slate-600">{{ preparedDocumentsCount }} saved</span>
@@ -2161,7 +2148,6 @@ watch(() => form.value.grading_scale, (scale) => {
 
                 <ApplicantProfileEditModal
                     :open="showProfileEditorModal"
-                    :eyebrow="activeSection === 'verification' ? 'Supporting records' : 'Edit applicant profile'"
                     :title="profileEditorCopy.title"
                     :description="profileEditorCopy.description"
                     :icon="profileEditorIcon"
@@ -2176,14 +2162,6 @@ watch(() => form.value.grading_scale, (scale) => {
                     @close="closeProfileEditor"
                     @save="finishProfileEditor"
                 >
-                    <template v-if="activeSection === 'verification'" #status>
-                                <span
-                                    :class="[sectionStatusPillClass, needsVerificationUpload ? 'bg-amber-100 text-amber-800' : verificationStatusClass(profileVerificationStatus)]"
-                                >
-                                    {{ needsVerificationUpload ? 'Files needed' : verificationStatusLabel(profileVerificationStatus) }}
-                                </span>
-                    </template>
-
                         <div
                             v-if="errorMessage || validationErrorEntries.length"
                             ref="profileValidationAlert"
@@ -2208,639 +2186,105 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </div>
 
-                        <section v-if="['personal', 'household'].includes(activeSection)" :id="`profile-${activeSection}`" :class="sectionCardClass">
-                            <div :class="sectionBodyClass">
-                                <div v-if="activeSection === 'personal'" :class="formPanelClass">
-                                    <div
-                                        v-if="['needs_replacement', 'resubmitted'].includes(user?.profile_photo_review_status)"
-                                        :class="[
-                                            'mb-4 border-l-4 px-3 py-3 text-sm',
-                                            user.profile_photo_review_status === 'resubmitted'
-                                                ? 'border-amber-400 bg-amber-50 text-amber-950'
-                                                : 'border-rose-500 bg-rose-50 text-rose-950',
-                                        ]"
-                                    >
-                                        <p class="font-bold">
-                                            {{ user.profile_photo_review_status === 'resubmitted' ? 'Your replacement photo is awaiting review.' : 'A reviewer requested a replacement photo.' }}
-                                        </p>
-                                        <p v-if="user.profile_photo_review_note" class="mt-1 leading-5">{{ user.profile_photo_review_note }}</p>
-                                    </div>
+                        <ApplicantPersonalEditor
+                            v-if="activeSection === 'personal'"
+                            v-model="form"
+                            :photo-url="profilePhotoUrl"
+                            :applicant-name="profileDisplayName"
+                            :photo-review-status="user?.profile_photo_review_status || ''"
+                            :photo-review-note="user?.profile_photo_review_note || ''"
+                            :uploading-photo="isUploadingProfilePhoto"
+                            :deleting-photo="isDeletingProfilePhoto"
+                            :age="applicantAge"
+                            :is-minor="isMinor"
+                            :birthdate-min="birthdateMinimumValue"
+                            :birthdate-max="birthdateMaximumValue"
+                            :gender-options="genderOptions"
+                            :citizenship-options="citizenshipOptions"
+                            :account-manager-options="accountManagerOptions"
+                            :suffix-options="suffixOptions"
+                            @upload-photo="uploadProfilePhoto"
+                            @open-camera="openProfileCamera"
+                            @remove-photo="deleteProfilePhoto"
+                            @middle-initial-input="handleMiddleInitialInput"
+                            @phone-input="handlePhoneInput('contact_number', $event)"
+                        />
 
-                                    <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
-                                        <div class="grid aspect-square w-28 shrink-0 place-items-center overflow-hidden rounded-md border border-slate-200 bg-slate-100 text-xl font-bold text-slate-500">
-                                            <img
-                                                v-if="profilePhotoUrl"
-                                                :src="profilePhotoUrl"
-                                                :alt="`${profileDisplayName} applicant photo`"
-                                                class="h-full w-full object-cover"
-                                            >
-                                            <img v-else :src="'/images/demo/default-applicant-avatar.jpg'" alt="No applicant photo uploaded" class="h-full w-full object-cover">
-                                        </div>
+                        <ApplicantHouseholdEditor
+                            v-if="activeSection === 'household'"
+                            v-model="form"
+                            :income-options="incomeOptions"
+                            :relationship-options="guardianRelationshipOptions"
+                            :scholarship-options="currentScholarshipOptions"
+                            :portal-scholarships="platformActiveScholarships"
+                            :guardian-required="needsGuardianContext"
+                            :has-guardian-details="hasGuardianDetails"
+                            :guardian-reason="guardianRequirementLabel"
+                            @guardian-phone-input="handlePhoneInput('guardian_contact', $event)"
+                        />
 
-                                        <div class="min-w-0 flex-1">
-                                        <div class="flex flex-wrap items-center gap-2">
-                                                <h4 :class="formPanelTitleClass">Applicant photo</h4>
-                                                <span class="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-amber-800">Required</span>
-                                            </div>
-                                            <p :class="formPanelDescriptionClass">Use a recent square photo that clearly shows the applicant.</p>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">JPG or PNG, 300 to 4000 pixels square, up to 5 MB. Photo changes save immediately.</p>
+                        <ApplicantLearningEditor
+                            v-if="activeSection === 'academic'"
+                            v-model="form"
+                            :education-options="educationLevelOptions"
+                            :enrollment-options="enrollmentOptions"
+                            :course-options="coursePathOptions"
+                            :year-options="yearLevelOptions"
+                            :academic-year-options="academicYearOptions"
+                            :term-options="academicTermOptions"
+                            :grading-scale-options="gradingScaleOptions"
+                            :school-type-options="schoolTypeOptions"
+                            :path-copy="learnerPathCopy"
+                            :field-relevant="isFieldRelevant"
+                            :field-required="isFieldRequired"
+                            :requires-grades="requiresGrades"
+                            :ocr-active="academicOcrActive"
+                            :manual-result-allowed="manualAcademicEntryAllowed"
+                            :extracted-result="extractedAcademicResult()"
+                            @open-evidence="openVerificationRecords"
+                        />
 
-                                            <div class="mt-3 flex flex-wrap gap-2">
-                                                <label
-                                                    :class="[
-                                                        'inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-slate-950 px-3.5 text-xs font-bold text-white transition hover:bg-slate-800',
-                                                        isUploadingProfilePhoto ? 'pointer-events-none opacity-60' : '',
-                                                    ]"
-                                                >
-                                                    <input
-                                                        type="file"
-                                                        accept="image/jpeg,image/png"
-                                                        class="sr-only"
-                                                        :disabled="isUploadingProfilePhoto"
-                                                        @change="uploadProfilePhoto"
-                                                    >
-                                                    <i :class="isUploadingProfilePhoto ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-image'" aria-hidden="true"></i>
-                                                    {{ isUploadingProfilePhoto ? 'Uploading...' : profilePhotoUrl ? 'Replace photo' : 'Choose photo' }}
-                                                </label>
-                                                <button
-                                                    type="button"
-                                                    class="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                    :disabled="isUploadingProfilePhoto || isDeletingProfilePhoto"
-                                                    @click="openProfileCamera"
-                                                >
-                                                    <i class="fa-solid fa-camera" aria-hidden="true"></i>
-                                                    Open camera
-                                                </button>
-                                                <button
-                                                    v-if="profilePhotoUrl"
-                                                    type="button"
-                                                    class="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
-                                                    :disabled="isDeletingProfilePhoto"
-                                                    @click="deleteProfilePhoto"
-                                                >
-                                                    <i :class="isDeletingProfilePhoto ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can'" aria-hidden="true"></i>
-                                                    Remove
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                        <ApplicantAddressEditor
+                            v-if="activeSection === 'location'"
+                            v-model="form"
+                            :province-options="applicantProvinceOptions"
+                            :city-options="applicantCityOptions"
+                            :loading-provinces="isLoadingApplicantProvinces"
+                            :loading-cities="isLoadingApplicantCities"
+                            :options-error="locationOptionsError"
+                            :has-pin="profileFormHasPin"
+                            :location-message="locationMessage"
+                            @region-change="handleApplicantRegionChange"
+                            @province-change="handleApplicantProvinceChange"
+                            @city-change="handleApplicantCityChange"
+                            @retry-options="loadApplicantLocationHierarchy()"
+                            @open-map="showProfileMapModal = true"
+                        />
 
-                                    <p class="mt-4 flex items-start gap-2 text-xs leading-5 text-slate-500">
-                                        <i class="fa-solid fa-lock mt-1 shrink-0" aria-hidden="true"></i>
-                                        <span>Visible only to authorized staff and providers reviewing an application you submitted.</span>
-                                    </p>
-                                </div>
-
-                                <div v-if="activeSection === 'personal'" :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Official name</h4>
-                                        <p :class="formPanelDescriptionClass">Enter the name used in school and identification records.</p>
-                                    </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-12">
-                                        <div :class="[fieldClass, 'md:col-span-4']">
-                                            <label :class="labelClass" for="profile-first-name">First name</label>
-                                            <input id="profile-first-name" v-model="form.first_name" :class="inputClass">
-                                        </div>
-                                        <div :class="[fieldClass, 'md:col-span-2']">
-                                            <label :class="[labelClass, 'text-center']" for="profile-middle">M.I. <span class="font-normal text-slate-400">(optional)</span></label>
-                                            <input
-                                                id="profile-middle"
-                                                :value="form.middle_initial"
-                                                maxlength="1"
-                                                :class="compactInputClass"
-                                                @input="handleMiddleInitialInput"
-                                            >
-                                        </div>
-                                        <div :class="[fieldClass, 'md:col-span-4']">
-                                            <label :class="labelClass" for="profile-last-name">Last name</label>
-                                            <input id="profile-last-name" v-model="form.last_name" :class="inputClass">
-                                        </div>
-                                        <div :class="[fieldClass, 'md:col-span-2']">
-                                            <label :class="labelClass" for="profile-suffix">Suffix <span class="font-normal text-slate-400">(optional)</span></label>
-                                            <select id="profile-suffix" v-model="form.suffix" :class="inputClass">
-                                                <option value="">None</option>
-                                                <option v-if="form.suffix && !suffixOptions.includes(form.suffix)" :value="form.suffix">{{ form.suffix }}</option>
-                                                <option v-for="option in suffixOptions" :key="option" :value="option">{{ option }}</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div v-if="activeSection === 'personal'" :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Identity details</h4>
-                                        <p :class="formPanelDescriptionClass">Used only when a scholarship has age or citizenship requirements.</p>
-                                    </div>
-                                    <div class="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                                        <div>
-                                            <label :class="labelClass" for="profile-birthdate">Birthdate</label>
-                                            <input id="profile-birthdate" v-model="form.birthdate" type="date" :min="birthdateMinimumValue" :max="birthdateMaximumValue" :class="inputClass">
-                                            <p v-if="applicantAge !== null" class="mt-1 text-xs font-semibold text-slate-500">
-                                                Age {{ applicantAge }}<span v-if="isMinor"> - guardian details required</span>
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-gender">Gender <span class="font-normal text-slate-400">(optional)</span></label>
-                                            <select id="profile-gender" v-model="form.gender" :class="inputClass">
-                                                <option value="">Select gender</option>
-                                                <option v-for="option in genderOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-citizenship">Citizenship declaration</label>
-                                            <select id="profile-citizenship" v-model="form.citizenship_status" :class="inputClass">
-                                                <option value="">Select citizenship status</option>
-                                                <option v-for="option in citizenshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                            <p class="mt-1 text-xs leading-5 text-slate-500">Used only when a program has a citizenship rule.</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="contents">
-                                    <div v-if="activeSection === 'personal'" :class="formPanelClass">
-                                        <div class="mb-4">
-                                            <h4 :class="formPanelTitleClass">Contact and account</h4>
-                                            <p :class="formPanelDescriptionClass">Keep the contact number current and identify who manages applications.</p>
-                                        </div>
-                                        <div class="grid items-start gap-4 sm:grid-cols-2">
-                                            <div>
-                                                <label :class="labelClass" for="profile-contact">Contact number</label>
-                                                <input id="profile-contact" :value="form.contact_number" maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('contact_number', $event)">
-                                            </div>
-                                            <div>
-                                                <label :class="labelClass" for="profile-account-manager">Who manages this account?</label>
-                                                <select id="profile-account-manager" v-model="form.account_managed_by" required :class="inputClass">
-                                                    <option value="">Select account manager</option>
-                                                    <option v-for="option in accountManagerOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div v-if="activeSection === 'household'" :class="formPanelClass">
-                                        <div class="mb-4">
-                                            <h4 :class="formPanelTitleClass">Household eligibility</h4>
-                                            <p :class="formPanelDescriptionClass">Add the household details commonly used for financial eligibility.</p>
-                                        </div>
-                                        <div class="grid gap-4 sm:grid-cols-2">
-                                            <div>
-                                                <label :class="labelClass" for="profile-income">Household income bracket <span class="font-normal text-slate-400">(required)</span></label>
-                                                <select id="profile-income" v-model="form.income_bracket" required :class="inputClass">
-                                                    <option value="">Select income bracket</option>
-                                                    <option v-for="option in incomeOptions" :key="option" :value="option">{{ option }}</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label :class="labelClass" for="profile-household-size">Household size <span class="font-normal text-slate-400">(required)</span></label>
-                                                <input
-                                                    id="profile-household-size"
-                                                    v-model="form.household_size"
-                                                    type="number"
-                                                    min="1"
-                                                    max="30"
-                                                    required
-                                                    placeholder="Number of people"
-                                                    :class="inputClass"
-                                                >
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div v-if="activeSection === 'household' && (needsGuardianContext || hasGuardianDetails)" :class="formPanelClass">
-                                    <div class="mb-4 flex items-start gap-3">
-                                        <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200">
-                                            <i class="fa-solid fa-user-shield text-sm" aria-hidden="true"></i>
-                                        </span>
-                                        <div>
-                                            <h4 :class="formPanelTitleClass">Guardian or account contact</h4>
-                                            <p :class="formPanelDescriptionClass">{{ guardianRequirementLabel }}. {{ guardianRequirementText }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-2">
-                                        <div>
-                                            <label :class="labelClass" for="profile-guardian">Guardian name</label>
-                                            <input id="profile-guardian" v-model="form.guardian_name" placeholder="Parent or guardian" :class="inputClass">
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-guardian-relationship">Relationship to learner</label>
-                                            <select id="profile-guardian-relationship" v-model="form.guardian_relationship" :class="inputClass">
-                                                <option value="">Select relationship</option>
-                                                <option v-for="option in guardianRelationshipOptions" :key="option" :value="option">{{ option }}</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-guardian-contact">Guardian contact</label>
-                                            <input id="profile-guardian-contact" :value="form.guardian_contact" maxlength="20" placeholder="09XX XXX XXXX" :class="inputClass" @input="handlePhoneInput('guardian_contact', $event)">
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-guardian-email">Guardian email <span v-if="needsGuardianContext" class="font-normal text-slate-400">(required)</span></label>
-                                            <input id="profile-guardian-email" v-model="form.guardian_email" type="email" :required="needsGuardianContext" placeholder="guardian@example.com" :class="inputClass">
-                                        </div>
-                                    </div>
-                                    <label class="mt-4 flex cursor-pointer items-start gap-3 border-t border-slate-200 pt-4 text-sm text-slate-600">
-                                        <input
-                                            id="profile-guardian-account-owner"
-                                            v-model="form.guardian_is_account_owner"
-                                            type="checkbox"
-                                            class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
-                                        >
-                                        <span>
-                                            <span class="block font-bold text-slate-950">Guardian manages this account</span>
-                                            <span class="mt-1 block text-xs leading-5">Select this when the guardian signs in, updates the learner profile, and manages applications.</span>
-                                        </span>
-                                    </label>
-                                </div>
-
-                                <div v-if="activeSection === 'household'" :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Other scholarship support</h4>
-                                        <p :class="formPanelDescriptionClass">Declare only scholarships managed outside this platform.</p>
-                                    </div>
-                                    <div class="mb-5 border-l-2 border-slate-300 pl-3">
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Detected by the portal</p>
-                                        <div v-if="platformActiveScholarships.length" class="mt-2 flex flex-wrap gap-2">
-                                            <span v-for="record in platformActiveScholarships" :key="record.application_id" class="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200">{{ record.title }}</span>
-                                        </div>
-                                        <p v-else class="mt-1 text-sm font-semibold text-slate-700">No active scholarship award is recorded in this portal.</p>
-                                    </div>
-                                    <div>
-                                        <p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Scholarship outside this portal</p>
-                                        <div class="mt-3 space-y-4">
-                                            <div>
-                                                <label :class="labelClass" for="profile-current-scholarship">Outside scholarship status <span class="font-normal text-slate-400">(required)</span></label>
-                                                <select id="profile-current-scholarship" v-model="form.current_scholarship_status" :class="inputClass">
-                                                    <option value="">Select an option</option>
-                                                    <option v-for="option in currentScholarshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                                </select>
-                                            </div>
-                                            <div v-if="['receiving', 'pending'].includes(form.current_scholarship_status)">
-                                                <label :class="labelClass" for="profile-current-scholarship-details">Outside provider and program details <span class="font-normal text-slate-400">(required)</span></label>
-                                                <textarea
-                                                    id="profile-current-scholarship-details"
-                                                    v-model="form.current_scholarship_details"
-                                                    rows="3"
-                                                    maxlength="1000"
-                                                    placeholder="Provider and program name"
-                                                    :class="inputClass"
-                                                ></textarea>
-                                            </div>
-                                            <p class="text-xs leading-5 text-slate-500">You do not need to list scholarships awarded through this portal because those are checked automatically.</p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <p v-if="activeSection === 'household'" class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
-                                    <i class="fa-solid fa-lock mr-1.5" aria-hidden="true"></i>
-                                    Household details are private and shared only for eligibility review.
-                                </p>
-                            </div>
-                        </section>
-
-                        <section v-if="activeSection === 'academic'" id="profile-academic" :class="sectionCardClass">
-                            <div :class="sectionBodyClass">
-                                <div :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <div>
-                                            <h4 :class="formPanelTitleClass">Current studies</h4>
-                                            <p :class="formPanelDescriptionClass">Add the learner's current school, level, and study path.</p>
-                                        </div>
-                                    </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-2">
-                                        <div>
-                                            <label :class="labelClass" for="profile-education-level">Education level</label>
-                                            <select id="profile-education-level" v-model="form.education_level" :class="inputClass">
-                                                <option value="">Select education level</option>
-                                                <option v-for="option in educationLevelOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-enrollment">Enrollment status <span class="font-normal text-slate-400">(required)</span></label>
-                                            <select id="profile-enrollment" v-model="form.enrollment_status" required :class="inputClass">
-                                                <option value="">Select status</option>
-                                                <option v-for="option in enrollmentOptions" :key="option" :value="option">{{ option }}</option>
-                                            </select>
-                                        </div>
-                                        <div class="md:col-span-2">
-                                            <label :class="labelClass" for="profile-school">School / learning institution</label>
-                                            <input id="profile-school" v-model="form.school" placeholder="School or learning center" :class="inputClass">
-                                        </div>
-                                    </div>
-                                    <div class="mt-5 border-t border-slate-200 pt-5">
-                                        <p class="mb-3 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Program or study path</p>
-                                        <div class="grid items-start gap-4 md:grid-cols-2">
-                                            <div v-if="isFieldRelevant('course_or_strand')">
-                                            <label :class="labelClass" for="profile-course">
-                                                {{ courseLabel }}
-                                                <span class="font-normal text-slate-400">{{ requiresProgramPath ? '(required)' : '(optional)' }}</span>
-                                            </label>
-                                            <select v-if="coursePathOptions.length" id="profile-course" v-model="form.course_or_strand" :class="inputClass">
-                                                <option value="">Select {{ courseLabel.toLowerCase() }}</option>
-                                                <option v-if="form.course_or_strand && !coursePathOptions.includes(form.course_or_strand)" :value="form.course_or_strand">{{ form.course_or_strand }}</option>
-                                                <option v-for="option in coursePathOptions" :key="option" :value="option">{{ option }}</option>
-                                            </select>
-                                            <input v-else id="profile-course" v-model="form.course_or_strand" :placeholder="coursePlaceholder" :class="inputClass">
-                                            <input
-                                                v-if="coursePathOptions.length && (form.course_or_strand === 'Other' || (hasValue(form.course_or_strand) && !coursePathOptions.includes(form.course_or_strand)))"
-                                                v-model="form.course_or_strand"
-                                                class="mt-2"
-                                                :placeholder="`Type exact ${courseLabel.toLowerCase()}`"
-                                                :class="inputClass"
-                                            >
-                                                <p class="mt-1 text-xs leading-5 text-slate-500">{{ courseHelpText }}</p>
-                                            </div>
-                                            <div>
-                                                <label :class="labelClass" for="profile-year">{{ yearLabel }}</label>
-                                                <select v-if="yearLevelOptions.length" id="profile-year" v-model="form.year_level" :class="inputClass">
-                                                    <option value="">Select {{ yearLabel.toLowerCase() }}</option>
-                                                    <option v-if="form.year_level && !yearLevelOptions.includes(form.year_level)" :value="form.year_level">{{ form.year_level }}</option>
-                                                    <option v-for="option in yearLevelOptions" :key="option" :value="option">{{ option }}</option>
-                                                </select>
-                                                <input v-else id="profile-year" v-model="form.year_level" :placeholder="yearPlaceholder" :class="inputClass">
-                                            </div>
-                                        </div>
-                                        <p class="mt-3 text-xs leading-5 text-slate-500">{{ academicSummary }}</p>
-                                    </div>
-                                </div>
-
-                                <div v-if="requiresGrades || form.academic_year || form.academic_term || isFieldRelevant('grading_scale')" :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">Record period and result</h4>
-                                        <p :class="formPanelDescriptionClass">Match the saved result to its school year and grading period.</p>
-                                    </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-2">
-                                        <div>
-                                            <label :class="labelClass" for="profile-academic-year">Academic year</label>
-                                            <select id="profile-academic-year" v-model="form.academic_year" :class="inputClass">
-                                                <option value="">Select academic year</option>
-                                                <option v-if="form.academic_year && !academicYearOptions.includes(form.academic_year)" :value="form.academic_year">{{ form.academic_year }}</option>
-                                                <option v-for="option in academicYearOptions" :key="option" :value="option">{{ option }}</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-academic-term">Term or grading period</label>
-                                            <select id="profile-academic-term" v-model="form.academic_term" :class="inputClass">
-                                                <option value="">Select record period</option>
-                                                <option v-for="option in academicTermOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </div>
-                                        <div v-if="academicOcrActive && isFieldRelevant('grading_scale')">
-                                            <label :class="labelClass">Academic result</label>
-                                            <button
-                                                type="button"
-                                                class="flex min-h-11 w-full items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-left text-sm font-semibold text-slate-900 transition hover:border-amber-400 hover:bg-amber-50/40"
-                                                @click="openVerificationRecords"
-                                            >
-                                                <span class="truncate">{{ extractedAcademicResult() }}</span>
-                                                <i class="fa-solid fa-file-shield shrink-0 text-amber-700" aria-hidden="true"></i>
-                                            </button>
-                                        </div>
-                                        <div v-else-if="isFieldRelevant('grading_scale')">
-                                            <label :class="labelClass" for="profile-grading-scale">Grading scale</label>
-                                            <select id="profile-grading-scale" v-model="form.grading_scale" :class="inputClass">
-                                                <option value="">Select grading scale</option>
-                                                <option v-for="option in gradingScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </div>
-                                        <div v-if="!academicOcrActive && isFieldRelevant('gwa')">
-                                            <label :class="labelClass" for="profile-gwa">{{ gwaLabel }}</label>
-                                            <input
-                                                id="profile-gwa"
-                                                v-model="form.gwa"
-                                                type="number"
-                                                min="0"
-                                                :max="form.grading_scale === 'grade_point' ? 5 : 100"
-                                                step="0.01"
-                                                :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'"
-                                                :class="inputClass"
-                                            >
-                                        </div>
-                                    </div>
-                                    <p v-if="isFieldRelevant('grading_scale')" class="mt-3 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
-                                        {{ academicOcrActive
-                                            ? manualAcademicEntryAllowed
-                                                ? 'The automatic scan could not read the result. Enter the value in Supporting evidence, where it will remain pending for reviewer confirmation.'
-                                                : 'Your academic result is read from Supporting evidence and cannot be edited here. A reviewer still checks the record before accepting it.'
-                                            : 'Numeric scales are kept as entered. Pass/fail and other systems are checked using supporting records.' }}
-                                    </p>
-                                </div>
-
-                                <div :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">School identifiers <span class="font-normal text-slate-400">(optional)</span></h4>
-                                        <p :class="formPanelDescriptionClass">Add these only when they are available.</p>
-                                    </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-2">
-                                        <div>
-                                            <label :class="labelClass" for="profile-school-type">Institution type</label>
-                                            <select id="profile-school-type" v-model="form.school_type" :class="inputClass">
-                                                <option value="">Select institution type</option>
-                                                <option v-for="option in schoolTypeOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label :class="labelClass" for="profile-lrn">{{ learnerIdLabel }}</label>
-                                            <input id="profile-lrn" v-model="form.learner_reference_number" :placeholder="learnerIdPlaceholder" :class="inputClass">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section v-if="activeSection === 'location'" id="profile-location" :class="sectionCardClass">
-                            <div :class="sectionBodyClass">
-                                <div :class="formPanelClass">
-                                    <div class="mb-4">
-                                        <h4 :class="formPanelTitleClass">General location</h4>
-                                        <p :class="formPanelDescriptionClass">Choose where you currently live for residency and distance checks.</p>
-                                    </div>
-                                    <div class="grid items-start gap-4 md:grid-cols-3">
-                                            <div>
-                                                <label :class="labelClass" for="profile-region">Region <span class="font-normal text-slate-400">(required)</span></label>
-                                                <select id="profile-region" v-model="form.region" required :class="inputClass" @change="handleApplicantRegionChange">
-                                                    <option value="">Select region</option>
-                                                    <option v-if="form.region && !findPhilippineRegion(form.region)" :value="form.region">{{ form.region }}</option>
-                                                    <option v-for="region in philippineRegionOptions" :key="region.code" :value="region.value">{{ region.label }}</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label :class="labelClass" for="profile-province">Province <span class="font-normal text-slate-400">(required)</span></label>
-                                                <select
-                                                    id="profile-province"
-                                                    v-model="form.province"
-                                                    required
-                                                    :class="inputClass"
-                                                    :disabled="!form.region || isLoadingApplicantProvinces"
-                                                    @change="handleApplicantProvinceChange"
-                                                >
-                                                    <option value="">{{ isLoadingApplicantProvinces ? 'Loading provinces...' : 'Select province' }}</option>
-                                                    <option v-if="form.province && !findLocationOption(applicantProvinceOptions, form.province)" :value="form.province">{{ form.province }}</option>
-                                                    <option v-for="province in applicantProvinceOptions" :key="province.code" :value="province.value">{{ province.label }}</option>
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label :class="labelClass" for="profile-city">City / municipality <span class="font-normal text-slate-400">(required)</span></label>
-                                                <select
-                                                    id="profile-city"
-                                                    v-model="form.city"
-                                                    required
-                                                    :class="inputClass"
-                                                    :disabled="!form.province || isLoadingApplicantCities"
-                                                    @change="handleApplicantCityChange"
-                                                >
-                                                    <option value="">{{ isLoadingApplicantCities ? 'Loading cities...' : 'Select city or municipality' }}</option>
-                                                    <option v-if="form.city && !findLocationOption(applicantCityOptions, form.city)" :value="form.city">{{ form.city }}</option>
-                                                    <option v-for="city in applicantCityOptions" :key="city.code" :value="city.value">{{ city.label }}</option>
-                                                </select>
-                                            </div>
-                                    </div>
-                                    <p v-if="locationOptionsError" class="mt-3 border-l-2 border-rose-500 pl-3 text-xs font-semibold leading-5 text-rose-700" role="alert">{{ locationOptionsError }}</p>
-
-                                    <div class="mt-5 border-t border-slate-200 pt-5">
-                                        <div class="mb-4">
-                                            <h5 class="text-sm font-bold text-slate-950">Address details <span class="font-normal text-slate-400">(optional)</span></h5>
-                                            <p :class="formPanelDescriptionClass">A complete home address is not required here. A provider may request it later for verification.</p>
-                                        </div>
-                                        <div class="grid items-start gap-4 md:grid-cols-3">
-                                            <div>
-                                                <label :class="labelClass" for="profile-barangay">Barangay</label>
-                                                <input id="profile-barangay" v-model="form.barangay" placeholder="Barangay" :class="inputClass">
-                                            </div>
-                                            <div class="md:col-span-2">
-                                                <label :class="labelClass" for="profile-address">Street / home address</label>
-                                                <input id="profile-address" v-model="form.address" placeholder="Street and house number" :class="inputClass">
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-5 border-t border-slate-200 pt-5">
-                                        <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                            <div>
-                                                <h5 class="text-sm font-bold text-slate-950">Approximate map pin <span class="font-normal text-slate-400">(optional)</span></h5>
-                                                <p :class="formPanelDescriptionClass">Use a nearby point for distance estimates; it does not need to identify your exact home.</p>
-                                            </div>
-                                            <span :class="['w-fit rounded px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em]', profileFormHasPin ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500']">
-                                                {{ profileFormHasPin ? 'Pin set in form' : 'Not set' }}
-                                            </span>
-                                        </div>
-                                        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <div class="flex min-w-0 items-start gap-3">
-                                                <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-800">
-                                                    <i class="fa-solid fa-location-dot" aria-hidden="true"></i>
-                                                </span>
-                                                <div class="min-w-0">
-                                                    <p class="text-sm font-bold text-slate-950">{{ profileFormHasPin ? 'Location ready for distance checks' : 'No map location selected' }}</p>
-                                                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ locationMessage || profileMapAddress || 'The map uses your city, province, and region.' }}</p>
-                                                </div>
-                                            </div>
-                                            <button type="button" class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="showProfileMapModal = true"><i class="fa-solid fa-map-location-dot mr-2" aria-hidden="true"></i>{{ profileFormHasPin ? 'Review map pin' : 'Set map pin' }}</button>
-                                        </div>
-                                    </div>
-                                </div>
-                                <p class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
-                                    <i class="fa-solid fa-lock mr-1.5" aria-hidden="true"></i>
-                                    Your home location is not shown on your public profile.
-                                </p>
-                            </div>
-                        </section>
-
-                        <section v-if="activeSection === 'verification'" id="profile-verification" :class="sectionCardClass">
-                            <div :class="sectionBodyClass">
-                                <div
-                                    v-if="user?.applicant_verification_notes"
-                                    :class="[
-                                        'flex items-start gap-3 border-l-4 px-4 py-3 text-sm',
-                                        profileVerificationStatus === 'rejected'
-                                            ? 'border-rose-500 bg-rose-50 text-rose-800'
-                                            : 'border-slate-400 bg-slate-50 text-slate-700',
-                                    ]"
-                                >
-                                    <i class="fa-solid fa-message mt-1 shrink-0" aria-hidden="true"></i>
-                                    <div>
-                                        <p class="font-bold">Reviewer note</p>
-                                        <p class="mt-1 leading-6">{{ user.applicant_verification_notes }}</p>
-                                    </div>
-                                </div>
-
-                                <ApplicantProfileEvidenceList
-                                    :groups="verificationDocumentGroups"
-                                    :title="verificationUploadCopy.title"
-                                    :description="verificationUploadCopy.detail"
-                                    :ocr="academicOcr"
-                                    :uploading-type="uploadingVerificationDocumentType"
-                                    :deleting-id="deletingVerificationDocumentId"
-                                    :scanning-id="rescanningAcademicDocumentId"
-                                    :disabled="isSaving"
-                                    :scan-label="academicScanStatusLabel"
-                                    :result-label="extractedAcademicResult"
-                                    @upload="uploadVerificationDocument"
-                                    @preview="previewDocument = $event"
-                                    @remove="deleteVerificationDocument"
-                                    @scan="retryAcademicRecordScan"
-                                >
-                                    <template #terms>
-                                        <TermsAgreement v-model="verificationDocumentTermsAccepted" context="document" :modal-layer="2700" />
-                                    </template>
-                                </ApplicantProfileEvidenceList>
-
-                                <div v-if="manualAcademicEntryAllowed" :class="formPanelClass">
-                                    <div>
-                                        <h4 :class="formPanelTitleClass">Enter the result shown on your record</h4>
-                                        <p :class="formPanelDescriptionClass">Use the exact result from the uploaded file. It remains pending until a reviewer confirms it.</p>
-                                    </div>
-
-                                    <div class="mt-4 grid items-end gap-4 sm:grid-cols-2">
-                                        <div>
-                                            <label :class="labelClass" for="fallback-grading-scale">Grading scale</label>
-                                            <select id="fallback-grading-scale" v-model="form.grading_scale" :class="inputClass">
-                                                <option value="">Select grading scale</option>
-                                                <option v-for="option in gradingScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
-                                            </select>
-                                        </div>
-                                        <div v-if="requiresNumericGrade">
-                                            <label :class="labelClass" for="fallback-academic-result">{{ gwaLabel }}</label>
-                                            <input
-                                                id="fallback-academic-result"
-                                                v-model="form.gwa"
-                                                type="number"
-                                                min="0"
-                                                :max="form.grading_scale === 'grade_point' ? 5 : 100"
-                                                step="0.01"
-                                                :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'"
-                                                :class="inputClass"
-                                            >
-                                        </div>
-                                    </div>
-
-                                    <p class="mt-3 text-xs leading-5 text-slate-500">Use Save changes below to submit this result for review.</p>
-                                </div>
-
-                            <div v-if="legacyVerificationDocuments.length" :class="formPanelClass">
-                                <div class="min-w-0">
-                                    <p class="text-sm font-bold text-slate-950">Older proof files</p>
-                                    <p class="mt-1 text-xs leading-5 text-slate-500">These are retained for reference but are no longer required.</p>
-                                    <div class="mt-3 divide-y divide-slate-200 border-y border-slate-200">
-                                            <div v-for="document in legacyVerificationDocuments" :key="document.id" class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between">
-                                                <div class="min-w-0">
-                                                    <p class="truncate text-xs font-bold text-slate-900">{{ document.original_name }}</p>
-                                                    <p class="mt-0.5 text-[11px] text-slate-500">Previously submitted supporting file</p>
-                                                </div>
-                                                <div class="flex shrink-0 gap-2">
-                                                    <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="previewDocument = document">View</button>
-                                                    <button type="button" :disabled="deletingVerificationDocumentId === document.id" class="rounded-md border border-rose-200 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50" @click="deleteVerificationDocument(document)">Remove</button>
-                                                </div>
-                                            </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                                <p class="border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-500">
-                                    <i class="fa-solid fa-lock mr-1.5" aria-hidden="true"></i>
-                                    Only authorized reviewers can access these files.
-                                </p>
-                            </div>
-                        </section>
+                        <ApplicantEvidenceEditor
+                            v-if="activeSection === 'verification'"
+                            v-model="form"
+                            v-model:consent="verificationDocumentTermsAccepted"
+                            :groups="verificationDocumentGroups"
+                            :title="verificationUploadCopy.title"
+                            :description="verificationUploadCopy.detail"
+                            :reviewer-note="user?.applicant_verification_notes || ''"
+                            :ocr="academicOcr"
+                            :uploading-type="uploadingVerificationDocumentType"
+                            :deleting-id="deletingVerificationDocumentId"
+                            :scanning-id="rescanningAcademicDocumentId"
+                            :disabled="profileEditorBusy"
+                            :scan-label="academicScanStatusLabel"
+                            :result-label="extractedAcademicResult"
+                            :manual-result-allowed="manualAcademicEntryAllowed"
+                            :grading-scale-options="gradingScaleOptions"
+                            :result-input-label="gwaLabel"
+                            :legacy-documents="legacyVerificationDocuments"
+                            @upload="uploadVerificationDocument"
+                            @preview="previewDocument = $event"
+                            @remove="deleteVerificationDocument"
+                            @scan="retryAcademicRecordScan"
+                        />
                 </ApplicantProfileEditModal>
 
             </div>

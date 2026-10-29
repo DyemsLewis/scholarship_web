@@ -2,8 +2,10 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { shouldPreviewStaffFileClick } from '../support/staffFilePreview';
 import ZoomableImagePreview from './ZoomableImagePreview.vue';
+import { usePageScrollLock } from '../composables/usePageScrollLock';
 
 const preview = ref(null);
+usePageScrollLock(() => Boolean(preview.value));
 const loading = ref(false);
 const mimeType = ref('');
 const loadError = ref('');
@@ -102,9 +104,8 @@ async function openPreview(anchor) {
         downloadUrl: downloadUrl(anchor),
         title: previewTitle(anchor),
     };
-    document.body.classList.add('overflow-hidden');
     await nextTick();
-    closeButton.value?.focus();
+    closeButton.value?.focus({ preventScroll: true });
     inspectFile(requestId);
 }
 
@@ -114,8 +115,7 @@ function closePreview() {
     loading.value = false;
     mimeType.value = '';
     loadError.value = '';
-    document.body.classList.remove('overflow-hidden');
-    returnFocus?.focus?.();
+    returnFocus?.focus?.({ preventScroll: true });
     returnFocus = null;
 }
 
@@ -145,7 +145,6 @@ onMounted(() => {
 onUnmounted(() => {
     document.removeEventListener('click', handleDocumentClick, true);
     document.removeEventListener('keydown', handleKeydown);
-    document.body.classList.remove('overflow-hidden');
 });
 </script>
 

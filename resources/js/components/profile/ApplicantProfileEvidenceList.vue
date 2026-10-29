@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { formatFileSize } from '../../support/display';
 import { evidenceFilePolicy, evidenceProgress, evidenceStatus } from '../../support/applicantProfileEvidence';
+import { disclosureSummary } from '../../support/profileEditorStyles';
 
 const props = defineProps({
     groups: { type: Array, default: () => [] },
@@ -22,11 +23,12 @@ const working = computed(() => props.disabled || Boolean(props.uploadingType) ||
 const canRetry = (row) => props.ocr.configured && row.value === 'academic_record' && row.document
     && ['failed', 'needs_review', 'unavailable', 'not_requested'].includes(row.document.ocr_status);
 const policy = (row) => evidenceFilePolicy(row.value, props.ocr);
+const groupNeedsAttention = (group) => group.rows.some((row) => row.document?.status === 'rejected');
 </script>
 
 <template>
     <div data-profile-evidence-list>
-        <div class="flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
+        <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
                 <h3 class="text-sm font-bold text-slate-950">{{ title }}</h3>
                 <p class="mt-1 text-xs leading-5 text-slate-500">{{ description }}</p>
@@ -39,17 +41,23 @@ const policy = (row) => evidenceFilePolicy(row.value, props.ocr);
 
         <div class="py-4"><slot name="terms" /></div>
 
-        <section v-for="group in groups" :key="group.id" :aria-labelledby="`evidence-group-${group.id}`" class="mt-2 first:mt-0">
-            <h4 :id="`evidence-group-${group.id}`" class="border-y border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700">{{ group.label }}</h4>
+        <component v-for="group in groups" :is="group.id === 'required' ? 'section' : 'details'" :key="group.id" :data-evidence-group="group.id" :open="group.id !== 'required' && groupNeedsAttention(group) ? true : undefined" :aria-labelledby="`evidence-group-${group.id}`" class="group border-t border-slate-200">
+            <component :is="group.id === 'required' ? 'h4' : 'summary'" :id="`evidence-group-${group.id}`" :class="[group.id === 'required' ? 'flex items-center justify-between gap-3 text-sm font-bold text-slate-950' : disclosureSummary, 'py-3']">
+                <span>{{ group.label }}</span>
+                <span class="flex items-center gap-2 text-xs font-normal text-slate-500">
+                    {{ group.id === 'required' ? `${group.rows.length} records` : `${group.rows.filter((row) => row.document).length} saved` }}
+                    <i v-if="group.id !== 'required'" class="fa-solid fa-chevron-down text-[10px] transition group-open:rotate-180" aria-hidden="true"></i>
+                </span>
+            </component>
             <div class="divide-y divide-slate-200">
                 <article v-for="row in group.rows" :key="row.value" :data-evidence-type="row.value" class="py-4">
-                    <div class="grid min-w-0 gap-x-5 gap-y-3 md:grid-cols-[minmax(0,1fr)_9rem_14rem] md:items-center">
+                    <div class="grid min-w-0 gap-x-5 gap-y-2 md:grid-cols-[minmax(0,1fr)_9rem_14rem] md:items-center">
                         <div class="flex min-w-0 items-start gap-3">
-                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-600"><i :class="row.icon" aria-hidden="true"></i></span>
+                            <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-600"><i :class="[row.icon, 'block leading-none']" aria-hidden="true"></i></span>
                             <div class="min-w-0">
                                 <h5 class="text-sm font-bold text-slate-950">{{ row.label }}</h5>
                                 <p v-if="row.document" class="mt-1 break-words text-xs leading-5 text-slate-500 [overflow-wrap:anywhere]">{{ row.document.original_name }} <span class="whitespace-nowrap">| {{ formatFileSize(row.document.size) }}</span></p>
-                                <p v-else class="mt-1 text-xs leading-5 text-slate-500">{{ row.required ? 'Required to verify your profile.' : 'Optional supporting record.' }}</p>
+                                <p v-else class="mt-1 text-xs leading-5 text-slate-500">{{ policy(row).label }}</p>
                             </div>
                         </div>
                         <div data-evidence-status class="pl-12 md:pl-0">
@@ -71,6 +79,7 @@ const policy = (row) => evidenceFilePolicy(row.value, props.ocr);
                         <strong v-if="row.document.ocr_status === 'succeeded'" class="text-slate-900">{{ resultLabel(row.document) }}</strong>
                         <button v-if="canRetry(row)" type="button" :disabled="working" class="min-h-8 font-bold text-amber-800 underline underline-offset-2 disabled:opacity-50" @click="$emit('scan', row.document)">{{ scanningId === row.document.id ? 'Scanning...' : 'Retry scan' }}</button>
                     </div>
+                    <slot v-if="row.value === 'academic_record'" name="academic-result" />
                     <details class="group ml-12 mt-2 text-xs" data-evidence-help>
                         <summary class="w-fit cursor-pointer py-1 font-semibold text-slate-600 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-amber-600">What to upload</summary>
                         <div class="mt-2 space-y-2 border-l border-slate-200 pl-3 leading-5 text-slate-500">
@@ -83,6 +92,6 @@ const policy = (row) => evidenceFilePolicy(row.value, props.ocr);
                     </details>
                 </article>
             </div>
-        </section>
+        </component>
     </div>
 </template>

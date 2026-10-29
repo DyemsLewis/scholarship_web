@@ -36,7 +36,7 @@ test('school IDs and scanned grades keep the server file restrictions', () => {
     assert.equal(evidenceFilePolicy('academic_record', { configured: true, max_file_size_mb: 'bad' }).maxMb, 1);
 });
 
-for (const file of ['profile/ApplicantProfileEvidenceList.vue', 'TermsAgreement.vue', 'TermsModal.vue']) {
+for (const file of ['profile/ApplicantEvidenceEditor.vue', 'profile/ApplicantProfileEvidenceList.vue', 'TermsAgreement.vue', 'TermsModal.vue']) {
     test(`${file} compiles with the modal workflow`, () => {
         const source = readFileSync(new URL(`../../resources/js/components/${file}`, import.meta.url), 'utf8');
         const { descriptor, errors } = parse(source, { filename: file });
@@ -73,13 +73,16 @@ test('evidence uses saved profile context and keeps upload terms above the edito
     const source = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
     const options = source.slice(source.indexOf('const academicProofOption'), source.indexOf('const applicantAge'));
     assert.doesNotMatch(options, /form\.value/);
-    assert.match(source, /:modal-layer="2700"/);
     assert.match(source, /title: 'Save before opening supporting evidence\?'/);
     assert.match(source, /Unable to upload this record/);
-    assert.match(source, /fallback-academic-result/);
+    const editor = readFileSync(new URL('../../resources/js/components/profile/ApplicantEvidenceEditor.vue', import.meta.url), 'utf8');
+    assert.match(editor, /:modal-layer="2700"/);
+    assert.match(editor, /fallback-academic-result/);
+    assert.match(editor, /v-if="manualResultAllowed" #academic-result/);
     assert.doesNotMatch(source, /Save entered result/);
     const terms = readFileSync(new URL('../../resources/js/components/TermsModal.vue', import.meta.url), 'utf8');
     assert.match(terms, /:style="\{ zIndex: layer \}"/);
     assert.match(terms, /previouslyFocused\?\.focus/);
-    assert.match(terms, /ownedScrollLock/);
+    assert.match(terms, /releaseScrollLock \?\?= lockPageScroll\(\)/);
+    assert.doesNotMatch(terms, /body.classList/);
 });

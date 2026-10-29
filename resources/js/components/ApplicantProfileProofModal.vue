@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onUnmounted, watch } from 'vue';
+import { computed } from 'vue';
+import { usePageScrollLock } from '../composables/usePageScrollLock';
 import { formatFileSize, labelFromKey } from '../support/display';
 import ZoomableImagePreview from './ZoomableImagePreview.vue';
 
@@ -9,6 +10,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close']);
+usePageScrollLock(() => Boolean(props.proof));
 const isImage = computed(() => {
     const mimeType = props.proof?.mime_type ?? '';
     const fileName = props.proof?.original_name ?? '';
@@ -49,13 +51,6 @@ function statusClass(status) {
     return 'bg-amber-100 text-amber-800';
 }
 
-watch(() => props.proof, (proof) => {
-    document.body.classList.toggle('overflow-hidden', Boolean(proof));
-}, { immediate: true });
-
-onUnmounted(() => {
-    document.body.classList.remove('overflow-hidden');
-});
 </script>
 
 <template>

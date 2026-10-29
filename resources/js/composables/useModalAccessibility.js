@@ -1,15 +1,15 @@
 import { nextTick, onBeforeUnmount, watch } from 'vue';
+import { lockPageScroll } from '../support/pageScrollLock';
 
 export function useModalAccessibility(isOpen, dialog, close) {
     let previousFocus = null;
-    let previousOverflow = '';
-    let locked = false;
+    let releaseScrollLock = null;
 
     function release() {
-        if (!locked) return;
-        document.body.style.overflow = previousOverflow;
-        locked = false;
-        previousFocus?.focus?.();
+        if (!releaseScrollLock) return;
+        releaseScrollLock();
+        releaseScrollLock = null;
+        previousFocus?.focus?.({ preventScroll: true });
         previousFocus = null;
     }
 
@@ -19,11 +19,9 @@ export function useModalAccessibility(isOpen, dialog, close) {
             return;
         }
         previousFocus = document.activeElement;
-        previousOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
-        locked = true;
+        releaseScrollLock ??= lockPageScroll();
         await nextTick();
-        if (isOpen()) dialog.value?.focus();
+        if (isOpen()) dialog.value?.focus({ preventScroll: true });
     }, { immediate: true });
 
     function handleKeydown(event) {

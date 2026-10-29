@@ -26,11 +26,11 @@ test('scholarship details use a focused visual hierarchy', () => {
     assert.match(source, /data-scholarship-detail-header/);
     assert.match(source, /data-scholarship-detail-navigation/);
     assert.match(source, /data-scholarship-overview/);
-    assert.match(source, /data-scholarship-readiness/);
-    assert.match(source, /data-scholarship-eligibility/);
+    assert.match(source, /<ScholarshipApplicationGuide/);
+    assert.match(source, /<ScholarshipEligibilityPanel/);
     assert.match(source, /data-scholarship-benefits/);
     assert.match(source, /data-scholarship-terms/);
-    assert.match(source, /data-scholarship-application-files/);
+    assert.match(source, /<ScholarshipApplicationRequirements/);
     assert.match(source, /data-scholarship-application-process/);
     assert.match(source, /data-scholarship-provider/);
     assert.match(source, /content\.primary_benefit/);
@@ -42,4 +42,10 @@ test('scholarship details use a focused visual hierarchy', () => {
     assert.doesNotMatch(source, /decisionIcon/);
     assert.doesNotMatch(source, /\{\{ page\.title \}\}/);
     assert.doesNotMatch(source, /sm:grid-cols-\[14rem_minmax\(0,1fr\)\]/);
+});
+
+test('eligibility verification guidance reuses the actual profile step rather than assuming evidence is pending', () => {
+    assert.match(source, /profileStep\?\.description/);
+    assert.doesNotMatch(source, /while an authorized reviewer checks your supporting evidence/);
+    assert.match(source, /content.preview_scenario \|\| previewScenario/);
 });

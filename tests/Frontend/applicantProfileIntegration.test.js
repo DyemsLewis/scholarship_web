@@ -39,8 +39,9 @@ test('all staff profile records reuse the saved-record mapper and retain source 
 
 test('nested maps and file previews own focus and restore their previous scroll lock', () => {
     const helper = readFileSync(new URL('../../resources/js/composables/useModalAccessibility.js', import.meta.url), 'utf8');
-    assert.match(helper, /previousOverflow = document.body.style.overflow/);
-    assert.match(helper, /document.body.style.overflow = previousOverflow/);
+    assert.match(helper, /releaseScrollLock \?\?= lockPageScroll\(\)/);
+    assert.match(helper, /releaseScrollLock\(\)/);
+    assert.doesNotMatch(helper, /document.body.style.overflow/);
     assert.match(helper, /previousFocus\?\.focus/);
     assert.match(helper, /event.stopPropagation\(\)/);
     assert.match(helper, /event.key === 'Tab'/);

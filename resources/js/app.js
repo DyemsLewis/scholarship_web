@@ -2,6 +2,7 @@ import './bootstrap';
 import { createApp } from 'vue';
 import GlobalToastHost from './components/GlobalToastHost.vue';
 import StaffFilePreviewHost from './components/StaffFilePreviewHost.vue';
+import { installModalScrollEnvironment } from './support/modalScrollEnvironment';
 
 function loadIconCdn() {
     if (document.querySelector('link[data-icon-cdn="fontawesome"]')) {
@@ -181,6 +182,8 @@ function mountStaffFilePreviewHost() {
 }
 
 if (appElement) {
+    const cleanupModalEnvironment = installModalScrollEnvironment();
+    if (import.meta.hot) import.meta.hot.dispose(cleanupModalEnvironment);
     loadIconCdn();
     mountGlobalToastHost();
     mountStaffFilePreviewHost();

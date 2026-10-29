@@ -2,12 +2,17 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ScholarshipPreparationReturn from '../components/ScholarshipPreparationReturn.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import { labelFromKey } from '../support/display';
+import { preparationQuery, withPreparationContext } from '../support/scholarshipPreparationContext';
 
 const isLoading = ref(true);
+const preparationParams = preparationQuery(window.location.search);
+const preparationContext = ref(null);
+const contextualHref = (href) => withPreparationContext(href, preparationContext.value?.scholarship_id, preparationContext.value?.return_section);
 const uploadingPreparedName = ref('');
 const errorMessage = ref('');
 const applications = ref([]);
@@ -240,9 +245,10 @@ async function loadDocuments() {
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/dashboard/documents/data');
+        const response = await window.axios.get('/dashboard/documents/data', { params: preparationParams });
 
         applications.value = response.data.applications;
+        preparationContext.value = response.data.preparation_context ?? null;
         preparedDocuments.value = response.data.prepared_documents ?? [];
         documentOptions.value = response.data.document_options ?? [];
         clampPagination();
@@ -365,9 +371,11 @@ onMounted(loadDocuments);
                     icon="fa-solid fa-folder-open"
                     :action-href="documentPageContent.actionHref"
                     :action-label="documentPageContent.actionLabel"
-                    :secondary-href="documentPageContent.secondaryHref"
+                    :secondary-href="contextualHref(documentPageContent.secondaryHref)"
                     :secondary-label="documentPageContent.secondaryLabel"
                 />
+
+                <ScholarshipPreparationReturn v-if="!isLoading" :context="preparationContext" :busy="Boolean(uploadingPreparedName || updatingPreparedId || removingPreparedId)" class="my-4" />
 
                 <PrivacyNoticeCard context="documents" compact />
 

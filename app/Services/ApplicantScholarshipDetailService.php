@@ -15,6 +15,7 @@ class ApplicantScholarshipDetailService
 
     public function __construct(
         private readonly ScholarshipEligibilityService $eligibilityService,
+        private readonly ApplicantScholarshipPreparationService $preparationService,
     ) {}
 
     public function build(Scholarship $scholarship, User $user, string $view = 'summary'): array
@@ -43,10 +44,11 @@ class ApplicantScholarshipDetailService
             $eligibility,
         );
         $eligibilityContent = $this->eligibility($scholarship, $eligibility, $profileReadiness);
+        $documentReadiness = $this->preparationService->documentReadiness($scholarship, $user);
         $requirementsContent = in_array($view, ['summary', 'application'], true)
             ? $this->requirements(
                 $scholarship,
-                $this->eligibilityService->preparedDocumentReadiness($scholarship, $user),
+                $documentReadiness,
             )
             : null;
         $processContent = in_array($view, ['summary', 'application'], true)
@@ -82,6 +84,14 @@ class ApplicantScholarshipDetailService
             'page' => $this->page($view),
             'identity' => $this->identity($scholarship),
             'decision' => $decision,
+            'preparation' => $this->preparationService->build(
+                $scholarship,
+                $decision,
+                $this->preparationService->withEvidenceReadiness($user, $profileReadiness),
+                $eligibility,
+                $documentReadiness,
+                $user->hasVerifiedEmail(),
+            ),
             'snapshot' => $this->facts($scholarship),
             'navigation' => $this->navigation($scholarship, $view),
             'content' => $content,
@@ -121,7 +131,15 @@ class ApplicantScholarshipDetailService
             'method' => null,
             'disabled' => true,
         ];
-        $detail['decision'] = $this->previewDecision($scenario);
+        $sampleEligibility = $this->previewEligibility($scholarship, $scenario);
+        $comparisonScenario = $scenario === 'ineligible' && $sampleEligibility['blocking_criteria'] === [] ? 'general' : $scenario;
+        $detail['decision'] = $this->previewDecision($comparisonScenario);
+        if ($scenario === 'ineligible' && $comparisonScenario === 'general') {
+            $detail['decision']['title'] = 'No required eligibility rule to illustrate a mismatch';
+            $detail['decision']['description'] = 'This program has no restrictive Required rule to fail in this example. Profile verification and application availability still apply.';
+        }
+        $detail['decision']['blockers'] = $sampleEligibility['blocking_criteria'];
+        $detail['preparation'] = $this->preparationService->preview($scholarship, $detail['decision'], $comparisonScenario);
         $detail['navigation'] = collect($detail['navigation'])
             ->map(function (array $item) use ($scholarship, $scenario): array {
                 $routeParameters = [
@@ -169,29 +187,26 @@ class ApplicantScholarshipDetailService
         }
 
         if ($view === 'eligibility') {
-            $detail['content']['profile'] = [
-                'complete' => $scenario !== 'general',
-                'verified' => $scenario !== 'general',
-                'verification_status' => $scenario === 'general' ? 'unsubmitted' : 'approved',
-                'percent' => $scenario === 'general' ? 0 : 100,
-                'missing' => $scenario === 'general' ? ['Applicant profile information'] : [],
-            ];
-            $detail['content']['blockers'] = $scenario === 'ineligible'
-                ? [['label' => 'A published eligibility rule does not match this sample applicant.']]
-                : [];
-            // Preview scenarios must not reuse the provider account's live comparison guidance.
-            $detail['content']['guidance'] = [
-                'state' => $scenario === 'ineligible' ? 'blocked' : 'ready',
-                'label' => 'Applicant example',
-                'title' => $scenario === 'ineligible'
-                    ? 'A required rule does not match this example'
-                    : 'No required mismatches in this example',
-                'description' => 'This is a sample outcome, not an actual eligibility decision. Live results use each applicant\'s verified profile and the program\'s Required and Preferred rules.',
-            ];
+            $detail['content'] = $this->eligibility($scholarship, $sampleEligibility, [
+                'complete' => $comparisonScenario !== 'general', 'verified' => $comparisonScenario !== 'general',
+                'verification_status' => $comparisonScenario === 'general' ? 'unsubmitted' : 'approved',
+                'percent' => $comparisonScenario === 'general' ? 0 : 100, 'missing' => [],
+            ]);
+            $detail['content']['preview_scenario'] = $comparisonScenario;
         }
 
         if ($view === 'application') {
             $detail['content']['requirements']['manage_files_href'] = null;
+            $readiness = &$detail['content']['requirements']['readiness'];
+            $readiness['state'] = 'preview';
+            $readiness['title'] = 'Files to prepare before submitting';
+            $readiness['description'] = 'Read-only preview of the published requirements. Saved-file availability is specific to each applicant.';
+            $readiness['ready_count'] = null;
+            $readiness['missing_count'] = null;
+            $readiness['items'] = array_map(fn (array $item): array => [
+                ...$item, 'status' => 'not_compared', 'status_label' => 'Required file',
+            ], $readiness['items']);
+            unset($readiness);
         }
 
         if ($view === 'provider') {
@@ -199,6 +214,45 @@ class ApplicantScholarshipDetailService
         }
 
         return $detail;
+    }
+
+    private function previewEligibility(Scholarship $scholarship, string $scenario): array
+    {
+        // Sample comparisons are based on published rules, never the viewing provider's profile.
+        $eligibility = $this->eligibilityService->evaluate($scholarship, null, false);
+        $restrictive = fn (array $row): bool => filled($row['requirement'] ?? null)
+            && (($row['status'] ?? null) !== 'info' || ($row['needs_review'] ?? false));
+        $mismatch = collect($eligibility['criteria'])
+            ->first(fn (array $row): bool => $restrictive($row) && ($row['rule_mode'] ?? 'required') === 'required');
+        $sample = $scenario !== 'general' && ($scenario !== 'ineligible' || $mismatch !== null);
+        $eligibility['criteria'] = array_map(function (array $row) use ($scenario, $sample, $mismatch, $restrictive): array {
+            $restricted = $restrictive($row);
+            $fails = $sample && $scenario === 'ineligible' && $row['key'] === $mismatch['key'];
+            $status = ! $sample ? $row['status'] : (! $restricted ? 'info' : ($fails ? 'fail' : 'pass'));
+            $note = ! $sample ? 'Compared with each applicant\'s saved profile when they review this program.'
+                : ($fails ? 'Illustrative example: this applicant does not meet this Required rule.' : 'Illustrative example only; no real applicant information is used.');
+
+            return [
+                'key' => $row['key'], 'label' => $row['label'], 'category' => 'eligibility',
+                'status' => $status, 'rule_mode' => $row['rule_mode'], 'requirement' => $row['requirement'],
+                'student_value' => ! $sample || ! $restricted ? null : ($fails ? 'Example does not meet this rule' : 'Example meets this rule'),
+                'note' => $note, 'comparison' => $note,
+                'comparison_mode' => $sample ? null : ($row['comparison_mode'] ?? null),
+                'needs_review' => ! $sample && ($row['needs_review'] ?? false),
+                'is_blocking' => $fails,
+            ];
+        }, $eligibility['criteria']);
+        $eligibility['blocking_criteria'] = $this->eligibilityService->blockers($eligibility);
+        $eligibility['preferred_mismatches'] = [];
+        $eligibility['review_criteria'] = [];
+        $eligibility['guidance'] = [
+            'state' => $eligibility['blocking_criteria'] !== [] ? 'blocked' : 'ready',
+            'label' => 'Applicant example',
+            'title' => $eligibility['blocking_criteria'] !== [] ? 'A required rule does not match this example' : 'No required mismatches in this example',
+            'description' => 'This is an illustrative preview, not an actual eligibility decision. Live comparisons use the applicant\'s own saved information.',
+        ];
+
+        return $eligibility;
     }
 
     private function previewDecision(string $scenario): array
@@ -703,7 +757,7 @@ class ApplicantScholarshipDetailService
         };
         $readinessContent = match ($state) {
             'ready' => [
-                'title' => 'Required files are ready',
+                'title' => 'Required files are saved',
                 'description' => 'Your saved files can be reused when you start this application.',
             ],
             'not_required' => [
@@ -711,8 +765,8 @@ class ApplicantScholarshipDetailService
                 'description' => 'The initial review uses the information already saved in your profile.',
             ],
             default => [
-                'title' => 'Prepare '.$missingCount.' file'.($missingCount === 1 ? '' : 's').' before applying',
-                'description' => 'Upload each file once in My Documents, then reuse it for this application.',
+                'title' => 'Prepare '.$missingCount.' file'.($missingCount === 1 ? '' : 's').' before submitting',
+                'description' => 'Save files in My Documents or upload them in the application form. Starting the form does not submit your application.',
             ],
         };
 
@@ -741,7 +795,7 @@ class ApplicantScholarshipDetailService
                     ->map(fn (string $name): array => [
                         'name' => $name,
                         'status' => $matchedDocuments->contains($name) ? 'ready' : 'missing',
-                        'status_label' => $matchedDocuments->contains($name) ? 'Ready' : 'Upload needed',
+                        'status_label' => $matchedDocuments->contains($name) ? 'Saved file' : 'Upload needed',
                     ])
                     ->values()
                     ->all(),
@@ -752,6 +806,8 @@ class ApplicantScholarshipDetailService
             'post_qualification_documents' => $this->eligibilityService
                 ->splitDocumentRequirements($scholarship->post_qualification_requirements),
             'manage_files_href' => '/dashboard/documents',
+            'questions' => $this->preparationService->questions($scholarship),
+            'upload_policy' => ['extensions' => ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'], 'max_size_mb' => 5],
         ];
     }
 
@@ -775,12 +831,20 @@ class ApplicantScholarshipDetailService
             ->values()
             ->values();
         $eventsByType = $events->keyBy('type');
+        $publishedSessionCounts = $scholarship->stageSessions()
+            ->whereIn('stage_key', $stages)
+            ->whereIn('status', ['scheduled', 'ongoing'])
+            ->whereNotNull('published_at')
+            ->selectRaw('stage_key, count(*) as session_count')
+            ->groupBy('stage_key')
+            ->pluck('session_count', 'stage_key');
         $expectedResults = $scholarship->expected_results_at?->format('M d, Y');
 
         return [
             'stages' => collect($stages)
-                ->map(function (string $stage, int $index) use ($eventsByType, $expectedResults): array {
+                ->map(function (string $stage, int $index) use ($eventsByType, $publishedSessionCounts, $expectedResults): array {
                     $event = $eventsByType->get($stage);
+                    $sessionCount = (int) $publishedSessionCounts->get($stage, $event ? 1 : 0);
                     $definition = match ($stage) {
                         'screening' => [
                             'label' => 'Pre-screening review',
@@ -819,13 +883,16 @@ class ApplicantScholarshipDetailService
                             $event['venue'] ?: $event['location_address'],
                         ])->filter()->implode(' | ')
                         : null;
-                    $timing = $event
-                        ? [
+                    if ($sessionCount > 1) {
+                        $timing = ['label' => 'Multiple sessions planned', 'note' => 'Your session is confirmed after assignment.', 'state' => 'multiple'];
+                    } elseif ($event) {
+                        $timing = [
                             'label' => $event['scheduled_label'] ?? 'Scheduled activity',
                             'note' => $eventPlace,
                             'state' => 'scheduled',
-                        ]
-                        : match ($stage) {
+                        ];
+                    } else {
+                        $timing = match ($stage) {
                             'screening' => ['label' => 'First step', 'note' => 'Portal review', 'state' => 'standard'],
                             'formal_application' => ['label' => 'If you qualify', 'note' => 'Provider instructions', 'state' => 'conditional'],
                             'exam', 'interview' => ['label' => 'If you advance', 'note' => 'Date shared later', 'state' => 'conditional'],
@@ -835,16 +902,20 @@ class ApplicantScholarshipDetailService
                                 'state' => $expectedResults ? 'scheduled' : 'standard',
                             ],
                         };
+                    }
 
                     return [
                         'key' => $stage,
                         'step' => $index + 1,
                         ...$definition,
                         'timing' => $timing,
+                        'session_count' => $sessionCount,
+                        'is_assigned_appointment' => false,
                     ];
                 })
                 ->all(),
             'intro' => 'You move forward one step at a time. The provider will notify you before any activity that needs a schedule.',
+            'schedule_note' => 'Published dates describe the program schedule, not your assigned appointment. If you advance, check your application record for your confirmed session and instructions.',
         ];
     }
 

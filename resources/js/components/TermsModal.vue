@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { getTermsContent } from '../support/termsContent';
+import { lockPageScroll } from '../support/pageScrollLock';
 
 const props = defineProps({
     modelValue: {
@@ -19,7 +20,7 @@ const emit = defineEmits(['update:modelValue']);
 const selectedContent = computed(() => getTermsContent(props.context));
 const dialog = ref(null);
 let previouslyFocused = null;
-let ownedScrollLock = false;
+let releaseScrollLock = null;
 
 function closeModal() {
     emit('update:modelValue', false);
@@ -50,20 +51,19 @@ function handleKeydown(event) {
 watch(() => props.modelValue, async (isOpen) => {
     if (isOpen) {
         previouslyFocused = document.activeElement;
-        ownedScrollLock = !document.body.classList.contains('overflow-hidden');
-        document.body.classList.add('overflow-hidden');
+        releaseScrollLock ??= lockPageScroll();
         await nextTick();
-        dialog.value?.focus();
+        if (props.modelValue) dialog.value?.focus({ preventScroll: true });
     } else {
-        if (ownedScrollLock) document.body.classList.remove('overflow-hidden');
-        ownedScrollLock = false;
-        previouslyFocused?.focus?.();
+        releaseScrollLock?.();
+        releaseScrollLock = null;
+        previouslyFocused?.focus?.({ preventScroll: true });
         previouslyFocused = null;
     }
 }, { immediate: true });
 
 onUnmounted(() => {
-    if (ownedScrollLock) document.body.classList.remove('overflow-hidden');
+    releaseScrollLock?.();
 });
 </script>
 

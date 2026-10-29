@@ -1,5 +1,6 @@
 <script setup>
-import { onUnmounted, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
+import { usePageScrollLock } from '../../composables/usePageScrollLock';
 import { showPortalToast } from '../../support/portalToast';
 
 const props = defineProps({
@@ -9,6 +10,7 @@ const props = defineProps({
     requirement: { type: Object, default: null },
 });
 const emit = defineEmits(['close', 'saved']);
+usePageScrollLock(() => props.open);
 const isSaving = ref(false);
 const form = ref(defaultForm());
 
@@ -24,14 +26,12 @@ function defaultForm() {
 }
 
 watch(() => props.open, (open) => {
-    document.body.classList.toggle('overflow-hidden', open);
     if (open) {
         form.value = defaultForm();
         if (!props.requirement?.requires_file) form.value.request_type = 'exception';
     }
 }, { immediate: true });
 
-onUnmounted(() => document.body.classList.remove('overflow-hidden'));
 
 function dateOffset(date, days) {
     if (!date) return '';

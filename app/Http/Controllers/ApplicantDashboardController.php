@@ -45,6 +45,7 @@ use App\Support\PreScreeningHandoffRecord;
 use App\Support\RecipientAgreement;
 use App\Support\RecipientMonitoringRequirementType;
 use App\Support\ReviewRubric;
+use App\Support\ScholarshipPreparationContext;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\Terms;
 use Carbon\CarbonImmutable;
@@ -532,6 +533,7 @@ class ApplicantDashboardController extends Controller
         return response()->json([
             'user' => $user->publicPayload(),
             'profile_readiness' => $user->applicantProfileReadiness(),
+            'preparation_context' => ScholarshipPreparationContext::fromRequest($request),
             'match_summary' => $this->profileMatchSummary($user),
             'platform_active_scholarships' => $this->eligibilityService->activePlatformScholarships($user),
             'prepared_documents_count' => $user->studentDocuments()->count(),
@@ -683,6 +685,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'user' => $this->userPayload($request),
+            'preparation_context' => ScholarshipPreparationContext::fromRequest($request),
             'stats' => [
                 'applications' => $applications->count(),
                 'prepared' => $studentDocuments->count(),

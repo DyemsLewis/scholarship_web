@@ -1,5 +1,6 @@
 <script setup>
-import { onUnmounted, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
+import { usePageScrollLock } from '../../composables/usePageScrollLock';
 import { showPortalToast } from '../../support/portalToast';
 
 const props = defineProps({
@@ -7,6 +8,7 @@ const props = defineProps({
     release: { type: Object, default: null },
 });
 const emit = defineEmits(['close', 'saved']);
+usePageScrollLock(() => props.open);
 const isSaving = ref(false);
 const today = new Date().toISOString().slice(0, 10);
 const form = ref(defaultForm());
@@ -24,11 +26,9 @@ function defaultForm() {
 }
 
 watch(() => props.open, (open) => {
-    document.body.classList.toggle('overflow-hidden', open);
     if (open) form.value = defaultForm();
 }, { immediate: true });
 
-onUnmounted(() => document.body.classList.remove('overflow-hidden'));
 
 function close() {
     if (!isSaving.value) emit('close');

@@ -1,5 +1,6 @@
 <script setup>
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { usePageScrollLock } from '../composables/usePageScrollLock';
 
 const props = defineProps({
     modelValue: {
@@ -13,6 +14,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue']);
+usePageScrollLock(() => props.modelValue);
 const isLoading = ref(false);
 const isSubmitting = ref(false);
 const errorMessage = ref('');
@@ -100,8 +102,6 @@ async function submitReport() {
 }
 
 watch(() => props.modelValue, (isOpen) => {
-    document.body.classList.toggle('overflow-hidden', isOpen);
-
     if (isOpen) {
         resetForm(props.initialCategory);
         loadOptions();
@@ -126,9 +126,6 @@ watch(() => form.value.category, (category) => {
     }
 });
 
-onUnmounted(() => {
-    document.body.classList.remove('overflow-hidden');
-});
 </script>
 
 <template>

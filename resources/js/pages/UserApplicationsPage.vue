@@ -1,7 +1,8 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
@@ -12,6 +13,8 @@ import { labelFromKey } from '../support/display';
 import { eligibilityCriterionPresentation, eligibilityOverview } from '../support/applicantEligibility';
 import { showPortalToast } from '../support/portalToast';
 import { progressStateLabel, selectionPlanFor } from '../support/selectionPlan';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { hasUnsentApplicationAnswers, withPreparationContext } from '../support/scholarshipPreparationContext';
 
 const isLoading = ref(true);
 const isSubmitting = ref(false);
@@ -44,6 +47,12 @@ const documentTermsAccepted = ref(false);
 const documentFileInput = ref(null);
 const activeUploadRequirement = ref('');
 const previewDocument = ref(null);
+const { confirmation, requestConfirmation, confirmConfirmation, cancelConfirmation } = useConfirmationDialog();
+let allowApplicationNavigation = false;
+let pendingApplicationNavigation = false;
+const hasUnsentAnswers = computed(() => Boolean(selectedScholarshipId.value)
+    && hasUnsentApplicationAnswers(applicationAnswers.value, notes.value, applicationTermsAccepted.value));
+const applicationBusy = computed(() => isSubmitting.value || isUploadingDocument.value);
 const applicationUrlParams = new URLSearchParams(window.location.search);
 const requestedScholarshipId = document.getElementById('app')?.dataset.scholarshipId
     || applicationUrlParams.get('scholarship');
@@ -90,6 +99,8 @@ const applicationModeOptions = [
     { value: 'provider_review', label: 'Profile review only' },
 ];
 const selectedScholarship = computed(() => scholarships.value.find((scholarship) => scholarship.id === Number(selectedScholarshipId.value)));
+const preparationHref = (href) => withPreparationContext(href, selectedScholarship.value?.id);
+const scholarshipRequirementsHref = computed(() => selectedScholarship.value ? `/dashboard/scholarships/${selectedScholarship.value.id}/application` : null);
 const selectedRequirements = computed(() => selectedScholarship.value?.application_mode === 'provider_review'
     ? []
     : documentRequirements(selectedScholarship.value?.requirements));
@@ -947,7 +958,49 @@ async function trackApplicationStart(scholarship) {
     }
 }
 
-onMounted(loadApplications);
+function protectUnsentApplication(event) {
+    if (!allowApplicationNavigation && (hasUnsentAnswers.value || applicationBusy.value)) {
+        event.preventDefault();
+        event.returnValue = '';
+    }
+}
+
+async function handleApplicationNavigation(event) {
+    if (allowApplicationNavigation || (!hasUnsentAnswers.value && !applicationBusy.value)
+        || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target?.closest?.('a[href]');
+    if (!link || link.target === '_blank' || link.hasAttribute('download')) return;
+    const destination = new URL(link.href, window.location.href);
+    if (destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+    event.preventDefault();
+    if (applicationBusy.value) {
+        showPortalToast({ type: 'warning', message: 'Wait for the current upload or submission to finish before leaving.' });
+        return;
+    }
+    if (pendingApplicationNavigation) return;
+    pendingApplicationNavigation = true;
+    const leave = await requestConfirmation({
+        eyebrow: 'Unsent application answers', title: 'Leave this application form?',
+        message: 'Your answers, notes, and confirmation are not saved until you submit. Uploaded files remain in My Documents, but unsent answers will be lost.',
+        confirmLabel: 'Discard answers and leave', cancelLabel: 'Keep editing', tone: 'danger',
+    });
+    pendingApplicationNavigation = false;
+    if (leave) {
+        allowApplicationNavigation = true;
+        window.location.assign(destination.href);
+    }
+}
+
+onMounted(() => {
+    window.addEventListener('beforeunload', protectUnsentApplication);
+    document.addEventListener('click', handleApplicationNavigation);
+    loadApplications();
+});
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', protectUnsentApplication);
+    document.removeEventListener('click', handleApplicationNavigation);
+    cancelConfirmation();
+});
 
 watch(selectedScholarship, (scholarship) => {
     applicationAnswers.value = {};
@@ -966,6 +1019,8 @@ watch(selectedScholarship, (scholarship) => {
 <template>
     <main class="student-shell">
         <ApplicantSidebar />
+
+        <ConfirmationDialog v-bind="confirmation" @confirm="confirmConfirmation" @cancel="cancelConfirmation" />
 
         <FilePreviewModal
             :file="previewDocument"
@@ -1042,6 +1097,10 @@ watch(selectedScholarship, (scholarship) => {
                     </div>
 
                     <template v-if="activeWorkspace === 'new'">
+                    <div v-if="scholarshipRequirementsHref" data-application-preparation-handoff class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-5 py-4">
+                        <div><p class="text-sm font-bold text-slate-950">{{ selectedScholarship.title }}</p><p class="mt-1 text-xs leading-5 text-slate-500">This scholarship is selected. Answers are not saved until you submit.</p></div>
+                        <a :href="scholarshipRequirementsHref" class="inline-flex min-h-11 items-center gap-2 text-xs font-bold text-slate-700 hover:underline"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>Back to scholarship requirements</a>
+                    </div>
                     <div v-if="!canApply" class="student-card border-amber-200 bg-amber-50/90 p-5">
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                             <div>
@@ -1062,7 +1121,7 @@ watch(selectedScholarship, (scholarship) => {
                                 </p>
                             </div>
                             <a
-                                :href="profileReadiness.complete ? '/dashboard/profile?section=verification' : '/dashboard/profile'"
+                                :href="preparationHref(profileReadiness.complete ? '/dashboard/profile?section=verification' : '/dashboard/profile')"
                                 class="inline-flex justify-center rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
                             >
                                 {{ profileReadiness.complete ? 'Review supporting evidence' : 'Complete profile' }}
@@ -1244,7 +1303,7 @@ watch(selectedScholarship, (scholarship) => {
 
                                 <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
                                     <div><p class="text-sm font-bold text-slate-900">Need to update your information?</p><p class="mt-1 text-xs leading-5 text-slate-500">Changes to your education, location, or household details may update this result.</p></div>
-                                    <a href="/dashboard/profile" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:w-auto">Edit profile <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                                    <a :href="preparationHref('/dashboard/profile')" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:w-auto">Edit profile <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
                                 </div>
                             </div>
 
@@ -1361,7 +1420,7 @@ watch(selectedScholarship, (scholarship) => {
                                             <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"><div class="h-full rounded-full bg-amber-500 transition-all" :style="{ width: `${selectedDocumentReadiness}%` }"></div></div>
                                             <p class="mt-2 text-xs text-slate-500">{{ selectedMissingPreparedDocuments.length ? `${selectedMissingPreparedDocuments.length} required file${selectedMissingPreparedDocuments.length === 1 ? '' : 's'} still missing.` : 'All required files are ready.' }}</p>
                                         </div>
-                                        <a href="/dashboard/documents" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"><i class="fa-solid fa-folder-open" aria-hidden="true"></i>Open Documents</a>
+                                        <a :href="preparationHref('/dashboard/documents')" class="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 sm:w-auto"><i class="fa-solid fa-folder-open" aria-hidden="true"></i>Open Documents</a>
                                     </div>
 
                                     <div class="p-5">

@@ -1,14 +1,11 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { lockPageScroll } from '../../support/pageScrollLock';
 
 const props = defineProps({
     open: {
         type: Boolean,
         default: false,
-    },
-    eyebrow: {
-        type: String,
-        default: 'Edit applicant profile',
     },
     title: {
         type: String,
@@ -70,7 +67,7 @@ const emit = defineEmits(['close', 'save']);
 const dialog = ref(null);
 const closeButton = ref(null);
 let previouslyFocused = null;
-let previousBodyOverflow = '';
+let releaseScrollLock = null;
 let nestedOpener = null;
 
 const widthClass = computed(() => ({
@@ -81,8 +78,8 @@ const widthClass = computed(() => ({
 
 const actionLabel = computed(() => props.saving ? 'Saving...' : props.saveLabel);
 const working = computed(() => props.saving || props.busy);
-const footerMessage = computed(() => props.dirty ? 'Profile changes not saved'
-    : props.instantChanges ? 'Uploads and removals are saved immediately.' : 'Changes are saved when you select Save changes.');
+const footerMessage = computed(() => props.dirty ? props.instantChanges ? 'Academic result not saved. Files are saved immediately.' : 'Profile changes not saved'
+    : props.instantChanges ? 'Uploads and removals are saved immediately.' : 'No changes to save yet.');
 
 function close() {
     if (!working.value) emit('close');
@@ -134,15 +131,15 @@ function handleKeydown(event) {
 watch(() => props.open, async (open) => {
     if (open) {
         previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        previousBodyOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
+        releaseScrollLock ??= lockPageScroll();
         await nextTick();
-        closeButton.value?.focus();
+        if (props.open) closeButton.value?.focus({ preventScroll: true });
         return;
     }
 
-    document.body.style.overflow = previousBodyOverflow;
-    previouslyFocused?.focus?.();
+    releaseScrollLock?.();
+    releaseScrollLock = null;
+    previouslyFocused?.focus?.({ preventScroll: true });
     previouslyFocused = null;
 }, { immediate: true });
 
@@ -153,16 +150,16 @@ watch(() => props.suspended, async (suspended) => {
         await nextTick();
         const nested = [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')]
             .filter((element) => element !== dialog.value && element.offsetParent !== null).at(-1);
-        nested?.focus();
+        nested?.focus({ preventScroll: true });
     } else {
         await nextTick();
-        nestedOpener?.focus?.();
+        nestedOpener?.focus?.({ preventScroll: true });
         nestedOpener = null;
     }
 });
 
 onBeforeUnmount(() => {
-    document.body.style.overflow = previousBodyOverflow;
+    releaseScrollLock?.();
 });
 </script>
 
@@ -177,7 +174,7 @@ onBeforeUnmount(() => {
             >
                 <section
                     ref="dialog"
-                    :class="['flex max-h-[96dvh] w-full flex-col overflow-hidden rounded-md border border-slate-300 bg-white shadow-2xl outline-none sm:max-h-[92dvh]', widthClass]"
+                    :class="['flex max-h-[96dvh] w-full flex-col overflow-hidden rounded-sm border border-slate-300 bg-white shadow-2xl outline-none sm:max-h-[92dvh]', widthClass]"
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="profile-editor-title"
@@ -186,16 +183,15 @@ onBeforeUnmount(() => {
                     tabindex="-1"
                     @keydown="handleKeydown"
                 >
-                    <header class="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 sm:py-5">
+                    <header data-profile-editor-header class="shrink-0 border-b-2 border-amber-400 bg-[#081426] px-4 py-4 text-white sm:px-6">
                         <div class="flex items-start justify-between gap-4">
                             <div class="flex min-w-0 items-start gap-3">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-700">
-                                    <i :class="icon" aria-hidden="true"></i>
+                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-white/10 text-sm text-amber-300">
+                                    <i :class="[icon, 'block leading-none']" aria-hidden="true"></i>
                                 </span>
                                 <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">{{ eyebrow }}</p>
-                                    <h2 id="profile-editor-title" class="mt-1 font-display text-2xl font-bold leading-tight text-slate-950">{{ title }}</h2>
-                                    <p v-if="description" id="profile-editor-description" class="mt-1 max-w-3xl text-sm leading-5 text-slate-500">{{ description }}</p>
+                                    <h2 id="profile-editor-title" class="font-display text-xl font-bold leading-tight text-white sm:text-2xl">{{ title }}</h2>
+                                    <p v-if="description" id="profile-editor-description" class="mt-1 max-w-3xl text-xs leading-5 text-slate-300">{{ description }}</p>
                                     <div v-if="$slots.status" class="mt-2"><slot name="status" /></div>
                                 </div>
                             </div>
@@ -204,7 +200,7 @@ onBeforeUnmount(() => {
                                 <button
                                     ref="closeButton"
                                     type="button"
-                                    class="grid h-10 w-10 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+                                    class="grid h-10 w-10 place-items-center rounded-sm border border-white/20 bg-white/5 text-slate-200 transition hover:bg-white/15 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-300 disabled:opacity-50"
                                     aria-label="Close profile editor"
                                     title="Close profile editor"
                                     :disabled="working"
@@ -229,7 +225,7 @@ onBeforeUnmount(() => {
                                 <button
                                     v-if="!instantChanges || dirty"
                                     type="button"
-                                    class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    class="rounded-sm border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
                                     :disabled="working"
                                     @click="close"
                                 >
@@ -237,7 +233,7 @@ onBeforeUnmount(() => {
                                 </button>
                                 <button
                                     type="button"
-                                    class="inline-flex items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                    class="inline-flex items-center justify-center gap-2 rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                                     :disabled="working || saveDisabled"
                                     @click="$emit('save')"
                                 >

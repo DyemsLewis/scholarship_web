@@ -63,7 +63,8 @@ test('shared preview modal provides accessible controls and a reusable viewport'
     assert.match(modal, /event\.key === 'Escape'/);
     assert.match(modal, /event\.key !== 'Tab'/);
     assert.match(modal, /modalEnvironmentActive/);
-    assert.match(modal, /document\.body\.classList\.add\('overflow-hidden'\)/);
+    assert.match(modal, /usePageScrollLock\(\(\) => props.open\)/);
+    assert.doesNotMatch(modal, /document.body.classList/);
     assert.match(viewport, /data-applicant-preview-viewport/);
     assert.doesNotMatch(viewport, /max-w-\[30rem\]/);
     assert.match(viewport, /min-h-full w-full bg-slate-100/);
@@ -109,6 +110,7 @@ test('scholarship detail supports embedded modal rendering and section navigatio
     assert.match(scholarship, /embedded: \{ type: Boolean/);
     assert.match(scholarship, /data-embedded-preview/);
     assert.match(scholarship, /openPreviewSection/);
-    assert.match(scholarship, /readinessSection/);
+    assert.match(scholarship, /<ScholarshipApplicationGuide/);
+    assert.match(scholarship, /@navigate="openPreviewSection"/);
     assert.match(scholarship, /section: currentView\.value/);
 });
