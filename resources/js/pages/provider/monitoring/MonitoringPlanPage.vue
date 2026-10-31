@@ -1,7 +1,9 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { showPortalToast } from '../../../support/portalToast';
+import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 
 const scholarshipId = document.getElementById('app')?.dataset.scholarshipId;
 const scholarship = ref(null);
@@ -20,6 +22,16 @@ const checkInEditor = ref(false);
 const editingIndex = ref(-1);
 const form = ref(defaultPlan());
 const checkInForm = ref(defaultCheckIn());
+const requirementDialog = ref(null);
+const checkInDialog = ref(null);
+const requirementError = ref('');
+const { handleKeydown: handleRequirementKeydown } = useModalAccessibility(() => Boolean(requirementEditor.value), requirementDialog, closeRequirementEditor);
+const { handleKeydown: handleCheckInKeydown } = useModalAccessibility(() => checkInEditor.value, checkInDialog, closeCheckInEditor);
+
+watch(requirementError, (message) => {
+    const body = requirementDialog.value?.querySelector('.monitoring-dialog-body');
+    if (message && body) body.scrollTop = 0;
+}, { flush: 'post' });
 
 const sections = [
     { key: 'schedule', label: '1. Schedule', icon: 'fa-solid fa-calendar-days' },
@@ -107,6 +119,7 @@ async function loadPlan() {
 }
 
 function openRequirement(index = -1) {
+    requirementError.value = '';
     editingIndex.value = index;
     if (index >= 0) {
         requirementEditor.value = { ...form.value.requirements[index] };
@@ -142,11 +155,11 @@ function changeRequirementType() {
 function saveRequirement() {
     const requirement = requirementEditor.value;
     if (!requirement?.title?.trim()) {
-        errorMessage.value = 'Add a short title for the monitoring requirement.';
+        requirementError.value = 'Add a short title for the monitoring requirement.';
         return;
     }
     if (requirement.requires_file && !requirement.evidence_description?.trim()) {
-        errorMessage.value = 'Describe the evidence recipients need to submit.';
+        requirementError.value = 'Describe the evidence recipients need to submit.';
         return;
     }
 
@@ -163,12 +176,23 @@ function saveRequirement() {
     else form.value.requirements.push(normalized);
 
     errorMessage.value = '';
+    requirementError.value = '';
     requirementEditor.value = null;
     editingIndex.value = -1;
 }
 
 function removeRequirement(index) {
     form.value.requirements.splice(index, 1);
+}
+
+function closeRequirementEditor() {
+    requirementEditor.value = null;
+    requirementError.value = '';
+}
+
+function closeCheckInEditor() {
+    if (isPublishingCheckIn.value) return;
+    checkInEditor.value = false;
 }
 
 function goTo(section) {
@@ -258,7 +282,7 @@ onMounted(loadPlan);
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="monitoring-plan-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-monitoring-workspace mx-auto max-w-[94rem]">
                 <div v-if="isLoading" class="border border-slate-200 bg-white px-6 py-16 text-center">
                     <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
                     <p class="mt-3 text-sm font-semibold text-slate-500">Loading monitoring plan...</p>
@@ -270,12 +294,12 @@ onMounted(loadPlan);
                             <div class="flex min-w-0 items-start gap-4">
                                 <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span>
                                 <div>
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Recipient monitoring</p>
-                                    <h1 id="monitoring-plan-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Monitoring plan</h1>
+                                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Recipient monitoring</p>
+                                    <h1 id="monitoring-plan-title" class="monitoring-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Monitoring plan</h1>
                                     <p class="mt-2 text-sm leading-6 text-slate-600">Set the schedule and records required for {{ scholarship.title }}.</p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-3">
+                            <div class="monitoring-page-actions flex items-center gap-3">
                                 <span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', activePlan ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600']">{{ savedPlan?.status_label || 'Not saved' }}</span>
                                 <button v-if="activePlan && canPublishCheckIn" type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800" @click="openCheckInEditor"><i class="fa-solid fa-calendar-plus text-[10px] text-amber-300" aria-hidden="true"></i>New check-in</button>
                                 <a href="/provider/monitoring/plans" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i> All plans</a>
@@ -304,7 +328,7 @@ onMounted(loadPlan);
                                 <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Ends</span><input v-model="form.ends_on" :disabled="!canEdit" type="date" :min="form.starts_on || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm disabled:bg-slate-100"></label>
                             </div>
                             <label class="mt-6 flex items-start gap-3 border border-slate-200 bg-slate-50 p-4"><input v-model="form.allow_exception_requests" :disabled="!canEdit" type="checkbox" class="mt-0.5 h-4 w-4"><span><strong class="block text-sm text-slate-900">Allow extension or exception requests</strong><span class="mt-1 block text-xs leading-5 text-slate-500">Recipients can explain a documented issue before a requirement is marked incomplete.</span></span></label>
-                            <label class="mt-5 block"><span class="mb-2 block text-xs font-bold text-slate-700">Instructions <span class="font-normal text-slate-400">(optional)</span></span><textarea v-model="form.instructions" :disabled="!canEdit" rows="4" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm leading-6 disabled:bg-slate-100" placeholder="Add instructions that apply to every check-in."></textarea></label>
+                            <label class="mt-5 block"><span class="mb-2 block text-xs font-bold text-slate-700">Instructions <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="form.instructions" :disabled="!canEdit" rows="4" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm leading-6 disabled:bg-slate-100" placeholder="Add instructions that apply to every check-in."></textarea></label>
                             <div class="mt-7 flex justify-end"><button type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800" @click="goTo('requirements')">Continue<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></button></div>
                         </div>
 
@@ -316,7 +340,7 @@ onMounted(loadPlan);
                             <div v-if="!form.requirements.length" class="py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-list-check text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">No requirements added</p><p class="mt-1 text-xs text-slate-500">Add the first record recipients must provide.</p></div>
                             <div v-else class="divide-y divide-slate-200">
                                 <article v-for="(requirement, index) in form.requirements" :key="requirement.id || `${requirement.type}-${index}`" class="flex min-h-24 items-center justify-between gap-8 py-5">
-                                    <div class="min-w-0"><div class="flex items-center gap-2"><h3 class="truncate text-sm font-bold text-slate-950">{{ requirement.title }}</h3><span v-if="requirement.required" class="bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600">Required</span></div><p class="mt-1 line-clamp-2 text-sm text-slate-500">{{ requirement.evidence_description || requirement.description || 'No file required' }}</p><p v-if="requirement.type === 'academic_progress'" class="mt-2 text-xs font-bold text-amber-700">Minimum {{ requirement.minimum_grade }} {{ requirement.grading_scale === 'grade_point' ? 'grade point' : '%' }}</p></div>
+                                    <div class="min-w-0"><div class="flex items-center gap-2"><h3 class="monitoring-text text-sm font-bold text-slate-950">{{ requirement.title }}</h3><span v-if="requirement.required" class="bg-slate-100 px-2 py-1 text-xs font-bold uppercase text-slate-600">Required</span></div><WorkspaceTextSummary class="mt-1 text-sm text-slate-500" :text="requirement.evidence_description || requirement.description || 'No file required'" label="details" /><p v-if="requirement.type === 'academic_progress'" class="mt-2 text-xs font-bold text-amber-700">Minimum {{ requirement.minimum_grade }} {{ requirement.grading_scale === 'grade_point' ? 'grade point' : '%' }}</p></div>
                                     <div v-if="canEdit" class="flex shrink-0 gap-2"><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" @click="openRequirement(index)"><i class="fa-solid fa-pen text-[9px]" aria-hidden="true"></i>Edit</button><button type="button" class="grid h-9 w-9 place-items-center border border-rose-200 bg-white text-rose-700" aria-label="Remove requirement" @click="removeRequirement(index)"><i class="fa-solid fa-trash text-xs" aria-hidden="true"></i></button></div>
                                 </article>
                             </div>
@@ -326,9 +350,9 @@ onMounted(loadPlan);
                         <div v-else class="p-7">
                             <div class="flex items-start gap-3 border-b border-slate-200 pb-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-check text-sm" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Confirm the plan</h2><p class="mt-1 text-sm text-slate-500">Review the essentials before saving.</p></div></div>
                             <dl class="mt-6 divide-y divide-slate-200 border border-slate-200">
-                                <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Schedule</dt><dd><p class="text-sm font-bold text-slate-950">{{ frequencyLabel }}</p><p class="mt-1 text-xs text-slate-500">{{ dateRange }} · {{ form.grace_period_days }}-day grace period</p></dd></div>
-                                <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Requirements</dt><dd><p class="text-sm font-bold text-slate-950">{{ form.requirements.length }} item{{ form.requirements.length === 1 ? '' : 's' }}</p><p class="mt-1 text-xs text-slate-500">{{ form.requirements.map((item) => item.title).join(' · ') }}</p></dd></div>
-                                <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-500">Exceptions</dt><dd class="text-sm font-bold text-slate-950">{{ form.allow_exception_requests ? 'Allowed' : 'Not enabled' }}</dd></div>
+                                <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Schedule</dt><dd><p class="text-sm font-bold text-slate-950">{{ frequencyLabel }}</p><p class="mt-1 text-xs text-slate-500">{{ dateRange }} · {{ form.grace_period_days }}-day grace period</p></dd></div>
+                                <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Requirements</dt><dd><p class="text-sm font-bold text-slate-950">{{ form.requirements.length }} item{{ form.requirements.length === 1 ? '' : 's' }}</p><p class="mt-1 text-xs text-slate-500">{{ form.requirements.map((item) => item.title).join(' · ') }}</p></dd></div>
+                                <div class="grid grid-cols-[14rem_1fr] px-5 py-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Exceptions</dt><dd class="text-sm font-bold text-slate-950">{{ form.allow_exception_requests ? 'Allowed' : 'Not enabled' }}</dd></div>
                             </dl>
                             <div class="mt-7 flex items-center justify-between border-t border-slate-200 pt-5"><button type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="goTo('requirements')"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>Previous</button><div v-if="canEdit" class="flex gap-2"><button type="button" :disabled="isSaving" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-50" @click="savePlan('draft')"><i class="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true"></i>Save draft</button><button type="button" :disabled="isSaving" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50" @click="savePlan('active')"><i :class="['fa-solid text-[10px]', isSaving ? 'fa-spinner fa-spin' : 'fa-circle-check']" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : 'Activate plan' }}</button></div></div>
                         </div>
@@ -339,39 +363,42 @@ onMounted(loadPlan);
             </div>
         </section>
 
-        <div v-if="requirementEditor" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" role="dialog" aria-modal="true" aria-labelledby="requirement-editor-title" @click.self="requirementEditor = null">
-            <form class="w-full max-w-2xl border border-slate-300 bg-white shadow-2xl" @submit.prevent="saveRequirement">
-                <header class="flex items-start justify-between border-b border-slate-200 px-6 py-5"><div><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Monitoring record</p><h2 id="requirement-editor-title" class="mt-1 text-xl font-bold text-slate-950">{{ editingIndex >= 0 ? 'Edit requirement' : 'Add requirement' }}</h2></div><button type="button" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600" aria-label="Close" @click="requirementEditor = null"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
-                <div class="grid grid-cols-2 gap-5 p-6">
+        <Teleport to="body">
+        <div v-if="requirementEditor" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" @click.self="closeRequirementEditor">
+            <form ref="requirementDialog" class="provider-monitoring-workspace monitoring-dialog w-full max-w-2xl border border-slate-300 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="requirement-editor-title" tabindex="-1" @keydown="handleRequirementKeydown" @submit.prevent="saveRequirement">
+                <header class="flex items-start justify-between border-b border-slate-200 px-6 py-5"><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Monitoring record</p><h2 id="requirement-editor-title" class="mt-1 text-xl font-bold text-slate-950">{{ editingIndex >= 0 ? 'Edit requirement' : 'Add requirement' }}</h2></div><button type="button" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600" aria-label="Close" @click="closeRequirementEditor"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
+                <div class="monitoring-dialog-body grid grid-cols-2 gap-5 p-6">
+                    <p v-if="requirementError" class="col-span-2 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ requirementError }}</p>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Type</span><select v-model="requirementEditor.type" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm" @change="changeRequirementType"><option v-for="type in requirementTypes" :key="type.value" :value="type.value">{{ type.label }}</option></select></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Title</span><input v-model="requirementEditor.title" required maxlength="120" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
                     <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">What should the recipient submit?</span><textarea v-model="requirementEditor.evidence_description" :required="requirementEditor.requires_file" rows="3" maxlength="1000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm"></textarea></label>
                     <template v-if="requirementEditor.type === 'academic_progress'"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Minimum grade</span><input v-model.number="requirementEditor.minimum_grade" required type="number" step="0.01" class="h-11 w-full border border-slate-300 px-3 text-sm"></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Scale</span><select v-model="requirementEditor.grading_scale" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option value="percentage">Percentage</option><option value="grade_point">Grade point</option></select></label></template>
                     <div class="col-span-2 flex gap-6 border border-slate-200 bg-slate-50 p-4"><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_file" type="checkbox"> File required</label><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_original_verification" type="checkbox"> Original may be checked</label></div>
                 </div>
-                <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="requirementEditor = null">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white"><i class="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true"></i>Save requirement</button></footer>
+                <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="closeRequirementEditor">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white"><i class="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true"></i>Save requirement</button></footer>
             </form>
         </div>
 
-        <div v-if="checkInEditor" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" role="dialog" aria-modal="true" aria-labelledby="check-in-editor-title" @click.self="checkInEditor = false">
-            <form class="w-full max-w-2xl border border-slate-300 bg-white shadow-2xl" @submit.prevent="publishCheckIn">
+        <div v-if="checkInEditor" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" @click.self="closeCheckInEditor">
+            <form ref="checkInDialog" class="provider-monitoring-workspace monitoring-dialog w-full max-w-2xl border border-slate-300 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="check-in-editor-title" tabindex="-1" @keydown="handleCheckInKeydown" @submit.prevent="publishCheckIn">
                 <header class="flex items-start justify-between border-b border-slate-200 px-6 py-5">
-                    <div><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Recipient monitoring</p><h2 id="check-in-editor-title" class="mt-1 text-xl font-bold text-slate-950">Schedule a check-in</h2><p class="mt-1 text-sm text-slate-500">Publish one period to all active recipients in this program.</p></div>
-                    <button type="button" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600" aria-label="Close" @click="checkInEditor = false"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                    <div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Recipient monitoring</p><h2 id="check-in-editor-title" class="mt-1 text-xl font-bold text-slate-950">Schedule a check-in</h2><p class="mt-1 text-sm text-slate-500">Publish one period to all active recipients in this program.</p></div>
+                    <button type="button" :disabled="isPublishingCheckIn" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 disabled:opacity-50" aria-label="Close" @click="closeCheckInEditor"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 </header>
-                <div class="grid grid-cols-2 gap-5 p-6">
+                <div class="monitoring-dialog-body grid grid-cols-2 gap-5 p-6">
                     <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Check-in title</span><input v-model="checkInForm.title" required maxlength="120" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester progress check"></label>
-                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Academic period <span class="font-normal text-slate-400">(optional)</span></span><input v-model="checkInForm.period_label" maxlength="80" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester"></label>
-                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">School year <span class="font-normal text-slate-400">(optional)</span></span><input v-model="checkInForm.school_year" maxlength="30" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="2026-2027"></label>
+                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Academic period <span class="font-normal text-slate-600">(optional)</span></span><input v-model="checkInForm.period_label" maxlength="80" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester"></label>
+                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">School year <span class="font-normal text-slate-600">(optional)</span></span><input v-model="checkInForm.school_year" maxlength="30" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="2026-2027"></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Opens</span><input v-model="checkInForm.opens_at" required type="date" :min="savedPlan?.starts_on && savedPlan.starts_on > localDate() ? savedPlan.starts_on : localDate()" :max="savedPlan?.ends_on || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Due date</span><input v-model="checkInForm.due_at" required type="date" :min="checkInForm.opens_at || localDate()" :max="savedPlan?.ends_on || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
-                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Period instructions <span class="font-normal text-slate-400">(optional)</span></span><textarea v-model="checkInForm.instructions" rows="3" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm" placeholder="Only add instructions specific to this check-in."></textarea></label>
+                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Period instructions <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="checkInForm.instructions" rows="3" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm" placeholder="Only add instructions specific to this check-in."></textarea></label>
                 </div>
                 <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
                     <p class="text-xs text-slate-500">The active plan requirements will be included automatically.</p>
-                    <div class="flex gap-2"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="checkInEditor = false">Cancel</button><button type="submit" :disabled="isPublishingCheckIn" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50"><i :class="['fa-solid text-[10px]', isPublishingCheckIn ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>{{ isPublishingCheckIn ? 'Publishing...' : 'Publish check-in' }}</button></div>
+                    <div class="flex shrink-0 gap-2"><button type="button" :disabled="isPublishingCheckIn" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-50" @click="closeCheckInEditor">Cancel</button><button type="submit" :disabled="isPublishingCheckIn" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50"><i :class="['fa-solid text-[10px]', isPublishingCheckIn ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>{{ isPublishingCheckIn ? 'Publishing...' : 'Publish check-in' }}</button></div>
                 </footer>
             </form>
         </div>
+        </Teleport>
     </main>
 </template>

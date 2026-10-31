@@ -769,7 +769,7 @@ function resetWizard() {
     currentStep.value = 0;
 
     if (window.location.search) {
-        window.history.replaceState({}, '', window.location.pathname);
+        window.history.replaceState({}, '', (window.portalPathname?.() ?? window.location.pathname));
     }
 }
 
@@ -971,7 +971,7 @@ async function handleApplicationNavigation(event) {
     const link = event.target?.closest?.('a[href]');
     if (!link || link.target === '_blank' || link.hasAttribute('download')) return;
     const destination = new URL(link.href, window.location.href);
-    if (destination.pathname === window.location.pathname && destination.search === window.location.search) return;
+    if (destination.pathname === (window.portalPathname?.() ?? window.location.pathname) && destination.search === window.location.search) return;
     event.preventDefault();
     if (applicationBusy.value) {
         showPortalToast({ type: 'warning', message: 'Wait for the current upload or submission to finish before leaving.' });

@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
@@ -15,7 +16,7 @@ const queueCopy = {
     history: { title: 'Release history', description: 'Reference completed benefit distributions and recipient receipts.', empty: 'No completed benefit releases are recorded.' },
 };
 
-const path = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/releases/issues';
+const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider/workspaces/releases/issues';
 const activeQueue = queueByPath[path] ?? 'issues';
 const pageCopy = queueCopy[activeQueue];
 const workspace = ref(null);
@@ -101,11 +102,11 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="release-directory-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-monitoring-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
-                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="release-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
-                        <div class="flex items-center gap-4"><div v-if="workspace" class="border-r border-slate-200 pr-5 text-right"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Release scope</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div><a href="/provider/workspaces/releases/schedule" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-plus text-amber-300" aria-hidden="true"></i>Schedule release</a></div>
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="release-directory-title" class="monitoring-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><WorkspaceTextSummary class="mt-1 text-sm leading-6 text-slate-600" :text="pageCopy.description" label="details" /></div></div>
+                        <div class="flex items-center gap-4"><div v-if="workspace" class="border-r border-slate-200 pr-5 text-right"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Release scope</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div><a href="/provider/workspaces/releases/schedule" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-plus text-amber-300" aria-hidden="true"></i>Schedule release</a></div>
                     </div>
                 </header>
 
@@ -121,15 +122,16 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
                     <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
                     <div v-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading benefit releases...</p></div>
-                    <div v-else-if="!releases.length" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Scheduled distributions move here as their status changes.</p></div>
+                    <div v-else-if="!releases.length && !errorMessage" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Scheduled distributions move here as their status changes.</p></div>
 
-                    <div v-else class="staff-table-viewport">
-                        <table class="w-full min-w-[72rem] table-fixed border-collapse text-left">
-                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"><th class="w-[31%] px-5 py-3">Distribution</th><th class="w-[20%] px-5 py-3">Current work</th><th class="w-[18%] px-5 py-3">Recipients</th><th class="w-[19%] px-5 py-3">Schedule</th><th class="w-[12%] px-5 py-3 text-right">Action</th></tr></thead>
+                    <div v-else-if="releases.length" class="staff-table-viewport">
+                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
+                            <colgroup><col><col class="w-44"><col class="w-36"><col class="w-44"><col class="w-32"></colgroup>
+                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600"><th class="px-5 py-3">Distribution</th><th class="px-5 py-3">Current work</th><th class="px-5 py-3">Recipients</th><th class="px-5 py-3">Schedule</th><th class="px-5 py-3 text-right">Action</th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="release in releases" :key="release.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><p class="truncate text-sm font-bold text-slate-950">{{ release.title }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ release.program.title }}</p><p class="mt-1 truncate text-xs font-semibold text-slate-500">{{ release.amount_label || release.benefit_description }}</p></td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', stateClass(release.work_state)]">{{ release.work_label }}</span><p class="mt-2 line-clamp-1 text-xs text-slate-500">{{ release.detail }}</p></td>
+                                    <td class="px-5 py-4"><p class="monitoring-text text-sm font-bold text-slate-950">{{ release.title }}</p><p class="mt-1 monitoring-text text-xs text-slate-500">{{ release.program.title }}</p><p class="mt-1 monitoring-text text-xs font-semibold text-slate-500">{{ release.amount_label || release.benefit_description }}</p></td>
+                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', stateClass(release.work_state)]">{{ release.work_label }}</span><p class="monitoring-text mt-2 text-xs text-slate-500">{{ release.detail }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ progressLabel(release) }}</p><p class="mt-1 text-xs text-slate-500">{{ release.counts.proof }} proof file{{ release.counts.proof === 1 ? '' : 's' }}</p></td>
                                     <td class="px-5 py-4"><p :class="['text-sm font-bold', release.timing_state === 'overdue' || release.timing_state === 'attention' ? 'text-rose-700' : release.timing_state === 'soon' || release.timing_state === 'today' ? 'text-amber-700' : 'text-slate-800']">{{ timingLabel(release) }}</p><p class="mt-1 text-xs text-slate-500">{{ release.release_method_label }}</p></td>
                                     <td class="px-5 py-4 text-right"><a :href="release.action_url" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>

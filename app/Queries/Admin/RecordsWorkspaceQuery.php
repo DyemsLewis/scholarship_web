@@ -3,6 +3,7 @@
 namespace App\Queries\Admin;
 
 use App\Models\ActivityLog;
+use App\Models\RecipientMonitoringCase;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -19,7 +20,7 @@ class RecordsWorkspaceQuery
 
     public function activity(array $filters): array
     {
-        $query = ActivityLog::query()->latest();
+        $query = ActivityLog::query()->latest()->latest('id');
         if (filled($filters['action'] ?? null) && $filters['action'] !== 'all') {
             $query->where('action', $filters['action']);
         }
@@ -55,7 +56,7 @@ class RecordsWorkspaceQuery
             'metadata' => collect($entry->metadata ?? [])
                 ->map(fn (mixed $value, string $key): array => [
                     'label' => Str::headline($key),
-                    'value' => $this->metadataValue($value),
+                    'value' => $this->metadataValue($value, $key),
                 ])
                 ->values(),
         ];
@@ -63,15 +64,7 @@ class RecordsWorkspaceQuery
 
     public function exportDesk(): array
     {
-        $monitoringRecords = ScholarshipApplication::query()
-            ->where(function (Builder $query): void {
-                $query
-                    ->whereIn('status', ['awarded', 'distribution_scheduled', 'disbursed', 'renewed', 'benefits_terminated'])
-                    ->orWhereHas('monitoringSubmissions')
-                    ->orWhereHas('benefitReleaseRecords')
-                    ->orWhereHas('supportDecisions');
-            })
-            ->count();
+        $monitoringRecords = RecipientMonitoringCase::query()->count();
 
         return [
             'datasets' => [
@@ -94,7 +87,7 @@ class RecordsWorkspaceQuery
                 [
                     'key' => 'monitoring',
                     'name' => 'Recipient monitoring',
-                    'description' => 'Requirements, releases, support, and oversight outcomes.',
+                    'description' => 'Monitoring case oversight records. The count covers all statuses; your selected status filters the CSV.',
                     'records' => $monitoringRecords,
                     'download_url' => route('admin.export.monitoring', [], false),
                     'last_exported_at' => $this->lastExportedAt('records_monitoring_exported'),
@@ -103,6 +96,7 @@ class RecordsWorkspaceQuery
             'recent_exports' => ActivityLog::query()
                 ->whereIn('action', self::EXPORT_ACTIONS)
                 ->latest()
+                ->latest('id')
                 ->limit(10)
                 ->get()
                 ->map(fn (ActivityLog $entry): array => $this->activityItem($entry))
@@ -153,24 +147,32 @@ class RecordsWorkspaceQuery
             return;
         }
 
-        $patterns = match ($category) {
+        // Match the same precedence as categoryFor so every row belongs to its displayed category.
+        $query->whereNotIn('action', self::EXPORT_ACTIONS);
+        foreach ([
             'security' => ['login', 'logout', 'password', 'email_verification'],
-            'accounts' => ['account', 'registered', 'profile'],
             'reviews' => ['review', 'verification'],
-            default => ['program', 'scholarship', 'application', 'monitoring', 'benefit', 'recipient', 'support', 'billing', 'service'],
-        };
+            'accounts' => ['account', 'registered', 'profile'],
+        ] as $name => $patterns) {
+            if ($name === $category) {
+                $query->where(function (Builder $nested) use ($patterns): void {
+                    foreach ($patterns as $pattern) {
+                        $nested->orWhere('action', 'like', "%{$pattern}%");
+                    }
+                });
 
-        $query->where(function (Builder $nested) use ($patterns): void {
-            foreach ($patterns as $pattern) {
-                $nested->orWhere('action', 'like', "%{$pattern}%");
+                return;
             }
-        });
+            foreach ($patterns as $pattern) {
+                $query->where('action', 'not like', "%{$pattern}%");
+            }
+        }
     }
 
     private function applyActorRole(Builder $query, string $role): void
     {
         if ($role === 'system') {
-            $query->whereNull('actor_role');
+            $query->where(fn (Builder $nested) => $nested->whereNull('actor_role')->orWhere('actor_role', 'system'));
         } elseif ($role !== 'all') {
             $query->where('actor_role', $role);
         }
@@ -220,13 +222,20 @@ class RecordsWorkspaceQuery
         return 'operations';
     }
 
-    private function metadataValue(mixed $value): string
+    private function metadataValue(mixed $value, string $key = ''): string
     {
         if (is_bool($value)) {
             return $value ? 'Yes' : 'No';
         }
         if (is_array($value) || is_object($value)) {
-            return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: 'Not recorded';
+            return collect($value)->map(function (mixed $nested, mixed $nestedKey) use ($key): string {
+                $label = is_string($nestedKey) ? Str::headline($nestedKey).': ' : '';
+
+                return $label.$this->metadataValue($nested, is_string($nestedKey) ? $nestedKey : $key);
+            })->implode("\n") ?: 'Not recorded';
+        }
+        if (is_string($value) && preg_match('/(^|_)(status|role|priority|category|decision|outcome)$/', $key)) {
+            return Str::headline($value);
         }
 
         return filled($value) ? (string) $value : 'Not recorded';

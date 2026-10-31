@@ -31,7 +31,7 @@ onMounted(loadDashboard);
     <main class="student-shell">
         <ProviderSidebar />
         <section class="student-page" aria-label="Support staff dashboard">
-            <WorkspaceDashboardFrame :dashboard="dashboard" :loading="isLoading" :error-message="errorMessage">
+            <WorkspaceDashboardFrame class="provider-dashboard" :dashboard="dashboard" :loading="isLoading" :error-message="errorMessage">
                 <WorkspaceDashboardSection v-for="section in dashboard.sections" :key="section.key" :section="section">
                     <template #default="{ items }">
                         <WorkspaceDashboardItemList :items="items" fallback-icon="fa-solid fa-headset" />

@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import { formatAdminServiceDateTime, formatAdminServiceMoney, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
 
-const { purchaseId, purchase, isLoading, errorMessage, successMessage, queueUrl } = useAdminServiceWorkspace('overview');
+const { purchaseId, purchase, isLoading, loadError, loadRecord, errorMessage, successMessage, queueUrl } = useAdminServiceWorkspace('overview');
 const milestoneProgress = computed(() => {
     const milestones = purchase.value?.milestones ?? [];
     return `${milestones.filter((item) => item.completed).length} of ${milestones.length}`;
@@ -14,7 +14,7 @@ const milestoneProgress = computed(() => {
     <AdminServiceWorkspaceShell
         :purchase="purchase"
         active-section="overview"
-        :loading="isLoading"
+        :loading="isLoading" :load-error="loadError" @retry="loadRecord"
         :error-message="errorMessage"
         :success-message="successMessage"
         :queue-url="queueUrl"

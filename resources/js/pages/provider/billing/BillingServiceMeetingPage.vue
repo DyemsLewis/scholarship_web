@@ -2,6 +2,7 @@
 import { computed, reactive, watch } from 'vue';
 import { formatServiceDateTime, localServiceDateTime, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
 import BillingServiceWorkspaceShell from './components/BillingServiceWorkspaceShell.vue';
+import { labelFromKey } from '../../../support/display';
 
 const {
     purchaseId,
@@ -16,7 +17,7 @@ const {
 } = useProviderServiceWorkspace('meeting');
 
 const meetingForm = reactive({ meeting_scheduled_for: '', meeting_mode: 'online', meeting_purpose: '' });
-const canRequestMeeting = computed(() => purchase.value?.status === 'paid' && purchase.value?.fulfillment_status !== 'completed');
+const canRequestMeeting = computed(() => purchase.value?.status === 'paid' && purchase.value?.cancellation_status !== 'requested' && !['completed', 'cancelled'].includes(purchase.value?.fulfillment_status));
 const minimumMeeting = computed(() => localServiceDateTime(new Date(Date.now() + 60 * 60 * 1000).toISOString()));
 
 watch(purchase, (value) => {
@@ -27,6 +28,7 @@ watch(purchase, (value) => {
 }, { immediate: true });
 
 async function requestMeeting() {
+    if (!canRequestMeeting.value) return;
     await runAction(
         () => window.axios.post(`/provider/billing/${purchaseId}/meeting`, { ...meetingForm }),
         'Meeting request sent.',
@@ -49,16 +51,16 @@ async function requestMeeting() {
 
             <dl v-if="purchase.meeting_scheduled_for" class="grid grid-cols-3 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">
                 <div class="px-6 py-4">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Requested time</dt>
+                    <dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Requested time</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-900">{{ formatServiceDateTime(purchase.meeting_scheduled_for) }}</dd>
                 </div>
                 <div class="px-6 py-4">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Format</dt>
-                    <dd class="mt-1 text-sm font-bold capitalize text-slate-900">{{ purchase.meeting_mode }}</dd>
+                    <dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Format</dt>
+                    <dd class="mt-1 text-sm font-bold text-slate-900">{{ labelFromKey(purchase.meeting_mode) }}</dd>
                 </div>
                 <div class="px-6 py-4">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Status</dt>
-                    <dd class="mt-1 text-sm font-bold capitalize text-slate-900">{{ purchase.meeting_status || 'Pending' }}</dd>
+                    <dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Status</dt>
+                    <dd class="mt-1 text-sm font-bold text-slate-900">{{ labelFromKey(purchase.meeting_status || 'pending') }}</dd>
                 </div>
             </dl>
 

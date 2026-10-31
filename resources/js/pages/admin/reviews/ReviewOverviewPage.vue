@@ -1,28 +1,21 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
+import { useAdminResource } from '../../../composables/useAdminResource.js';
+import AdminLoadState from '../components/AdminLoadState.vue';
 import WorkspaceDashboardFrame from '../../../components/workspace-dashboard/WorkspaceDashboardFrame.vue';
 import WorkspaceDashboardItemList from '../../../components/workspace-dashboard/WorkspaceDashboardItemList.vue';
 import WorkspaceDashboardSection from '../../../components/workspace-dashboard/WorkspaceDashboardSection.vue';
 import { normalizeWorkspaceDashboard } from '../../../support/workspaceDashboard.js';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
-const dashboard = ref(normalizeWorkspaceDashboard());
-const loading = ref(true);
-const errorMessage = ref('');
+const resource = useAdminResource(async ({ signal }) => {
+    const response = await window.axios.get('/admin/workspaces/reviews/dashboard/data', { signal });
+    return normalizeWorkspaceDashboard(response.data);
+}, { failureMessage: 'The review dashboard could not be loaded.' });
+const { isLoading: loading, errorMessage } = resource;
+const dashboard = computed(() => resource.data.value ?? normalizeWorkspaceDashboard({ workspace: { key: 'review-officer', title: 'Review dashboard', eyebrow: 'Verification work', description: 'Review submitted evidence and records needing attention.', icon: 'fa-solid fa-clipboard-check' } }));
 
-async function loadDashboard() {
-    loading.value = true;
-    errorMessage.value = '';
-
-    try {
-        const response = await window.axios.get('/admin/workspaces/reviews/dashboard/data');
-        dashboard.value = normalizeWorkspaceDashboard(response.data);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'The review dashboard could not be loaded.';
-    } finally {
-        loading.value = false;
-    }
-}
+const loadDashboard = () => resource.load();
 
 onMounted(loadDashboard);
 </script>
@@ -30,6 +23,7 @@ onMounted(loadDashboard);
 <template>
     <AdminWorkspacePage workspace="review_officer">
         <WorkspaceDashboardFrame :dashboard="dashboard" :loading="loading" :error-message="errorMessage">
+            <template #error><section class="admin-panel mt-4 overflow-hidden"><AdminLoadState :error="errorMessage" @retry="loadDashboard" /></section></template>
             <WorkspaceDashboardSection v-for="section in dashboard.sections" :key="section.key" :section="section">
                 <template #default="{ items }">
                     <WorkspaceDashboardItemList :items="items" fallback-icon="fa-solid fa-clipboard-check" />

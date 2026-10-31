@@ -1,5 +1,7 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
+import { useAdminResource } from '../../../composables/useAdminResource.js';
+import AdminLoadState from '../components/AdminLoadState.vue';
 import WorkspaceMetricStrip from '../../../components/workspace-dashboard/WorkspaceMetricStrip.vue';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
@@ -11,15 +13,18 @@ const area = document.getElementById('app')?.dataset.area ?? 'team';
 const config = area === 'platform'
     ? { eyebrow: 'System oversight', title: 'Platform health', description: 'Review platform scale, workload ownership, and recent activity.', icon: 'fa-solid fa-heart-pulse', endpoint: '/admin/governance/platform/data' }
     : { eyebrow: 'Access governance', title: 'Admin team', description: 'Review role coverage and administrative access.', icon: 'fa-solid fa-user-shield', endpoint: '/admin/governance/team/data' };
-const isLoading = ref(true);
-const errorMessage = ref('');
-const payload = ref({});
+const resource = useAdminResource(async ({ signal }) => {
+    const response = await window.axios.get(config.endpoint, { signal });
+    return response.data;
+}, { failureMessage: 'Unable to load this governance page.' });
+const { isLoading, errorMessage } = resource;
+const payload = computed(() => resource.data.value ?? {});
 
 const metrics = computed(() => {
     if (area === 'team') return [
         metric('members', 'Team members', payload.value.summary?.team_members, 'Managed admins', 'fa-solid fa-users-gear'),
         metric('active', 'Active', payload.value.summary?.active, 'Can access workspace', 'fa-solid fa-user-check'),
-        metric('coverage', 'Roles covered', `${coveredRoles.value} of ${payload.value.coverage?.length ?? 0}`, 'Operational roles', 'fa-solid fa-shield-check', uncoveredRoles.value ? 'attention' : ''),
+        metric('coverage', 'Roles covered', `${coveredRoles.value} of ${payload.value.coverage?.length ?? 0}`, 'Operational roles', 'fa-solid fa-shield-halved', uncoveredRoles.value ? 'attention' : ''),
         metric('unassigned', 'Unassigned', payload.value.summary?.unassigned, 'Need a role', 'fa-solid fa-user-clock', payload.value.summary?.unassigned ? 'attention' : ''),
     ];
 
@@ -64,18 +69,7 @@ function memberIcon(workspace) {
     return roleIcon(String(workspace ?? '').toLowerCase().replaceAll(' ', '_'));
 }
 
-async function loadArea() {
-    isLoading.value = true;
-    errorMessage.value = '';
-    try {
-        const { data } = await window.axios.get(config.endpoint);
-        payload.value = data;
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to load this governance page.';
-    } finally {
-        isLoading.value = false;
-    }
-}
+const loadArea = () => resource.load();
 
 onMounted(loadArea);
 </script>
@@ -85,17 +79,17 @@ onMounted(loadArea);
         <AdminWorkspaceHeader :eyebrow="config.eyebrow" :title="config.title" :description="config.description" :icon="config.icon">
             <template #actions>
                 <a v-if="area === 'team'" href="/admin/accounts/create?role=admin" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-user-plus text-xs" aria-hidden="true"></i>Add admin account</a>
-                <button v-else type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950" @click="loadArea"><i class="fa-solid fa-rotate text-xs" aria-hidden="true"></i>Refresh</button>
+                <button v-else type="button" :disabled="isLoading" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950 disabled:opacity-50" @click="loadArea"><i class="fa-solid fa-rotate text-xs" aria-hidden="true"></i>Refresh</button>
             </template>
         </AdminWorkspaceHeader>
 
-        <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
-        <WorkspaceMetricStrip :metrics="metrics" :loading="isLoading" />
+        <section v-if="isLoading || errorMessage" class="admin-panel mt-4 overflow-hidden"><AdminLoadState :loading="isLoading" :error="errorMessage" loading-message="Loading governance page..." @retry="loadArea" /></section>
+        <template v-else>
+        <WorkspaceMetricStrip :metrics="metrics" />
 
         <template v-if="area === 'team'">
             <AdminTableFrame title="Role coverage" description="Every operational role should have at least one active owner." icon="fa-solid fa-sitemap" class="mt-4">
-                <div v-if="isLoading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading role coverage...</div>
-                <table v-else-if="payload.coverage?.length" class="portal-data-table min-w-[58rem]">
+                <table v-if="payload.coverage?.length" class="portal-data-table min-w-[56rem]">
                     <thead><tr><th class="px-5">Role</th><th>Accounts</th><th>Active</th><th class="px-5">Coverage</th></tr></thead>
                     <tbody>
                         <tr v-for="role in payload.coverage" :key="role.key">
@@ -106,25 +100,25 @@ onMounted(loadArea);
                         </tr>
                     </tbody>
                 </table>
-                <AdminEmptyState v-else-if="!isLoading" title="No roles found" description="Administrative role definitions are not available." icon="fa-solid fa-sitemap" />
+                <AdminEmptyState v-else title="No roles found" description="Administrative role definitions are not available." icon="fa-solid fa-sitemap" />
             </AdminTableFrame>
 
             <AdminTableFrame title="Administrative accounts" description="Managed accounts with platform-level responsibilities." icon="fa-solid fa-users-gear" class="mt-4">
-                <div v-if="isLoading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading administrative accounts...</div>
-                <table v-else-if="payload.members?.length" class="portal-data-table min-w-[72rem]">
+                <table v-if="payload.members?.length" class="portal-data-table table-fixed min-w-[56rem]">
+                    <colgroup><col><col class="w-44"><col class="w-32"><col class="w-28"><col class="w-36"><col class="w-20"></colgroup>
                     <thead><tr><th class="px-5">Admin</th><th>Assigned role</th><th>Permissions</th><th>Status</th><th>Updated</th><th class="px-5 text-right">Open</th></tr></thead>
                     <tbody>
                         <tr v-for="member in payload.members" :key="member.id">
-                            <td class="px-5"><div class="flex items-center gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-600"><i :class="[memberIcon(member.workspace), 'text-sm']" aria-hidden="true"></i></span><span class="min-w-0"><strong class="block max-w-sm truncate text-sm text-slate-950">{{ member.name }}</strong><span class="block max-w-sm truncate text-xs text-slate-500">{{ member.email }}</span></span></div></td>
+                            <td class="px-5"><div class="flex min-w-0 items-center gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-600"><i :class="[memberIcon(member.workspace), 'text-sm']" aria-hidden="true"></i></span><span class="min-w-0"><strong class="block break-words text-sm text-slate-950">{{ member.name }}</strong><span class="block text-xs text-slate-500 [overflow-wrap:anywhere]">{{ member.email }}</span></span></div></td>
                             <td><p class="font-semibold text-slate-800">{{ member.title }}</p><p class="mt-0.5 text-xs text-slate-500">{{ member.workspace }}</p></td>
                             <td class="font-bold text-slate-800">{{ member.permission_count }}</td>
-                            <td><span :class="['inline-flex px-2.5 py-1 text-xs font-bold capitalize', member.status === 'suspended' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700']">{{ member.status }}</span></td>
+                            <td><span :class="['inline-flex px-2.5 py-1 text-xs font-bold', member.status === 'suspended' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700']">{{ labelFromKey(member.status) }}</span></td>
                             <td class="text-sm text-slate-500">{{ member.updated_at }}</td>
                             <td class="px-5 text-right"><a :href="member.edit_url" class="inline-grid h-9 w-9 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open ${member.name}`" title="Open account"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                         </tr>
                     </tbody>
                 </table>
-                <AdminEmptyState v-else-if="!isLoading" title="No managed admin accounts" description="Create an admin account and assign its operational role." icon="fa-solid fa-user-plus">
+                <AdminEmptyState v-else title="No managed admin accounts" description="Create an admin account and assign its operational role." icon="fa-solid fa-user-plus">
                     <template #actions><a href="/admin/accounts/create?role=admin" class="bg-slate-950 px-4 py-2.5 text-sm font-bold text-white">Add admin account</a></template>
                 </AdminEmptyState>
             </AdminTableFrame>
@@ -132,8 +126,7 @@ onMounted(loadArea);
 
         <template v-else>
             <AdminTableFrame title="Operational ownership" description="Open workload and active ownership across the platform." icon="fa-solid fa-sitemap" class="mt-4">
-                <div v-if="isLoading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading platform health...</div>
-                <table v-else-if="payload.operational_areas?.length" class="portal-data-table min-w-[66rem]">
+                <table v-if="payload.operational_areas?.length" class="portal-data-table min-w-[56rem]">
                     <thead><tr><th class="px-5">Area</th><th>Owner</th><th>Active owners</th><th>Open items</th><th class="px-5">Coverage</th></tr></thead>
                     <tbody>
                         <tr v-for="item in payload.operational_areas" :key="item.key">
@@ -145,16 +138,18 @@ onMounted(loadArea);
                         </tr>
                     </tbody>
                 </table>
-                <AdminEmptyState v-else-if="!isLoading" title="No operational areas found" description="Platform workload information is not available." icon="fa-solid fa-sitemap" />
+                <AdminEmptyState v-else title="No operational areas found" description="Platform workload information is not available." icon="fa-solid fa-sitemap" />
             </AdminTableFrame>
 
             <AdminTableFrame title="Recent platform activity" description="Latest auditable events from the last seven days." icon="fa-solid fa-clock-rotate-left" class="mt-4">
-                <table v-if="payload.activity?.items?.length" class="portal-data-table min-w-[66rem]">
+                <table v-if="payload.activity?.items?.length" class="portal-data-table table-fixed min-w-[56rem]">
+                    <colgroup><col><col class="w-44"><col class="w-36"><col class="w-44"></colgroup>
                     <thead><tr><th class="px-5">Event</th><th>Actor</th><th>Category</th><th class="px-5">Recorded</th></tr></thead>
-                    <tbody><tr v-for="item in payload.activity.items" :key="item.id"><td class="px-5"><p class="max-w-xl truncate font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td><td><p class="font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ labelFromKey(item.actor_role) }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ labelFromKey(item.category) }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
+                    <tbody><tr v-for="item in payload.activity.items" :key="item.id"><td class="px-5"><p class="break-words font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td><td><p class="break-words font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ labelFromKey(item.actor_role) }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ labelFromKey(item.category) }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
                 </table>
-                <AdminEmptyState v-else-if="!isLoading" title="No recent activity" description="No auditable platform events were recorded this week." icon="fa-solid fa-clock-rotate-left" />
+                <AdminEmptyState v-else title="No recent activity" description="No auditable platform events were recorded this week." icon="fa-solid fa-clock-rotate-left" />
             </AdminTableFrame>
+        </template>
         </template>
     </AdminWorkspacePage>
 </template>

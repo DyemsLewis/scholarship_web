@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
@@ -15,7 +16,7 @@ const queueCopy = {
     closed: { title: 'Closed recipient records', description: 'Reference completed or ended scholarship support.', empty: 'No recipient support records are closed.' },
 };
 
-const path = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/recipients/agreements';
+const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider/workspaces/recipients/agreements';
 const activeQueue = queueByPath[path] ?? 'awaiting';
 const pageCopy = queueCopy[activeQueue];
 const workspace = ref(null);
@@ -95,11 +96,11 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="recipient-directory-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-application-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-start justify-between gap-8">
-                        <div class="flex min-w-0 items-start gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-award" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Recipient onboarding</p><h1 id="recipient-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
-                        <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Recipient scope</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div>
+                        <div class="flex min-w-0 items-start gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-award" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Recipient onboarding</p><h1 id="recipient-directory-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
+                        <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Recipient scope</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div>
                     </div>
                 </header>
 
@@ -115,16 +116,16 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
                     <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
                     <div v-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading recipient records...</p></div>
-                    <div v-else-if="!recipients.length" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-user-shield text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Recipient records move here after a scholarship is awarded.</p></div>
+                    <div v-else-if="!recipients.length && !errorMessage" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-user-shield text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Recipient records move here after a scholarship is awarded.</p></div>
 
                     <div v-else class="staff-table-viewport">
-                        <table class="w-full min-w-[72rem] table-fixed border-collapse text-left">
-                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"><th class="w-[30%] px-5 py-3">Recipient</th><th class="w-[22%] px-5 py-3">Onboarding</th><th class="w-[22%] px-5 py-3">Support</th><th class="w-[14%] px-5 py-3">Award</th><th class="w-[12%] px-5 py-3 text-right">Action</th></tr></thead>
+                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-44"><col class="w-40"><col class="w-32"><col class="w-36"></colgroup>
+                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600"><th class="px-5 py-3">Recipient</th><th class="px-5 py-3">Onboarding</th><th class="px-5 py-3">Support</th><th class="px-5 py-3">Award</th><th class="px-5 py-3 text-right">Action</th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="recipient in recipients" :key="recipient.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><div class="flex items-center gap-3"><img v-if="recipient.applicant.profile_photo_url" :src="recipient.applicant.profile_photo_url" :alt="`${recipient.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ recipient.applicant.name }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ recipient.program.title }}</p></div></div></td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(recipient.onboarding.state)]">{{ recipient.onboarding.label }}</span><p class="mt-2 truncate text-xs text-slate-500">{{ recipient.onboarding.response_note || recipient.onboarding.next_step }}</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ recipient.onboarding.state === 'active' ? 'Support active' : recipient.onboarding.state === 'closed' ? 'Support record closed' : 'Not started' }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ recipient.program.support_period || recipient.support.latest_decision_at || 'Dates set by the program' }}</p></td>
+                                    <td class="px-5 py-4"><div class="flex items-center gap-3"><img v-if="recipient.applicant.profile_photo_url" :src="recipient.applicant.profile_photo_url" :alt="`${recipient.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ recipient.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ recipient.program.title }}</p></div></div></td>
+                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(recipient.onboarding.state)]">{{ recipient.onboarding.label }}</span><WorkspaceTextSummary class="mt-2 text-xs text-slate-500" :text="recipient.onboarding.response_note || recipient.onboarding.next_step" label="note" /></td>
+                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ recipient.onboarding.state === 'active' ? 'Support active' : recipient.onboarding.state === 'closed' ? 'Support record closed' : 'Not started' }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ recipient.program.support_period || recipient.support.latest_decision_at || 'Dates set by the program' }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ recipient.award.amount_label }}</p><p class="mt-1 text-xs text-slate-500">{{ recipient.onboarding.responded_at || `${recipient.waiting_days} days waiting` }}</p></td>
                                     <td class="px-5 py-4 text-right"><a :href="recordUrl(recipient)" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800">{{ recipient.onboarding.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                 </tr>

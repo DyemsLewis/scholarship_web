@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { labelFromKey } from '../../../support/display';
@@ -47,7 +48,7 @@ const copy = {
         search: 'Search service or reference',
     },
 };
-const path = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/billing/requests';
+const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider/workspaces/billing/requests';
 const activeQueue = queueByPath[path] ?? 'requests';
 const pageCopy = copy[activeQueue];
 
@@ -139,10 +140,10 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
     <main class="student-shell">
         <ProviderSidebar />
         <section class="student-page" aria-labelledby="billing-directory-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                     <div class="flex min-h-20 items-center justify-between gap-8">
-                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">{{ pageCopy.eyebrow }}</p><h1 id="billing-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">{{ pageCopy.eyebrow }}</p><h1 id="billing-directory-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
                         <a href="/provider/workspaces/billing/services" class="inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">
                             Browse services
                             <i class="fa-solid fa-arrow-right text-xs text-amber-300" aria-hidden="true"></i>
@@ -152,7 +153,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
                 <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                     <div class="flex items-center justify-between gap-5 border-b border-slate-200 px-5 py-4">
-                        <label class="relative block w-full max-w-xl">
+                        <label class="relative block min-w-0 flex-1">
                             <span class="sr-only">{{ pageCopy.search }}</span>
                             <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i>
                             <input v-model="search" type="search" class="h-11 w-full border border-slate-300 pl-10 pr-4 text-sm outline-none focus:border-slate-950" :placeholder="pageCopy.search">
@@ -166,19 +167,20 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
 
                     <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
                     <div v-if="isLoading" class="px-6 py-14 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading service records...</p></div>
-                    <div v-else-if="!entries.length" class="min-h-96 px-6 py-14 text-center">
+                    <div v-else-if="!entries.length && !errorMessage" class="min-h-96 px-6 py-14 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p>
                         <a v-if="isRequestQueue" href="/provider/workspaces/billing/services" class="mt-4 inline-flex h-10 items-center gap-2 border border-slate-300 px-4 text-xs font-bold text-slate-700 hover:border-slate-950">Browse available services<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
                     </div>
-                    <div v-else class="staff-table-viewport">
-                        <table class="w-full min-w-[920px] table-fixed border-collapse text-left">
-                            <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                    <div v-else-if="entries.length" class="staff-table-viewport">
+                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
+                            <colgroup><col><col class="w-52"><col class="w-44"><col class="w-64"></colgroup>
+                            <thead class="bg-slate-50 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
                                 <tr>
-                                    <th class="w-[34%] px-5 py-3">{{ isRequestQueue ? 'Service request' : 'Service' }}</th>
-                                    <th class="w-[28%] px-5 py-3">{{ isRequestQueue ? 'Program and total' : 'Current state' }}</th>
-                                    <th class="w-[22%] px-5 py-3">{{ isRequestQueue ? 'Next step' : 'Payment' }}</th>
-                                    <th class="w-[16%] px-5 py-3 text-right">Action</th>
+                                    <th class="px-5 py-3">{{ isRequestQueue ? 'Service request' : 'Service' }}</th>
+                                    <th class="px-5 py-3">{{ isRequestQueue ? 'Program and total' : 'Current state' }}</th>
+                                    <th class="px-5 py-3">{{ isRequestQueue ? 'Next step' : 'Payment' }}</th>
+                                    <th class="px-5 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
@@ -191,16 +193,16 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                         </p>
                                     </td>
                                     <td v-if="isRequestQueue" class="px-5 py-4">
-                                        <p class="truncate text-sm font-bold text-slate-900">{{ entry.program_name }}</p>
+                                        <p class="service-text text-sm font-bold text-slate-900">{{ entry.program_name }}</p>
                                         <p class="mt-1 text-xs text-slate-500">{{ amountLabel(entry) }}</p>
                                     </td>
                                     <td v-else class="px-5 py-4">
-                                        <span :class="['inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(entry)]">{{ entry.work_label }}</span>
-                                        <p class="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{{ entry.work_detail }}</p>
+                                        <span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(entry)]">{{ entry.work_label }}</span>
+                                        <WorkspaceTextSummary  class="mt-2 text-xs leading-5 text-slate-500" :text="entry.work_detail" label="details" />
                                     </td>
                                     <td v-if="isRequestQueue" class="px-5 py-4">
-                                        <span :class="['inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(entry)]">{{ entry.work_label }}</span>
-                                        <p class="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{{ entry.work_detail }}</p>
+                                        <span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(entry)]">{{ entry.work_label }}</span>
+                                        <WorkspaceTextSummary  class="mt-2 text-xs leading-5 text-slate-500" :text="entry.work_detail" label="details" />
                                     </td>
                                     <td v-else class="px-5 py-4">
                                         <p class="text-sm font-bold text-slate-900">{{ amountLabel(entry) }}</p>
@@ -223,9 +225,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         </table>
                     </div>
                     <footer v-if="pagination.last_page > 1" class="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-                        <button type="button" :disabled="pagination.current_page <= 1" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" @click="loadEntries(pagination.current_page - 1)">Previous</button>
+                        <button type="button" :disabled="pagination.current_page <= 1 || isLoading" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" @click="loadEntries(pagination.current_page - 1)">Previous</button>
                         <span class="px-2 text-xs font-semibold text-slate-500">Page {{ pagination.current_page }} of {{ pagination.last_page }}</span>
-                        <button type="button" :disabled="pagination.current_page >= pagination.last_page" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" @click="loadEntries(pagination.current_page + 1)">Next</button>
+                        <button type="button" :disabled="pagination.current_page >= pagination.last_page || isLoading" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" @click="loadEntries(pagination.current_page + 1)">Next</button>
                     </footer>
                 </section>
             </div>

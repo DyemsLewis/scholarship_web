@@ -91,7 +91,7 @@ const primaryLinks = computed(() => [
 ]);
 
 const activeKey = computed(() => {
-    const path = window.location.pathname.replace(/\/$/, '');
+    const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '');
 
     if (path.endsWith('/applications/review')) return 'applicants';
     if (path.endsWith('/applications/activities')) return 'schedule';

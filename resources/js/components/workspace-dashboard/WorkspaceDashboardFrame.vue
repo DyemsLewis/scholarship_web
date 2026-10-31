@@ -24,9 +24,11 @@ defineProps({
             <template v-if="$slots.actions" #actions><slot name="actions"></slot></template>
         </WorkspaceDashboardHeader>
 
-        <div v-if="errorMessage" class="mt-4 border border-rose-200 border-l-4 border-l-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">
-            {{ errorMessage }}
-        </div>
+        <template v-if="errorMessage">
+            <slot name="error">
+                <div class="mt-4 border border-rose-200 border-l-4 border-l-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+            </slot>
+        </template>
 
         <WorkspaceMetricStrip v-if="!errorMessage" :metrics="dashboard.metrics" :loading="loading" />
 

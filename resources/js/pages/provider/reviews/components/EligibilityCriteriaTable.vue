@@ -34,14 +34,14 @@ function reviewNote(criterion) {
     <div class="overflow-x-auto" data-provider-eligibility-criteria>
         <table v-if="rows.length" class="w-full min-w-[52rem] table-fixed border-collapse text-left">
             <caption class="sr-only">Eligibility rules, applicant values, program requirements, and review results</caption>
-            <thead class="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">
+            <thead class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase tracking-[0.12em] text-slate-600">
                 <tr><th scope="col" class="w-[26%] px-6 py-3">Rule</th><th scope="col" class="w-[24%] px-4 py-3">Applicant value</th><th scope="col" class="w-[29%] px-4 py-3">Program requirement</th><th scope="col" class="w-[21%] px-6 py-3 text-right">Result</th></tr>
             </thead>
             <tbody class="divide-y divide-slate-200">
                 <tr v-for="criterion in rows" :key="criterion.key">
                     <th scope="row" class="break-words px-6 py-4 align-top text-sm font-bold text-slate-900">
                         {{ criterion.label }}
-                        <span v-if="presentation(criterion).modeLabel" class="mt-1 block text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ presentation(criterion).modeLabel }}</span>
+                        <span v-if="presentation(criterion).modeLabel" class="mt-1 block text-xs font-bold uppercase tracking-wide text-slate-600">{{ presentation(criterion).modeLabel }}</span>
                         <span v-if="reviewNote(criterion)" class="mt-2 block text-xs font-normal leading-5 text-slate-500">{{ reviewNote(criterion) }}</span>
                     </th>
                     <td class="break-words px-4 py-4 align-top text-sm leading-6 text-slate-700">{{ display(criterion.student_value ?? criterion.studentValue, 'Not provided') }}</td>
@@ -53,7 +53,7 @@ function reviewNote(criterion) {
                             <p class="mt-1 text-slate-500">{{ criterion.equivalence.notice }}</p>
                         </details>
                     </td>
-                    <td class="px-6 py-4 text-right align-top"><span :class="['inline-flex border px-2.5 py-1 text-left text-[10px] font-bold uppercase tracking-wide', tones[presentation(criterion).state]]">{{ presentation(criterion).label }}</span></td>
+                    <td class="px-6 py-4 text-right align-top"><span :class="['inline-flex border px-2.5 py-1 text-left text-xs font-bold uppercase tracking-wide', tones[presentation(criterion).state]]">{{ presentation(criterion).label }}</span></td>
                 </tr>
             </tbody>
         </table>

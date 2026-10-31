@@ -26,7 +26,9 @@ const documentsPerPage = 7;
 const documentsPage = ref(1);
 const applicationsPerPage = 3;
 const applicationsPage = ref(1);
-const statusBadgeBase = 'inline-flex h-7 min-w-[7.5rem] items-center justify-center gap-1.5 rounded px-2.5 text-[10px] font-bold uppercase tracking-wide';
+const statusBadgeBase = 'student-badge min-w-[7.5rem] justify-center text-center';
+const preparedRowColumns = 'lg:grid-cols-[minmax(0,1fr)_9rem_14rem]';
+const applicationRowColumns = 'md:grid-cols-[minmax(0,1fr)_9rem] xl:grid-cols-[minmax(0,1fr)_9rem_12rem_9rem]';
 const requestedDocumentView = new URLSearchParams(window.location.search).get('view');
 const documentView = ['prepared', 'applications'].includes(requestedDocumentView)
     ? requestedDocumentView
@@ -149,12 +151,12 @@ function preparedDocumentStatus(document) {
         ? {
             label: 'Ready',
             icon: 'fa-solid fa-circle-check',
-            className: 'bg-emerald-100 text-emerald-800',
+            className: 'student-badge-positive',
         }
         : {
             label: 'Not uploaded',
             icon: 'fa-regular fa-circle',
-            className: 'bg-slate-100 text-slate-600',
+            className: '',
         };
 }
 
@@ -162,18 +164,18 @@ function applicationStatus(status) {
     const normalized = status || 'submitted';
 
     if (['selected', 'accepted', 'recipient', 'completed'].includes(normalized)) {
-        return { label: labelFromKey(normalized), icon: 'fa-solid fa-circle-check', className: 'bg-emerald-100 text-emerald-800' };
+        return { label: labelFromKey(normalized), icon: 'fa-solid fa-circle-check', className: 'student-badge-positive' };
     }
 
     if (['not_selected', 'rejected', 'cancelled', 'withdrawn'].includes(normalized)) {
-        return { label: labelFromKey(normalized), icon: 'fa-solid fa-circle-xmark', className: 'bg-rose-100 text-rose-800' };
+        return { label: labelFromKey(normalized), icon: 'fa-solid fa-circle-xmark', className: 'student-badge-negative' };
     }
 
     if (['qualified', 'shortlisted', 'waitlisted'].includes(normalized)) {
-        return { label: labelFromKey(normalized), icon: 'fa-solid fa-hourglass-half', className: 'bg-amber-100 text-amber-800' };
+        return { label: labelFromKey(normalized), icon: 'fa-solid fa-hourglass-half', className: 'student-badge-attention' };
     }
 
-    return { label: labelFromKey(normalized), icon: 'fa-regular fa-clock', className: 'bg-slate-100 text-slate-700' };
+    return { label: labelFromKey(normalized), icon: 'fa-regular fa-clock', className: '' };
 }
 
 function readinessBarClass(percent) {
@@ -397,10 +399,11 @@ onMounted(loadDocuments);
                                 <div class="min-w-0">
                                     <p class="student-kicker">Reusable files</p>
                                     <h2 class="mt-1 text-xl font-bold text-slate-950">Common documents</h2>
+                                    <p class="mt-1 max-w-2xl text-xs leading-5 text-slate-600">Upload only what a scholarship requests. You do not need every document below.</p>
                                 </div>
                             </div>
-                            <p class="text-sm font-semibold text-slate-500">
-                                {{ commonDocumentReadyCount }} of {{ documentOptions.length }} ready
+                            <p class="shrink-0 text-sm font-semibold text-slate-600" data-library-saved-count>
+                                {{ commonDocumentReadyCount }} common {{ commonDocumentReadyCount === 1 ? 'file' : 'files' }} saved
                             </p>
                         </header>
 
@@ -409,14 +412,17 @@ onMounted(loadDocuments);
                                 v-model="preparedDocumentTermsAccepted"
                                 context="document"
                             />
-                            <p class="mt-2 text-xs text-slate-500">PDF, JPG, PNG, DOC or DOCX, up to 5 MB.</p>
+                            <p id="prepared-upload-consent" :class="['mt-2 text-xs leading-5', preparedDocumentTermsAccepted ? 'text-slate-600' : 'font-semibold text-amber-800']" role="status" aria-live="polite">{{ preparedDocumentTermsAccepted ? 'Upload and Replace are enabled for this visit.' : 'Accept the upload terms above to enable Upload and Replace.' }}</p>
+                            <p id="prepared-upload-formats" class="mt-1 text-xs text-slate-500">PDF, JPG, PNG, DOC or DOCX, up to 5 MB.</p>
                         </div>
 
                         <div class="divide-y divide-slate-200">
                             <article
                                 v-for="row in paginatedDocumentRows"
                                 :key="row.name"
-                                class="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_9rem_auto] lg:items-center"
+                                class="grid gap-4 px-5 py-4 lg:items-center"
+                                :class="preparedRowColumns"
+                                data-library-document-row
                             >
                                 <div class="flex min-w-0 items-start gap-3">
                                     <span :class="['grid h-11 w-11 shrink-0 place-items-center rounded-md text-sm', row.document ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500']">
@@ -433,18 +439,18 @@ onMounted(loadDocuments);
                                     </div>
                                 </div>
 
-                                <div class="lg:text-center">
+                                <div class="lg:text-center" data-document-status>
                                     <span :class="[statusBadgeBase, preparedDocumentStatus(row.document).className]">
                                         <i :class="preparedDocumentStatus(row.document).icon" aria-hidden="true"></i>
                                         {{ preparedDocumentStatus(row.document).label }}
                                     </span>
                                 </div>
 
-                                <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
+                                <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end" data-document-actions>
                                     <button
                                         v-if="row.document"
                                         type="button"
-                                        class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                                        class="student-button student-button-secondary student-button-compact"
                                         @click="openDocumentPreview(row.document)"
                                     >
                                         <i class="fa-solid fa-eye" aria-hidden="true"></i>
@@ -452,8 +458,8 @@ onMounted(loadDocuments);
                                     </button>
                                     <label
                                         :class="[
-                                            'inline-flex h-9 cursor-pointer items-center gap-2 rounded-md px-3 text-xs font-bold transition',
-                                            row.document ? 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'bg-slate-900 text-white hover:bg-slate-800',
+                                            'student-button student-button-compact cursor-pointer focus-within:ring-2 focus-within:ring-amber-400 focus-within:ring-offset-2',
+                                            row.document ? 'student-button-secondary' : 'student-button-primary',
                                             !preparedDocumentTermsAccepted || uploadingPreparedName === row.name || updatingPreparedId === row.document?.id ? 'pointer-events-none opacity-60' : '',
                                         ]"
                                     >
@@ -461,6 +467,7 @@ onMounted(loadDocuments);
                                             type="file"
                                             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
                                             class="sr-only"
+                                            aria-describedby="prepared-upload-consent prepared-upload-formats"
                                             :disabled="!preparedDocumentTermsAccepted || uploadingPreparedName === row.name || updatingPreparedId === row.document?.id"
                                             @change="row.document ? updatePreparedDocument(row.document, $event) : uploadPreparedDocument(row.name, $event)"
                                         >
@@ -473,7 +480,7 @@ onMounted(loadDocuments);
                                         v-if="row.document"
                                         type="button"
                                         :disabled="removingPreparedId === row.document.id"
-                                        class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+                                        class="student-button student-button-danger student-button-compact student-button-icon"
                                         :aria-label="`Remove ${row.name}`"
                                         @click="deletePreparedDocument(row.document)"
                                     >
@@ -514,7 +521,9 @@ onMounted(loadDocuments);
                                 <article
                                     v-for="document in otherPreparedDocuments"
                                     :key="document.id"
-                                    class="grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_9rem_auto] lg:items-center"
+                                    class="grid gap-4 px-5 py-4 lg:items-center"
+                                    :class="preparedRowColumns"
+                                    data-library-document-row
                                 >
                                     <div class="flex min-w-0 items-start gap-3">
                                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] font-black text-slate-600">
@@ -525,23 +534,23 @@ onMounted(loadDocuments);
                                             <p class="mt-1 truncate text-xs text-slate-500">{{ document.original_name }}</p>
                                         </div>
                                     </div>
-                                    <div class="lg:text-center">
+                                    <div class="lg:text-center" data-document-status>
                                         <span :class="[statusBadgeBase, preparedDocumentStatus(document).className]">
                                             <i :class="preparedDocumentStatus(document).icon" aria-hidden="true"></i>
                                             {{ preparedDocumentStatus(document).label }}
                                         </span>
                                     </div>
-                                    <div class="flex flex-wrap items-center gap-2 lg:justify-end">
-                                        <button type="button" class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" @click="openDocumentPreview(document)">
+                                    <div class="flex flex-wrap items-center gap-2 lg:justify-end" data-document-actions>
+                                        <button type="button" class="student-button student-button-secondary student-button-compact" @click="openDocumentPreview(document)">
                                             <i class="fa-solid fa-eye" aria-hidden="true"></i>
                                             View
                                         </button>
-                                        <label :class="['inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700', !preparedDocumentTermsAccepted || updatingPreparedId === document.id ? 'pointer-events-none opacity-60' : '']">
-                                            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="sr-only" :disabled="!preparedDocumentTermsAccepted || updatingPreparedId === document.id" @change="updatePreparedDocument(document, $event)">
+                                        <label :class="['student-button student-button-secondary student-button-compact cursor-pointer focus-within:ring-2 focus-within:ring-amber-400 focus-within:ring-offset-2', !preparedDocumentTermsAccepted || updatingPreparedId === document.id ? 'pointer-events-none opacity-60' : '']">
+                                            <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="sr-only" aria-describedby="prepared-upload-consent prepared-upload-formats" :disabled="!preparedDocumentTermsAccepted || updatingPreparedId === document.id" @change="updatePreparedDocument(document, $event)">
                                             <i :class="[updatingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-rotate', 'text-xs']" aria-hidden="true"></i>
                                             Replace
                                         </label>
-                                        <button type="button" :disabled="removingPreparedId === document.id" class="inline-flex h-9 w-9 items-center justify-center rounded-md border border-rose-200 bg-white text-rose-700 disabled:opacity-60" :aria-label="`Remove ${document.document_name}`" @click="deletePreparedDocument(document)">
+                                        <button type="button" :disabled="removingPreparedId === document.id" class="student-button student-button-danger student-button-compact student-button-icon" :aria-label="`Remove ${document.document_name}`" @click="deletePreparedDocument(document)">
                                             <i :class="[removingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can', 'text-xs']" aria-hidden="true"></i>
                                         </button>
                                     </div>
@@ -589,7 +598,9 @@ onMounted(loadDocuments);
                             <article
                                 v-for="application in paginatedApplications"
                                 :key="application.id"
-                                class="grid gap-4 p-5 lg:grid-cols-[minmax(0,1fr)_9rem_minmax(15rem,0.6fr)_auto] lg:items-center"
+                                class="grid gap-4 p-5 md:items-center"
+                                :class="applicationRowColumns"
+                                data-library-application-row
                             >
                                 <div class="flex min-w-0 gap-3">
                                     <img
@@ -608,7 +619,7 @@ onMounted(loadDocuments);
                                     </div>
                                 </div>
 
-                                <div class="lg:text-center">
+                                <div class="md:text-center" data-document-status>
                                     <span :class="[statusBadgeBase, applicationStatus(application.status).className]">
                                         <i :class="applicationStatus(application.status).icon" aria-hidden="true"></i>
                                         {{ applicationStatus(application.status).label }}
@@ -617,7 +628,7 @@ onMounted(loadDocuments);
 
                                 <div class="min-w-0">
                                     <div class="flex items-center justify-between gap-3 text-xs">
-                                        <span class="font-bold text-slate-700">Document readiness</span>
+                                        <span class="font-bold text-slate-700">Required files uploaded</span>
                                         <span :class="['rounded px-2 py-1 font-bold', readinessClass(application.document_readiness?.uploaded_percent)]">
                                             {{ application.document_readiness?.uploaded_percent ?? 0 }}%
                                         </span>
@@ -636,7 +647,8 @@ onMounted(loadDocuments);
 
                                 <a
                                     :href="application.detail_url || `/dashboard/applications/${application.id}`"
-                                    class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 lg:w-auto"
+                                    class="student-button student-button-secondary w-full"
+                                    data-document-actions
                                 >
                                     <i class="fa-solid fa-eye text-xs" aria-hidden="true"></i>
                                     View details

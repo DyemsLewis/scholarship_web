@@ -95,13 +95,13 @@ onMounted(() => {
             'Account created',
             'Your email is verified and your account is ready. You can now sign in.',
         );
-        window.history.replaceState({}, '', window.location.pathname);
+        window.history.replaceState({}, '', (window.portalPathname?.() ?? window.location.pathname));
         return;
     }
 
     if (params.get('verified') === '1') {
         showToast('success', 'Email verified', 'Email verified successfully. You can now sign in.');
-        window.history.replaceState({}, '', window.location.pathname);
+        window.history.replaceState({}, '', (window.portalPathname?.() ?? window.location.pathname));
     }
 });
 

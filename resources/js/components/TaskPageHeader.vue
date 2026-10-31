@@ -89,10 +89,10 @@ const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props
 
     <header v-else :class="[headerClass, compact ? '!min-h-0 !px-4 !py-3' : '']">
         <div :class="['flex flex-col lg:flex-row lg:items-center lg:justify-between', compact ? 'gap-3' : 'gap-4']">
-            <div :class="['flex min-w-0 gap-3', isApplicant ? 'items-center' : 'items-start']">
+            <div :class="['task-page-heading flex min-w-0 gap-3', isApplicant ? 'items-center' : 'items-start']">
                 <span
                     :class="[
-                        'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md shadow-sm',
+                        'task-page-icon inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md shadow-sm',
                         isApplicant ? 'student-hero-icon' : 'bg-slate-950 text-amber-300',
                     ]"
                 >
@@ -100,7 +100,7 @@ const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props
                 </span>
 
                 <div class="min-w-0">
-                    <p :class="['text-[11px] font-bold uppercase tracking-[0.18em]', isApplicant ? 'text-amber-200' : 'text-amber-700']">
+                    <p :class="['task-page-eyebrow text-[11px] font-bold uppercase tracking-[0.18em]', isApplicant ? 'text-amber-200' : 'text-amber-700']">
                         {{ eyebrow }}
                     </p>
                     <h1 :class="['mt-1 font-display font-bold leading-tight', compact ? 'text-lg sm:text-xl' : 'text-xl sm:text-2xl', isApplicant ? 'text-white' : 'text-slate-950']">
@@ -108,7 +108,7 @@ const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props
                     </h1>
                     <p
                         v-if="description"
-                        :class="['max-w-2xl leading-5 sm:line-clamp-2', compact ? 'mt-1 text-xs sm:text-sm' : 'mt-1.5 text-sm', isApplicant ? 'text-slate-300' : 'text-slate-600']"
+                        :class="['task-page-description max-w-2xl leading-5 sm:line-clamp-2', compact ? 'mt-1 text-xs sm:text-sm' : 'mt-1.5 text-sm', isApplicant ? 'text-slate-300' : 'text-slate-600']"
                     >
                         {{ description }}
                     </p>
@@ -120,30 +120,20 @@ const headerClass = computed(() => isApplicant.value ? 'student-hero' : `${props
 
             <div
                 v-if="$slots.actions || actionHref || secondaryHref"
-                class="grid w-full shrink-0 grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center lg:justify-end"
+                class="task-page-actions grid w-full shrink-0 grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center lg:justify-end"
             >
                 <slot name="actions">
                     <a
                         v-if="secondaryHref && secondaryLabel"
                         :href="secondaryHref"
-                        :class="[
-                            'rounded-md border px-4 py-2.5 text-center text-sm font-bold transition',
-                            isApplicant
-                                ? 'border-white/30 bg-white/5 text-white hover:bg-white hover:text-slate-950'
-                                : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50',
-                        ]"
+                        :class="isApplicant ? 'student-button student-button-on-dark' : 'rounded-md border border-slate-300 bg-white px-4 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-50'"
                     >
                         {{ secondaryLabel }}
                     </a>
                     <a
                         v-if="actionHref && actionLabel"
                         :href="actionHref"
-                        :class="[
-                            'rounded-md px-4 py-2.5 text-center text-sm font-bold transition',
-                            isApplicant
-                                ? 'bg-amber-300 text-slate-950 hover:bg-amber-200'
-                                : 'bg-slate-950 text-white hover:bg-slate-800',
-                        ]"
+                        :class="isApplicant ? 'student-button student-button-accent' : 'rounded-md bg-slate-950 px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-slate-800'"
                     >
                         {{ actionLabel }}
                     </a>

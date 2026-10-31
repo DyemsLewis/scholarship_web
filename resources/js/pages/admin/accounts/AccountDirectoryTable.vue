@@ -55,16 +55,17 @@ function issueClass(account) {
         Loading accounts...
     </div>
 
-    <table v-else-if="accounts.length" class="w-full min-w-[56rem] border-collapse text-left">
+    <table v-else-if="accounts.length" class="portal-data-table table-fixed min-w-[56rem]">
+        <colgroup><col><col class="w-24"><col class="w-40"><col class="w-28"><col class="w-36"><col class="w-20"></colgroup>
         <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500">
             <tr>
-                <th class="border-b border-slate-200 px-5 py-3">Account</th>
-                <th class="border-b border-slate-200 px-4 py-3">Role</th>
-                <th v-if="showIssue" class="border-b border-slate-200 px-4 py-3">Needs attention</th>
-                <th v-else class="border-b border-slate-200 px-4 py-3">Sign-in</th>
-                <th class="border-b border-slate-200 px-4 py-3">Access</th>
-                <th class="border-b border-slate-200 px-4 py-3">Created</th>
-                <th class="border-b border-slate-200 px-5 py-3 text-right">Open</th>
+                <th scope="col" class="border-b border-slate-200 px-5 py-3">Account</th>
+                <th scope="col" class="border-b border-slate-200 px-4 py-3">Role</th>
+                <th v-if="showIssue" scope="col" class="border-b border-slate-200 px-4 py-3">Needs attention</th>
+                <th v-else scope="col" class="border-b border-slate-200 px-4 py-3">Sign-in checks</th>
+                <th scope="col" class="border-b border-slate-200 px-4 py-3">Access</th>
+                <th scope="col" class="border-b border-slate-200 px-4 py-3">Created</th>
+                <th scope="col" class="border-b border-slate-200 px-5 py-3 text-right">Open</th>
             </tr>
         </thead>
         <tbody class="divide-y divide-slate-200 bg-white">
@@ -76,8 +77,8 @@ function issueClass(account) {
                             <img v-if="account.avatar_url" :src="account.avatar_url" :alt="account.role === 'provider' ? `${account.name} logo` : `${account.name} profile photo`" :class="['absolute inset-0 h-full w-full bg-white', account.role === 'provider' ? 'object-contain p-1' : 'object-cover']" @error="$event.currentTarget.remove()">
                         </span>
                         <span class="min-w-0">
-                            <span class="block truncate text-sm font-bold text-slate-950">{{ account.name }}</span>
-                            <span class="mt-0.5 block truncate text-xs text-slate-500">{{ account.email }}</span>
+                            <span class="block break-words text-sm font-bold text-slate-950">{{ account.name }}</span>
+                            <span class="mt-0.5 block text-xs text-slate-500 [overflow-wrap:anywhere]">{{ account.email }}</span>
                         </span>
                     </div>
                 </td>
@@ -87,9 +88,9 @@ function issueClass(account) {
                 </td>
                 <td v-else class="px-4 py-3.5">
                     <span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', account.email_verified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
-                        {{ account.email_verified ? 'Verified' : 'Unverified' }}
+                        {{ account.email_verified ? 'Email verified' : 'Email unverified' }}
                     </span>
-                    <span v-if="account.must_reset_password" class="ml-1 inline-flex bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700">Reset due</span>
+                    <span v-if="account.must_reset_password" class="mt-1 inline-flex bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700">Reset due</span>
                 </td>
                 <td class="px-4 py-3.5">
                     <span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', account.account_status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800']">

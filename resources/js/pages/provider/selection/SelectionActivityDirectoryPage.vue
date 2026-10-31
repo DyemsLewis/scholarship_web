@@ -17,7 +17,7 @@ const copyByQueue = {
     history: { title: 'Session history', description: 'Reference completed and cancelled selection sessions.', empty: 'No session history yet.' },
 };
 
-const path = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/selection/active';
+const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider/workspaces/selection/active';
 const pageQuery = new URLSearchParams(window.location.search);
 const activeQueue = queueByPath[path] ?? 'active';
 const pageCopy = copyByQueue[activeQueue];
@@ -147,14 +147,14 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
     <main class="student-shell">
         <ProviderSidebar />
         <section class="student-page provider-page" aria-labelledby="selection-directory-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-application-workspace mx-auto max-w-[94rem]">
                 <header class="provider-hero task-page-header border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
                     <div class="flex items-center justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4">
                             <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span>
                             <div class="min-w-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Selection workflow</p>
-                                <h1 id="selection-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Selection workflow</p>
+                                <h1 id="selection-directory-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
                                 <p class="mt-1 text-sm text-slate-600">{{ pageCopy.description }}</p>
                             </div>
                         </div>
@@ -178,32 +178,32 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
 
                     <div class="staff-table-viewport">
-                        <table v-if="isSessionQueue" class="w-full min-w-[70rem] table-fixed border-collapse text-left">
+                        <table v-if="isSessionQueue" class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-48"><col class="w-40"><col class="w-28"><col class="w-36"><col class="w-20"></colgroup>
                             <caption class="sr-only">{{ pageCopy.title }}</caption>
-                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><th class="w-[29%] px-5 py-3">Session</th><th class="w-[26%] px-5 py-3">Program</th><th class="w-[20%] px-5 py-3">Schedule</th><th class="w-[12%] px-5 py-3">Roster</th><th class="w-[8%] px-5 py-3">Status</th><th class="w-[5%] px-5 py-3 text-right"><span class="sr-only">Action</span></th></tr></thead>
+                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.14em] text-slate-600"><th class="px-5 py-3">Session</th><th class="px-5 py-3">Program</th><th class="px-5 py-3">Schedule</th><th class="px-5 py-3">Roster</th><th class="px-5 py-3">Status</th><th class="px-5 py-3 text-right"><span class="sr-only">Action</span></th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-if="isLoading && !sessions.length"><td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading sessions...</p></td></tr>
-                                <tr v-else-if="!sessions.length"><td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Create a session when applicants reach a selection stage.' }}</p></td></tr>
+                                <tr v-else-if="!sessions.length && !errorMessage"><td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Create a session when applicants reach a selection stage.' }}</p></td></tr>
                                 <tr v-for="session in sessions" :key="session.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><p class="truncate text-sm font-bold text-slate-950">{{ session.title }}</p><p class="mt-1 text-xs text-slate-500">{{ labelize(session.stage_key) }} · {{ labelize(session.mode) }}</p></td>
-                                    <td class="px-5 py-4"><p class="truncate text-sm font-semibold text-slate-800">{{ session.program?.title }}</p><p v-if="session.proof_required" class="mt-1 text-xs text-slate-500">Proof required</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-semibold text-slate-800">{{ formatDate(session.starts_at) }}</p><p v-if="session.venue" class="mt-1 truncate text-xs text-slate-500">{{ session.venue }}</p></td>
+                                    <td class="px-5 py-4"><p class="application-text text-sm font-bold text-slate-950">{{ session.title }}</p><p class="mt-1 text-xs text-slate-500">{{ labelize(session.stage_key) }} · {{ labelize(session.mode) }}</p></td>
+                                    <td class="px-5 py-4"><p class="application-text text-sm font-semibold text-slate-800">{{ session.program?.title }}</p><p v-if="session.proof_required" class="mt-1 text-xs text-slate-500">Proof required</p></td>
+                                    <td class="px-5 py-4"><p class="text-sm font-semibold text-slate-800">{{ formatDate(session.starts_at) }}</p><p v-if="session.venue" class="mt-1 application-text text-xs text-slate-500">{{ session.venue }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ session.capacity.assigned }} assigned</p><p class="mt-1 text-xs text-slate-500">{{ session.capacity.limit ? `${session.capacity.remaining} spaces left` : 'No capacity limit' }}</p></td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(session.status)]">{{ labelize(session.status) }}</span></td>
+                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2 py-1 text-xs font-bold uppercase tracking-wide', statusClass(session.status)]">{{ labelize(session.status) }}</span></td>
                                     <td class="px-5 py-4 text-right"><a :href="`/provider/workspaces/selection/sessions/${session.id}`" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open ${session.title}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                                 </tr>
                             </tbody>
                         </table>
 
-                        <table v-else class="w-full min-w-[68rem] table-fixed border-collapse text-left">
+                        <table v-else class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-48"><col class="w-36"><col class="w-36"><col class="w-32"></colgroup>
                             <caption class="sr-only">{{ pageCopy.title }}</caption>
-                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><th class="w-[32%] px-5 py-3">Applicant</th><th class="w-[29%] px-5 py-3">Program</th><th class="w-[18%] px-5 py-3">Stage</th><th class="w-[12%] px-5 py-3">Submitted</th><th class="w-[9%] px-5 py-3 text-right"><span class="sr-only">Actions</span></th></tr></thead>
+                            <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.14em] text-slate-600"><th class="px-5 py-3">Applicant</th><th class="px-5 py-3">Program</th><th class="px-5 py-3">Stage</th><th class="px-5 py-3">Submitted</th><th class="px-5 py-3 text-right"><span class="sr-only">Actions</span></th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applicants...</p></td></tr>
-                                <tr v-else-if="!applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Records move here automatically as work is completed.' }}</p></td></tr>
+                                <tr v-else-if="!applications.length && !errorMessage"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Records move here automatically as work is completed.' }}</p></td></tr>
                                 <tr v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><div class="flex min-w-0 items-center gap-3"><img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ application.applicant.education || 'Education not provided' }}</p></div></div></td>
-                                    <td class="px-5 py-4"><p class="truncate text-sm font-semibold text-slate-800">{{ application.program.title }}</p></td>
+                                    <td class="px-5 py-4"><div class="flex min-w-0 items-center gap-3"><img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education || 'Education not provided' }}</p></div></div></td>
+                                    <td class="px-5 py-4"><p class="application-text text-sm font-semibold text-slate-800">{{ application.program.title }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage.label }}</p><p class="mt-1 text-xs text-slate-500">{{ applicationQueueNote(application) }}</p></td>
                                     <td class="px-5 py-4 text-sm text-slate-600">{{ application.submitted_at || 'Not available' }}</td>
                                     <td class="px-5 py-4 text-right"><div class="flex justify-end gap-2">

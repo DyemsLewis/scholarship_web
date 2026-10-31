@@ -50,9 +50,7 @@ function iconClass(tone) {
         <section v-if="content.timeline.length" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
             <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
                 <div>
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recorded activity</p>
-                    <h3 class="mt-1 text-lg font-bold text-slate-950">Monitoring timeline</h3>
-                    <p class="mt-1 text-sm text-slate-500">Completed reviews, released benefits, and support decisions.</p>
+                    <h3 class="text-base font-bold text-slate-950">Monitoring timeline</h3>
                 </div>
                 <p class="shrink-0 text-xs font-bold text-slate-500">{{ content.timeline.length }} records</p>
             </header>

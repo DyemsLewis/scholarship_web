@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { formatServiceMoney, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
 import BillingServiceWorkspaceShell from './components/BillingServiceWorkspaceShell.vue';
@@ -31,6 +32,7 @@ watch(purchase, (value) => {
 }, { immediate: true });
 
 async function saveBrief() {
+    if (!canModify.value) return;
     const saved = await runAction(
         () => window.axios.patch(`/provider/billing/${purchaseId}/request`, { ...briefForm }),
         'Request brief updated.',
@@ -64,7 +66,7 @@ async function saveBrief() {
                     <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><h2 class="text-base font-bold text-slate-950">Service brief</h2><p class="mt-1 text-xs text-slate-500">The agreed need and expected result.</p></div></div>
                     <div class="flex items-center gap-4">
                         <div class="text-right">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Paid</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Paid</p>
                             <p class="mt-1 text-sm font-bold text-slate-900">{{ formatServiceMoney(purchase.amount, purchase.currency) }}</p>
                         </div>
                         <button v-if="canModify && !editingBrief" type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-950" @click="editingBrief = true"><i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>Edit brief</button>
@@ -83,11 +85,11 @@ async function saveBrief() {
                 </form>
                 <dl v-else class="divide-y divide-slate-200">
                     <div class="px-6 py-5">
-                        <dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">What your team needs</dt>
+                        <dt class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">What your team needs</dt>
                         <dd class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{{ purchase.request_summary || 'No additional brief was recorded.' }}</dd>
                     </div>
                     <div class="px-6 py-5">
-                        <dt class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Expected outcome</dt>
+                        <dt class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">Expected outcome</dt>
                         <dd class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{{ purchase.requested_outcome || 'No expected outcome was recorded.' }}</dd>
                     </div>
                 </dl>
@@ -105,7 +107,7 @@ async function saveBrief() {
                     </li>
                 </ul>
                 <div v-else class="px-6 py-10 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">Progress steps will appear when platform support starts the service.</p></div>
-                <p v-if="purchase.fulfillment_notes" class="border-t border-slate-200 bg-slate-50 px-6 py-4 text-sm leading-6 text-slate-600">{{ purchase.fulfillment_notes }}</p>
+                <WorkspaceTextSummary v-if="purchase.fulfillment_notes" class="border-t border-slate-200 bg-slate-50 px-6 py-4 text-sm leading-6 text-slate-600" :text="purchase.fulfillment_notes" label="details" />
             </section>
 
         </template>

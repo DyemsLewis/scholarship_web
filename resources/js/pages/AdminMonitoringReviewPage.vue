@@ -8,8 +8,8 @@ import { showPortalToast } from '../support/portalToast';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
-const usesReviewOfficerWorkspace = window.location.pathname.startsWith('/admin/workspaces/reviews');
-const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const usesReviewOfficerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/reviews');
+const usesPortalManagerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/portal');
 const reviewQueueUrl = usesPortalManagerWorkspace
     ? '/admin/workspaces/portal/reviews?type=monitoring'
     : (usesReviewOfficerWorkspace ? '/admin/workspaces/reviews?type=monitoring' : '/admin/reviews?type=monitoring');

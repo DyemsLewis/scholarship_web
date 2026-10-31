@@ -2,14 +2,19 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import AdminWorkspaceSidebar from '../components/AdminWorkspaceSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
+import AdminLoadState from './admin/components/AdminLoadState.vue';
+import { useAdminResource } from '../composables/useAdminResource.js';
 import { limitPhoneNumber } from '../support/phoneNumber';
 
-const isLoading = ref(true);
+const { data: user, isLoading, errorMessage: loadError, load } = useAdminResource(async ({ signal }) => {
+    const response = await window.axios.get('/admin/profile/data', { signal });
+    if (!response.data.user) throw new Error('Missing admin profile.');
+    return response.data.user;
+}, { failureMessage: 'Unable to load admin profile.' });
 const isSaving = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 const validationErrors = ref({});
-const user = ref(null);
 const form = reactive({
     first_name: '',
     last_name: '',
@@ -49,21 +54,13 @@ function fieldError(field) {
 }
 
 async function loadProfile() {
-    isLoading.value = true;
     errorMessage.value = '';
-
-    try {
-        const response = await window.axios.get('/admin/profile/data');
-
-        applyUser(response.data.user);
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to load admin profile.';
-    } finally {
-        isLoading.value = false;
-    }
+    const payload = await load();
+    if (payload) applyUser(payload);
 }
 
 async function saveProfile() {
+    if (isSaving.value || isLoading.value || !user.value) return;
     isSaving.value = true;
     errorMessage.value = '';
     successMessage.value = '';
@@ -104,15 +101,15 @@ onMounted(loadProfile);
                     </template>
                 </TaskPageHeader>
 
-                <div v-if="isLoading" class="admin-panel mt-5 p-6 text-sm text-slate-500">
-                    Loading admin profile...
-                </div>
+                <section v-if="isLoading || loadError" class="admin-panel mt-5 overflow-hidden">
+                    <AdminLoadState :loading="isLoading" :error="loadError" loading-message="Loading admin profile..." error-title="Profile unavailable" @retry="loadProfile" />
+                </section>
 
-                <div v-else class="admin-content-stack">
-                    <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
+                <div v-else-if="user" class="admin-content-stack">
+                    <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm" role="alert">
                         {{ errorMessage }}
                     </p>
-                    <p v-if="successMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 shadow-sm">
+                    <p v-if="successMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 shadow-sm" role="status">
                         {{ successMessage }}
                     </p>
 
@@ -133,15 +130,15 @@ onMounted(loadProfile);
                                 <h2 class="text-sm font-black text-slate-950">Personal identity</h2>
                                 <p class="mt-1 text-xs text-slate-500">Name displayed across the admin portal.</p>
                             </div>
-                            <div class="max-w-4xl">
-                                <div class="grid gap-4 md:grid-cols-[1fr_5rem_1fr]">
+                            <div class="w-full">
+                                <div class="grid items-end gap-4 md:grid-cols-[1fr_7rem_1fr]">
                                     <label>
                                         <span :class="labelClass">First name</span>
                                         <input v-model="form.first_name" type="text" placeholder="First name" :class="inputClass">
                                         <span v-if="fieldError('first_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('first_name') }}</span>
                                     </label>
                                     <label>
-                                        <span :class="labelClass">M.I.</span>
+                                        <span :class="labelClass">M.I. <span class="font-normal normal-case tracking-normal">(optional)</span></span>
                                         <input v-model="form.middle_initial" maxlength="1" type="text" placeholder="A" :class="inputClass">
                                         <span v-if="fieldError('middle_initial')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('middle_initial') }}</span>
                                     </label>
@@ -164,7 +161,7 @@ onMounted(loadProfile);
                                 <h2 class="text-sm font-black text-slate-950">Account and contact</h2>
                                 <p class="mt-1 text-xs text-slate-500">Sign-in identity and contact number.</p>
                             </div>
-                            <div class="grid max-w-4xl gap-4 md:grid-cols-2">
+                            <div class="grid w-full gap-4 md:grid-cols-3">
                                 <label>
                                     <span :class="labelClass">Email</span>
                                     <input v-model="form.email" type="email" placeholder="admin@example.com" :class="inputClass">

@@ -231,7 +231,7 @@
     }
 
     .student-hero {
-        @apply relative flex min-h-0 flex-col justify-center overflow-hidden rounded-lg border border-slate-800 px-4 py-4 text-white shadow-[0_12px_32px_rgba(8,20,38,0.13)] sm:px-5;
+        @apply relative flex min-h-0 flex-col justify-center overflow-hidden rounded-md border border-slate-800 px-4 py-4 text-white shadow-[0_12px_32px_rgba(8,20,38,0.13)] sm:px-5;
         background:
             radial-gradient(circle at 90% -20%, rgba(252, 211, 77, 0.20), transparent 28%),
             linear-gradient(115deg, #081426 0%, #0e1f36 68%, #122a45 100%);
@@ -375,15 +375,15 @@
     }
 
     .student-card {
-        @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+        @apply rounded-md border border-slate-200 bg-white shadow-sm;
     }
 
     .student-soft-card {
-        @apply rounded-lg border border-slate-200/80 bg-slate-50/95;
+        @apply rounded-md border border-slate-200/80 bg-slate-50/95;
     }
 
     .student-visual-card {
-        @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md;
+        @apply relative overflow-hidden rounded-md border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md;
     }
 
     .student-icon-badge {
@@ -391,7 +391,7 @@
     }
 
     .student-muted-panel {
-        @apply rounded-lg border border-slate-200 bg-slate-50 p-4;
+        @apply rounded-md border border-slate-200 bg-slate-50 p-4;
     }
 
     .applicant-profile-editor:not(.show-guidance) p[class*='text-xs'][class*='leading-5'][class*='text-slate-500'] {
@@ -399,7 +399,82 @@
     }
 
     .student-empty-state {
-        @apply rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-500;
+        @apply rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-500;
+    }
+
+    .student-detail-label {
+        @apply text-xs font-semibold leading-5 text-slate-600;
+    }
+
+    .student-badge {
+        @apply inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-sm border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold leading-4 text-slate-700;
+    }
+
+    .student-badge-positive {
+        @apply border-emerald-200 bg-emerald-50 text-emerald-800;
+    }
+
+    .student-badge-attention {
+        @apply border-amber-200 bg-amber-50 text-amber-900;
+    }
+
+    .student-badge-negative {
+        @apply border-rose-200 bg-rose-50 text-rose-800;
+    }
+
+    .student-badge-info {
+        @apply border-sky-200 bg-sky-50 text-sky-800;
+    }
+
+    .student-button {
+        @apply inline-flex min-h-11 min-w-0 max-w-full items-center justify-center gap-2 rounded-sm border border-transparent px-4 py-2 text-center text-sm font-bold leading-5 transition;
+    }
+
+    .student-button-primary {
+        @apply border-slate-950 bg-slate-950 text-white hover:border-slate-800 hover:bg-slate-800;
+    }
+
+    .student-button-secondary {
+        @apply border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+    }
+
+    .student-button-accent {
+        @apply border-amber-300 bg-amber-300 text-slate-950 hover:border-amber-200 hover:bg-amber-200;
+    }
+
+    .student-button-on-dark {
+        @apply border-white/30 bg-white/5 text-white hover:bg-white/15;
+    }
+
+    .student-button-danger {
+        @apply border-rose-200 bg-white text-rose-700 hover:bg-rose-50;
+    }
+
+    .student-button-compact {
+        @apply min-h-10 px-3 text-xs;
+    }
+
+    .student-button-icon {
+        @apply w-10 px-0;
+    }
+
+    .student-button:focus-visible {
+        @apply outline-2 outline-offset-2 outline-amber-600;
+    }
+
+    .student-button-on-dark:focus-visible,
+    .student-button-accent:focus-visible {
+        @apply outline-amber-300;
+    }
+
+    .student-button:disabled,
+    .student-button[aria-disabled='true'] {
+        @apply cursor-not-allowed opacity-60;
+    }
+
+    .student-button > i,
+    .student-badge > i {
+        @apply block w-4 shrink-0 text-center text-xs leading-none;
     }
 
     .student-kicker {
@@ -419,7 +494,7 @@
     }
 
     .student-stat-tile {
-        @apply rounded-lg border border-slate-200 bg-slate-50 p-3;
+        @apply rounded-md border border-slate-200 bg-slate-50 p-3;
     }
 
     /* Shared table and responsive record-list primitives. */
@@ -518,5 +593,730 @@
 
     .student-action-card {
         @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md;
+    }
+}
+
+@layer utilities {
+    /* Admin-only refinements leave shared applicant and provider views unchanged. */
+    .admin-page :is(.task-page-heading, .workspace-dashboard-heading) {
+        align-items: center;
+    }
+
+    .admin-page .task-page-description {
+        display: block;
+        overflow: visible;
+        -webkit-line-clamp: unset;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-page .workspace-dashboard-header-row {
+        min-height: 0;
+        gap: 1.5rem;
+    }
+
+    .admin-page .workspace-dashboard-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-page :is(.task-page-eyebrow, .workspace-dashboard-label, .workspace-dashboard-status, .portal-data-table th, .uppercase[class~='text-[10px]'], .uppercase[class~='text-[11px]']) {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.08em;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-page .workspace-metric-content {
+        height: 100%;
+        min-height: 6.5rem;
+        align-items: center;
+    }
+
+    .admin-page .workspace-dashboard-text {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-page .workspace-dashboard-status {
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    .admin-page :is(.workspace-dashboard-action, .task-page-actions > a, .task-page-actions > button),
+    .admin-page .portal-data-table :is(a, button).h-9 {
+        min-height: 2.5rem;
+        font-size: 0.875rem;
+        flex-shrink: 0;
+    }
+
+    .admin-page .portal-data-table :is(a, button).w-9 {
+        width: 2.5rem;
+    }
+
+    .admin-page :is(.task-page-icon, .workspace-dashboard-icon, .admin-table-icon) > i,
+    .admin-page :is(a, button).inline-flex > i,
+    .admin-dialog i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        flex-shrink: 0;
+        text-align: center;
+    }
+
+    .admin-page :is(label, dd, th, td) {
+        min-width: 0;
+    }
+
+    .admin-page :is(a, button, summary):focus-visible,
+    .admin-dialog :is(a, button, input, select, textarea):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    .admin-dialog {
+        display: flex;
+        max-height: calc(100dvh - 3rem);
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .admin-dialog-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .admin-dialog > :is(header, footer) {
+        flex-shrink: 0;
+    }
+
+    .admin-dialog :is(h2, p, label) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    /* End admin shared refinements. */
+
+    /* Review-only text wrapping preserves applicant and provider presentation. */
+    .admin-review-workspace :is(.review-text, label, dd, td) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-review-workspace .review-text {
+        white-space: normal;
+    }
+
+    .admin-review-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    /* End admin review refinements. */
+
+    /* Keep support identifiers and notes readable without changing other roles. */
+    .admin-support-workspace :is(.support-text, label, dd, td) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-support-workspace .support-text {
+        white-space: normal;
+    }
+
+    .admin-support-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    /* End admin support refinements. */
+
+    /* Billing-only refinements preserve the shared provider service presentation. */
+    .admin-billing-workspace :is(.billing-text, label, dd, td, p, h2, h3) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-billing-workspace .billing-text {
+        white-space: normal;
+    }
+
+    .admin-billing-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    /* End admin billing refinements. */
+
+    /* Read-only finance and records views retain the shared admin hierarchy. */
+    :is(.admin-finance-workspace, .admin-records-workspace) :is(td, dd, p, h2, h3) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    :is(.admin-finance-workspace, .admin-records-workspace) .admin-ledger-table {
+        width: 100%;
+        min-width: 54rem;
+        table-layout: fixed;
+    }
+
+    :is(.admin-finance-workspace, .admin-records-workspace) span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .admin-records-workspace .admin-export-feedback:empty {
+        display: none;
+    }
+
+    /* End admin finance and records refinements. */
+
+    .admin-portal-workspace :is(td, p, strong) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-portal-workspace .portal-oversight-table {
+        width: 100%;
+        min-width: 52rem;
+        table-layout: fixed;
+    }
+
+    .admin-portal-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    /* End admin portal refinements. */
+
+    /* Refine provider support and paid-service screens without affecting admin. */
+    .provider-service-workspace .service-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace :is(.service-text, [data-workspace-text-summary], label, dd, td, th, p, h1, h2, h3) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace .uppercase {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.07em;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace :is(header, .service-heading) :is(h1, h2, p, .min-w-0 > div) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace header .items-start:has(> span > i),
+    .provider-service-workspace header:has(> span > i) {
+        align-items: center;
+    }
+
+    .provider-service-workspace :is(button, select, a.inline-flex, a.inline-grid, a.grid, label.inline-flex):not(nav *) {
+        min-height: 2.5rem;
+    }
+
+    .provider-service-workspace :is(button, a).w-9 {
+        width: 2.5rem;
+        flex-shrink: 0;
+    }
+
+    .provider-service-workspace header :is(a.inline-flex, button.inline-flex),
+    .provider-service-workspace td :is(a, button) {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    .provider-service-workspace :is(a, button, label).inline-flex > i,
+    .provider-service-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        flex-shrink: 0;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .provider-service-workspace :is(input, select, textarea) {
+        min-width: 0;
+        color: var(--color-slate-900);
+    }
+
+    .provider-service-workspace :is(input, textarea)::placeholder {
+        color: var(--color-slate-500);
+    }
+
+    .provider-service-workspace .service-next-action {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    }
+
+    .provider-service-workspace .service-next-action > :is(span, a) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace :is(a, button, summary, input, select, textarea):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Provider account and organization refinements never style applicant previews. */
+    .provider-settings-workspace .settings-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-settings-workspace :is(.settings-text, [data-workspace-text-summary], label, dd, td, th) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-settings-workspace .uppercase {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.07em;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-settings-workspace header :is(h1, h2, p, .min-w-0 > div) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-settings-workspace header .items-start:has(> span > i),
+    .provider-settings-workspace header:has(> span > i) {
+        align-items: center;
+    }
+
+    .provider-settings-workspace > header .settings-page-actions {
+        display: flex;
+        max-width: 48%;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .provider-settings-workspace header :is(a.inline-flex, button.inline-flex) {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    .provider-settings-workspace :is(button, select, a.inline-flex, a.grid):not(nav *) {
+        min-height: 2.5rem;
+    }
+
+    .provider-settings-workspace :is(button, a).w-9 {
+        width: 2.5rem;
+        flex-shrink: 0;
+    }
+
+    .provider-settings-workspace td :is(a, button) {
+        white-space: nowrap;
+    }
+
+    .provider-settings-workspace :is(a, button).inline-flex > i,
+    .provider-settings-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        flex-shrink: 0;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .provider-settings-workspace :is(td, header) img {
+        flex-shrink: 0;
+    }
+
+    .provider-settings-workspace .settings-program-list {
+        max-height: 24rem;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-settings-workspace.settings-dialog {
+        display: flex;
+        max-height: calc(100dvh - 3rem);
+        flex-direction: column;
+        overflow: hidden;
+        color: var(--color-slate-950);
+    }
+
+    .provider-settings-workspace .settings-dialog-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-settings-workspace.settings-dialog > :is(header, footer) {
+        flex-shrink: 0;
+    }
+
+    .provider-settings-workspace :is(a, button, summary, input, select, textarea):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Keep monitoring and distribution refinements out of applicant records. */
+    .provider-monitoring-workspace .monitoring-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-monitoring-workspace :is(.monitoring-text, [data-workspace-text-summary], label, dd, td, th) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-monitoring-workspace .uppercase {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.07em;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-monitoring-workspace header .items-start:has(> span > i),
+    .provider-monitoring-workspace header:has(> span > i) {
+        align-items: center;
+    }
+
+    .provider-monitoring-workspace .monitoring-page-actions {
+        display: flex;
+        max-width: 48%;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .provider-monitoring-workspace header :is(h1, h2, p, .min-w-0 > div) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-monitoring-workspace :is(button, select, a.inline-flex):not(nav *) {
+        min-height: 2.5rem;
+    }
+
+    .provider-monitoring-workspace :is(button, a).w-9 {
+        width: 2.5rem;
+    }
+
+    .provider-monitoring-workspace td :is(a.inline-flex, button) {
+        white-space: nowrap;
+    }
+
+    .provider-monitoring-workspace :is(a, button).inline-flex > i,
+    .provider-monitoring-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        flex-shrink: 0;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .provider-monitoring-workspace .monitoring-recipient-picker {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        max-height: 16rem;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-monitoring-workspace .monitoring-candidate-list {
+        max-height: 24rem;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-monitoring-workspace.monitoring-dialog {
+        display: flex;
+        max-height: calc(100dvh - 3rem);
+        flex-direction: column;
+        overflow: hidden;
+        color: var(--color-slate-950);
+    }
+
+    .provider-monitoring-workspace .monitoring-dialog-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-monitoring-workspace.monitoring-dialog > :is(header, footer) {
+        flex-shrink: 0;
+    }
+
+    .provider-monitoring-workspace :is(a, button, summary, input, select, textarea):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Refinements stay inside the operational provider application screens. */
+    .provider-application-workspace .application-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-application-workspace .application-text {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-application-workspace .uppercase {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.07em;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-application-workspace :is(label, dd, td, th) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-application-workspace td img {
+        flex-shrink: 0;
+    }
+
+    .provider-application-workspace header .items-start:has(> span > i),
+    .provider-application-workspace header:has(> span > i) {
+        align-items: center;
+    }
+
+    .provider-application-workspace :is(button, a.inline-flex):not(nav *) {
+        min-height: 2.5rem;
+    }
+
+    .provider-application-workspace select {
+        min-height: 2.5rem;
+    }
+
+    .provider-application-workspace :is(button, a).w-9 {
+        width: 2.5rem;
+    }
+
+    .provider-application-workspace :is(a, button).inline-flex > i,
+    .provider-application-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .provider-application-workspace .application-candidate-list {
+        max-height: 20rem;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-application-workspace.application-dialog {
+        display: flex;
+        max-height: calc(100dvh - 3rem);
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .provider-application-workspace .application-dialog-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-application-workspace.application-dialog > :is(header, nav, footer) {
+        flex-shrink: 0;
+    }
+
+    .provider-application-workspace :is(a, button, summary):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Provider program refinements do not style embedded applicant previews. */
+    .provider-program-workspace .program-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-program-workspace .program-label {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.08em;
+    }
+
+    .provider-program-workspace .program-status {
+        max-width: 100%;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-program-workspace .program-field-label > span.font-normal {
+        color: var(--color-slate-600);
+    }
+
+    .provider-program-workspace .program-text {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-program-workspace .program-page-actions {
+        display: flex;
+        max-width: 48%;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+
+    .provider-program-workspace .program-summary > div,
+    .provider-program-workspace .program-builder-form label,
+    .provider-program-workspace.program-benefit-dialog label {
+        min-width: 0;
+    }
+
+    .provider-program-workspace .program-action,
+    .provider-program-workspace .program-form-footer :is(a, button),
+    .provider-program-workspace .program-benefit-actions button {
+        min-height: 2.5rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+
+    .provider-program-workspace .program-icon > i,
+    .provider-program-workspace .program-summary i,
+    .provider-program-workspace .program-action > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .provider-program-workspace .program-builder-step {
+        align-content: start;
+    }
+
+    .provider-program-workspace :is(a, button):focus-visible,
+    .provider-program-workspace label:has(input[type='radio']:focus-visible) {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Shared dashboard components also serve admin pages; refinements are provider-only. */
+    .provider-dashboard .workspace-dashboard-header {
+        padding: 1.25rem 1.5rem;
+    }
+
+    .provider-dashboard .workspace-dashboard-header-row {
+        min-height: 0;
+        gap: 1.5rem;
+    }
+
+    .provider-dashboard .workspace-dashboard-header-row > .workspace-dashboard-heading {
+        flex: 1;
+    }
+
+    .provider-dashboard .workspace-dashboard-heading {
+        align-items: center;
+    }
+
+    .provider-dashboard .workspace-dashboard-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-dashboard .workspace-dashboard-label {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.08em;
+    }
+
+    .provider-dashboard .workspace-metric-content {
+        height: 100%;
+        min-height: 6.5rem;
+        align-items: center;
+    }
+
+    .provider-dashboard .workspace-metric-content .workspace-dashboard-label,
+    .provider-dashboard .workspace-dashboard-detail {
+        color: var(--color-slate-600);
+    }
+
+    .provider-dashboard .workspace-dashboard-section-header {
+        min-height: 4.5rem;
+    }
+
+    .provider-dashboard .workspace-dashboard-text {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-dashboard .workspace-dashboard-status {
+        max-width: 100%;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-dashboard .workspace-dashboard-action,
+    .provider-page-header-actions > :is(a, button) {
+        min-height: 2.5rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+
+    .provider-dashboard .workspace-dashboard-action {
+        flex-shrink: 0;
+    }
+
+    .provider-dashboard .workspace-dashboard-icon > i,
+    .provider-dashboard .workspace-dashboard-action > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .provider-dashboard .provider-dashboard-header-actions {
+        max-width: 45%;
+    }
+
+    .provider-dashboard .provider-dashboard-organization {
+        max-width: 16rem;
+    }
+
+    .provider-dashboard :is(a, button):focus-visible,
+    .provider-page-header :is(a, button, summary):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
     }
 }

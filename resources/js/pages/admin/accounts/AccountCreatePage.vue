@@ -35,7 +35,7 @@ async function createAccount() {
     try {
         const response = await window.axios.post('/admin/users', {
             ...form,
-            middle_initial: form.middle_initial.trim().toUpperCase(),
+            middle_initial: form.middle_initial.trim().toUpperCase() || null,
             contact_number: form.contact_number.trim(),
             account_title: null,
             permissions: null,
@@ -65,7 +65,8 @@ async function createAccount() {
 
         <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
 
-        <form class="admin-panel mt-4 w-full overflow-hidden" @submit.prevent="createAccount">
+        <form class="admin-panel mt-4 w-full overflow-hidden" :aria-busy="saving" @submit.prevent="createAccount">
+            <fieldset :disabled="saving" class="min-w-0">
             <section class="border-b border-slate-200 px-6 py-5">
                 <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-user-tag" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Account type</h2><p class="mt-0.5 text-sm text-slate-500">Choose who will use this login.</p></div></div>
                 <div class="mt-4 w-full">
@@ -80,10 +81,12 @@ async function createAccount() {
 
             <section class="border-b border-slate-200 px-6 py-5">
                 <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-address-card" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Identity and login</h2><p class="mt-0.5 text-sm text-slate-500">Enter the account holder's contact and sign-in details.</p></div></div>
-                <div class="mt-4 grid grid-cols-3 gap-5">
+                <div class="mt-4 grid grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)] items-end gap-5">
                     <label><span :class="labelClass">First name</span><input v-model="form.first_name" required maxlength="255" :class="inputClass"><span v-if="fieldError('first_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('first_name') }}</span></label>
-                    <label><span :class="labelClass">Middle initial</span><input v-model="form.middle_initial" required maxlength="1" :class="inputClass" @input="form.middle_initial = form.middle_initial.replace(/[^a-z]/gi, '').slice(0, 1).toUpperCase()"><span v-if="fieldError('middle_initial')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('middle_initial') }}</span></label>
+                    <label><span :class="labelClass">M.I. <span class="text-xs font-normal text-slate-500">(optional)</span></span><input v-model="form.middle_initial" maxlength="1" pattern="[A-Za-z]" :class="inputClass" @input="form.middle_initial = form.middle_initial.replace(/[^a-z]/gi, '').slice(0, 1).toUpperCase()"><span v-if="fieldError('middle_initial')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('middle_initial') }}</span></label>
                     <label><span :class="labelClass">Last name</span><input v-model="form.last_name" required maxlength="255" :class="inputClass"><span v-if="fieldError('last_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('last_name') }}</span></label>
+                </div>
+                <div class="mt-5 grid grid-cols-3 gap-5">
                     <label><span :class="labelClass">Email</span><input v-model="form.email" required type="email" maxlength="255" :class="inputClass"><span v-if="fieldError('email')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('email') }}</span></label>
                     <label><span :class="labelClass">Username</span><input v-model="form.username" required minlength="4" maxlength="255" :class="inputClass"><span v-if="fieldError('username')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('username') }}</span></label>
                     <label><span :class="labelClass">Contact number</span><input :value="form.contact_number" required inputmode="tel" :class="inputClass" @input="form.contact_number = limitPhoneNumber($event.target.value)"><span v-if="fieldError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('contact_number') }}</span></label>
@@ -94,7 +97,7 @@ async function createAccount() {
                 <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-key" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Temporary access</h2><p class="mt-0.5 text-sm text-slate-500">Set the first password shared with the account holder.</p></div></div>
                 <div class="mt-4 grid w-full grid-cols-2 gap-5">
                     <label><span :class="labelClass">Temporary password</span><input v-model="form.password" required type="password" minlength="8" autocomplete="new-password" :class="inputClass"><span v-if="fieldError('password')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('password') }}</span></label>
-                    <label><span :class="labelClass">Confirm password</span><input v-model="form.password_confirmation" required type="password" minlength="8" autocomplete="new-password" :class="inputClass"></label>
+                    <label><span :class="labelClass">Confirm password</span><input v-model="form.password_confirmation" required type="password" minlength="8" autocomplete="new-password" :class="inputClass"><span v-if="fieldError('password_confirmation')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError('password_confirmation') }}</span></label>
                 </div>
             </section>
 
@@ -102,6 +105,7 @@ async function createAccount() {
                 <p class="text-xs text-slate-500">Share temporary credentials securely.</p>
                 <button type="submit" :disabled="saving" class="h-11 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50">{{ saving ? 'Creating...' : 'Create account' }}</button>
             </footer>
+            </fieldset>
         </form>
     </AdminWorkspacePage>
 </template>

@@ -31,7 +31,7 @@ const primaryHref = computed(() => action.value ? withPreparationContext(action.
                 <h3 id="scholarship-requirements-title" class="mt-1.5 font-display text-2xl font-bold text-slate-950">Prepare your application</h3>
                 <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{{ isPreview ? 'Published requirements. Applicants see which of their saved files can be reused.' : 'Check the required files, then answer the provider questions in the application form.' }}</p>
             </div>
-            <a v-if="documentsHref" :href="documentsHref" class="inline-flex min-h-11 w-fit shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 px-3 text-xs font-bold text-slate-800 hover:bg-slate-50"><i class="fa-solid fa-folder-open text-xs" aria-hidden="true"></i>My Documents</a>
+            <a v-if="documentsHref" :href="documentsHref" class="student-button student-button-secondary w-fit shrink-0"><i class="fa-solid fa-folder-open text-xs" aria-hidden="true"></i>My Documents</a>
         </header>
 
         <div class="border-b border-slate-200 bg-slate-50/70 px-5 py-3 sm:px-6">
@@ -48,7 +48,7 @@ const primaryHref = computed(() => action.value ? withPreparationContext(action.
             <li v-for="row in rows" :key="row.name" data-required-file class="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 px-5 py-4 sm:grid-cols-[1.5rem_minmax(0,1fr)_10rem] sm:px-6">
                 <i class="fa-regular fa-file-lines pt-1 text-sm text-slate-400" aria-hidden="true"></i>
                 <p class="text-sm font-semibold leading-6 text-slate-900 [overflow-wrap:anywhere]">{{ eligibilityValue(row.name) }}</p>
-                <div data-file-status class="col-start-2 sm:col-start-auto"><span :class="['inline-flex rounded-sm border px-2.5 py-1 text-xs font-bold leading-5', isPreview ? 'border-slate-200 bg-slate-50 text-slate-600' : row.status === 'ready' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-900']">{{ isPreview ? 'Required file' : row.status === 'ready' ? 'Saved file' : 'Upload needed' }}</span></div>
+                <div data-file-status class="col-start-2 sm:col-start-auto"><span :class="['student-badge', isPreview ? '' : row.status === 'ready' ? 'student-badge-positive' : 'student-badge-attention']">{{ isPreview ? 'Required file' : row.status === 'ready' ? 'Saved file' : 'Upload needed' }}</span></div>
             </li>
         </ul>
         <p v-else class="px-5 py-5 text-sm leading-6 text-slate-600 sm:px-6">{{ requirements.review_method === 'provider_review' ? 'No initial files are needed. The provider begins with your verified profile and any required answers.' : 'No files are required for the initial application. Complete any required questions and review the terms in the form.' }}</p>
@@ -82,8 +82,8 @@ const primaryHref = computed(() => action.value ? withPreparationContext(action.
 
         <footer class="flex flex-col gap-4 border-t border-slate-200 bg-slate-50/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div class="min-w-0"><p class="text-sm font-bold text-slate-950">{{ isPreview ? 'Applicant actions are disabled in this preview' : preparation.has_applied ? 'Your application has already been submitted' : preparation.can_start_application ? 'Continue when you are ready' : decision.title }}</p><p class="mt-1 max-w-2xl text-xs leading-5 text-slate-500">{{ isPreview ? 'Applicants use the application form to upload files, answer questions, and confirm submission.' : preparation.can_start_application ? 'Opening the form keeps this scholarship selected. Nothing is submitted until you confirm.' : decision.description }}</p></div>
-            <a v-if="action?.kind === 'link'" :href="primaryHref" class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-sm bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">{{ action.label }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
-            <button v-else-if="action?.kind === 'save'" type="button" :disabled="saving" class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-sm bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" @click="$emit('save')"><i class="fa-regular fa-bookmark text-xs" aria-hidden="true"></i>{{ saving ? 'Saving...' : action.label }}</button>
+            <a v-if="action?.kind === 'link'" :href="primaryHref" class="student-button student-button-primary shrink-0">{{ action.label }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
+            <button v-else-if="action?.kind === 'save'" type="button" :disabled="saving" class="student-button student-button-primary shrink-0" @click="$emit('save')"><i class="fa-regular fa-bookmark text-xs" aria-hidden="true"></i>{{ saving ? 'Saving...' : action.label }}</button>
         </footer>
     </section>
 </template>

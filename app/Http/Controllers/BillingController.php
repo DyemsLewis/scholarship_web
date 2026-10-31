@@ -18,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -1170,12 +1171,7 @@ class BillingController extends Controller
         return response()->json([
             'purchase' => $this->workspacePayload($purchase, true, $validated['section'] ?? 'overview'),
             'assignees' => $assignees,
-            'status_options' => [
-                ['value' => 'needs_information', 'label' => 'Needs information'],
-                ['value' => 'ready', 'label' => 'Ready to start'],
-                ['value' => 'in_progress', 'label' => 'In progress'],
-                ['value' => 'provider_review', 'label' => 'Ready for provider review'],
-            ],
+            'status_options' => $this->deliveryStatusOptions($purchase),
         ]);
     }
 
@@ -1278,13 +1274,6 @@ class BillingController extends Controller
             'message' => ['required', 'string', 'min:3', 'max:2000'],
         ]);
         $isInternal = $validated['kind'] === 'internal_note';
-        $update = $purchase->updates()->create([
-            'actor_id' => $request->user()->id,
-            'kind' => $validated['kind'],
-            'message' => trim($validated['message']),
-            'visible_to_provider' => ! $isInternal,
-        ]);
-
         if ($validated['kind'] === 'clarification_request') {
             $purchase = $this->transitionServiceDelivery(
                 $purchase,
@@ -1294,6 +1283,13 @@ class BillingController extends Controller
                 'platform_information_requested',
             );
         }
+
+        $update = $purchase->updates()->create([
+            'actor_id' => $request->user()->id,
+            'kind' => $validated['kind'],
+            'message' => trim($validated['message']),
+            'visible_to_provider' => ! $isInternal,
+        ]);
 
         ActivityLog::record(
             $request->user(),
@@ -1489,7 +1485,14 @@ class BillingController extends Controller
             'fulfillment_notes' => ['nullable', 'string', 'max:2000'],
             'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
             'priority' => ['nullable', Rule::in(['low', 'normal', 'high', 'urgent'])],
-            'target_due_at' => ['nullable', 'date', 'after_or_equal:today'],
+            'target_due_at' => ['bail', 'nullable', 'date', function (string $attribute, mixed $value, \Closure $fail) use ($purchase): void {
+                $target = Carbon::parse($value, config('app.timezone'))->timezone(config('app.timezone'));
+                $saved = $purchase->target_due_at?->copy()->timezone(config('app.timezone'));
+                if ($target->copy()->startOfDay()->isBefore(now(config('app.timezone'))->startOfDay())
+                    && (! $saved || ! $target->isSameDay($saved))) {
+                    $fail('Keep the saved overdue date or choose today or a future target date.');
+                }
+            }],
             'milestones' => ['nullable', 'array', 'max:12'],
             'milestones.*.id' => ['required_with:milestones', 'string', 'max:80'],
             'milestones.*.label' => ['required_with:milestones', 'string', 'max:160'],
@@ -1550,18 +1553,26 @@ class BillingController extends Controller
             }
         }
 
+        $targetDueAt = ! array_key_exists('target_due_at', $validated) ? $purchase->target_due_at : (filled($validated['target_due_at'])
+            ? Carbon::parse($validated['target_due_at'], config('app.timezone'))->timezone(config('app.timezone'))
+            : null);
+        if ($targetDueAt && $purchase->target_due_at
+            && $targetDueAt->isSameDay($purchase->target_due_at->copy()->timezone(config('app.timezone')))) {
+            $targetDueAt = $purchase->target_due_at;
+        }
+
         $previousStatus = $purchase->fulfillment_status;
         $purchase = $this->transitionServiceDelivery(
             $purchase,
             $validated['fulfillment_status'],
             $request->user(),
             [
-                'fulfillment_notes' => filled($validated['fulfillment_notes'] ?? null)
+                'fulfillment_notes' => ! array_key_exists('fulfillment_notes', $validated) ? $purchase->fulfillment_notes : (filled($validated['fulfillment_notes'])
                     ? trim($validated['fulfillment_notes'])
-                    : null,
-                'assigned_to' => $validated['assigned_to'] ?? null,
+                    : null),
+                'assigned_to' => array_key_exists('assigned_to', $validated) ? $validated['assigned_to'] : $purchase->assigned_to,
                 'priority' => $validated['priority'] ?? $purchase->priority,
-                'target_due_at' => $validated['target_due_at'] ?? null,
+                'target_due_at' => $targetDueAt,
                 'milestones' => $milestones,
                 'fulfilled_by' => $request->user()->id,
                 'fulfilled_at' => null,
@@ -2204,6 +2215,16 @@ class BillingController extends Controller
         return "/provider/billing/{$purchase->id}{$section}";
     }
 
+    private function deliveryStatusOptions(ProviderServicePurchase $purchase): array
+    {
+        return collect([
+            ['value' => 'needs_information', 'label' => 'Needs information'],
+            ['value' => 'ready', 'label' => 'Ready to start'],
+            ['value' => 'in_progress', 'label' => 'In progress'],
+            ['value' => 'provider_review', 'label' => 'Ready for provider review'],
+        ])->filter(fn (array $option): bool => $this->serviceLifecycle->canTransitionDelivery($purchase, $option['value']))->values()->all();
+    }
+
     private function workspacePayload(ProviderServicePurchase $purchase, bool $includeInternal, string $section = 'all'): array
     {
         $purchase->loadMissing([
@@ -2283,6 +2304,7 @@ class BillingController extends Controller
 
         return [
             ...$this->purchasePayload($purchase, $includeInternal),
+            ...($includeInternal ? ['delivery_status_options' => $this->deliveryStatusOptions($purchase)] : []),
             'milestones' => $milestones,
             'plan_description' => $plan['description'] ?? null,
             'plan_features' => array_values($plan['features'] ?? []),

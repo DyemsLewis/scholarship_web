@@ -6,7 +6,7 @@ import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const isLoading = ref(true);
-const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const usesPortalManagerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/portal');
 const updatingId = ref(null);
 const errorMessage = ref('');
 const actionError = ref('');

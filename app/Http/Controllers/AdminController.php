@@ -595,14 +595,14 @@ class AdminController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'display_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
             'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
         ]);
 
-        $middleInitial = strtoupper($validated['middle_initial']);
+        $middleInitial = filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null;
 
         $user->update([
             'email' => $validated['email'],
@@ -1410,7 +1410,7 @@ class AdminController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
             'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
@@ -1429,8 +1429,8 @@ class AdminController extends Controller
             );
         }
 
-        $middleInitial = strtoupper($validated['middle_initial']);
-        $displayName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
+        $middleInitial = filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null;
+        $displayName = trim($validated['first_name'].' '.($middleInitial ? $middleInitial.'. ' : '').$validated['last_name']);
 
         $profile = [
             'first_name' => $validated['first_name'],
@@ -1545,7 +1545,7 @@ class AdminController extends Controller
         $validated = $request->validate([
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
-            'middle_initial' => ['required', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
+            'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($user->id)],
             'contact_number' => ['required', 'string', 'max:30', new PhoneNumber],
@@ -1588,8 +1588,8 @@ class AdminController extends Controller
             ], 422);
         }
 
-        $middleInitial = strtoupper($validated['middle_initial']);
-        $displayName = trim("{$validated['first_name']} {$middleInitial}. {$validated['last_name']}");
+        $middleInitial = filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null;
+        $displayName = trim($validated['first_name'].' '.($middleInitial ? $middleInitial.'. ' : '').$validated['last_name']);
         $userPayload = [
             'email' => $validated['email'],
             'username' => $validated['username'],

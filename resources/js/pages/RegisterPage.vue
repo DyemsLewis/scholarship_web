@@ -6,7 +6,7 @@ import ToastMessage from '../components/ToastMessage.vue';
 import { limitPhoneNumber } from '../support/phoneNumber';
 
 const formElement = ref(null);
-const isProviderRegistration = window.location.pathname.startsWith('/provider/register');
+const isProviderRegistration = (window.portalPathname?.() ?? window.location.pathname).startsWith('/provider/register');
 const registrationRole = isProviderRegistration ? 'provider' : 'applicant';
 const registrationStep = ref('details');
 const registrationToken = ref('');

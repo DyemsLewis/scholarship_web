@@ -187,7 +187,7 @@ async function saveManualGrade(requirement, index) {
         </a>
 
         <article class="overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm">
-            <header class="px-5 py-5 sm:px-6">
+            <header class="px-4 py-4 sm:px-6">
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
@@ -207,20 +207,20 @@ async function saveManualGrade(requirement, index) {
                         Case history
                     </button>
                 </div>
-                <p v-if="record.instructions" class="mt-4 max-w-4xl text-sm leading-6 text-slate-600">{{ record.instructions }}</p>
+                <p v-if="record.instructions" class="mt-3 max-w-4xl text-sm leading-6 text-slate-600">{{ record.instructions }}</p>
             </header>
 
-            <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-3">
-                <div class="px-5 py-3">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Deadline</dt>
+            <dl class="grid grid-cols-2 border-t border-slate-200 bg-slate-50 sm:grid-cols-3">
+                <div class="col-span-2 px-4 py-2.5 sm:col-span-1 sm:px-5 sm:py-3">
+                    <dt class="student-detail-label">Deadline</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ record.effective_due_label || record.due_label || 'Not scheduled' }}</dd>
                 </div>
-                <div class="border-t border-slate-200 px-5 py-3 sm:border-l sm:border-t-0">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Requirements</dt>
+                <div class="border-t border-slate-200 px-4 py-2.5 sm:border-l sm:border-t-0 sm:px-5 sm:py-3">
+                    <dt class="student-detail-label">Requirements</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ record.requirements.length }} listed</dd>
                 </div>
-                <div class="border-t border-slate-200 px-5 py-3 sm:border-l sm:border-t-0">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Progress</dt>
+                <div class="border-l border-t border-slate-200 px-4 py-2.5 sm:border-t-0 sm:px-5 sm:py-3">
+                    <dt class="student-detail-label">Progress</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ completedCount }} of {{ record.requirements.length }} complete</dd>
                 </div>
             </dl>
@@ -228,8 +228,7 @@ async function saveManualGrade(requirement, index) {
 
         <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
             <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Submission checklist</p>
-                <h3 class="mt-1 text-lg font-bold text-slate-950">Complete one item at a time</h3>
+                <h3 class="text-base font-bold text-slate-950">Complete one item at a time</h3>
                 <p class="mt-1 text-sm text-slate-500">Open an item to view its record, feedback, or available action.</p>
             </header>
 

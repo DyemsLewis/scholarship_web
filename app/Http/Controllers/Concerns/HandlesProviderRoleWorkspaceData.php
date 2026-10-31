@@ -1515,11 +1515,7 @@ trait HandlesProviderRoleWorkspaceData
             'detail_url' => route('provider.applications.show', $application, false),
             'applicant' => [
                 'name' => $application->applicant?->name ?: 'Applicant record',
-                'education' => collect([
-                    $application->applicant?->studentProfile?->education_level,
-                    $application->applicant?->studentProfile?->course_or_strand,
-                    $application->applicant?->studentProfile?->year_level,
-                ])->filter()->implode(' - '),
+                'education' => $this->providerApplicantEducationSummary($application),
                 'profile_photo_url' => $application->applicant?->studentProfile?->profile_photo_path
                     ? route('provider.applications.profile-photo.view', $application, false)
                     : null,
@@ -1641,11 +1637,7 @@ trait HandlesProviderRoleWorkspaceData
             'detail_url' => route('provider.applications.show', $application, false),
             'applicant' => [
                 'name' => $application->applicant?->name ?: 'Applicant record',
-                'education' => collect([
-                    $application->applicant?->studentProfile?->education_level,
-                    $application->applicant?->studentProfile?->course_or_strand,
-                    $application->applicant?->studentProfile?->year_level,
-                ])->filter()->implode(' - '),
+                'education' => $this->providerApplicantEducationSummary($application),
                 'profile_photo_url' => $application->applicant?->studentProfile?->profile_photo_path
                     ? route('provider.applications.profile-photo.view', $application, false)
                     : null,
@@ -1754,11 +1746,7 @@ trait HandlesProviderRoleWorkspaceData
                 : route('provider.applications.show', $application, false).'?section=decision',
             'applicant' => [
                 'name' => $application->applicant?->name ?: 'Recipient record',
-                'education' => collect([
-                    $application->applicant?->studentProfile?->education_level,
-                    $application->applicant?->studentProfile?->course_or_strand,
-                    $application->applicant?->studentProfile?->year_level,
-                ])->filter()->implode(' - '),
+                'education' => $this->providerApplicantEducationSummary($application),
                 'profile_photo_url' => $application->applicant?->studentProfile?->profile_photo_path
                     ? route('provider.applications.profile-photo.view', $application, false)
                     : null,
@@ -2113,11 +2101,7 @@ trait HandlesProviderRoleWorkspaceData
             'priority' => $priority,
             'applicant' => [
                 'name' => $application->applicant?->name ?: 'Applicant record',
-                'education' => collect([
-                    $application->applicant?->studentProfile?->education_level,
-                    $application->applicant?->studentProfile?->course_or_strand,
-                    $application->applicant?->studentProfile?->year_level,
-                ])->filter()->implode(' - '),
+                'education' => $this->providerApplicantEducationSummary($application),
                 'profile_photo_url' => $application->applicant?->studentProfile?->profile_photo_path
                     ? route('provider.applications.profile-photo.view', $application, false)
                     : null,
@@ -2143,5 +2127,25 @@ trait HandlesProviderRoleWorkspaceData
             'waiting_days' => $waitingDays,
             'submitted_at' => $submittedAt?->format('M d, Y h:i A'),
         ];
+    }
+
+    private function providerApplicantEducationSummary(ScholarshipApplication $application): string
+    {
+        $profile = $application->applicant?->studentProfile;
+        $level = trim((string) $profile?->education_level);
+        $label = match ($level) {
+            'preschool' => 'Preschool / Kindergarten',
+            'elementary' => 'Elementary',
+            'junior_high_school' => 'Junior High School',
+            'senior_high_school' => 'Senior High School',
+            'college' => 'College / University',
+            'tvet' => 'TVET / Vocational',
+            'als' => 'ALS / Alternative Learning',
+            default => str_contains($level, '_') ? Str::headline($level) : $level,
+        };
+
+        return collect([$label, $profile?->course_or_strand, $profile?->year_level])
+            ->filter()
+            ->implode(' - ');
     }
 }

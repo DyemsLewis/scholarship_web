@@ -36,7 +36,7 @@ function statusLabel(purchase) {
         provider_review: 'Review delivery',
         completed: 'Completed',
         cancelled: 'Cancelled',
-    }[purchase.fulfillment_status] ?? String(purchase.fulfillment_status || 'pending').replaceAll('_', ' ');
+    }[purchase.fulfillment_status] ?? labelFromKey(purchase.fulfillment_status || 'pending');
 }
 
 function statusClass(purchase) {
@@ -57,7 +57,7 @@ function dueClass(status) {
     <main class="student-shell">
         <ProviderSidebar />
         <section class="student-page" aria-labelledby="service-record-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <a :href="directoryUrl" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to services
@@ -65,24 +65,24 @@ function dueClass(status) {
 
                 <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
                     <div class="flex min-h-24 items-center justify-between gap-8 px-7 py-5">
-                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Service workspace</p><h1 id="service-record-title" class="mt-1 truncate font-display text-2xl font-bold tracking-tight text-slate-950">{{ purchase?.plan_name || 'Service request' }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ purchase?.plan_description || workspace.headerDescription }}</p></div></div>
-                        <span v-if="purchase" :class="['inline-flex shrink-0 border px-3 py-2 text-[10px] font-bold uppercase tracking-wide', statusClass(purchase)]">{{ statusLabel(purchase) }}</span>
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Service workspace</p><h1 id="service-record-title" class="service-page-title mt-1 service-text font-display text-2xl font-bold tracking-tight text-slate-950">{{ purchase?.plan_name || 'Service request' }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ purchase?.plan_description || workspace.headerDescription }}</p></div></div>
+                        <span v-if="purchase" :class="['inline-flex shrink-0 border px-3 py-2 text-xs font-bold uppercase tracking-wide', statusClass(purchase)]">{{ statusLabel(purchase) }}</span>
                     </div>
                     <div v-if="purchase" class="grid grid-cols-3 divide-x divide-slate-200 border-t border-slate-200 bg-slate-50">
                         <div class="px-6 py-3.5">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Payment</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Payment</p>
                             <p class="mt-1 text-sm font-bold text-slate-900">{{ labelFromKey(purchase.status) }}</p>
                         </div>
                         <div class="px-6 py-3.5">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Support owner</p>
-                            <p class="mt-1 truncate text-sm font-bold text-slate-900">{{ purchase.assigned_to_name || 'Platform support queue' }}</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Support owner</p>
+                            <p class="mt-1 service-text text-sm font-bold text-slate-900">{{ purchase.assigned_to_name || 'Platform support queue' }}</p>
                         </div>
                         <div class="px-6 py-3.5">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Target</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Target</p>
                             <p class="mt-1 text-sm font-bold text-slate-900">{{ formatServiceDateTime(purchase.target_due_at) }}</p>
                         </div>
                     </div>
-                    <div v-if="purchase?.current_action" class="flex items-center gap-3 border-t border-slate-200 px-6 py-3 text-sm">
+                    <div v-if="purchase?.current_action" class="service-next-action items-center gap-3 border-t border-slate-200 px-6 py-3 text-sm">
                         <span class="font-bold text-slate-950">Next:</span>
                         <span class="text-slate-600">{{ purchase.current_action }}</span>
                         <span v-if="purchase.action_due_label" :class="['ml-auto text-xs font-bold', dueClass(purchase.action_due_status)]">{{ purchase.action_due_label }}</span>

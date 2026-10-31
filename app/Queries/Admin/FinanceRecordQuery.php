@@ -64,7 +64,7 @@ class FinanceRecordQuery
 
         $this->applyPeriod($query, $filters['period'] ?? 'all');
         $this->applySearch($query, $filters['search'] ?? null);
-        $paginator = $query->latest('paid_at')->paginate((int) ($filters['per_page'] ?? 15))->withQueryString();
+        $paginator = $query->latest('paid_at')->latest('id')->paginate((int) ($filters['per_page'] ?? 15))->withQueryString();
 
         return $this->page($paginator, fn (ProviderServicePurchase $purchase): array => $this->payment($purchase));
     }
@@ -80,7 +80,7 @@ class FinanceRecordQuery
             $query->where('status', $status);
         }
         $this->applySearch($query, $filters['search'] ?? null);
-        $paginator = $query->latest()->paginate((int) ($filters['per_page'] ?? 15))->withQueryString();
+        $paginator = $query->latest()->latest('id')->paginate((int) ($filters['per_page'] ?? 15))->withQueryString();
 
         return $this->page($paginator, fn (ProviderServicePurchase $purchase): array => [
             'id' => $purchase->id,
@@ -165,6 +165,7 @@ class FinanceRecordQuery
                 ->orWhere('payment_id', 'like', "%{$search}%")
                 ->orWhereHas('provider', function (Builder $provider) use ($search): void {
                     $provider->where('email', 'like', "%{$search}%")
+                        ->orWhereHas('providerProfile', fn (Builder $profile) => $profile->where('first_name', 'like', "%{$search}%")->orWhere('last_name', 'like', "%{$search}%"))
                         ->orWhereHas('providerProfile', fn (Builder $profile) => $profile->where('provider_name', 'like', "%{$search}%"));
                 });
         });

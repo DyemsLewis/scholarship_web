@@ -13,7 +13,7 @@ const props = defineProps({
     },
 });
 
-const currentPath = window.location.pathname;
+const currentPath = (window.portalPathname?.() ?? window.location.pathname);
 const links = [
     { href: '/', label: 'Home', icon: 'fa-solid fa-house' },
     { href: '/login', label: 'Login', icon: 'fa-solid fa-right-to-bracket' },

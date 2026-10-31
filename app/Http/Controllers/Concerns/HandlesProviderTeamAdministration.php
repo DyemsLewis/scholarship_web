@@ -463,12 +463,15 @@ trait HandlesProviderTeamAdministration
         $profile = $account->providerProfile;
         $middle = filled($profile?->middle_initial) ? ' '.strtoupper($profile->middle_initial).'.' : '';
         $name = trim(($profile?->first_name ?? '').$middle.' '.($profile?->last_name ?? ''));
+        $title = trim((string) $account->account_title);
+        $roleKey = str_replace(['-', ' '], '_', strtolower($title));
+        $knownRole = array_key_exists($roleKey, self::PROVIDER_TEAM_ROLES);
 
         return [
             ...$this->providerStaffPayload($account),
             'name' => $name ?: ($account->username ?: $account->email),
-            'team_role' => $account->account_title,
-            'team_role_label' => self::PROVIDER_TEAM_ROLES[$account->account_title] ?? 'Team member',
+            'team_role' => $knownRole ? $roleKey : 'custom',
+            'team_role_label' => $knownRole ? self::PROVIDER_TEAM_ROLES[$roleKey] : ($title ?: self::PROVIDER_TEAM_ROLES['custom']),
             'program_access_mode' => $account->hasLimitedProviderProgramAccess() ? 'selected' : 'all',
             'assigned_program_ids' => $account->assignedProviderProgramIds(),
             'assigned_programs' => $account->hasLimitedProviderProgramAccess()

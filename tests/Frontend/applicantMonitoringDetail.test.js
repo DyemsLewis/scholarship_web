@@ -57,10 +57,10 @@ test('monitoring overview uses the dedicated contract and focused hierarchy', ()
     assert.match(shell, /data-monitoring-detail-header/);
     assert.match(shell, /data-monitoring-detail-navigation/);
     assert.match(shell, /grid-cols-2/);
-    assert.match(shell, /sm:grid-cols-4/);
+    assert.match(shell, /<ApplicantRecordTabs[^>]+layout="grid"/);
     assert.doesNotMatch(shell, /min-w-\[40rem\]/);
     assert.match(shell, /filipino-students-studying\.jpg/);
-    assert.match(shell, /lg:min-h-\[12rem\]/);
+    assert.match(shell, /lg:min-h-\[10rem\]/);
     assert.match(overview, /data-monitoring-overview/);
     assert.match(overview, /Support plan/);
     assert.match(overview, /Your support schedule/);

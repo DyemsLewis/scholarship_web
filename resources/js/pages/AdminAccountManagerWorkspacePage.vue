@@ -7,7 +7,7 @@ import { limitPhoneNumber } from '../support/phoneNumber';
 import { showPortalToast } from '../support/portalToast';
 
 const isLoading = ref(true);
-const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const usesPortalManagerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/portal');
 const isSaving = ref(false);
 const activeAction = ref('');
 const errorMessage = ref('');

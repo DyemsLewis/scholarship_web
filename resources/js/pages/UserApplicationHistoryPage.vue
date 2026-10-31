@@ -73,11 +73,9 @@ onMounted(loadHistory);
         />
 
         <section class="mt-4 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-            <header class="flex flex-col gap-3 border-b border-slate-200 px-4 py-5 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+            <header class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 sm:px-5">
                 <div>
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Application history</p>
-                    <h2 class="mt-1 font-display text-xl font-bold text-slate-950">Application timeline</h2>
-                    <p class="mt-1 text-sm text-slate-600">Latest milestone first. Open a record only when you need more detail.</p>
+                    <h2 class="text-base font-bold text-slate-950">Application timeline</h2>
                 </div>
                 <p v-if="history.summary?.event_count" class="text-xs font-semibold text-slate-500">
                     {{ history.summary.event_count }} {{ history.summary.event_count === 1 ? 'milestone' : 'milestones' }}

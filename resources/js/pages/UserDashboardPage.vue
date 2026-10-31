@@ -82,7 +82,7 @@ onMounted(loadDashboard);
                     <p class="mt-1 text-sm text-slate-600">{{ errorMessage }}</p>
                     <button
                         type="button"
-                        class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800"
+                        class="student-button student-button-primary mt-4"
                         @click="loadDashboard"
                     >
                         Try again

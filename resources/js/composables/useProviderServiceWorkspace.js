@@ -3,7 +3,7 @@ import { providerServiceWorkspace } from '../support/providerServiceWorkspaces.j
 
 export function providerServicePurchaseId() {
     return document.getElementById('app')?.dataset.purchaseId
-        ?? window.location.pathname.match(/\/provider\/billing\/(\d+)/)?.[1];
+        ?? (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/billing\/(\d+)/)?.[1];
 }
 
 export function formatServiceMoney(amount, currency = 'PHP') {
@@ -46,6 +46,7 @@ export function useProviderServiceWorkspace(section) {
     const successMessage = ref('');
     const workspace = computed(() => providerServiceWorkspace(purchase.value?.plan_code));
     const canModify = computed(() => purchase.value?.status === 'paid'
+        && purchase.value?.cancellation_status !== 'requested'
         && !['provider_review', 'completed', 'cancelled'].includes(purchase.value?.fulfillment_status));
     const directoryUrl = computed(() => {
         if (!purchase.value || purchase.value.status !== 'paid') return '/provider/workspaces/billing/requests';
@@ -82,6 +83,7 @@ export function useProviderServiceWorkspace(section) {
     }
 
     async function runAction(action, successFallback) {
+        if (isLoading.value || !purchase.value || isSaving.value) return false;
         isSaving.value = true;
         errorMessage.value = '';
         successMessage.value = '';

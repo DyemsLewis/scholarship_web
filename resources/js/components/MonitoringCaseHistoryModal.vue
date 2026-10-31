@@ -1,12 +1,16 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useModalAccessibility } from '../composables/useModalAccessibility';
 
 const props = defineProps({
     open: { type: Boolean, default: false },
     monitoringCase: { type: Object, default: null },
     subject: { type: String, default: '' },
+    providerWorkspace: { type: Boolean, default: false },
 });
 const emit = defineEmits(['close']);
+const dialogPanel = ref(null);
+const { handleKeydown } = useModalAccessibility(() => props.open, dialogPanel, () => emit('close'));
 
 const history = computed(() => props.monitoringCase?.history ?? []);
 const exceptionContext = computed(() => props.monitoringCase?.exception_context ?? null);
@@ -29,8 +33,8 @@ function historyIcon(kind) {
 
 <template>
     <Teleport to="body">
-        <div v-if="open" class="fixed inset-0 z-[2200] grid place-items-center bg-slate-950/65 p-4" role="dialog" aria-modal="true" aria-labelledby="monitoring-history-title" @click.self="emit('close')" @keydown.esc="emit('close')">
-            <section class="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-slate-300 bg-white text-slate-950 shadow-2xl">
+        <div v-if="open" class="fixed inset-0 z-[2200] grid place-items-center bg-slate-950/65 p-4" @click.self="emit('close')">
+            <section ref="dialogPanel" :class="['flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-slate-300 bg-white text-slate-950 shadow-2xl', providerWorkspace ? 'provider-monitoring-workspace monitoring-dialog' : '']" role="dialog" aria-modal="true" aria-labelledby="monitoring-history-title" tabindex="-1" @keydown="handleKeydown">
                 <header class="flex items-start justify-between gap-5 border-b border-slate-200 px-5 py-4 sm:px-6">
                     <div>
                         <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Monitoring record</p>
@@ -40,7 +44,7 @@ function historyIcon(kind) {
                     <button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded border border-slate-300 text-slate-500 hover:text-slate-950" aria-label="Close history" @click="emit('close')"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 </header>
 
-                <div class="min-h-0 overflow-y-auto px-5 py-5 sm:px-6">
+                <div class="monitoring-dialog-body min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
                     <section v-if="exceptionContext" class="border border-amber-200 bg-amber-50 px-4 py-4">
                         <div class="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Adjustment context</p><h3 class="mt-1 font-bold text-amber-950">{{ exceptionContext.summary }}</h3></div>

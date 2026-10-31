@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, ref } from 'vue';
 import { formatServiceDateTime, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
 import BillingServiceWorkspaceShell from './components/BillingServiceWorkspaceShell.vue';
@@ -35,7 +36,7 @@ function updateLabel(kind) {
 }
 
 async function addUpdate() {
-    if (!updateMessage.value.trim()) return;
+    if (!canModify.value || !updateMessage.value.trim()) return;
     const saved = await runAction(
         () => window.axios.post(`/provider/billing/${purchaseId}/updates`, { message: updateMessage.value.trim() }),
         'Response sent.',
@@ -71,8 +72,8 @@ async function addUpdate() {
             </div>
             <ol v-else class="divide-y divide-slate-200">
                 <li v-for="update in updates" :key="update.id" class="grid grid-cols-[12rem_minmax(0,1fr)_12rem] gap-6 px-6 py-5">
-                    <div><p class="text-xs font-bold text-slate-900">{{ update.actor_name }}</p><p class="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">{{ update.actor_role === 'provider' ? 'Provider team' : 'Platform support' }}</p></div>
-                    <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">{{ updateLabel(update.kind) }}</p><p class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{{ update.message }}</p></div>
+                    <div><p class="text-xs font-bold text-slate-900">{{ update.actor_name }}</p><p class="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-600">{{ update.actor_role === 'provider' ? 'Provider team' : 'Platform support' }}</p></div>
+                    <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{{ updateLabel(update.kind) }}</p><WorkspaceTextSummary  class="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700" :text="update.message" label="details" /></div>
                     <time class="text-right text-xs font-semibold text-slate-500">{{ formatServiceDateTime(update.created_at) }}</time>
                 </li>
             </ol>

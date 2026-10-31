@@ -167,7 +167,7 @@ function mountGlobalToastHost() {
 }
 
 function mountStaffFilePreviewHost() {
-    if (!/^\/(?:provider|admin)(?:\/|$)/.test(window.location.pathname)) {
+    if (!/^\/(?:provider|admin)(?:\/|$)/.test((window.portalPathname?.() ?? window.location.pathname))) {
         return;
     }
 

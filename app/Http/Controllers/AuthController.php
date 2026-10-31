@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
@@ -253,11 +254,20 @@ class AuthController extends Controller
         $loginField = filter_var($login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
         $loginValue = $loginField === 'email' ? strtolower($login) : $login;
         $remember = (bool) ($credentials['remember'] ?? false);
+        $attemptKey = 'login-account:'.hash('sha256', mb_strtolower($loginValue));
+        if (RateLimiter::tooManyAttempts($attemptKey, 5)) {
+            $retryAfter = RateLimiter::availableIn($attemptKey);
+            return response()->json([
+                'message' => 'Too many sign-in attempts. Please wait before trying again.',
+                'retry_after' => $retryAfter,
+            ], 429)->header('Retry-After', (string) $retryAfter);
+        }
 
         if (! Auth::attempt([
             $loginField => $loginValue,
             'password' => $credentials['password'],
         ], $remember)) {
+            RateLimiter::hit($attemptKey, 60);
             ActivityLog::record(
                 null,
                 'login_failed',
@@ -271,6 +281,7 @@ class AuthController extends Controller
             ], 422);
         }
 
+        RateLimiter::clear($attemptKey);
         $request->session()->regenerate();
 
         if ($request->user()->isSuspended()) {

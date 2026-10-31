@@ -1,9 +1,11 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderApplicantPhoto from '../../../components/ProviderApplicantPhoto.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import ProviderActionDialog from '../../../components/ProviderActionDialog.vue';
 
-const caseId = window.location.pathname.match(/\/cases\/(\d+)/)?.[1];
+const caseId = (window.portalPathname?.() ?? window.location.pathname).match(/\/cases\/(\d+)/)?.[1];
 const isLoading = ref(true);
 const isSaving = ref(false);
 const errorMessage = ref('');
@@ -11,6 +13,7 @@ const workspace = ref(null);
 const report = ref(null);
 const responseText = ref('');
 const confirmation = ref(null);
+const confirmationError = ref('');
 
 const backUrl = computed(() => {
     if (report.value?.work_state === 'waiting') return '/provider/workspaces/support/waiting';
@@ -87,11 +90,13 @@ async function loadCase() {
 }
 
 function requestComplete() {
+    if (!canRespond.value || isSaving.value) return;
     if (responseLength.value < 10) {
         errorMessage.value = 'Add a clear provider response of at least 10 characters.';
         return;
     }
     errorMessage.value = '';
+    confirmationError.value = '';
     confirmation.value = {
         status: 'resolved',
         title: 'Send this response?',
@@ -101,6 +106,8 @@ function requestComplete() {
 }
 
 function requestReopen() {
+    if (!isIncomingCase.value || report.value?.provider_status !== 'resolved' || isSaving.value) return;
+    confirmationError.value = '';
     confirmation.value = {
         status: 'open',
         title: 'Reopen the response?',
@@ -110,9 +117,9 @@ function requestReopen() {
 }
 
 async function confirmStatus() {
-    if (!confirmation.value) return;
+    if (!confirmation.value || !isIncomingCase.value || isSaving.value) return;
     isSaving.value = true;
-    errorMessage.value = '';
+    confirmationError.value = '';
     try {
         const payload = { status: confirmation.value.status };
         if (confirmation.value.status === 'resolved') payload.provider_response = responseText.value.trim();
@@ -121,13 +128,18 @@ async function confirmStatus() {
         responseText.value = report.value.provider_response || '';
         confirmation.value = null;
     } catch (error) {
-        errorMessage.value = Object.values(error.response?.data?.errors ?? {})[0]?.[0]
+        confirmationError.value = Object.values(error.response?.data?.errors ?? {})[0]?.[0]
             || error.response?.data?.message
             || 'The provider response could not be saved.';
-        confirmation.value = null;
     } finally {
         isSaving.value = false;
     }
+}
+
+function cancelConfirmation() {
+    if (isSaving.value) return;
+    confirmation.value = null;
+    confirmationError.value = '';
 }
 
 onMounted(loadCase);
@@ -138,7 +150,7 @@ onMounted(loadCase);
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="support-case-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <a :href="backUrl" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to support cases</a>
 
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center shadow-sm"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading support case...</p></div>
@@ -147,8 +159,8 @@ onMounted(loadCase);
                 <template v-else>
                     <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                         <div class="flex items-center justify-between gap-8">
-                            <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Support case</p><h1 id="support-case-title" class="mt-1 truncate font-display text-2xl font-bold tracking-tight text-slate-950">{{ report.subject }}</h1><p class="mt-1 text-sm text-slate-600">{{ report.category_label }} · Received {{ report.created_at }}</p></div></div>
-                            <span :class="['inline-flex shrink-0 border px-3 py-2 text-[11px] font-bold uppercase tracking-wide', stateClass(report.work_state)]">{{ report.work_label }}</span>
+                            <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Support case</p><h1 id="support-case-title" class="service-page-title mt-1 service-text font-display text-2xl font-bold tracking-tight text-slate-950">{{ report.subject }}</h1><p class="mt-1 text-sm text-slate-600">{{ report.category_label }} · Received {{ report.created_at }}</p></div></div>
+                            <span :class="['inline-flex shrink-0 border px-3 py-2 text-xs font-bold uppercase tracking-wide', stateClass(report.work_state)]">{{ report.work_label }}</span>
                         </div>
                     </header>
 
@@ -159,17 +171,17 @@ onMounted(loadCase);
                             <div class="flex min-w-0 items-center gap-4 px-6 py-5">
                                 <ProviderApplicantPhoto :src="report.applicant?.profile_photo_url" :name="report.applicant?.name || 'Provider team'" />
                                 <div class="min-w-0">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ reporterLabel }}</p>
-                                    <p class="mt-1 truncate text-base font-bold text-slate-950">{{ report.applicant?.name || 'Provider team' }}</p>
-                                    <p class="mt-1 truncate text-sm text-slate-600">{{ report.applicant?.email }}<span v-if="report.applicant?.contact_number"> · {{ report.applicant.contact_number }}</span></p>
+                                    <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">{{ reporterLabel }}</p>
+                                    <p class="mt-1 service-text text-base font-bold text-slate-950">{{ report.applicant?.name || 'Provider team' }}</p>
+                                    <p class="mt-1 service-text text-sm text-slate-600">{{ report.applicant?.email }}<span v-if="report.applicant?.contact_number"> · {{ report.applicant.contact_number }}</span></p>
                                 </div>
                             </div>
                             <div class="px-6 py-5">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Related program</p>
-                                <p class="mt-2 truncate text-sm font-bold text-slate-950">{{ report.program?.title || 'General platform issue' }}</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Related program</p>
+                                <p class="mt-2 service-text text-sm font-bold text-slate-950">{{ report.program?.title || 'General platform issue' }}</p>
                             </div>
                             <div class="px-6 py-5">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Assigned to</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Assigned to</p>
                                 <p class="mt-2 text-sm font-bold text-slate-950">{{ report.submitted_by_provider ? 'Platform support' : 'Provider support' }}</p>
                             </div>
                         </div>
@@ -179,8 +191,8 @@ onMounted(loadCase);
                         <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-message" aria-hidden="true"></i></span><div><h2 id="reported-issue-heading" class="text-base font-bold text-slate-950">Reported issue</h2><p class="mt-1 text-xs text-slate-500">Read the original concern before taking action.</p></div></header>
                         <div class="px-6 py-5"><p class="whitespace-pre-wrap text-sm leading-7 text-slate-700">{{ report.description }}</p></div>
                         <div v-if="report.context || report.attachment" class="flex items-center gap-6 border-t border-slate-200 bg-slate-50 px-6 py-4">
-                            <div v-if="report.context" class="min-w-0 flex-1"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Affected page or context</p><p class="mt-1 truncate text-sm font-semibold text-slate-800">{{ report.context }}</p></div>
-                            <a v-if="report.attachment" :href="report.attachment.view_url" target="_blank" rel="noopener" class="inline-flex h-10 max-w-md shrink-0 items-center gap-3 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 hover:border-slate-950"><i class="fa-solid fa-paperclip text-slate-500" aria-hidden="true"></i><span class="max-w-64 truncate">{{ report.attachment.original_name }}</span><span class="text-xs font-normal text-slate-500">{{ fileSize(report.attachment.size) }}</span></a>
+                            <div v-if="report.context" class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Affected page or context</p><p class="mt-1 service-text text-sm font-semibold text-slate-800">{{ report.context }}</p></div>
+                            <a v-if="report.attachment" :href="report.attachment.view_url" target="_blank" rel="noopener" class="inline-flex min-h-10 max-w-[48%] shrink-0 py-2 items-center gap-3 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 hover:border-slate-950"><i class="fa-solid fa-paperclip text-slate-500" aria-hidden="true"></i><span class="max-w-64 service-text">{{ report.attachment.original_name }}</span><span class="text-xs font-normal text-slate-500">{{ fileSize(report.attachment.size) }}</span></a>
                         </div>
                     </section>
 
@@ -189,7 +201,7 @@ onMounted(loadCase);
                         <ol class="grid grid-cols-3 divide-x divide-slate-200">
                             <li v-for="(step, index) in progressSteps" :key="step.label" class="flex items-start gap-3 px-6 py-5">
                                 <span :class="['grid h-8 w-8 shrink-0 place-items-center text-xs font-black', step.current ? 'bg-amber-300 text-slate-950' : step.complete ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-500']"><i v-if="step.complete" class="fa-solid fa-check" aria-hidden="true"></i><span v-else>{{ index + 1 }}</span></span>
-                                <div class="min-w-0"><p class="text-sm font-bold text-slate-950">{{ step.label }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ step.detail }}</p></div>
+                                <div class="min-w-0"><p class="text-sm font-bold text-slate-950">{{ step.label }}</p><p class="mt-1 service-text text-xs text-slate-500">{{ step.detail }}</p></div>
                             </li>
                         </ol>
                     </section>
@@ -204,20 +216,14 @@ onMounted(loadCase);
                             <textarea id="provider-response" v-model="responseText" rows="6" maxlength="2000" class="w-full border border-slate-300 px-4 py-3 text-sm leading-6 outline-none focus:border-slate-950" placeholder="Explain the answer and what the applicant should do next."></textarea>
                             <div class="mt-3 flex items-center justify-between"><p class="text-xs text-slate-500">{{ responseLength }}/2000 characters</p><button type="button" :disabled="isSaving || responseLength < 10" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40" @click="requestComplete"><i class="fa-solid fa-paper-plane text-[10px]" aria-hidden="true"></i>Send response</button></div>
                         </div>
-                        <div v-else class="px-6 py-5"><p class="whitespace-pre-wrap text-sm leading-7 text-slate-700">{{ report.provider_response || 'No written provider response was recorded.' }}</p><p v-if="report.provider_resolved_by" class="mt-4 text-xs font-semibold text-slate-500">Sent by {{ report.provider_resolved_by }} · {{ report.provider_resolved_at }}</p></div>
+                        <div v-else class="px-6 py-5"><WorkspaceTextSummary  class="whitespace-pre-wrap text-sm leading-7 text-slate-700" :text="report.provider_response || 'No written provider response was recorded.'" label="details" /><p v-if="report.provider_resolved_by" class="mt-4 text-xs font-semibold text-slate-500">Sent by {{ report.provider_resolved_by }} · {{ report.provider_resolved_at }}</p></div>
                     </section>
 
-                    <section v-else class="mt-4 flex items-center gap-4 border border-slate-200 bg-white px-6 py-5 shadow-sm"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Platform review</p><h2 class="mt-1 text-base font-bold text-slate-950">No provider response is required</h2><p class="mt-1 text-sm text-slate-600">Your organization submitted this issue. Platform support controls its review and closure.</p></div></section>
+                    <section v-else class="mt-4 flex items-center gap-4 border border-slate-200 bg-white px-6 py-5 shadow-sm"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Platform review</p><h2 class="mt-1 text-base font-bold text-slate-950">No provider response is required</h2><p class="mt-1 text-sm text-slate-600">Your organization submitted this issue. Platform support controls its review and closure.</p></div></section>
                 </template>
             </div>
         </section>
 
-        <div v-if="confirmation" class="fixed inset-0 z-[120] grid place-items-center bg-slate-950/60 p-6" role="dialog" aria-modal="true" aria-labelledby="support-confirm-title">
-            <section class="w-full max-w-md border border-slate-300 bg-white shadow-2xl">
-                <header class="border-b border-slate-200 px-6 py-5"><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Confirm update</p><h2 id="support-confirm-title" class="mt-1 text-xl font-bold text-slate-950">{{ confirmation.title }}</h2></header>
-                <p class="px-6 py-5 text-sm leading-6 text-slate-600">{{ confirmation.detail }}</p>
-                <footer class="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="confirmation = null">Cancel</button><button type="button" :disabled="isSaving" class="h-10 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-40" @click="confirmStatus">{{ confirmation.action }}</button></footer>
-            </section>
-        </div>
+        <ProviderActionDialog :open="Boolean(confirmation)" :title="confirmation?.title" :message="confirmation?.detail" :confirm-label="confirmation?.action" :busy="isSaving" :error="confirmationError" @confirm="confirmStatus" @cancel="cancelConfirmation" />
     </main>
 </template>

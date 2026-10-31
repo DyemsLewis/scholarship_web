@@ -1,7 +1,9 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, reactive, ref } from 'vue';
 import { formatServiceDateTime, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
 import BillingServiceWorkspaceShell from './components/BillingServiceWorkspaceShell.vue';
+import { labelFromKey } from '../../../support/display';
 
 const {
     purchaseId, purchase, workspace, isLoading, isSaving, errorMessage, successMessage, directoryUrl, runAction,
@@ -28,6 +30,7 @@ async function requestRevision() {
 }
 
 async function requestCancellation() {
+    if (!canRequestCancellation.value) return;
     const saved = await runAction(() => window.axios.post(`/provider/billing/${purchaseId}/cancellation`, {
         reason: cancellationReason.value.trim(),
     }), 'Cancellation request sent.');
@@ -35,7 +38,7 @@ async function requestCancellation() {
 }
 
 function readable(value) {
-    return String(value || 'Not recorded').replaceAll('_', ' ');
+    return labelFromKey(value || 'Not recorded');
 }
 </script>
 
@@ -66,7 +69,7 @@ function readable(value) {
             <div v-else-if="purchase.fulfillment_status === 'completed'" class="px-6 py-5">
                 <h3 class="text-sm font-bold text-emerald-800">Service completed</h3>
                 <p class="mt-1 text-sm text-slate-600">Confirmed {{ formatServiceDateTime(purchase.provider_confirmed_at) }}<span v-if="purchase.provider_rating"> · {{ purchase.provider_rating }}/5 rating</span></p>
-                <p v-if="purchase.provider_feedback" class="mt-3 border-l-2 border-amber-400 pl-3 text-sm text-slate-700">{{ purchase.provider_feedback }}</p>
+                <WorkspaceTextSummary v-if="purchase.provider_feedback" class="mt-3 border-l-2 border-amber-400 pl-3 text-sm text-slate-700" :text="purchase.provider_feedback" label="details" />
                 <form class="mt-5 border-t border-slate-200 pt-5" @submit.prevent="requestRevision"><label class="text-xs font-bold text-slate-700">Reopen for a necessary correction</label><div class="mt-2 flex gap-3"><input v-model="revisionReason" minlength="10" maxlength="2000" required class="h-10 flex-1 border border-slate-300 px-3 text-sm" placeholder="Explain the correction needed"><button type="submit" :disabled="isSaving" class="inline-flex h-10 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700"><i class="fa-solid fa-rotate-left text-[10px]" aria-hidden="true"></i>Reopen</button></div></form>
             </div>
 

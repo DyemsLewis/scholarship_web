@@ -4,12 +4,16 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        @if ($recordUrl = request()->attributes->get('opaque_record_url'))
+            <meta name="portal-route-prefix" content="{{ $recordUrl['prefix'] }}">
+            <meta name="portal-route-opaque-prefix" content="{{ $recordUrl['opaque_prefix'] }}">
+        @endif
         <title>@yield('title', 'Scholarship Portal')</title>
         @yield('head')
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body>
-        <script>
+        <script nonce="{{ Illuminate\Support\Facades\Vite::cspNonce() }}">
             window.portalUser = {{ Illuminate\Support\Js::from(
                 auth()->check()
                     ? auth()->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload()

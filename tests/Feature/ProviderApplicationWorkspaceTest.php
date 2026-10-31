@@ -100,6 +100,18 @@ class ProviderApplicationWorkspaceTest extends TestCase
             ->assertJsonMissingPath('application.applicant.guardian_email');
     }
 
+    public function test_review_queue_uses_readable_education_keys_without_changing_profile_data(): void
+    {
+        [$owner, $application] = $this->applicationRecord();
+        $application->applicant->studentProfile()->update(['education_level' => 'senior_high_school']);
+
+        $this->actingAs($owner)->getJson('/provider/workspaces/reviews/data?queue=unassigned')
+            ->assertOk()
+            ->assertJsonPath('applications.0.applicant.education', 'Senior High School - STEM - Grade 12');
+
+        $this->assertSame('senior_high_school', $application->applicant->fresh('studentProfile')->studentProfile->education_level);
+    }
+
     /** @return array{User, ScholarshipApplication} */
     private function applicationRecord(): array
     {

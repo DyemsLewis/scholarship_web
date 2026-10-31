@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\ApplySecurityHeaders;
+use App\Http\Middleware\ResolveOpaqueRecordUrl;
+use App\Http\Middleware\SecureRecordNavigation;
 use App\Http\Middleware\EnsureManagedAccountSetupIsComplete;
 use App\Http\Middleware\EnsureProviderIsApproved;
 use App\Http\Middleware\EnsurePortalManagerWorkspace;
@@ -19,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->prepend([ApplySecurityHeaders::class, ResolveOpaqueRecordUrl::class]);
         $middleware->validateCsrfTokens(except: [
             'webhooks/paymongo',
         ]);
@@ -26,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             EnsureAccountIsActive::class,
             EnsureManagedAccountSetupIsComplete::class,
+            SecureRecordNavigation::class,
         ]);
 
         $middleware->alias([

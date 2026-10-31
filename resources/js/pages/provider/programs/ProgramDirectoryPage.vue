@@ -8,7 +8,7 @@ const filterFromPath = {
     '/provider/programs/published': 'published',
     '/provider/programs/closed': 'closed',
 };
-const currentPath = window.location.pathname.replace(/\/$/, '');
+const currentPath = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '');
 const isMonitoringDirectory = currentPath === '/provider/monitoring/plans';
 const filterCopy = {
     all: {
@@ -130,26 +130,26 @@ onMounted(() => loadPrograms());
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="program-directory-title">
-            <div class="mx-auto max-w-[94rem]">
-                <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
+            <div class="provider-program-workspace mx-auto max-w-[94rem]">
+                <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-6 py-5 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
-                        <div class="flex min-w-0 items-center gap-4">
-                            <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true">
+                        <div class="flex min-w-0 flex-1 items-center gap-4">
+                            <span class="program-icon grid h-11 w-11 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true">
                                 <i class="fa-solid fa-graduation-cap"></i>
                             </span>
                             <div class="min-w-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">{{ isMonitoringDirectory ? 'Recipient monitoring' : 'Program workspace' }}</p>
-                                <h1 id="program-directory-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
+                                <p class="program-label font-bold uppercase text-amber-700">{{ isMonitoringDirectory ? 'Recipient monitoring' : 'Program workspace' }}</p>
+                                <h1 id="program-directory-title" class="program-page-title mt-1 font-display font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
                                 <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-5">
-                            <div v-if="context.organization_name" class="max-w-xs border-l border-slate-200 pl-5 text-right">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Organization</p>
-                                <p class="mt-1 text-sm font-semibold text-slate-800">{{ context.organization_name }}</p>
+                        <div class="program-page-actions">
+                            <div v-if="context.organization_name" class="min-w-0 max-w-56 border-l border-slate-200 pl-5 text-right">
+                                <p class="program-label font-bold uppercase text-slate-600">Organization</p>
+                                <p class="program-text mt-1 text-sm font-semibold text-slate-800">{{ context.organization_name }}</p>
                                 <p v-if="context.access_scope === 'assigned'" class="mt-1 text-xs text-slate-500">Assigned programs only</p>
                             </div>
-                            <a v-if="!isMonitoringDirectory" href="/provider/programs/create" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">
+                            <a v-if="!isMonitoringDirectory" href="/provider/programs/create" class="program-action inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">
                                 <i class="fa-solid fa-plus text-xs text-amber-300" aria-hidden="true"></i>
                                 Create program
                             </a>
@@ -157,22 +157,22 @@ onMounted(() => loadPrograms());
                     </div>
                 </header>
 
-                <section class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" :aria-label="isMonitoringDirectory ? 'Monitoring plan summary' : 'Program summary'">
+                <section class="program-summary mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" :aria-label="isMonitoringDirectory ? 'Monitoring plan summary' : 'Program summary'" :aria-busy="isLoading">
                     <div class="flex items-center gap-4 border-r border-slate-200 px-5 py-4">
                         <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600" aria-hidden="true"><i :class="['fa-solid text-sm', isMonitoringDirectory ? 'fa-clipboard-list' : 'fa-layer-group']"></i></span>
-                        <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ isMonitoringDirectory ? 'Programs to monitor' : 'All programs' }}</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ summary.total }}</p></div>
+                        <div class="min-w-0"><p class="program-label font-bold uppercase text-slate-600">{{ isMonitoringDirectory ? 'Programs to monitor' : 'All programs' }}</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ isLoading ? '...' : summary.total }}</p></div>
                     </div>
                     <div class="flex items-center gap-4 border-r border-slate-200 px-5 py-4">
                         <span :class="['grid h-9 w-9 shrink-0 place-items-center', (isMonitoringDirectory ? summary.not_set : summary.needs_action) ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600']" aria-hidden="true"><i :class="['fa-solid text-sm', (isMonitoringDirectory ? summary.not_set : summary.needs_action) ? 'fa-bell' : 'fa-check']"></i></span>
-                        <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ isMonitoringDirectory ? 'Not set up' : 'Needs action' }}</p><p :class="['mt-1 text-2xl font-bold', (isMonitoringDirectory ? summary.not_set : summary.needs_action) ? 'text-amber-700' : 'text-slate-950']">{{ isMonitoringDirectory ? summary.not_set : summary.needs_action }}</p></div>
+                        <div class="min-w-0"><p class="program-label font-bold uppercase text-slate-600">{{ isMonitoringDirectory ? 'Not set up' : 'Needs action' }}</p><p :class="['mt-1 text-2xl font-bold', (isMonitoringDirectory ? summary.not_set : summary.needs_action) ? 'text-amber-700' : 'text-slate-950']">{{ isLoading ? '...' : isMonitoringDirectory ? summary.not_set : summary.needs_action }}</p></div>
                     </div>
                     <div class="flex items-center gap-4 border-r border-slate-200 px-5 py-4">
                         <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600" aria-hidden="true"><i class="fa-solid fa-clock-rotate-left text-sm"></i></span>
-                        <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ isMonitoringDirectory ? 'Draft plans' : 'Under review' }}</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ isMonitoringDirectory ? summary.draft : summary.under_review }}</p></div>
+                        <div class="min-w-0"><p class="program-label font-bold uppercase text-slate-600">{{ isMonitoringDirectory ? 'Draft plans' : 'Under review' }}</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ isLoading ? '...' : isMonitoringDirectory ? summary.draft : summary.under_review }}</p></div>
                     </div>
                     <div class="flex items-center gap-4 px-5 py-4">
                         <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600" aria-hidden="true"><i class="fa-solid fa-circle-check text-sm"></i></span>
-                        <div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ isMonitoringDirectory ? 'Active plans' : 'Published' }}</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ isMonitoringDirectory ? summary.active : summary.published }}</p></div>
+                        <div class="min-w-0"><p class="program-label font-bold uppercase text-slate-600">{{ isMonitoringDirectory ? 'Active plans' : 'Published' }}</p><p class="mt-1 text-2xl font-bold text-slate-950">{{ isLoading ? '...' : isMonitoringDirectory ? summary.active : summary.published }}</p></div>
                     </div>
                 </section>
 
@@ -211,23 +211,24 @@ onMounted(() => loadPrograms());
                     </div>
 
                     <div class="staff-table-viewport">
-                        <table class="w-full min-w-[68rem] table-fixed border-collapse text-left">
+                        <table class="program-directory-table w-full min-w-[56rem] table-fixed border-collapse text-left">
+                            <colgroup><col><col class="w-32"><col class="w-32"><col class="w-36"><col class="w-[7.5rem]"><col class="w-36"></colgroup>
                             <caption class="sr-only">Programs in the selected lifecycle section</caption>
                             <thead class="bg-slate-50">
-                                <tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                                    <th class="w-[31%] px-5 py-3">Program</th>
-                                    <th class="w-[15%] px-5 py-3">{{ isMonitoringDirectory ? 'Plan status' : 'Status' }}</th>
-                                    <th class="w-[14%] px-5 py-3">{{ isMonitoringDirectory ? 'Requirements' : 'Applications' }}</th>
-                                    <th class="w-[18%] px-5 py-3">{{ isMonitoringDirectory ? 'Check-ins' : 'Deadline' }}</th>
-                                    <th class="w-[12%] px-5 py-3">Updated</th>
-                                    <th class="w-[10%] px-5 py-3 text-right">Action</th>
+                                <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-wide text-slate-600">
+                                    <th class="px-5 py-3">Program</th>
+                                    <th class="px-5 py-3">{{ isMonitoringDirectory ? 'Plan status' : 'Status' }}</th>
+                                    <th class="px-5 py-3">{{ isMonitoringDirectory ? 'Requirements' : 'Applications' }}</th>
+                                    <th class="px-5 py-3">{{ isMonitoringDirectory ? 'Check-ins' : 'Deadline' }}</th>
+                                    <th class="px-5 py-3">Updated</th>
+                                    <th class="px-4 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-if="isLoading && !programs.length">
                                     <td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-circle-notch animate-spin text-sm"></i></span><p class="mt-2 text-sm font-semibold text-slate-500">Loading programs...</p></td>
                                 </tr>
-                                <tr v-else-if="!programs.length">
+                                <tr v-else-if="!programs.length && !errorMessage">
                                     <td colspan="6" class="px-5 py-12 text-center">
                                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-folder-open text-sm"></i></span>
                                         <p class="mt-2 font-semibold text-slate-800">No programs found</p>
@@ -239,15 +240,15 @@ onMounted(() => loadPrograms());
                                         <div class="flex min-w-0 items-center gap-3">
                                             <img :src="program.logo_url" :alt="`${program.title} logo`" class="h-11 w-11 shrink-0 border border-slate-200 bg-white object-contain p-1" @error="$event.currentTarget.src = '/uploads/scholarship-default.jpg'">
                                             <div class="min-w-0">
-                                                <a :href="isMonitoringDirectory ? program.monitoring.plan_url : program.record_url" class="block truncate font-semibold text-slate-950 hover:text-amber-700">{{ program.title }}</a>
-                                                <p class="mt-1 truncate text-xs text-slate-500">
+                                                <a :href="isMonitoringDirectory ? program.monitoring.plan_url : program.record_url" class="program-text block text-sm font-semibold text-slate-950 hover:text-amber-700">{{ program.title }}</a>
+                                                <p class="program-text mt-1 text-xs text-slate-600">
                                                     {{ program.category || 'Uncategorized' }}<template v-if="program.cycle"> · {{ program.cycle }}</template>
                                                 </p>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="px-5 py-4">
-                                        <span :class="['inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(isMonitoringDirectory ? program.monitoring.status_tone : program.status.tone)]">
+                                        <span :class="['program-status inline-flex border px-2.5 py-1 font-bold uppercase tracking-wide', statusClass(isMonitoringDirectory ? program.monitoring.status_tone : program.status.tone)]">
                                             {{ isMonitoringDirectory ? program.monitoring.status_label : program.status.label }}
                                         </span>
                                         <p v-if="isMonitoringDirectory && program.monitoring.frequency_label" class="mt-1 text-xs text-slate-500">{{ program.monitoring.frequency_label }}</p>
@@ -261,8 +262,8 @@ onMounted(() => loadPrograms());
                                         <p class="mt-1 text-xs text-slate-500">{{ isMonitoringDirectory ? (program.monitoring.check_ins_count === 1 ? 'period published' : 'periods published') : deadlineNote(program.application_period.deadline) }}</p>
                                     </td>
                                     <td class="px-5 py-4 text-sm text-slate-600">{{ program.updated_display || 'Not available' }}</td>
-                                    <td class="px-5 py-4 text-right">
-                                        <a :href="isMonitoringDirectory ? program.monitoring.plan_url : program.record_url" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800">
+                                    <td class="px-4 py-4 text-right">
+                                        <a :href="isMonitoringDirectory ? program.monitoring.plan_url : program.record_url" class="program-action inline-flex h-10 items-center gap-2 bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800" :aria-label="`${isMonitoringDirectory ? 'Open monitoring plan for' : 'View'} ${program.title}`">
                                             {{ isMonitoringDirectory
                                                 ? (program.monitoring.status === 'active'
                                                     ? (program.monitoring.can_publish_check_in ? 'Schedule' : 'Open plan')
@@ -276,7 +277,7 @@ onMounted(() => loadPrograms());
                         </table>
                     </div>
 
-                    <footer class="flex items-center justify-between border-t border-slate-200 px-5 py-3">
+                    <footer class="program-form-footer flex items-center justify-between border-t border-slate-200 px-5 py-3">
                         <p class="text-xs font-semibold text-slate-500">Showing {{ rangeLabel }}</p>
                         <div class="flex items-center gap-2">
                             <button

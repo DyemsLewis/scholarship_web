@@ -54,6 +54,8 @@ class SupportCaseQuery
                         ->where('first_name', 'like', "%{$search}%")
                         ->orWhere('last_name', 'like', "%{$search}%")
                         ->orWhere('provider_name', 'like', "%{$search}%"))
+                    ->orWhereHas('applicant.parentAccount.providerProfile', fn (Builder $profile) => $profile
+                        ->where('provider_name', 'like', "%{$search}%"))
                     ->orWhereHas('applicant.adminProfile', fn (Builder $profile) => $profile
                         ->where('first_name', 'like', "%{$search}%")
                         ->orWhere('last_name', 'like', "%{$search}%")
@@ -65,6 +67,7 @@ class SupportCaseQuery
 
         $paginator = $query
             ->orderBy($queue === 'needs_response' ? 'created_at' : 'updated_at', $queue === 'needs_response' ? 'asc' : 'desc')
+            ->orderBy('id', $queue === 'needs_response' ? 'asc' : 'desc')
             ->paginate((int) ($filters['per_page'] ?? 10))
             ->withQueryString();
 
@@ -80,8 +83,10 @@ class SupportCaseQuery
         $report->load([
             'applicant.studentProfile',
             'applicant.providerProfile',
+            'applicant.parentAccount.providerProfile',
             'applicant.adminProfile',
             'scholarship:id,title',
+            'provider.providerProfile',
             'providerResolver.studentProfile',
             'providerResolver.providerProfile',
             'providerResolver.adminProfile',
@@ -96,17 +101,19 @@ class SupportCaseQuery
             ...$item,
             'description' => $report->description,
             'context' => $report->context,
+            'context_label' => $this->contextLabel($report->context),
             'privacy_request_type' => $report->privacy_request_type,
             'privacy_request_type_label' => $report->privacy_request_type
                 ? (SupportReport::PRIVACY_REQUEST_TYPES[$report->privacy_request_type] ?? 'Privacy request')
                 : null,
             'contact_number' => $report->applicant?->contact_number,
+            'provider_name' => $report->provider?->providerProfile?->provider_name ?: $report->provider?->name,
             'provider_response' => $report->provider_response,
             'admin_response' => $report->admin_response,
             'provider_status' => $report->assigned_role === 'provider' ? $report->provider_status : 'not_required',
-            'provider_status_label' => $report->assigned_role === 'provider' ? ucfirst($report->provider_status) : 'Not required',
+            'provider_status_label' => $report->assigned_role === 'provider' ? str($report->provider_status)->headline()->toString() : 'Not required',
             'admin_status' => $report->admin_status,
-            'admin_status_label' => ucfirst($report->admin_status),
+            'admin_status_label' => str($report->admin_status)->headline()->toString(),
             'overall_status' => $report->status,
             'overall_status_label' => ucfirst($report->status),
             'provider_resolved_by' => $report->providerResolver?->name,
@@ -137,7 +144,7 @@ class SupportCaseQuery
     {
         return match ($queue) {
             'waiting' => SupportReport::query()
-                ->where('admin_status', 'resolved')
+                ->whereIn('admin_status', ['resolved', 'not_required'])
                 ->where('status', 'open'),
             'resolved' => SupportReport::query()->where('status', 'resolved'),
             default => SupportReport::query()->where('admin_status', 'open'),
@@ -165,6 +172,9 @@ class SupportCaseQuery
                 'name' => $report->applicant?->name ?: 'Unknown reporter',
                 'email' => $report->applicant?->email,
                 'type' => $submittedByProvider ? 'Provider team' : 'Applicant',
+                'organization_name' => $submittedByProvider
+                    ? $report->applicant->providerOrganizationOwner()->providerProfile?->provider_name
+                    : null,
                 'image_url' => $this->reporterImageUrl($report->applicant),
                 'image_fit' => $submittedByProvider ? 'contain' : 'cover',
             ],
@@ -179,7 +189,7 @@ class SupportCaseQuery
                 default => 'Needs response',
             },
             'coordination_label' => $report->assigned_role === 'provider'
-                ? 'Provider and platform'
+                ? ($report->admin_status === 'not_required' ? 'Provider support' : 'Provider and platform')
                 : 'Platform support',
             'requires_provider' => $report->assigned_role === 'provider',
             'has_attachment' => filled($report->attachment_path),
@@ -195,6 +205,7 @@ class SupportCaseQuery
         return [
             'applicant.studentProfile',
             'applicant.providerProfile',
+            'applicant.parentAccount.providerProfile',
             'applicant.adminProfile',
             'scholarship:id,title',
         ];
@@ -207,13 +218,35 @@ class SupportCaseQuery
         }
 
         if ($reporter->isProvider()) {
-            $path = $reporter->providerProfile?->logo_path;
+            $path = $reporter->providerOrganizationOwner()->providerProfile?->logo_path
+                ?: $reporter->providerProfile?->logo_path;
 
             return filled($path) ? asset(ltrim($path, '/')) : null;
         }
 
         if ($reporter->isApplicant() && filled($reporter->studentProfile?->profile_photo_path)) {
             return route('admin.workspaces.support.reporters.photo', $reporter, false);
+        }
+
+        return null;
+    }
+
+    private function contextLabel(?string $context): ?string
+    {
+        if (blank($context)) {
+            return null;
+        }
+
+        $decoded = json_decode($context, true);
+        if (! is_array($decoded)) {
+            return $context;
+        }
+
+        // Older records stored routing metadata here, not a user-facing description.
+        foreach (['area', 'page', 'source'] as $key) {
+            if (is_string($decoded[$key] ?? null) && filled($decoded[$key])) {
+                return $key === 'source' ? str($decoded[$key])->headline()->toString() : $decoded[$key];
+            }
         }
 
         return null;

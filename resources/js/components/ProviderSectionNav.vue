@@ -8,7 +8,7 @@ const props = defineProps({
     },
 });
 
-const currentPath = window.location.pathname.replace(/\/$/, '') || '/provider';
+const currentPath = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider';
 const hasPermission = (permission) => Boolean(
     window.portalUser?.has_full_access
         || window.portalUser?.permissions?.includes(permission),

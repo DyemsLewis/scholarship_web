@@ -100,7 +100,7 @@ onMounted(() => {
 
     if (params.get('verified') === '1') {
         notify('success', 'Email verified', 'Create a new password to finish your staff account setup.');
-        window.history.replaceState({}, '', window.location.pathname);
+        window.history.replaceState({}, '', (window.portalPathname?.() ?? window.location.pathname));
     }
 
     loadSetup();

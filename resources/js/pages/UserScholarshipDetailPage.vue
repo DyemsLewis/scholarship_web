@@ -163,31 +163,31 @@ function stateStyle(state) {
     return {
         ready: {
             icon: 'bg-emerald-100 text-emerald-800',
-            badge: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+            badge: 'student-badge-positive',
         },
         positive: {
             icon: 'bg-emerald-100 text-emerald-800',
-            badge: 'bg-emerald-50 text-emerald-800 ring-emerald-200',
+            badge: 'student-badge-positive',
         },
         attention: {
             icon: 'bg-amber-100 text-amber-900',
-            badge: 'bg-amber-50 text-amber-900 ring-amber-200',
+            badge: 'student-badge-attention',
         },
         blocked: {
             icon: 'bg-rose-100 text-rose-800',
-            badge: 'bg-rose-50 text-rose-800 ring-rose-200',
+            badge: 'student-badge-negative',
         },
         muted: {
             icon: 'bg-slate-200 text-slate-700',
-            badge: 'bg-slate-100 text-slate-700 ring-slate-200',
+            badge: '',
         },
         neutral: {
             icon: 'bg-slate-100 text-slate-700',
-            badge: 'bg-slate-100 text-slate-700 ring-slate-200',
+            badge: '',
         },
     }[state] ?? {
         icon: 'bg-slate-100 text-slate-700',
-        badge: 'bg-slate-100 text-slate-700 ring-slate-200',
+        badge: '',
     };
 }
 
@@ -372,7 +372,7 @@ onMounted(loadScholarship);
                                             {{ identity.provider.name }}
                                         </a>
                                         <span v-else class="font-bold text-slate-800">{{ identity.provider?.name }}</span>
-                                        <span v-if="identity.provider?.verified" class="inline-flex items-center gap-1.5 font-semibold text-emerald-700">
+                                        <span v-if="identity.provider?.verified" class="student-badge student-badge-positive">
                                             <i class="fa-solid fa-circle-check text-xs" aria-hidden="true"></i>
                                             Verified
                                         </span>
@@ -390,7 +390,7 @@ onMounted(loadScholarship);
 
                                 <dl class="mt-6 grid border-y border-slate-200 sm:grid-cols-3">
                                     <div v-for="fact in snapshot" :key="fact.key" class="min-w-0 border-b border-slate-200 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:px-4 sm:first:pl-0 sm:last:border-r-0">
-                                        <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">{{ fact.label }}</dt>
+                                        <dt class="student-detail-label">{{ fact.label }}</dt>
                                         <dd class="mt-1 text-sm font-bold leading-5 text-slate-900">{{ fact.value }}</dd>
                                     </div>
                                 </dl>
@@ -399,7 +399,7 @@ onMounted(loadScholarship);
                                     <button
                                         v-if="!isPreview && decision.action?.kind !== 'save'"
                                         type="button"
-                                        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                                        class="student-button student-button-secondary"
                                         :disabled="isSaving"
                                         @click="toggleSave"
                                     >
@@ -409,7 +409,7 @@ onMounted(loadScholarship);
                                     <a
                                         v-if="!isPreview && decision.action?.kind === 'link'"
                                         :href="contextualHref(decision.action.href)"
-                                        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800"
+                                        class="student-button student-button-primary"
                                     >
                                         {{ decision.action.label }}
                                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
@@ -417,7 +417,7 @@ onMounted(loadScholarship);
                                     <button
                                         v-else-if="decision.action"
                                         type="button"
-                                        class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-60"
+                                        class="student-button student-button-primary"
                                         :disabled="isSaving || isPreview"
                                         @click="handlePrimaryAction"
                                     >
@@ -458,7 +458,7 @@ onMounted(loadScholarship);
                                 :href="item.href"
                                 :aria-current="item.active ? 'page' : undefined"
                                 :class="[
-                                    'relative flex min-h-12 items-center justify-center rounded-md px-5 text-sm font-bold transition lg:flex-1',
+                                    'relative flex min-h-12 items-center justify-center rounded-sm px-5 text-sm font-bold transition lg:flex-1',
                                     item.active ? 'bg-slate-950 text-white shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-950',
                                 ]"
                                 @click="openPreviewSection($event, item.key)"
@@ -652,7 +652,7 @@ onMounted(loadScholarship);
                                             <p class="student-kicker">Scholarship provider</p>
                                             <div class="mt-1 flex flex-wrap items-center gap-2">
                                                 <h3 class="text-2xl font-bold text-slate-950">{{ provider.name }}</h3>
-                                                <span :class="['inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold ring-1 ring-inset', stateStyle(provider.verified ? 'ready' : 'attention').badge]">
+                                                <span :class="['student-badge', stateStyle(provider.verified ? 'ready' : 'attention').badge]">
                                                     <i :class="provider.verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-info'" aria-hidden="true"></i>
                                                     {{ provider.verification_label }}
                                                 </span>
@@ -661,7 +661,7 @@ onMounted(loadScholarship);
                                         </div>
                                     </div>
                                     <p v-if="provider.summary" class="mt-4 max-w-3xl whitespace-pre-line text-sm leading-7 text-slate-600">{{ provider.summary }}</p>
-                                    <a v-if="provider.profile_href" :href="provider.profile_href" class="mt-5 inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
+                                    <a v-if="provider.profile_href" :href="provider.profile_href" class="student-button student-button-secondary mt-5 w-fit" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                         Provider page
                                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                     </a>
@@ -676,15 +676,15 @@ onMounted(loadScholarship);
 
                             <dl class="grid border-b border-slate-200 sm:grid-cols-3">
                                 <div class="border-b border-slate-200 px-5 py-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 sm:px-6">
-                                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Organization type</dt>
+                                    <dt class="student-detail-label">Organization type</dt>
                                     <dd class="mt-1 text-sm font-bold text-slate-900">{{ provider.type_label }}</dd>
                                 </div>
                                 <div class="border-b border-slate-200 px-5 py-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 sm:px-6">
-                                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Established</dt>
+                                    <dt class="student-detail-label">Established</dt>
                                     <dd class="mt-1 text-sm font-bold text-slate-900">{{ provider.year_established || 'Not listed' }}</dd>
                                 </div>
                                 <div class="px-5 py-4 sm:px-6">
-                                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Service area</dt>
+                                    <dt class="student-detail-label">Service area</dt>
                                     <dd class="mt-1 text-sm font-bold text-slate-900">{{ provider.service_area || 'Not listed' }}</dd>
                                 </div>
                             </dl>
@@ -697,19 +697,19 @@ onMounted(loadScholarship);
                                     </div>
                                     <div v-if="provider.contact?.available" class="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                                         <div v-if="provider.contact.department || provider.contact.person">
-                                            <p class="text-xs font-semibold text-slate-500">Contact</p>
+                                            <p class="student-detail-label">Contact</p>
                                             <p class="mt-1 text-sm font-bold text-slate-900">{{ [provider.contact.department, provider.contact.person].filter(Boolean).join(' | ') }}</p>
                                         </div>
                                         <div v-if="provider.contact.email">
-                                            <p class="text-xs font-semibold text-slate-500">Email</p>
+                                            <p class="student-detail-label">Email</p>
                                             <a :href="`mailto:${provider.contact.email}`" class="mt-1 block break-all text-sm font-bold text-slate-900 hover:underline" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">{{ provider.contact.email }}</a>
                                         </div>
                                         <div v-if="provider.contact.number">
-                                            <p class="text-xs font-semibold text-slate-500">Phone</p>
+                                            <p class="student-detail-label">Phone</p>
                                             <a :href="`tel:${provider.contact.number}`" class="mt-1 block text-sm font-bold text-slate-900 hover:underline" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">{{ provider.contact.number }}</a>
                                         </div>
                                         <div v-if="provider.contact.office_hours">
-                                            <p class="text-xs font-semibold text-slate-500">Office hours</p>
+                                            <p class="student-detail-label">Office hours</p>
                                             <p class="mt-1 text-sm font-bold text-slate-900">{{ provider.contact.office_hours }}</p>
                                         </div>
                                     </div>
@@ -725,7 +725,7 @@ onMounted(loadScholarship);
                                             <p v-if="provider.location.distance_label" class="mt-1 text-xs font-bold text-slate-500">{{ provider.location.distance_label }} from your saved location</p>
                                         </div>
                                     </div>
-                                    <button type="button" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="showMapModal = true">
+                                    <button type="button" class="student-button student-button-secondary shrink-0" @click="showMapModal = true">
                                         <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
                                         View map
                                     </button>
@@ -733,11 +733,11 @@ onMounted(loadScholarship);
 
                                 <section v-if="provider.website || provider.official_program_url" class="px-5 py-5 sm:px-6">
                                     <div class="flex flex-wrap gap-3">
-                                        <a v-if="provider.official_program_url" :href="provider.official_program_url" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
+                                        <a v-if="provider.official_program_url" :href="provider.official_program_url" target="_blank" rel="noopener noreferrer" class="student-button student-button-secondary" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                             Official program page
                                             <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                         </a>
-                                        <a v-if="provider.website" :href="provider.website" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-10 items-center gap-2 rounded-md border border-slate-300 px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
+                                        <a v-if="provider.website" :href="provider.website" target="_blank" rel="noopener noreferrer" class="student-button student-button-secondary" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                             Organization website
                                             <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                         </a>

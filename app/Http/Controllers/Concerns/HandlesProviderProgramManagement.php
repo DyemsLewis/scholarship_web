@@ -392,6 +392,7 @@ trait HandlesProviderProgramManagement
                 ? 'Scholarship submitted for admin review.'
                 : 'Scholarship draft saved.',
             'scholarship' => $this->scholarshipPayload($scholarship),
+            'record_navigation' => app(\App\Support\OpaqueRecordUrl::class)->encode('/provider/programs/'.$scholarship->id),
         ], 201);
     }
 
@@ -541,6 +542,7 @@ trait HandlesProviderProgramManagement
                 default => 'Scholarship draft saved.',
             },
             'scholarship' => $this->scholarshipPayload($scholarship->fresh()),
+            'record_navigation' => app(\App\Support\OpaqueRecordUrl::class)->encode('/provider/programs/'.$scholarship->id),
         ]);
     }
 

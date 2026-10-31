@@ -141,7 +141,9 @@ class ReviewQueueQuery
             'email' => $applicant->email,
             'school' => $applicant->studentProfile?->school,
             'education' => collect([
-                $applicant->studentProfile?->education_level,
+                filled($applicant->studentProfile?->education_level)
+                    ? str($applicant->studentProfile->education_level)->headline()->toString()
+                    : null,
                 $applicant->studentProfile?->course_or_strand,
                 $applicant->studentProfile?->year_level,
             ])->filter()->implode(' - '),
@@ -184,6 +186,9 @@ class ReviewQueueQuery
             return [
                 'id' => $record->id,
                 'recipient' => $record->applicant?->name,
+                'photo_url' => filled($record->applicant?->studentProfile?->profile_photo_path)
+                    ? route('admin.applicants.profile-photo.view', $record->applicant)
+                    : null,
                 'program' => $program?->title,
                 'provider' => $program?->provider?->providerProfile?->provider_name ?: $program?->provider?->name,
                 'release' => $release?->title,
@@ -192,6 +197,7 @@ class ReviewQueueQuery
                 'primary_flag' => $flags[0] ?? null,
                 'scheduled_at' => $release?->release_at?->format('M d, Y'),
                 'receipt_url' => $hasReceipt ? route('admin.benefit-release-records.receipt', $record) : null,
+                'receipt_name' => $hasReceipt ? $record->receipt_original_name : null,
                 'recipient_url' => $record->applicant ? route('admin.workspaces.reviews.applicants.show', $record->applicant) : null,
             ];
         });

@@ -53,6 +53,7 @@ const props = defineProps({
 });
 
 const currentUrl = new URL(window.location.href);
+currentUrl.pathname = window.portalPathname?.() ?? currentUrl.pathname;
 const currentPath = currentUrl.pathname.replace(/\/$/, '') || props.homeHref;
 const portalUser = window.portalUser ?? {};
 const accountName = computed(() => (

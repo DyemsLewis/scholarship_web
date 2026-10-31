@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { labelFromKey } from '../../../support/display';
@@ -46,11 +47,11 @@ onMounted(loadWorkspace);
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="profile-readiness-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-settings-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
-                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-building-circle-check" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="profile-readiness-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Profile readiness</h1><p class="mt-1 text-sm leading-6 text-slate-600">Keep the public profile accurate and the organization proof ready for review.</p></div></div>
-                        <span v-if="profile" :class="['inline-flex border px-3 py-2 text-[10px] font-bold uppercase tracking-wide', verificationClass(profile.verification_status)]">
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-building-circle-check" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="profile-readiness-title" class="settings-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Profile readiness</h1><p class="mt-1 text-sm leading-6 text-slate-600">Keep the public profile accurate and the organization proof ready for review.</p></div></div>
+                        <span v-if="profile" :class="['inline-flex border px-3 py-2 text-xs font-bold uppercase tracking-wide', verificationClass(profile.verification_status)]">
                             {{ profile.verification_status_label }}
                         </span>
                     </div>
@@ -64,7 +65,7 @@ onMounted(loadWorkspace);
                         <div class="flex items-center gap-4">
                             <span class="grid h-10 w-10 shrink-0 place-items-center bg-amber-200 text-slate-950"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>
                             <div class="min-w-0 flex-1">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-800">Next profile task</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">Next profile task</p>
                                 <h2 id="next-profile-task" class="mt-1 text-base font-bold text-slate-950">{{ nextTask.title }}</h2>
                                 <p class="mt-1 text-sm text-slate-600">{{ nextTask.detail }}</p>
                             </div>
@@ -77,8 +78,8 @@ onMounted(loadWorkspace);
                             <img v-if="profile.logo_url" :src="profile.logo_url" :alt="profile.name" class="h-14 w-14 border border-slate-200 bg-white object-contain p-1.5">
                             <span v-else class="grid h-14 w-14 place-items-center border border-slate-200 bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-building-columns text-lg"></i></span>
                             <div class="min-w-0 flex-1">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Organization record</p>
-                                <h2 id="organization-record-title" class="mt-1 truncate text-xl font-bold text-slate-950">{{ profile.name }}</h2>
+                                <p class="text-xs font-bold uppercase tracking-[0.18em] text-slate-600">Organization record</p>
+                                <h2 id="organization-record-title" class="mt-1 settings-text text-xl font-bold text-slate-950">{{ profile.name }}</h2>
                                 <p class="mt-1 text-sm text-slate-500">{{ labelFromKey(profile.type) }}<span v-if="profile.updated_at"> · Updated {{ profile.updated_at }}</span></p>
                             </div>
                             <div class="border-l border-slate-200 pl-6 text-right">
@@ -88,12 +89,13 @@ onMounted(loadWorkspace);
                         </header>
 
                         <div class="staff-table-viewport">
-                            <table class="w-full min-w-[70rem] table-fixed border-collapse text-left">
+                            <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
+                                <colgroup><col><col class="w-36"><col class="w-64"><col class="w-32"></colgroup>
                                 <caption class="sr-only">Organization profile readiness by area</caption>
-                                <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"><th class="w-[30%] px-5 py-3">Profile area</th><th class="w-[18%] px-5 py-3">Status</th><th class="w-[36%] px-5 py-3">Still needed</th><th class="w-[16%] px-5 py-3 text-right">Action</th></tr></thead>
+                                <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600"><th class="px-5 py-3">Profile area</th><th class="px-5 py-3">Status</th><th class="px-5 py-3">Still needed</th><th class="px-5 py-3 text-right">Action</th></tr></thead>
                                 <tbody class="divide-y divide-slate-200">
                                     <tr v-for="section in sections" :key="section.key" class="align-middle hover:bg-slate-50/70">
-                                        <td class="px-5 py-4"><div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i :class="['fa-solid', section.icon]" aria-hidden="true"></i></span><div><p class="text-sm font-bold text-slate-950">{{ section.title }}</p><p class="mt-1 line-clamp-1 text-xs text-slate-500">{{ section.description }}</p></div></div></td>
+                                        <td class="px-5 py-4"><div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i :class="['fa-solid', section.icon]" aria-hidden="true"></i></span><div><p class="text-sm font-bold text-slate-950">{{ section.title }}</p><WorkspaceTextSummary  class="mt-1 text-xs text-slate-500" :text="section.description" label="details" /></div></div></td>
                                         <td class="px-5 py-4"><p :class="['text-sm font-bold', section.is_ready ? 'text-emerald-700' : 'text-amber-700']">{{ section.status_label }}</p><p class="mt-1 text-xs text-slate-500">{{ section.complete }} of {{ section.total }} complete</p></td>
                                         <td class="px-5 py-4"><p class="text-sm text-slate-700">{{ section.missing.length ? section.missing.join(', ') : 'No missing information' }}</p></td>
                                         <td class="px-5 py-4 text-right"><a :href="section.action_url" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">Open<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
@@ -113,7 +115,7 @@ onMounted(loadWorkspace);
                         <div class="divide-y divide-slate-200">
                             <div v-for="document in documents" :key="document.id" class="flex items-center gap-4 px-5 py-3.5">
                                 <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span>
-                                <div class="min-w-0 flex-1"><p class="truncate text-sm font-bold text-slate-900">{{ document.original_name }}</p><p class="mt-1 text-xs text-slate-500">Uploaded {{ document.uploaded_at }}</p></div>
+                                <div class="min-w-0 flex-1"><p class="settings-text text-sm font-bold text-slate-900">{{ document.original_name }}</p><p class="mt-1 text-xs text-slate-500">Uploaded {{ document.uploaded_at }}</p></div>
                                 <a :href="document.view_url" target="_blank" rel="noopener" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 hover:border-slate-950 hover:text-slate-950" aria-label="Open proof"><i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i></a>
                             </div>
                         </div>

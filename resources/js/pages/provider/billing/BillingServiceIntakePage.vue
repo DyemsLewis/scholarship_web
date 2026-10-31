@@ -3,7 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { labelFromKey } from '../../../support/display';
 
-const planCode = window.location.pathname.match(/\/provider\/workspaces\/billing\/services\/([^/]+)\/request$/)?.[1] ?? '';
+const planCode = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/workspaces\/billing\/services\/([^/]+)\/request$/)?.[1] ?? '';
 const requestId = new URLSearchParams(window.location.search).get('request');
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -12,6 +12,7 @@ const errors = ref({});
 const plan = ref(null);
 const organization = ref(null);
 const programs = ref([]);
+const canSaveRequest = ref(false);
 const form = reactive({
     scholarship_id: '',
     contact_name: '',
@@ -66,6 +67,7 @@ async function loadIntake() {
         organization.value = response.data.organization ?? null;
         programs.value = response.data.programs ?? [];
         initializeForm(response.data);
+        canSaveRequest.value = !response.data.request || Boolean(response.data.request.editable);
 
         if (response.data.request && !response.data.request.editable) {
             window.location.assign(response.data.request.review_url);
@@ -78,6 +80,7 @@ async function loadIntake() {
 }
 
 async function continueToReview() {
+    if (isLoading.value || !plan.value || !canSaveRequest.value || isSaving.value) return;
     isSaving.value = true;
     errorMessage.value = '';
     errors.value = {};
@@ -107,7 +110,7 @@ onMounted(loadIntake);
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="intake-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <a :href="`/provider/workspaces/billing/services/${planCode}`" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to service
@@ -123,7 +126,7 @@ onMounted(loadIntake);
                     <div class="mt-4 grid grid-cols-3 border border-slate-200 bg-white shadow-sm" aria-label="Request progress">
                         <div class="flex items-center gap-3 border-r border-slate-200 bg-amber-50 px-5 py-4">
                             <span class="grid h-8 w-8 place-items-center bg-amber-400 text-xs font-bold text-slate-950">1</span>
-                            <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Current step</p><p class="text-sm font-bold text-slate-950">Request details</p></div>
+                            <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">Current step</p><p class="text-sm font-bold text-slate-950">Request details</p></div>
                         </div>
                         <div class="flex items-center gap-3 border-r border-slate-200 px-5 py-4 text-slate-500">
                             <span class="grid h-8 w-8 place-items-center bg-slate-100 text-xs font-bold">2</span>
@@ -136,9 +139,9 @@ onMounted(loadIntake);
                     </div>
 
                     <header class="mt-4 flex items-center justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Service request</p><h1 id="intake-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.intake.description }}</p></div></div>
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Service request</p><h1 id="intake-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.intake.description }}</p></div></div>
                         <div class="shrink-0 text-right">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">One-time fee</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">One-time fee</p>
                             <p class="mt-1 text-xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p>
                             <p class="mt-1 text-xs text-slate-500">No payment yet</p>
                         </div>
@@ -146,14 +149,15 @@ onMounted(loadIntake);
 
                     <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
 
-                    <form class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="continueToReview">
+                    <form class="mt-4 border border-slate-200 bg-white shadow-sm" :aria-busy="isSaving" @submit.prevent="continueToReview">
+                        <fieldset :disabled="isSaving || !canSaveRequest" class="min-w-0">
                         <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">{{ plan.intake.title }}</h2><p class="mt-1 text-sm text-slate-600">Only information needed to prepare this service is requested.</p></div></header>
 
                         <div class="grid grid-cols-2 gap-x-6 gap-y-5 px-6 py-6">
                             <div v-for="field in plan.intake.fields" :key="field.key" :class="field.type === 'textarea' || field.type === 'checkboxes' || field.type === 'program' ? 'col-span-2' : ''">
                                 <label :for="`service-${field.key}`" class="text-sm font-bold text-slate-800">
                                     {{ field.label }}
-                                    <span v-if="!field.required" class="font-normal text-slate-400">(optional)</span>
+                                    <span v-if="!field.required" class="font-normal text-slate-600">(optional)</span>
                                 </label>
 
                                 <template v-if="field.type === 'program'">
@@ -207,6 +211,7 @@ onMounted(loadIntake);
                                 {{ isSaving ? 'Saving...' : 'Continue to review' }}
                             </button>
                         </footer>
+                        </fieldset>
                     </form>
 
                     <p v-if="organization" class="mt-4 text-xs font-semibold text-slate-500">Request prepared for {{ organization.name }}.</p>

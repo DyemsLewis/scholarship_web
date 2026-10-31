@@ -5,10 +5,16 @@ import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 import LocationMapLink from '../../../components/LocationMapLink.vue';
 import { labelFromKey } from '../../../support/display';
+import AdminLoadState from '../components/AdminLoadState.vue';
+import { useAdminResource } from '../../../composables/useAdminResource';
 
-const sessionId = window.location.pathname.match(/selection-activities\/(\d+)/)?.[1];
-const loading = ref(true);
-const errorMessage = ref('');
+const sessionId = (window.portalPathname?.() ?? window.location.pathname).match(/selection-activities\/(\d+)/)?.[1];
+const resource = useAdminResource(async ({ signal }) => {
+    const response = await window.axios.get(`/admin/workspaces/reviews/selection-activities/${sessionId}/data`, { signal });
+    if (!response.data?.session) throw new Error('Selection activity unavailable.');
+    return response.data.session;
+}, { failureMessage: 'The selection activity could not be loaded.' });
+const { isLoading: loading, errorMessage } = resource;
 const session = ref(null);
 const sections = [
     { key: 'summary', label: 'Summary', icon: 'fa-solid fa-calendar-check' },
@@ -21,7 +27,7 @@ const activeSection = ref(sections.some((section) => section.key === requestedSe
 function chooseSection(section) {
     if (!sections.some((item) => item.key === section)) return;
     activeSection.value = section;
-    window.history.replaceState({}, '', `${window.location.pathname}#${section}`);
+    window.history.replaceState({}, '', `${(window.portalPathname?.() ?? window.location.pathname)}#${section}`);
 }
 
 function statusClass(value) {
@@ -31,23 +37,15 @@ function statusClass(value) {
 }
 
 async function loadSession() {
-    loading.value = true;
-    errorMessage.value = '';
-    try {
-        const response = await window.axios.get(`/admin/workspaces/reviews/selection-activities/${sessionId}/data`);
-        session.value = response.data.session;
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'The selection activity could not be loaded.';
-    } finally {
-        loading.value = false;
-    }
+    const payload = await resource.load();
+    if (payload) session.value = payload;
 }
 
 onMounted(loadSession);
 </script>
 
 <template>
-    <AdminWorkspacePage workspace="review_officer">
+    <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
         <a href="/admin/workspaces/reviews/selection-activities" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
             <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Selection activities
         </a>
@@ -58,21 +56,20 @@ onMounted(loadSession);
             :description="session ? `${session.program} · ${session.provider}` : 'Review session readiness and recorded evidence.'"
             icon="fa-solid fa-calendar-check"
         >
-            <template v-if="session" #actions>
+            <template v-if="session && !loading && !errorMessage" #actions>
                 <span :class="['inline-flex px-3 py-2 text-xs font-bold uppercase tracking-wide', statusClass(session.oversight_status)]">
                     {{ session.attention_message ? 'Needs attention' : session.status_label }}
                 </span>
             </template>
         </AdminWorkspaceHeader>
 
-        <div v-if="loading" class="admin-panel mt-4 px-6 py-16 text-center text-sm font-semibold text-slate-500">Loading selection activity...</div>
-        <p v-else-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
+        <section v-if="loading || errorMessage" class="admin-panel mt-4"><AdminLoadState :loading="loading" :error="errorMessage" loading-message="Loading selection activity..." @retry="loadSession" /></section>
 
         <template v-else-if="session">
             <section class="admin-panel mt-4 overflow-hidden">
                 <dl class="grid grid-cols-4 divide-x divide-slate-200">
                     <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Stage</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.stage_label }}</dd></div>
-                    <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Schedule</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.starts_at }}</dd></div>
+                    <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Schedule</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.starts_at }}<span v-if="session.timezone" class="mt-1 block text-xs font-normal text-slate-500">{{ session.timezone }}</span></dd></div>
                     <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Applicants</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.counts.participants }} assigned</dd></div>
                     <div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Proof</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.counts.proof }} file{{ session.counts.proof === 1 ? '' : 's' }}</dd></div>
                 </dl>
@@ -83,6 +80,7 @@ onMounted(loadSession);
                     v-for="section in sections"
                     :key="section.key"
                     type="button"
+                    :aria-current="activeSection === section.key ? 'page' : undefined"
                     :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'bg-white text-slate-700 hover:bg-slate-50']"
                     @click="chooseSection(section.key)"
                 >
@@ -103,9 +101,9 @@ onMounted(loadSession);
                         <div class="px-6 py-4"><dt class="text-xs font-semibold text-slate-500">Attendance pending</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.counts.pending_attendance }}</dd></div>
                         <div class="px-6 py-4"><dt class="text-xs font-semibold text-slate-500">Proof rule</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ session.proof_required ? 'Required' : 'Optional' }}</dd></div>
                     </dl>
-                    <div v-if="session.venue || session.location_address || session.instructions" class="px-6 py-4 text-sm text-slate-700">
+                    <div v-if="session.venue || session.location_address || session.instructions" class="review-text px-6 py-4 text-sm text-slate-700">
                         <p v-if="session.venue || session.location_address"><strong class="text-slate-950">Location:</strong> {{ [session.venue, session.location_address].filter(Boolean).join(' · ') }}</p>
-                        <LocationMapLink :address="session.location_address || session.venue || ''" :latitude="session.latitude" :longitude="session.longitude" :title="session.title" />
+                        <LocationMapLink v-if="session.location_address || session.latitude != null" :address="session.location_address || session.venue || ''" :latitude="session.latitude" :longitude="session.longitude" :title="session.title" />
                         <p v-if="session.instructions" class="mt-2"><strong class="text-slate-950">Instructions:</strong> {{ session.instructions }}</p>
                     </div>
                 </section>
@@ -115,14 +113,15 @@ onMounted(loadSession);
                         <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Recorded proof</h2><p class="mt-0.5 text-sm text-slate-500">Current files only.</p></div></div>
                         <span class="text-sm font-bold text-slate-600">{{ session.evidence.length }} files</span>
                     </header>
-                    <div v-if="session.evidence.length" class="staff-table-viewport"><table class="portal-data-table min-w-[56rem]">
+                    <div v-if="session.evidence.length" class="staff-table-viewport"><table class="portal-data-table table-fixed min-w-[56rem]">
+                        <colgroup><col><col class="w-40"><col class="w-48"><col class="w-28"></colgroup>
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">File</th><th class="border-b border-slate-200 px-4 py-3">Scope</th><th class="border-b border-slate-200 px-4 py-3">Recorded</th><th class="border-b border-slate-200 px-5 py-3 text-right">Preview</th></tr></thead>
                         <tbody class="divide-y divide-slate-200">
                             <tr v-for="file in session.evidence" :key="file.id">
-                                <td class="px-5 py-4"><strong class="block max-w-sm truncate text-sm text-slate-950" data-file-name>{{ file.name }}</strong><span class="mt-0.5 block text-xs text-slate-500">{{ file.category }} · {{ file.size }}</span></td>
+                                <td class="px-5 py-4"><strong class="review-text block text-sm text-slate-950" data-file-name>{{ file.name }}</strong><span class="mt-0.5 block text-xs text-slate-500">{{ file.category }} · {{ file.size }}</span></td>
                                 <td class="px-4 py-4 text-sm font-semibold text-slate-700">{{ file.scope_label }}</td>
                                 <td class="px-4 py-4"><p class="text-sm text-slate-700">{{ file.uploaded_at }}</p><p class="mt-0.5 text-xs text-slate-500">{{ file.uploaded_by || 'Provider team' }}</p></td>
-                                <td class="px-5 py-4 text-right"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.name" class="inline-grid h-9 w-9 place-items-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" title="Preview proof" aria-label="Preview proof"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a></td>
+                                <td class="px-5 py-4 text-right"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.name" class="inline-grid h-10 w-10 place-items-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" title="Preview proof" :aria-label="`Preview ${file.name}`"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a></td>
                             </tr>
                         </tbody>
                     </table></div>
@@ -132,7 +131,8 @@ onMounted(loadSession);
 
             <section v-else-if="activeSection === 'applicants'" class="admin-panel mt-4 min-h-[24rem] overflow-hidden">
                 <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Assigned applicants</h2><p class="mt-0.5 text-sm text-slate-500">Acknowledgment and attendance only.</p></div></header>
-                <div v-if="session.participants.length" class="staff-table-viewport"><table class="portal-data-table min-w-[60rem]">
+                <div v-if="session.participants.length" class="staff-table-viewport"><table class="portal-data-table table-fixed min-w-[56rem]">
+                    <colgroup><col><col class="w-52"><col class="w-44"><col class="w-28"></colgroup>
                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Applicant</th><th class="border-b border-slate-200 px-4 py-3">Assignment</th><th class="border-b border-slate-200 px-4 py-3">Attendance</th><th class="border-b border-slate-200 px-5 py-3">Proof</th></tr></thead>
                     <tbody class="divide-y divide-slate-200">
                         <tr v-for="applicant in session.participants" :key="applicant.assignment_id">

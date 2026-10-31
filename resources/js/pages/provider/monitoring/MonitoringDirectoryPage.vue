@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
@@ -15,7 +16,7 @@ const queueCopy = {
     history: { title: 'Check-in history', description: 'Reference completed monitoring periods and decisions.', empty: 'No completed check-ins are recorded.' },
 };
 
-const path = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/monitoring/review';
+const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider/workspaces/monitoring/review';
 const activeQueue = queueByPath[path] ?? 'review';
 const pageCopy = queueCopy[activeQueue];
 const workspace = ref(null);
@@ -113,19 +114,19 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="monitoring-directory-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-monitoring-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-start justify-between gap-8">
                         <div class="flex min-w-0 items-start gap-4">
                             <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-chart-line" aria-hidden="true"></i></span>
                             <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Recipient monitoring</p>
-                                <h1 id="monitoring-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
-                                <p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Recipient monitoring</p>
+                                <h1 id="monitoring-directory-title" class="monitoring-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
+                                <WorkspaceTextSummary class="mt-2 text-sm leading-6 text-slate-600" :text="pageCopy.description" label="details" />
                             </div>
                         </div>
                         <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Monitoring scope</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Monitoring scope</p>
                             <p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p>
                             <p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p>
                         </div>
@@ -160,33 +161,34 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-semibold text-slate-500">Loading monitoring check-ins...</p>
                     </div>
-                    <div v-else-if="!checkIns.length" class="px-6 py-16 text-center">
+                    <div v-else-if="!checkIns.length && !errorMessage" class="px-6 py-16 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-check text-sm" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p>
                         <p class="mt-1 text-xs text-slate-500">Records appear here when their monitoring state changes.</p>
                     </div>
 
-                    <div v-else class="staff-table-viewport">
-                        <table class="w-full min-w-[70rem] table-fixed border-collapse text-left">
+                    <div v-else-if="checkIns.length" class="staff-table-viewport">
+                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
+                            <colgroup><col><col class="w-44"><col class="w-44"><col class="w-36"><col class="w-32"></colgroup>
                             <thead class="bg-slate-50">
-                                <tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                                    <th class="w-[32%] px-5 py-3">Check-in</th>
-                                    <th class="w-[23%] px-5 py-3">Current work</th>
-                                    <th class="w-[20%] px-5 py-3">Coverage</th>
-                                    <th class="w-[13%] px-5 py-3">Deadline</th>
-                                    <th class="w-[12%] px-5 py-3 text-right">Action</th>
+                                <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
+                                    <th class="px-5 py-3">Check-in</th>
+                                    <th class="px-5 py-3">Current work</th>
+                                    <th class="px-5 py-3">Coverage</th>
+                                    <th class="px-5 py-3">Deadline</th>
+                                    <th class="px-5 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="checkIn in checkIns" :key="checkIn.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4">
-                                        <p class="truncate text-sm font-bold text-slate-950">{{ checkIn.title }}</p>
-                                        <p class="mt-1 truncate text-xs text-slate-500">{{ checkIn.program.title }}</p>
+                                        <p class="monitoring-text text-sm font-bold text-slate-950">{{ checkIn.title }}</p>
+                                        <p class="mt-1 monitoring-text text-xs text-slate-500">{{ checkIn.program.title }}</p>
                                         <p class="mt-1 text-xs font-semibold text-slate-500">{{ checkIn.period_label }}</p>
                                     </td>
                                     <td class="px-5 py-4">
-                                        <span :class="['inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', stateClass(checkIn.work_state)]">{{ checkIn.work_label }}</span>
-                                        <p class="mt-2 line-clamp-1 text-xs text-slate-500">{{ checkIn.detail }}</p>
+                                        <span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', stateClass(checkIn.work_state)]">{{ checkIn.work_label }}</span>
+                                        <p class="monitoring-text mt-2 text-xs text-slate-500">{{ checkIn.detail }}</p>
                                     </td>
                                     <td class="px-5 py-4">
                                         <p class="text-sm font-bold text-slate-900">{{ workloadLabel(checkIn) }}</p>

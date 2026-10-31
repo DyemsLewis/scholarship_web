@@ -3,10 +3,11 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { labelFromKey } from '../../../support/display';
 
-const accountId = window.location.pathname.match(/\/provider\/team\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
+const accountId = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/team\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(accountId));
 const isLoading = ref(true);
 const isSaving = ref(false);
+const hasLoaded = ref(false);
 const errorMessage = ref('');
 const errors = ref({});
 const step = ref(1);
@@ -63,7 +64,9 @@ function applyAccount(account) {
     form.email = account.email ?? '';
     form.username = account.username ?? '';
     form.contact_number = account.contact_number ?? '';
-    form.account_title = account.team_role ?? '';
+    form.account_title = availableRoles.value.some((role) => role.value === account.team_role)
+        ? account.team_role
+        : (availableRoles.value.some((role) => role.value === 'custom') ? 'custom' : '');
     form.permissions = [...(account.permissions ?? [])];
     form.program_access_mode = account.program_access_mode ?? 'all';
     form.assigned_program_ids = [...(account.assigned_program_ids ?? [])];
@@ -119,6 +122,7 @@ function validateStep(currentStep) {
 }
 
 function nextStep() {
+    if (!hasLoaded.value || isSaving.value) return;
     if (!validateStep(step.value)) return;
     step.value = Math.min(3, step.value + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -142,6 +146,7 @@ async function loadAccount() {
             form.account_title = availableRoles.value[0]?.value ?? 'custom';
             applyRolePreset();
         }
+        hasLoaded.value = true;
     } catch (error) {
         errorMessage.value = error.response?.data?.message || 'The team account form could not be loaded.';
     } finally {
@@ -150,11 +155,13 @@ async function loadAccount() {
 }
 
 async function saveAccount() {
-    if (![1, 2, 3].every(validateStep)) {
-        if (!String(form.first_name).trim()) step.value = 1;
-        else if (!form.account_title || !form.permissions.length) step.value = 2;
-        else step.value = 3;
-        return;
+    if (!hasLoaded.value || isLoading.value || isSaving.value) return;
+    for (const currentStep of [1, 2, 3]) {
+        if (!validateStep(currentStep)) {
+            step.value = currentStep;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
     }
     isSaving.value = true;
     errors.value = {};
@@ -183,6 +190,11 @@ async function saveAccount() {
     } catch (error) {
         errors.value = error.response?.data?.errors ?? {};
         errorMessage.value = error.response?.data?.message || 'The team account could not be saved.';
+        const field = Object.keys(errors.value)[0]?.split('.')[0];
+        if (['account_title', 'permissions'].includes(field)) step.value = 2;
+        else if (['program_access_mode', 'assigned_program_ids'].includes(field)) step.value = 3;
+        else if (field) step.value = 1;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
         isSaving.value = false;
     }
@@ -196,21 +208,21 @@ onMounted(loadAccount);
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="team-account-title">
-            <div class="mx-auto w-full max-w-[94rem]">
+            <div class="provider-settings-workspace mx-auto w-full max-w-[94rem]">
                 <a href="/provider/workspaces/team" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to team access</a>
 
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                    <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i :class="['fa-solid', isEditMode ? 'fa-user-pen' : 'fa-user-plus']" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Team access</p><h1 id="team-account-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ isEditMode ? 'Edit team member' : 'Add team member' }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">{{ isEditMode ? 'Update this account without changing unrelated staff access.' : 'Create a separate login with one clear role and appropriate program access.' }}</p></div></div><span class="border border-slate-300 bg-slate-100 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-700">Step {{ step }} of 3</span></div>
+                    <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i :class="['fa-solid', isEditMode ? 'fa-user-pen' : 'fa-user-plus']" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Team access</p><h1 id="team-account-title" class="settings-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ isEditMode ? 'Edit team member' : 'Add team member' }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">{{ isEditMode ? 'Update this account without changing unrelated staff access.' : 'Create a separate login with one clear role and appropriate program access.' }}</p></div></div><span class="border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-700">Step {{ step }} of 3</span></div>
                 </header>
 
                 <nav class="mt-4 grid grid-cols-3 border border-slate-200 bg-white shadow-sm" aria-label="Account setup progress">
-                    <button v-for="item in steps" :key="item.number" type="button" :disabled="item.number > step" :class="['flex min-h-16 items-center gap-3 border-r border-slate-200 px-5 text-left last:border-r-0', item.number === step ? 'bg-slate-950 text-white' : item.number < step ? 'bg-white text-slate-800' : 'cursor-not-allowed bg-slate-50 text-slate-400']" @click="item.number < step && (step = item.number)"><span :class="['grid h-8 w-8 place-items-center text-xs font-black', item.number === step ? 'bg-amber-300 text-slate-950' : item.number < step ? 'bg-slate-950 text-white' : 'bg-slate-200 text-slate-500']"><i v-if="item.number < step" class="fa-solid fa-check" aria-hidden="true"></i><template v-else>{{ item.number }}</template></span><span class="text-sm font-bold">{{ item.label }}</span></button>
+                    <button v-for="item in steps" :key="item.number" type="button" :aria-current="item.number === step ? 'step' : undefined" :disabled="item.number > step" :class="['flex min-h-16 items-center gap-3 border-r border-slate-200 px-5 text-left last:border-r-0', item.number === step ? 'bg-slate-950 text-white' : item.number < step ? 'bg-white text-slate-800' : 'cursor-not-allowed bg-slate-50 text-slate-400']" @click="item.number < step && (step = item.number)"><span :class="['grid h-8 w-8 place-items-center text-xs font-black', item.number === step ? 'bg-amber-300 text-slate-950' : item.number < step ? 'bg-slate-950 text-white' : 'bg-slate-200 text-slate-500']"><i v-if="item.number < step" class="fa-solid fa-check" aria-hidden="true"></i><template v-else>{{ item.number }}</template></span><span class="text-sm font-bold">{{ item.label }}</span></button>
                 </nav>
 
                 <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading account setup...</p></div>
 
-                <form v-else class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="saveAccount">
+                <form v-else-if="hasLoaded" class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="saveAccount">
                     <section v-if="step === 1" aria-labelledby="account-details-heading">
                         <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-id-card" aria-hidden="true"></i></span><div><h2 id="account-details-heading" class="text-lg font-bold text-slate-950">Account details</h2><p class="mt-1 text-sm text-slate-500">Use the staff member's own contact details and login name.</p></div></header>
                         <div class="grid grid-cols-3 gap-5 px-6 py-6">
@@ -235,7 +247,7 @@ onMounted(loadAccount);
                                 <header class="border-b border-slate-200 bg-slate-50 px-5 py-4"><h3 class="text-sm font-bold text-slate-950">Assigned responsibilities</h3><p class="mt-1 text-xs text-slate-500">{{ isCustomRole ? 'Select only the workspaces this custom role needs.' : `${selectedRole?.label || 'This role'} receives its standard workspace access.` }}</p></header>
                                 <div v-if="!permissionCatalog.length" class="px-5 py-10 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-white text-slate-500"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">No responsibilities are available to assign.</p></div>
                                 <div v-else class="grid grid-cols-2 divide-x divide-y divide-slate-200">
-                                    <label v-for="permission in permissionCatalog" :key="permission.value" :class="['flex min-h-24 items-start gap-3 px-5 py-4', !isCustomRole && !form.permissions.includes(permission.value) ? 'bg-slate-50 opacity-45' : 'bg-white', isCustomRole ? 'cursor-pointer' : 'cursor-default']"><input type="checkbox" class="mt-1 h-4 w-4 accent-slate-950" :checked="form.permissions.includes(permission.value)" :disabled="!isCustomRole" @change="togglePermission(permission.value)"><span><span class="block text-sm font-bold text-slate-900">{{ permission.label }}</span><span class="mt-1 block text-xs leading-5 text-slate-500">{{ permission.description }}</span></span></label>
+                                    <label v-for="permission in permissionCatalog" :key="permission.value" :class="['flex min-h-24 items-start gap-3 px-5 py-4', !isCustomRole && !form.permissions.includes(permission.value) ? 'bg-slate-50' : 'bg-white', isCustomRole ? 'cursor-pointer' : 'cursor-default']"><input type="checkbox" class="mt-1 h-4 w-4 accent-slate-950" :checked="form.permissions.includes(permission.value)" :disabled="!isCustomRole" @change="togglePermission(permission.value)"><span><span class="block text-sm font-bold text-slate-900">{{ permission.label }}</span><span class="mt-1 block text-xs leading-5 text-slate-500">{{ permission.description }}</span></span></label>
                                 </div>
                             </div>
                         </div>
@@ -245,15 +257,15 @@ onMounted(loadAccount);
                         <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-folder-tree" aria-hidden="true"></i></span><div><h2 id="program-access-heading" class="text-lg font-bold text-slate-950">Program access</h2><p class="mt-1 text-sm text-slate-500">Limit which scholarship records are visible inside the assigned workspace.</p></div></header>
                         <div class="px-6 py-6">
                             <div class="grid grid-cols-2 border border-slate-200">
-                                <label :class="['flex cursor-pointer items-start gap-3 border-r border-slate-200 px-5 py-4', form.program_access_mode === 'all' ? 'bg-amber-50' : 'bg-white', !canAssignAllPrograms ? 'cursor-not-allowed opacity-50' : '']"><input v-model="form.program_access_mode" type="radio" value="all" class="mt-1 h-4 w-4 accent-slate-950" :disabled="!canAssignAllPrograms"><span><span class="block text-sm font-bold text-slate-950">All organization programs</span><span class="mt-1 block text-xs text-slate-500">Use when this staff member works across the full program portfolio.</span></span></label>
+                                <label :class="['flex cursor-pointer items-start gap-3 border-r border-slate-200 px-5 py-4', form.program_access_mode === 'all' ? 'bg-amber-50' : 'bg-white', !canAssignAllPrograms ? 'cursor-not-allowed bg-slate-50' : '']"><input v-model="form.program_access_mode" type="radio" value="all" class="mt-1 h-4 w-4 accent-slate-950" :disabled="!canAssignAllPrograms"><span><span class="block text-sm font-bold text-slate-950">All organization programs</span><span class="mt-1 block text-xs text-slate-500">Use when this staff member works across the full program portfolio.</span></span></label>
                                 <label :class="['flex cursor-pointer items-start gap-3 px-5 py-4', form.program_access_mode === 'selected' ? 'bg-amber-50' : 'bg-white']"><input v-model="form.program_access_mode" type="radio" value="selected" class="mt-1 h-4 w-4 accent-slate-950"><span><span class="block text-sm font-bold text-slate-950">Selected programs only</span><span class="mt-1 block text-xs text-slate-500">Restrict this account to specific scholarship programs.</span></span></label>
                             </div>
 
                             <div v-if="form.program_access_mode === 'selected'" class="mt-5 border border-slate-200">
                                 <header class="border-b border-slate-200 bg-slate-50 px-5 py-3"><p class="text-sm font-bold text-slate-900">Choose programs</p></header>
                                 <div v-if="!availablePrograms.length" class="px-5 py-10 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-white text-slate-500"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">No programs are available within your access scope.</p></div>
-                                <div v-else class="divide-y divide-slate-200">
-                                    <label v-for="program in availablePrograms" :key="program.id" class="flex cursor-pointer items-center gap-3 px-5 py-3.5 hover:bg-slate-50"><input type="checkbox" class="h-4 w-4 accent-slate-950" :checked="form.assigned_program_ids.includes(program.id)" @change="toggleProgram(program.id)"><span class="min-w-0 flex-1 truncate text-sm font-bold text-slate-900">{{ program.title }}</span><span class="text-[10px] font-bold uppercase tracking-wide text-slate-400">{{ labelFromKey(program.status) }}</span></label>
+                                <div v-else class="settings-program-list divide-y divide-slate-200" role="group" aria-label="Programs available to this account">
+                                    <label v-for="program in availablePrograms" :key="program.id" class="flex cursor-pointer items-center gap-3 px-5 py-3.5 hover:bg-slate-50"><input type="checkbox" class="h-4 w-4 accent-slate-950" :checked="form.assigned_program_ids.includes(program.id)" @change="toggleProgram(program.id)"><span class="min-w-0 flex-1 settings-text text-sm font-bold text-slate-900">{{ program.title }}</span><span class="text-xs font-bold uppercase tracking-wide text-slate-600">{{ labelFromKey(program.status) }}</span></label>
                                 </div>
                             </div>
 

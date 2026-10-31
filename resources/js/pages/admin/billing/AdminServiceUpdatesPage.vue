@@ -3,14 +3,17 @@ import { computed, ref } from 'vue';
 import { formatAdminServiceDateTime, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
 
-const { purchaseId, purchase, isLoading, isSaving, errorMessage, successMessage, queueUrl, runAction } = useAdminServiceWorkspace('updates');
+const { purchaseId, purchase, isLoading, loadError, loadRecord, isSaving, errorMessage, successMessage, queueUrl, runAction } = useAdminServiceWorkspace('updates');
 const updateForm = ref({ kind: 'progress_update', message: '' });
 const timeline = computed(() => [...(purchase.value?.updates ?? [])].reverse());
+const canPost = computed(() => purchase.value?.status === 'paid' && purchase.value.fulfillment_status !== 'cancelled' && purchase.value.cancellation_status !== 'requested');
+const canRequestInformation = computed(() => ['queued', 'ready', 'needs_information', 'in_progress'].includes(purchase.value?.fulfillment_status));
+const messageValid = computed(() => updateForm.value.message.trim().length >= 3 && updateForm.value.message.trim().length <= 2000);
 
 async function addUpdate() {
-    if (!updateForm.value.message.trim()) return;
+    if (!canPost.value || isSaving.value || !messageValid.value || (updateForm.value.kind === 'clarification_request' && !canRequestInformation.value)) return;
     const saved = await runAction(
-        () => window.axios.post(`/admin/billing/${purchaseId}/updates`, { kind: updateForm.value.kind, message: updateForm.value.message.trim() }),
+        (config) => window.axios.post(`/admin/billing/${purchaseId}/updates`, { kind: updateForm.value.kind, message: updateForm.value.message.trim() }, config),
         'Update added.',
     );
     if (saved) updateForm.value.message = '';
@@ -18,14 +21,18 @@ async function addUpdate() {
 </script>
 
 <template>
-    <AdminServiceWorkspaceShell :purchase="purchase" active-section="updates" :loading="isLoading" :error-message="errorMessage" :success-message="successMessage" :queue-url="queueUrl">
+    <AdminServiceWorkspaceShell :purchase="purchase" active-section="updates" :loading="isLoading" :load-error="loadError" @retry="loadRecord" :error-message="errorMessage" :success-message="successMessage" :queue-url="queueUrl">
         <section class="admin-panel mt-4 overflow-hidden">
             <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-message" aria-hidden="true"></i></span><div><h2 class="text-lg font-black text-slate-950">Service updates</h2><p class="mt-0.5 text-sm text-slate-500">Send one clear response or leave an internal note.</p></div></header>
-            <form class="grid grid-cols-[14rem_minmax(0,1fr)_auto] items-end gap-3 border-b border-slate-200 bg-slate-50 px-6 py-5" @submit.prevent="addUpdate">
-                <label class="text-sm font-bold text-slate-700">Type<select v-model="updateForm.kind" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="progress_update">Provider update</option><option value="clarification_request">Request information</option><option value="internal_note">Internal note</option></select></label>
-                <label class="text-sm font-bold text-slate-700">Message<textarea v-model="updateForm.message" rows="2" maxlength="2000" class="mt-2 w-full border border-slate-300 bg-white px-3 py-2 font-normal" placeholder="Write a concise update."></textarea></label>
-                <button type="submit" :disabled="isSaving || !updateForm.message.trim()" class="h-11 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-40">{{ isSaving ? 'Adding...' : 'Add update' }}</button>
+            <form v-if="canPost" :aria-busy="isSaving" class="border-b border-slate-200 bg-slate-50 px-6 py-5" @submit.prevent="addUpdate">
+                <fieldset :disabled="isSaving" class="grid grid-cols-[14rem_minmax(0,1fr)_auto] items-end gap-3">
+                    <label class="text-sm font-bold text-slate-700">Type<select v-model="updateForm.kind" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="progress_update">Provider update</option><option v-if="canRequestInformation" value="clarification_request">Request information</option><option value="internal_note">Internal note</option></select></label>
+                    <label class="text-sm font-bold text-slate-700">Message<textarea v-model="updateForm.message" rows="2" minlength="3" maxlength="2000" required class="mt-2 w-full border border-slate-300 bg-white px-3 py-2 font-normal" placeholder="Write a concise update."></textarea></label>
+                    <button type="submit" :disabled="isSaving || !messageValid" class="h-11 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-40">{{ isSaving ? 'Adding...' : 'Add update' }}</button>
+                </fieldset>
+                <p class="mt-3 text-sm font-semibold text-slate-600">{{ updateForm.kind === 'internal_note' ? 'Internal: visible only to administrators, not the provider.' : updateForm.kind === 'clarification_request' ? 'Shared with the provider and changes the service to Needs information.' : 'Shared with the provider. This does not change the delivery state.' }}</p>
             </form>
+            <p v-else class="border-b border-slate-200 bg-slate-50 px-6 py-4 text-sm text-slate-600">Updates are read-only while cancellation is pending or the service is cancelled.</p>
 
             <div v-if="!timeline.length" class="min-h-80 px-6 py-16 text-center"><i class="fa-regular fa-message text-2xl text-slate-300" aria-hidden="true"></i><p class="mt-3 text-sm font-bold text-slate-900">No updates recorded</p></div>
             <div v-else class="divide-y divide-slate-200">

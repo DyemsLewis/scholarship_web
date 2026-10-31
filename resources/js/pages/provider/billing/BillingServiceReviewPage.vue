@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
-const requestId = window.location.pathname.match(/\/provider\/workspaces\/billing\/service-requests\/(\d+)\/review$/)?.[1] ?? '';
+const requestId = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/workspaces\/billing\/service-requests\/(\d+)\/review$/)?.[1] ?? '';
 const isLoading = ref(true);
 const isOpeningCheckout = ref(false);
 const isSyncing = ref(false);
@@ -55,6 +55,7 @@ function clearCheckoutResult() {
 }
 
 async function syncPayment(reference) {
+    if (isLoading.value || !serviceRequest.value || isSyncing.value || isOpeningCheckout.value) return;
     isSyncing.value = true;
 
     try {
@@ -76,7 +77,7 @@ async function syncPayment(reference) {
 }
 
 async function startCheckout() {
-    if (!canStartCheckout.value) return;
+    if (!canStartCheckout.value || isLoading.value || !serviceRequest.value || isOpeningCheckout.value || isSyncing.value) return;
 
     isOpeningCheckout.value = true;
     errorMessage.value = '';
@@ -121,7 +122,7 @@ onMounted(async () => {
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="review-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <a href="/provider/workspaces/billing/services" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to services
@@ -141,7 +142,7 @@ onMounted(async () => {
                         </div>
                         <div class="flex items-center gap-3 border-r border-slate-200 bg-amber-50 px-5 py-4">
                             <span class="grid h-8 w-8 place-items-center bg-amber-400 text-xs font-bold text-slate-950">2</span>
-                            <div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Current step</p><p class="text-sm font-bold text-slate-950">Review</p></div>
+                            <div><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">Current step</p><p class="text-sm font-bold text-slate-950">Review</p></div>
                         </div>
                         <div class="flex items-center gap-3 px-5 py-4 text-slate-500">
                             <span class="grid h-8 w-8 place-items-center bg-slate-100 text-xs font-bold">3</span>
@@ -150,7 +151,7 @@ onMounted(async () => {
                     </div>
 
                     <header class="mt-4 flex items-center justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Review before payment</p><h1 id="review-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">Confirm the service details and contact before opening checkout.</p></div></div>
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Review before payment</p><h1 id="review-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">Confirm the service details and contact before opening checkout.</p></div></div>
                         <a v-if="serviceRequest.editable" :href="serviceRequest.edit_url" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950">
                             <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
                             Edit details
@@ -165,7 +166,7 @@ onMounted(async () => {
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
                             <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Request summary</h2><p class="mt-1 text-xs text-slate-500">These details become the starting brief after payment.</p></div></div>
-                            <div class="text-right"><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">One-time fee</p><p class="mt-1 text-xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p></div>
+                            <div class="text-right"><p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">One-time fee</p><p class="mt-1 text-xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p></div>
                         </header>
 
                         <dl class="divide-y divide-slate-200 px-6">
@@ -176,7 +177,7 @@ onMounted(async () => {
                         </dl>
 
                         <div class="border-t border-slate-200 px-6 py-5">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Requested outcome</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Requested outcome</p>
                             <p class="mt-2 max-w-4xl text-sm font-semibold leading-6 text-slate-900">{{ serviceRequest.requested_outcome }}</p>
                         </div>
 

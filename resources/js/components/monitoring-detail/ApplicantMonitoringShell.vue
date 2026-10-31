@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import ApplicantSidebar from '../ApplicantSidebar.vue';
 import MonitoringDecisionBanner from './MonitoringDecisionBanner.vue';
+import ApplicantRecordTabs from '../ApplicantRecordTabs.vue';
 
 const props = defineProps({
     detail: {
@@ -11,11 +12,11 @@ const props = defineProps({
 });
 
 const statusClass = computed(() => ({
-    positive: 'bg-emerald-100 text-emerald-800',
-    attention: 'bg-amber-100 text-amber-800',
-    critical: 'bg-rose-100 text-rose-800',
-    neutral: 'bg-slate-100 text-slate-700',
-}[props.detail.status?.tone] ?? 'bg-slate-100 text-slate-700'));
+    positive: 'student-badge-positive',
+    attention: 'student-badge-attention',
+    critical: 'student-badge-negative',
+}[props.detail.status?.tone] ?? ''));
+const hasSelectedRecord = computed(() => Boolean(props.detail.content?.selected));
 
 const snapshot = computed(() => [
     {
@@ -58,17 +59,17 @@ function hideBrokenImage(event) {
                     Back to monitoring
                 </a>
 
-                <header data-monitoring-detail-header class="mt-5 overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm">
-                    <div class="grid lg:min-h-[12rem] lg:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.55fr)]">
-                        <div class="flex flex-col justify-center px-5 py-6 sm:px-7 lg:px-8">
+                <header data-monitoring-detail-header class="mt-4 overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm">
+                    <div class="grid lg:min-h-[10rem] lg:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.55fr)]">
+                        <div class="flex flex-col justify-center px-4 py-4 sm:px-6 sm:py-5">
                             <div class="flex flex-wrap items-center gap-2">
                                 <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Recipient monitoring</p>
-                                <span :class="['inline-flex rounded-sm px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass]">
+                                <span :class="['student-badge', statusClass]">
                                     {{ detail.status.label }}
                                 </span>
                             </div>
 
-                            <h1 class="mt-3 max-w-3xl font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">
+                            <h1 class="mt-2 max-w-3xl font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">
                                 {{ detail.identity.program.title }}
                             </h1>
 
@@ -80,18 +81,18 @@ function hideBrokenImage(event) {
                                 </span>
                             </div>
 
-                            <div class="mt-5">
-                                <a :href="detail.identity.application_href" class="inline-flex min-h-10 items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 hover:text-slate-950">
+                            <div class="mt-3">
+                                <a :href="detail.identity.application_href" class="student-button student-button-secondary">
                                     Application record
                                     <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                 </a>
                             </div>
                         </div>
 
-                        <figure class="relative order-first h-44 overflow-hidden bg-slate-900 lg:order-last lg:h-auto">
+                        <figure class="relative order-first h-32 overflow-hidden bg-slate-900 sm:h-40 lg:order-last lg:h-auto">
                             <img :src="'/images/filipino-students-studying.jpg'" alt="Filipino students studying together" class="absolute inset-0 h-full w-full object-cover object-center">
                             <div class="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/10 to-transparent"></div>
-                            <figcaption class="absolute inset-x-0 bottom-0 flex items-center gap-3 p-5">
+                            <figcaption class="absolute inset-x-0 bottom-0 flex items-center gap-3 p-4">
                                 <span class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-sm bg-white p-2 shadow-xl ring-1 ring-white/60">
                                     <i class="fa-solid fa-graduation-cap text-lg text-slate-400" aria-hidden="true"></i>
                                     <img
@@ -109,55 +110,27 @@ function hideBrokenImage(event) {
                         </figure>
                     </div>
 
-                    <dl class="grid border-t border-slate-200 bg-slate-50/80 sm:grid-cols-3">
+                    <dl class="grid grid-cols-2 border-t border-slate-200 bg-slate-50/80 sm:grid-cols-3" data-record-snapshot>
                         <div
                             v-for="(item, index) in snapshot"
                             :key="item.key"
-                            :class="['px-4 py-3 sm:px-5', index ? 'border-t border-slate-200 sm:border-l sm:border-t-0' : '']"
+                            :class="['min-w-0 border-slate-200 px-3 py-2.5 sm:px-5 sm:py-3', index === 0 ? 'col-span-2 sm:col-span-1' : 'border-t sm:border-t-0', index === 1 ? 'sm:border-l' : '', index === 2 ? 'border-l' : '']"
                         >
-                            <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">{{ item.label }}</dt>
+                            <dt class="student-detail-label">{{ item.label }}</dt>
                             <dd class="mt-1 text-sm font-bold text-slate-950">{{ item.value }}</dd>
-                            <dd class="mt-0.5 truncate text-xs text-slate-500">{{ item.note }}</dd>
+                            <dd v-if="item.key !== 'support' && item.note" class="mt-0.5 text-xs leading-5 text-slate-600">{{ item.note }}</dd>
                         </div>
                     </dl>
                 </header>
 
                 <MonitoringDecisionBanner v-if="detail.view === 'overview'" class="mt-4" :decision="detail.decision" />
 
-                <nav data-monitoring-detail-navigation class="mt-4 rounded-md border border-slate-300 bg-white p-1 shadow-sm" aria-label="Monitoring record">
-                    <div class="grid grid-cols-2 gap-1 sm:grid-cols-4">
-                        <a
-                            v-for="item in detail.navigation"
-                            :key="item.key"
-                            :href="item.href"
-                            :aria-current="item.active ? 'page' : undefined"
-                            :class="[
-                                'flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-sm border-b-2 px-2 py-2 text-center text-xs font-bold transition sm:px-3 sm:text-sm',
-                                item.active
-                                    ? 'border-amber-400 bg-slate-950 text-white'
-                                    : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950',
-                            ]"
-                        >
-                            <i :class="[item.icon, 'w-4 text-center text-xs']" aria-hidden="true"></i>
-                            <span class="truncate">{{ item.label }}</span>
-                            <span
-                                v-if="item.badge"
-                                :class="[
-                                    'grid h-5 min-w-5 place-items-center rounded-sm px-1 text-[10px]',
-                                    item.active ? 'bg-amber-300 text-slate-950' : 'bg-amber-100 text-amber-800',
-                                ]"
-                            >
-                                {{ item.badge }}
-                            </span>
-                        </a>
-                    </div>
-                </nav>
+                <ApplicantRecordTabs :items="detail.navigation" label="Monitoring record" layout="grid" data-monitoring-detail-navigation />
 
-                <section v-if="detail.view !== 'overview'" class="relative mt-4 overflow-hidden rounded-md border border-slate-300 bg-white px-5 py-4 shadow-sm sm:px-6">
+                <section v-if="detail.view !== 'overview' && !hasSelectedRecord" class="relative mt-4 overflow-hidden rounded-md border border-slate-300 bg-white px-4 py-3 shadow-sm sm:px-5" data-record-section-intro>
                     <span class="absolute inset-y-0 left-0 w-1 bg-amber-400" aria-hidden="true"></span>
-                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">{{ detail.page.eyebrow }}</p>
-                    <h2 class="mt-1 font-display text-xl font-bold text-slate-950 sm:text-2xl">{{ detail.page.title }}</h2>
-                    <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ detail.page.description }}</p>
+                    <h2 class="font-display text-lg font-bold text-slate-950 sm:text-xl">{{ detail.page.title }}</h2>
+                    <p class="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{{ detail.page.description }}</p>
                 </section>
 
                 <slot></slot>

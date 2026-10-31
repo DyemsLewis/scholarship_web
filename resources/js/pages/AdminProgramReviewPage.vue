@@ -13,8 +13,8 @@ import { providerObjectiveDetails } from '../support/providerObjectives';
 
 const appElement = document.getElementById('app');
 const scholarshipId = appElement?.dataset.scholarshipId;
-const usesReviewOfficerWorkspace = window.location.pathname.startsWith('/admin/workspaces/reviews');
-const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const usesReviewOfficerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/reviews');
+const usesPortalManagerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/portal');
 const reviewQueueUrl = usesPortalManagerWorkspace
     ? '/admin/workspaces/portal/reviews?type=programs'
     : (usesReviewOfficerWorkspace ? '/admin/workspaces/reviews?type=programs' : '/admin/reviews?type=programs');

@@ -5,7 +5,7 @@ import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
 const queueTypes = ['providers', 'programs', 'applicants', 'benefits', 'monitoring'];
-const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const usesPortalManagerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/portal');
 const reviewWorkspaceBase = usesPortalManagerWorkspace ? '/admin/workspaces/portal/reviews' : '/admin/workspaces/reviews';
 const requestedType = new URLSearchParams(window.location.search).get('type');
 const activeType = ref(queueTypes.includes(requestedType) ? requestedType : 'providers');

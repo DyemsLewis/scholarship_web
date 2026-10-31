@@ -11,6 +11,7 @@ const sessionCookie = process.env.PROVIDER_SMOKE_SESSION_COOKIE;
 const sessionCookieName = process.env.PROVIDER_SMOKE_SESSION_COOKIE_NAME;
 const timeoutMs = Number(process.env.PROVIDER_SMOKE_TIMEOUT_MS ?? 20_000);
 const verifyFilePreview = process.env.PROVIDER_SMOKE_FILE_PREVIEW === '1';
+const verifyOpaqueUrls = process.env.PORTAL_SMOKE_OPAQUE_URLS === '1';
 const verifyMapPin = process.env.PROVIDER_SMOKE_MAP_PIN === '1';
 const verifyEligibilityBuilder = process.env.PROVIDER_SMOKE_ELIGIBILITY_BUILDER === '1';
 const verifyProgramConsistency = process.env.PROVIDER_SMOKE_PROGRAM_CONSISTENCY === '1';
@@ -25,6 +26,27 @@ const verifyPreparationPreview = process.env.PORTAL_SMOKE_PREPARATION_PREVIEW ==
 const verifyScholarshipRequirements = process.env.PORTAL_SMOKE_SCHOLARSHIP_REQUIREMENTS === '1';
 const verifyPreparationHandoff = process.env.PORTAL_SMOKE_PREPARATION_HANDOFF === '1';
 const verifyPreparationStates = process.env.PORTAL_SMOKE_PREPARATION_STATES === '1';
+const verifyDocumentRefinements = process.env.PORTAL_SMOKE_DOCUMENT_REFINEMENTS === '1';
+const verifyApplicantPresentation = process.env.PORTAL_SMOKE_APPLICANT_PRESENTATION === '1';
+const verifyRecordRefinements = process.env.PORTAL_SMOKE_RECORD_REFINEMENTS === '1';
+const verifyOverviewRefinements = process.env.PORTAL_SMOKE_OVERVIEW_REFINEMENTS === '1';
+const verifyProviderSafety = process.env.PORTAL_SMOKE_PROVIDER_SAFETY === '1';
+const verifyProviderDashboards = process.env.PORTAL_SMOKE_PROVIDER_DASHBOARDS === '1';
+const dashboardLongText = process.env.PORTAL_SMOKE_PROVIDER_DASHBOARD_LONG_TEXT === '1';
+const verifyProgramRefinements = process.env.PORTAL_SMOKE_PROGRAM_REFINEMENTS === '1';
+const programLongText = process.env.PORTAL_SMOKE_PROGRAM_LONG_TEXT === '1';
+const verifyMonitoringRefinements = process.env.PORTAL_SMOKE_MONITORING_REFINEMENTS === '1';
+const verifySettingsRefinements = process.env.PORTAL_SMOKE_SETTINGS_REFINEMENTS === '1';
+const verifyServiceRefinements = process.env.PORTAL_SMOKE_SERVICE_REFINEMENTS === '1';
+const serviceLongText = process.env.PORTAL_SMOKE_SERVICE_LONG_TEXT === '1';
+const serviceFixtureState = process.env.PORTAL_SMOKE_SERVICE_FIXTURE_STATE;
+const settingsLongText = process.env.PORTAL_SMOKE_SETTINGS_LONG_TEXT === '1';
+const verifyApplicationRefinements = process.env.PORTAL_SMOKE_APPLICATION_REFINEMENTS === '1' || verifyMonitoringRefinements || verifySettingsRefinements || verifyServiceRefinements;
+const operationalRefinementSelector = verifyServiceRefinements ? '.provider-service-workspace' : verifySettingsRefinements ? '.provider-settings-workspace' : verifyMonitoringRefinements ? '.provider-monitoring-workspace' : '.provider-application-workspace';
+const monitoringLongText = process.env.PORTAL_SMOKE_MONITORING_LONG_TEXT === '1';
+const monitoringHistoryFixture = process.env.PORTAL_SMOKE_MONITORING_HISTORY_FIXTURE === '1';
+const applicationLongText = process.env.PORTAL_SMOKE_APPLICATION_LONG_TEXT === '1';
+const summaryCase = process.env.PORTAL_SMOKE_SUMMARY_CASE;
 const handoffScreenshotDirectory = process.env.PORTAL_SMOKE_HANDOFF_SCREENSHOT_DIRECTORY;
 const screenshotSelector = process.env.PORTAL_SMOKE_SCREENSHOT_SELECTOR;
 
@@ -336,6 +358,217 @@ async function main() {
 
         let activePreparationFixture = null;
         const fixtureErrors = [];
+        if (serviceLongText || serviceFixtureState) {
+            if (!verifyServiceRefinements || settingsLongText || monitoringLongText || applicationLongText || programLongText || dashboardLongText) fail('Use service fixtures only with service refinement checks.');
+            if (serviceFixtureState && !['resolved', 'completed', 'cancelled'].includes(serviceFixtureState)) fail('Unsupported read-only service fixture.');
+            await client.send('Fetch.enable', { patterns: [
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/support/*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/billing/*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/billing/*/data*`, requestStage: 'Response' },
+            ] });
+            client.on('Fetch.requestPaused', (event) => {
+                (async () => {
+                    if (!event.responseHeaders?.some((header) => header.name.toLowerCase() === 'content-type' && header.value.includes('application/json'))) {
+                        await client.send('Fetch.continueResponse', { requestId: event.requestId });
+                        return;
+                    }
+                    const response = await client.send('Fetch.getResponseBody', { requestId: event.requestId });
+                    const payload = JSON.parse(response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body);
+                    const long = 'Browser-only long applicant and support service name '+ 'UnbrokenName'.repeat(9);
+                    const note = 'Browser-only complete service instruction with the original recipient context. '.repeat(14)+'End of note.';
+                    for (const report of [...(payload.reports ?? []), payload.report].filter(Boolean)) {
+                        if (serviceLongText) {
+                            report.subject = long;
+                            if (report.applicant) report.applicant.name = long;
+                            if (report.program) report.program.title = long;
+                            if (report.attachment) report.attachment.original_name = long+'.pdf';
+                        }
+                        if (serviceFixtureState === 'resolved') Object.assign(report, { provider_status: 'resolved', provider_response: note, work_state: 'waiting' });
+                    }
+                    if (serviceLongText) {
+                        if (payload.workspace) payload.workspace.organization_name = long;
+                        if (payload.organization) payload.organization.name = long;
+                        for (const plan of [...(payload.plans ?? []), payload.plan].filter(Boolean)) plan.name = long;
+                        for (const entry of payload.entries ?? []) Object.assign(entry, { plan_name: long, program_name: long });
+                    }
+                    if (payload.purchase) {
+                        const purchase = payload.purchase;
+                        if (serviceLongText) {
+                            purchase.plan_name = long;
+                            purchase.assigned_to_name = long;
+                            purchase.fulfillment_notes = note;
+                            for (const file of purchase.files ?? []) file.original_name = long+'.pdf';
+                            if (!purchase.updates?.length) purchase.updates = [{ id: 'browser-only-update', actor_name: long, actor_role: 'provider', kind: 'provider_response', message: note, created_at: '2026-10-31T00:00:00Z' }];
+                            for (const update of purchase.updates ?? []) Object.assign(update, { actor_name: long, message: note });
+                        }
+                        if (['completed', 'cancelled'].includes(serviceFixtureState)) Object.assign(purchase, {
+                            fulfillment_status: serviceFixtureState, provider_confirmed_at: '2026-10-30T01:00:00Z',
+                            cancellation_reason: 'Browser-only closure fixture; no records were changed.', refund_status: 'not_required',
+                        });
+                    }
+                    await client.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: event.responseStatusCode,
+                        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(payload)).toString('base64') });
+                })().catch((error) => { fixtureErrors.push(error.message); });
+            });
+        }
+        if (settingsLongText) {
+            if (!verifySettingsRefinements || monitoringLongText || applicationLongText || programLongText || dashboardLongText) fail('Use settings fixtures only with settings refinement checks.');
+            await client.send('Fetch.enable', { patterns: [
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/organization-profile/data*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/team/data*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/team/accounts/*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/account/data*`, requestStage: 'Response' },
+            ] });
+            client.on('Fetch.requestPaused', (event) => {
+                (async () => {
+                    if (!event.responseHeaders?.some((header) => header.name.toLowerCase() === 'content-type' && header.value.includes('application/json'))) {
+                        await client.send('Fetch.continueResponse', { requestId: event.requestId });
+                        return;
+                    }
+                    const response = await client.send('Fetch.getResponseBody', { requestId: event.requestId });
+                    const payload = JSON.parse(response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body);
+                    const long = 'Browser-only long applicant and organization name '+ 'UnbrokenName'.repeat(9);
+                    const note = 'Browser-only complete organization verification review note. '.repeat(14)+'End of note.';
+                    if (payload.profile) payload.profile.name = long;
+                    if (payload.workspace) payload.workspace.organization_name = long;
+                    if (payload.account) Object.assign(payload.account, { name: long, organization_name: long });
+                    for (const account of payload.accounts ?? []) account.name = long;
+                    for (const item of [...(payload.verification_documents ?? []), ...(payload.recent_documents ?? [])]) Object.assign(item, { original_name: long+'.pdf', review_notes: note });
+                    for (const program of payload.available_programs ?? []) program.title = long;
+                    await client.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: event.responseStatusCode,
+                        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(payload)).toString('base64') });
+                })().catch((error) => { fixtureErrors.push(error.message); });
+            });
+        }
+        if (monitoringLongText || monitoringHistoryFixture) {
+            if (!verifyMonitoringRefinements || applicationLongText || programLongText || dashboardLongText) fail('Use the monitoring fixture only with monitoring refinement checks.');
+            await client.send('Fetch.enable', { patterns: [
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/monitoring/*/data*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/monitoring/data*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/releases/*/data*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/releases/data*`, requestStage: 'Response' },
+            ] });
+            client.on('Fetch.requestPaused', (event) => {
+                (async () => {
+                    const response = await client.send('Fetch.getResponseBody', { requestId: event.requestId });
+                    const payload = JSON.parse(response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body);
+                    const long = 'Browser-only long applicant and program name '+ 'UnbrokenName'.repeat(9);
+                    const note = 'Browser-only monitoring instruction with the full recipient context. '.repeat(16)+'End of note.';
+                    if (monitoringLongText && payload.program) payload.program.title = long;
+                    for (const item of [...(payload.check_ins ?? []), ...(payload.releases ?? []), payload.cycle, payload.release].filter(Boolean)) {
+                        if (monitoringLongText) {
+                            item.title = long;
+                            if (item.program) item.program.title = long;
+                            item.instructions = note;
+                        }
+                        for (const recipient of [...(item.recipients ?? []), ...(item.records ?? [])]) {
+                            if (monitoringLongText) {
+                                recipient.name = long;
+                                recipient.notes = note;
+                                for (const requirement of recipient.requirements ?? []) requirement.description = note;
+                            }
+                            if (monitoringHistoryFixture && recipient.monitoring_case) recipient.monitoring_case.history = Array.from({ length: 12 }, (_, index) => ({
+                                id: `browser-only-${index}`, kind: 'case_decision', title: 'Check-in outcome recorded', detail: 'Completed check-in',
+                                reason: 'Browser-only history event to verify scrolling and focus without changing demo records.',
+                                actor: 'Monitoring officer', occurred_at: 'Oct 28, 2026 09:00 AM', tone: 'emerald',
+                            }));
+                        }
+                    }
+                    if (monitoringLongText) for (const candidate of payload.candidates ?? []) candidate.name = long;
+                    await client.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: event.responseStatusCode,
+                        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(payload)).toString('base64') });
+                })().catch((error) => { fixtureErrors.push(error.message); });
+            });
+        }
+        if (applicationLongText) {
+            if (!verifyApplicationRefinements || programLongText || dashboardLongText || summaryCase || verifyPreparationStates) fail('Use the application fixture only with application refinement checks.');
+            await client.send('Fetch.enable', { patterns: [
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/*/data*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/applications/*/data*`, requestStage: 'Response' },
+            ] });
+            client.on('Fetch.requestPaused', (event) => {
+                (async () => {
+                    const response = await client.send('Fetch.getResponseBody', { requestId: event.requestId });
+                    const payload = JSON.parse(response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body);
+                    const long = 'Browser-only long applicant and scholarship name '+ 'UnbrokenName'.repeat(9);
+                    for (const item of [...(payload.applications ?? []), ...(payload.recipients ?? []), payload.application].filter(Boolean)) {
+                        if (item.applicant) item.applicant.name = long;
+                        if (item.program) item.program.title = long;
+                        if (item.scholarship) item.scholarship.title = long;
+                        for (const document of item.documents ?? []) document.review_notes = 'Browser-only complete review instruction. '.repeat(14)+'End of note.';
+                    }
+                    for (const session of payload.sessions ?? []) { session.title = long; if (session.program) session.program.title = long; }
+                    await client.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: event.responseStatusCode,
+                        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(payload)).toString('base64') });
+                })().catch((error) => { fixtureErrors.push(error.message); });
+            });
+        }
+        if (programLongText) {
+            if (!verifyProgramRefinements || dashboardLongText || summaryCase || verifyPreparationStates) fail('Use the program fixture only with program refinement checks.');
+            await client.send('Fetch.enable', { patterns: [
+                { urlPattern: `${baseUrl.origin}/provider/programs/data*`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/programs/*/data`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/scholarships/*`, requestStage: 'Response' },
+            ] });
+            client.on('Fetch.requestPaused', (event) => {
+                (async () => {
+                    const response = await client.send('Fetch.getResponseBody', { requestId: event.requestId });
+                    const payload = JSON.parse(response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body);
+                    for (const program of [...(payload.programs ?? []), payload.program, payload.scholarship].filter(Boolean)) program.title = 'Browser-only long program name for a multi-campus learning assistance scholarship '+ 'LongUnbrokenProgramName'.repeat(5);
+                    await client.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: event.responseStatusCode,
+                        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(payload)).toString('base64') });
+                })().catch((error) => { fixtureErrors.push(error.message); });
+            });
+        }
+        if (dashboardLongText) {
+            if (!verifyProviderDashboards || summaryCase || verifyPreparationStates) fail('Use the long dashboard fixture only with provider dashboard checks.');
+            await client.send('Fetch.enable', { patterns: [
+                { urlPattern: `${baseUrl.origin}/provider/dashboard/data`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/programs/dashboard/data`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/workspaces/*/dashboard/data`, requestStage: 'Response' },
+            ] });
+            client.on('Fetch.requestPaused', (event) => {
+                (async () => {
+                    const response = await client.send('Fetch.getResponseBody', { requestId: event.requestId });
+                    const payload = JSON.parse(response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body);
+                    const longName = 'Browser-only long scholarship and applicant record name for a multi-campus learning assistance program';
+                    for (const metric of payload.metrics ?? []) metric.label += ' across assigned programs';
+                    for (const section of payload.sections ?? []) {
+                        for (const item of section.items) {
+                            item.title = `${longName} ${'LongUnbrokenName'.repeat(8)}`;
+                            item.subtitle = longName;
+                            item.meta = [...(item.meta ?? []), longName];
+                        }
+                    }
+                    for (const item of [...(payload.scholarships ?? []), ...(payload.priorities ?? []), ...(payload.deadlines ?? []), ...(payload.recent ?? [])]) item.title = `${longName} ${'LongUnbrokenName'.repeat(8)}`;
+                    if (payload.manager_overview) payload.manager_overview.organization_name = longName;
+                    await client.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: event.responseStatusCode,
+                        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Cache-Control', value: 'no-store' }],
+                        body: Buffer.from(JSON.stringify(payload)).toString('base64') });
+                })().catch((error) => { fixtureErrors.push(error.message); });
+            });
+        }
+        if (summaryCase) {
+            if (!['long', 'short'].includes(summaryCase) || verifyPreparationStates) fail('Choose one supported browser-only summary fixture per run.');
+            await client.send('Fetch.enable', { patterns: [
+                { urlPattern: `${baseUrl.origin}/dashboard/overview-data`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/dashboard/providers/*/data`, requestStage: 'Response' },
+                { urlPattern: `${baseUrl.origin}/provider/previews/organization/data`, requestStage: 'Response' },
+            ] });
+            client.on('Fetch.requestPaused', (event) => {
+                (async () => {
+                    const response = await client.send('Fetch.getResponseBody', { requestId: event.requestId });
+                    const payload = JSON.parse(response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body);
+                    const text = summaryCase === 'short' ? 'Tuition support.'
+                        : 'Browser-only summary sample: tuition and transport support, learning materials, mentoring and school participation assistance. '.repeat(12);
+                    if (payload.dashboard?.recommendation) payload.dashboard.recommendation.benefit_summary = text;
+                    for (const program of payload.provider?.programs ?? []) program.benefit_summary = text;
+                    await client.send('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: event.responseStatusCode,
+                        responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Cache-Control', value: 'no-store' }],
+                        body: Buffer.from(JSON.stringify(payload)).toString('base64') });
+                })().catch((error) => { fixtureErrors.push(error.message); });
+            });
+        }
         if (verifyPreparationStates) {
             await client.send('Fetch.enable', { patterns: [
                 { urlPattern: `${baseUrl.origin}/dashboard/scholarships/*/data*`, requestStage: 'Response' },
@@ -372,7 +605,7 @@ async function main() {
         const browserLogs = [];
         const preparationWrites = [];
         client.on('Network.requestWillBeSent', ({ request }) => {
-            if (!verifyPreparationHandoff || ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return;
+            if ((!verifyOpaqueUrls && !verifyPreparationHandoff && !verifyDocumentRefinements && !verifyRecordRefinements && !verifyOverviewRefinements && !verifyProviderSafety && !verifyProviderDashboards && !verifyProgramRefinements && !verifyApplicationRefinements) || ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return;
             const url = new URL(request.url);
             const hostingSecurityCheck = request.method === 'POST' && url.pathname === '/hcdn-cgi/jschallenge-validate';
             if (url.origin === baseUrl.origin && url.pathname !== '/login' && !url.pathname.endsWith('/application-start') && !hostingSecurityCheck) preparationWrites.push(`${request.method} ${url.pathname}`);
@@ -407,6 +640,7 @@ async function main() {
                     || responseUrl.pathname === '/provider/profile/data'
                     || responseUrl.pathname === '/provider/applications/data'
                     || responseUrl.pathname === '/provider/dashboard/data'
+                    || responseUrl.pathname === '/provider/programs/dashboard/data'
                     || responseUrl.pathname === '/admin/dashboard/data'
                     || responseUrl.pathname === '/provider/scholarships')
                 && response.status >= 400) {
@@ -470,6 +704,13 @@ async function main() {
         }
 
         let filePreviewVerified = false;
+        if (process.env.PORTAL_SMOKE_DENIED_URL) {
+            const target = new URL(process.env.PORTAL_SMOKE_DENIED_URL, baseUrl);
+            if (target.origin !== baseUrl.origin) fail('The access-denial check must use this same hosting origin.');
+            const status = await client.evaluate(`fetch(${JSON.stringify(target.href)}, { credentials: 'same-origin', headers: { Accept: 'application/json' } }).then((response) => response.status)`);
+            if (![403, 404].includes(status)) fail(`Another organization's opaque record was not denied: ${status}`);
+            console.log('PASS Another organization cannot access the opaque record reference');
+        }
 
         for (const [workspacePath, heading, loadingText = null, capture = {}] of workspaces) {
             runtimeErrors.length = 0;
@@ -480,7 +721,7 @@ async function main() {
             try {
                 await waitFor(
                     () => client.evaluate(`document.readyState === 'complete'
-                        && location.pathname === ${JSON.stringify(workspaceUrl.pathname)}
+                        && (window.portalPathname?.() ?? location.pathname) === ${JSON.stringify(workspaceUrl.pathname)}
                         && location.search === ${JSON.stringify(workspaceUrl.search)}
                         && document.body.innerText.toLowerCase().includes(${JSON.stringify(heading.toLowerCase())})
                         && (${JSON.stringify(loadingText)} === null
@@ -507,6 +748,25 @@ async function main() {
                 fail(`${heading} did not render: ${JSON.stringify(snapshot)}`);
             }
             await delay(250);
+
+            if (verifyOpaqueUrls && /\/(?:\d+|(?:check-in|academic|release|outcome)-\d+)(?:\/|$)/.test(workspacePath)) {
+                const opaque = await client.evaluate(`({ actual: location.pathname, logical: window.portalPathname?.() })`);
+                if (!/^\/(?:dashboard|provider|admin|documents|service-files)\/r\/[A-Za-z0-9_-]+(?:\/|$)/.test(opaque.actual)
+                    || /\/\d+(?:\/|$)/.test(opaque.actual) || opaque.logical !== workspaceUrl.pathname) {
+                    fail(`Record URL was not safely tokenized: ${JSON.stringify(opaque)}`);
+                }
+                console.log('PASS Opaque record URL resolves to the authorized page');
+                if (capture.opaqueHistoryPath) {
+                    const stepUrl = await client.evaluate(`(() => {
+                        history.pushState({}, '', ${JSON.stringify(capture.opaqueHistoryPath)});
+                        return { url: location.href, actual: location.pathname, logical: window.portalPathname?.() };
+                    })()`);
+                    if (/\/\d+(?:\/|$)/.test(stepUrl.actual) || stepUrl.logical !== capture.opaqueHistoryPath) fail('Wizard history exposed an internal record ID.');
+                    await client.send('Page.navigate', { url: stepUrl.url });
+                    await waitFor(() => client.evaluate(`document.readyState === 'complete' && window.portalPathname?.() === ${JSON.stringify(capture.opaqueHistoryPath)} && Boolean(document.querySelector('h1')) && !document.body.innerText.includes('Loading program builder...')`), 'the opaque wizard step after refresh');
+                    console.log('PASS Wizard history and refresh preserve the opaque record URL');
+                }
+            }
 
             if (verifyPreparationStates) {
                 for (const example of preparationStateCases) {
@@ -778,6 +1038,386 @@ async function main() {
                 console.log(`PASS Scholarship requirements: separated groups, aligned saved-file statuses and read-only questions ${JSON.stringify(requirementsAudit)}`);
             }
 
+            if (verifyDocumentRefinements) {
+                const measureDocuments = () => client.evaluate(`(() => {
+                    const families = [
+                        ['prepared', '[data-library-document-row]'],
+                        ['applications', '[data-library-application-row]'],
+                        ['submitted', '[data-application-file-row]'],
+                    ].map(([key, selector]) => {
+                        const rows = [...document.querySelectorAll(selector)];
+                        const statusCells = rows.map((row) => row.querySelector('[data-document-status]'));
+                        const actionCells = rows.map((row) => row.querySelector('[data-document-actions]'));
+                        const grid = statusCells[0]?.parentElement;
+                        const columns = grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').length : 0;
+                        const header = key === 'submitted' ? document.querySelector('[data-application-file-header]') : null;
+                        if (header?.getBoundingClientRect().width) {
+                            statusCells.push(header.querySelector('[data-document-status]'));
+                            actionCells.push(header.querySelector('[data-document-actions]'));
+                        }
+                        const aligned = (cells) => cells.every((cell) => {
+                            const first = cells[0].getBoundingClientRect();
+                            const rect = cell.getBoundingClientRect();
+                            return Math.abs(rect.left - first.left) <= 1 && Math.abs(rect.width - first.width) <= 1;
+                        });
+                        return { key, rows: rows.length, columns,
+                            aligned: columns <= 1 || (aligned(statusCells) && aligned(actionCells)) };
+                    });
+                    return { families, rows: families.reduce((count, family) => count + family.rows, 0) };
+                })()`);
+                const audit = await measureDocuments();
+                if (!audit.rows || audit.families.some((family) => !family.aligned)) fail(`Document alignment failed: ${JSON.stringify(audit)}`);
+                const library = await client.evaluate("Boolean(document.querySelector('[data-library-document-row]'))");
+                const consentSelector = library ? '#upload-document input[type="checkbox"]' : '#application-files input[type="checkbox"]';
+                if (await client.evaluate(`Boolean(document.querySelector(${JSON.stringify(consentSelector)}))`)) {
+                    const consentState = () => client.evaluate(`(() => {
+                        const controls = ${library ? "[...document.querySelectorAll('[data-library-document-row] input[type=\"file\"]')]" : "[...document.querySelectorAll('[data-application-file-row] [data-document-actions] button')].filter((button) => /^(Upload|Replace|Uploading\\.\\.\\.)$/.test(button.innerText.trim()))"};
+                        const hint = document.getElementById('${library ? 'prepared' : 'application'}-upload-consent');
+                        return { checked: document.querySelector(${JSON.stringify(consentSelector)}).checked,
+                            count: controls.length, enabled: controls.every((control) => !control.disabled),
+                            disabled: controls.every((control) => control.disabled),
+                            hint: hint?.innerText ?? '',
+                            previewsEnabled: [...document.querySelectorAll('[data-document-actions] button')]
+                                .filter((button) => button.innerText.trim() === 'View').every((button) => !button.disabled) };
+                    })()`);
+                    const initial = await consentState();
+                    if (!initial.count || initial.checked || !initial.disabled || !initial.hint.includes('Accept the upload terms') || !initial.previewsEnabled) fail(`Initial upload consent failed: ${JSON.stringify(initial)}`);
+                    await client.evaluate(`document.querySelector(${JSON.stringify(consentSelector)}).click()`);
+                    await waitFor(async () => { const state = await consentState(); return state.checked && state.enabled && state.hint.includes('enabled for this visit'); }, 'upload controls to enable after consent');
+                    await client.evaluate(`document.querySelector(${JSON.stringify(consentSelector)}).click()`);
+                    await waitFor(async () => { const state = await consentState(); return !state.checked && state.disabled && state.previewsEnabled; }, 'uploads to disable again without disabling file previews');
+                }
+                if (library) {
+                    if (!await client.evaluate("document.querySelector('[data-library-saved-count]').innerText.includes('saved') && !document.querySelector('[data-library-saved-count]').innerText.includes(' of ')")) fail('The library still implies a mandatory completion target.');
+                    const pagination = '[data-library-document-row]';
+                    if (await client.evaluate(`Boolean(document.querySelector('${pagination}').closest('section').querySelector('footer button:last-child:not([disabled])'))`)) {
+                        await client.evaluate(`document.querySelector('${pagination}').closest('section').querySelector('footer button:last-child').click()`);
+                        await waitFor(() => client.evaluate(`document.querySelector('${pagination}').closest('section').querySelector('footer').innerText.includes('Page 2 of')`), 'the next common-document page');
+                        const nextPage = await measureDocuments();
+                        if (nextPage.families.some((family) => !family.aligned)) fail(`Paginated document alignment failed: ${JSON.stringify(nextPage)}`);
+                        await client.evaluate(`document.querySelector('${pagination}').closest('section').querySelector('footer button:first-child').click()`);
+                        await waitFor(() => client.evaluate(`document.querySelector('${pagination}').closest('section').querySelector('footer').innerText.includes('Page 1 of')`), 'the original common-document page');
+                    }
+                }
+                if (await client.evaluate("Boolean(document.querySelector('[data-application-file-row] [data-document-actions] button'))")) {
+                    await client.evaluate("(() => { const button = document.querySelector('[data-application-file-row] [data-document-actions] button'); button.dataset.refinementDisplay = button.style.display; button.style.display = 'none'; })()");
+                    const mixedActions = await measureDocuments();
+                    if (mixedActions.families.some((family) => !family.aligned)) fail('Different application-file action counts changed column alignment.');
+                    await client.evaluate("(() => { const button = document.querySelector('[data-refinement-display]'); button.style.display = button.dataset.refinementDisplay; delete button.dataset.refinementDisplay; })()");
+                }
+                if (preparationWrites.length) fail(`The document UI check changed application data: ${preparationWrites.join(', ')}`);
+                console.log(`PASS Document refinements: aligned columns, consent controls and unchanged records ${JSON.stringify(audit)}`);
+            }
+
+            if (verifyRecordRefinements) {
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-applicant-record-tabs] [aria-current=\"page\"]'))"), 'the current record section');
+                await waitFor(() => client.evaluate("(() => { const image = document.querySelector('[data-application-detail-header] figure > img, [data-monitoring-detail-header] figure > img'); return image?.complete && image.naturalWidth > 0; })()"), 'the record header photograph');
+                const measureRecord = () => client.evaluate(`(() => {
+                    const nav = document.querySelector('[data-applicant-record-tabs]');
+                    const viewport = nav.querySelector('[data-record-tab-viewport]');
+                    const active = nav.querySelector('[aria-current="page"]');
+                    const bounds = viewport.getBoundingClientRect();
+                    const target = active.getBoundingClientRect();
+                    const header = document.querySelector('[data-application-detail-header], [data-monitoring-detail-header]');
+                    const application = header.hasAttribute('data-application-detail-header');
+                    const intro = document.querySelector('[data-record-section-intro]');
+                    const selected = !application && ['/check-ins/', '/benefits/', '/history/'].some((part) => location.pathname.includes(part));
+                    return { application, selected, headerHeight: Math.round(header.getBoundingClientRect().height),
+                        imageHeight: Math.round(header.querySelector('figure').getBoundingClientRect().height),
+                        facts: header.querySelectorAll('[data-record-snapshot] dt').length,
+                        links: nav.querySelectorAll('a').length, activeCount: nav.querySelectorAll('[aria-current="page"]').length,
+                        activeVisible: target.left >= bounds.left - 1 && target.right <= bounds.right + 1,
+                        overflow: viewport.scrollWidth > viewport.clientWidth + 1,
+                        cue: Boolean(nav.querySelector('[data-record-tab-cue]')), scrollLeft: viewport.scrollLeft, scrollY: window.scrollY,
+                        intro: Boolean(intro), introAfterTabs: !intro || Boolean(nav.compareDocumentPosition(intro) & Node.DOCUMENT_POSITION_FOLLOWING),
+                        currentHref: active.getAttribute('href'), pathname: location.pathname,
+                        activeIndex: [...nav.querySelectorAll('a')].indexOf(active),
+                        forwardDisabled: nav.querySelector('[data-record-scroll-forward]')?.disabled,
+                        backDisabled: nav.querySelector('[data-record-scroll-back]')?.disabled };
+                })()`);
+                const audit = await measureRecord();
+                if (audit.facts !== (audit.application ? 4 : 3) || audit.links !== (audit.application ? 5 : 4) || audit.activeCount !== 1 || !audit.activeVisible) fail(`Record identity or navigation failed: ${JSON.stringify(audit)}`);
+                if (audit.cue !== audit.overflow || !audit.introAfterTabs || (audit.selected && audit.intro)) fail(`Record hierarchy failed: ${JSON.stringify(audit)}`);
+                if (!audit.application && audit.overflow) fail('The monitoring grid hides a section offscreen.');
+                if (audit.overflow) {
+                    if ((audit.activeIndex === 0 && !audit.backDisabled) || (audit.activeIndex === audit.links - 1 && !audit.forwardDisabled)) fail(`Record tab edge controls failed: ${JSON.stringify(audit)}`);
+                    const direction = audit.backDisabled ? 'forward' : 'back';
+                    await client.evaluate(`document.querySelector('[data-record-scroll-${direction}]').click()`);
+                    await waitFor(async () => Math.abs((await measureRecord()).scrollLeft - audit.scrollLeft) > 10, 'the next group of record tabs');
+                    await delay(350);
+                    const moved = await measureRecord();
+                    if (Math.abs(moved.scrollY - audit.scrollY) > 1 || moved.pathname !== audit.pathname || moved.currentHref !== audit.currentHref) fail('Browsing record tabs moved the page or changed the selected section.');
+                    await client.evaluate(`document.querySelector('[data-record-tab-viewport]').scrollTo({ left: ${audit.scrollLeft}, behavior: 'instant' })`);
+                    await waitFor(async () => (await measureRecord()).activeVisible, 'the original active record tab');
+                }
+                if (preparationWrites.length) fail(`The record UI check changed application data: ${preparationWrites.join(', ')}`);
+                console.log(`PASS Record refinements: compact facts, retained imagery, discoverable sections and unchanged records ${JSON.stringify(audit)}`);
+            }
+
+            if (verifyOverviewRefinements) {
+                await client.evaluate('document.fonts.ready');
+                const measureSummaries = () => client.evaluate(`(() => {
+                    const dashboard = document.querySelector('[data-applicant-dashboard]');
+                    const programs = [...document.querySelectorAll('[data-provider-program]')];
+                    const summaries = [...document.querySelectorAll('[data-applicant-text-summary]')].map((node, index) => {
+                        const text = node.querySelector('[data-summary-text]');
+                        const button = node.querySelector('[data-summary-toggle]');
+                        const style = getComputedStyle(text);
+                        return { index, text: text.textContent, height: text.clientHeight, fullHeight: text.scrollHeight,
+                            lineHeight: parseFloat(style.lineHeight), button: Boolean(button), expanded: button?.getAttribute('aria-expanded'),
+                            controlled: !button || button.getAttribute('aria-controls') === text.id,
+                            nestedLink: Boolean(button?.closest('a')), withinBounds: text.getBoundingClientRect().right <= node.getBoundingClientRect().right + 1 };
+                    });
+                    return { dashboard: Boolean(dashboard), programs: programs.length, summaries,
+                        numbers: dashboard?.querySelectorAll('[data-dashboard-summary-value]').length,
+                        rightAligned: !dashboard || [...dashboard.querySelectorAll('[data-dashboard-summary-value]')].every((node) => getComputedStyle(node).textAlign === 'right'),
+                        overlappingCounters: dashboard ? [...dashboard.querySelectorAll('[data-dashboard-summary-value]')].some((node) => {
+                            const range = document.createRange();
+                            range.selectNodeContents(node.closest('a').querySelector('[data-dashboard-summary-label]'));
+                            const label = range.getBoundingClientRect();
+                            const value = node.getBoundingClientRect();
+                            return Math.min(label.right, value.right) - Math.max(label.left, value.left) > 1 && Math.min(label.bottom, value.bottom) - Math.max(label.top, value.top) > 1;
+                        }) : false,
+                        preview: Boolean(document.querySelector('[data-provider-detail-hero]')) && location.pathname.startsWith('/provider/'),
+                        previewSafe: !location.pathname.startsWith('/provider/') || [...document.querySelectorAll('[data-provider-program] a')].every((node) => node.getAttribute('aria-disabled') === 'true') };
+                })()`);
+                await delay(150);
+                const audit = await measureSummaries();
+                if ((!audit.dashboard && !audit.programs) || (audit.dashboard && (audit.numbers !== 4 || !audit.rightAligned || audit.overlappingCounters)) || !audit.previewSafe) fail(`Overview structure failed: ${JSON.stringify(audit)}`);
+                if (summaryCase && !audit.summaries.length) fail('The summary fixture did not reach a visible benefit summary.');
+                for (const summary of audit.summaries) {
+                    const overflows = summary.fullHeight > summary.height + 1;
+                    if (!summary.controlled || summary.nestedLink || !summary.withinBounds || summary.height > summary.lineHeight * 2 + 1 || summary.button !== overflows) fail(`Benefit summary layout failed: ${JSON.stringify(summary)}`);
+                    if ((summaryCase === 'long' && !summary.button) || (summaryCase === 'short' && summary.button)) fail(`The ${summaryCase} summary fixture did not produce the expected disclosure.`);
+                    if (!summary.button) continue;
+                    const urlBefore = await client.evaluate('location.href');
+                    await client.evaluate(`document.querySelectorAll('[data-applicant-text-summary]')[${summary.index}].querySelector('[data-summary-toggle]').click()`);
+                    await waitFor(async () => (await measureSummaries()).summaries[summary.index].expanded === 'true', 'the full benefit summary');
+                    const expanded = (await measureSummaries()).summaries[summary.index];
+                    if (expanded.text !== summary.text || expanded.height <= summary.height || expanded.height < expanded.fullHeight - 1 || await client.evaluate('location.href') !== urlBefore) fail('Expanding benefits lost text, clipped it or navigated away.');
+                    await client.evaluate(`document.querySelectorAll('[data-applicant-text-summary]')[${summary.index}].querySelector('[data-summary-toggle]').click()`);
+                    await waitFor(async () => (await measureSummaries()).summaries[summary.index].expanded === 'false', 'the compact benefit summary');
+                }
+                if (preparationWrites.length || fixtureErrors.length) fail(`Overview check changed records or failed a fixture: ${JSON.stringify({ preparationWrites, fixtureErrors })}`);
+                console.log(`PASS Overview refinements: optional disclosures, preserved links, right-aligned counts and unchanged records ${JSON.stringify({ dashboard: audit.dashboard, programs: audit.programs, summaries: audit.summaries.length, expanded: audit.summaries.filter((item) => item.button).length, preview: audit.preview, fixture: summaryCase ?? 'real data' })}`);
+            }
+
+            if (verifyProviderSafety) {
+                const programForm = await client.evaluate("Boolean(document.querySelector('#program-builder-title'))");
+                if (programForm) {
+                    if (typeof capture.expectDraftDelete !== 'boolean') fail('The program safety check requires an explicit expected draft state.');
+                    await waitFor(() => client.evaluate("!document.body.innerText.includes('Loading program builder...')"), 'the loaded program state');
+                    const deletion = await client.evaluate(`(() => {
+                        const button = [...document.querySelectorAll('button')].find((node) => node.innerText.trim() === 'Delete draft');
+                        return { visible: Boolean(button), enabled: button ? !button.disabled : false };
+                    })()`);
+                    if (deletion.visible !== capture.expectDraftDelete || (deletion.visible && !deletion.enabled)) fail(`Draft deletion state failed: ${JSON.stringify(deletion)}`);
+                    console.log(`PASS Program safety: Delete draft ${deletion.visible ? 'available for the saved draft' : 'hidden for this program state'}`);
+                } else if (workspaceUrl.pathname.startsWith('/provider/workspaces/support/')) {
+                    const error = await client.evaluate("document.querySelector('.student-page [role=\"alert\"]')?.innerText ?? ''");
+                    if (error) fail(`The support workspace still reports an error: ${error}`);
+                    console.log('PASS Support safety: the loaded case or queue is readable');
+                } else {
+                    fail('The provider safety check was used on an unsupported page.');
+                }
+                if (preparationWrites.length) fail(`Read-only provider verification changed records: ${preparationWrites.join(', ')}`);
+            }
+
+            if (verifyApplicationRefinements) {
+                const refinementSelector = capture.refinementRoot || operationalRefinementSelector;
+                await waitFor(() => client.evaluate(`Boolean(document.querySelector('${refinementSelector} h1')) && !/(Loading |Checking recipient eligibility|Checking profile readiness)/.test(document.querySelector('${refinementSelector}').innerText)`), 'the loaded operational workspace');
+                if (verifyServiceRefinements && capture.supportResponse) {
+                    await client.evaluate(`(() => {
+                        const input = document.querySelector('#provider-response');
+                        if (!input) throw new Error('The applicant concern response form was not found.');
+                        input.value = 'Browser-only response draft for opening the confirmation. This will not be sent.';
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                    })()`);
+                }
+                if (verifySettingsRefinements && capture.teamStep > 1) {
+                    await client.evaluate(`(() => {
+                        const label = [...document.querySelectorAll('.provider-settings-workspace label')].find((node) => node.querySelector('span')?.innerText.trim() === 'Middle initial');
+                        const input = label?.querySelector('input');
+                        if (input && !input.value) {
+                            input.value = 'D';
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    })()`);
+                    for (let step = 1; step < capture.teamStep; step++) {
+                        await client.evaluate(`(() => {
+                            const button = [...document.querySelectorAll('.provider-settings-workspace footer button')].find((node) => node.innerText.trim() === 'Continue');
+                            if (!button) throw new Error('The team form continuation action was not found.');
+                            button.click();
+                        })()`);
+                        await waitFor(() => client.evaluate(`document.querySelector('.provider-settings-workspace nav [aria-current="step"]')?.innerText.trim().startsWith('${step + 1}')`), `team form step ${step + 1}`);
+                    }
+                }
+                if (capture.activateSection) {
+                    await client.evaluate(`(() => {
+                        const button = [...document.querySelectorAll('${refinementSelector} nav button')].find((node) => node.innerText.trim().startsWith(${JSON.stringify(capture.activateSection)}));
+                        if (!button) throw new Error('The requested read-only record section was not found.');
+                        button.click();
+                    })()`);
+                    await delay(100);
+                }
+                if (verifyMonitoringRefinements && capture.selectRecipient) {
+                    await client.evaluate(`(() => {
+                        const button = [...document.querySelectorAll('.monitoring-recipient-picker button')].find((node) => node.innerText.includes(${JSON.stringify(capture.selectRecipient)}));
+                        if (!button) throw new Error('The requested demo recipient was not found.');
+                        button.click();
+                    })()`);
+                }
+                await client.evaluate('document.fonts.ready');
+                if (verifyServiceRefinements || capture.refinementRoot) {
+                    await waitFor(() => client.evaluate(`(() => {
+                        const icon = document.querySelector('${refinementSelector} i.fa-solid');
+                        return !icon || !['none', 'normal', '""'].includes(getComputedStyle(icon, '::before').content);
+                    })()`), 'the icon stylesheet before visual verification');
+                    await client.evaluate('document.fonts.ready');
+                }
+                const audit = await client.evaluate(`(() => {
+                    const root = document.querySelector('${refinementSelector}');
+                    const visible = (node) => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0;
+                    const controls = [...root.querySelectorAll('td a.inline-flex, td a.inline-grid, td a.grid, td button, td select')].filter(visible);
+                    return {
+                        error: root.querySelector('[role="alert"]')?.innerText ?? '',
+                        clipped: [...root.querySelectorAll('.application-text, .application-page-title, .monitoring-text, .monitoring-page-title, .settings-text, .settings-page-title, .service-text, .service-page-title, .program-text, .program-page-title')].filter((node) => node.clientWidth > 0 && (node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1)).map((node) => node.innerText),
+                        smallLabels: [...root.querySelectorAll('.uppercase')].filter((node) => visible(node) && parseFloat(getComputedStyle(node).fontSize) < 12).map((node) => node.innerText),
+                        outsideActions: controls.filter((node) => { const box = node.getBoundingClientRect(); const td = node.closest('td').getBoundingClientRect(); return box.left < td.left - 1 || box.right > td.right + 1; }).map((node) => node.innerText),
+                        shortControls: controls.filter((node) => node.getBoundingClientRect().height < 39).map((node) => node.innerText),
+                        tableOverflow: [...root.querySelectorAll('.staff-table-viewport')].filter((node) => node.clientWidth >= 896 && node.scrollWidth > node.clientWidth + 1).length,
+                        photos: [...root.querySelectorAll('td img')].length,
+                        longText: root.innerText.includes('Browser-only long applicant'),
+                        unboundedNotes: [...root.querySelectorAll('[data-workspace-text-summary] details:not([open]) summary > .line-clamp-2')].filter((node) => node.clientHeight > parseFloat(getComputedStyle(node).lineHeight) * 2 + 1).length,
+                        pageOverflow: ${Boolean(capture.refinementRoot) || verifyMonitoringRefinements || verifySettingsRefinements || verifyServiceRefinements} && document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+                        misalignedIcons: ${verifySettingsRefinements || verifyServiceRefinements} ? [...root.querySelectorAll('.flex.items-center:has(> span.grid > i):has(> div)')].filter((node) => {
+                            const icon = node.querySelector(':scope > span.grid').getBoundingClientRect();
+                            const text = node.querySelector(':scope > div').getBoundingClientRect();
+                            return icon.width > 0 && text.width > 0 && Math.abs((icon.top + icon.bottom - text.top - text.bottom) / 2) > 2;
+                        }).map((node) => node.innerText) : [],
+                    };
+                })()`);
+                if (audit.error || audit.clipped.length || audit.smallLabels.length || audit.outsideActions.length || audit.shortControls.length || audit.tableOverflow || audit.unboundedNotes || audit.pageOverflow || audit.misalignedIcons.length || ((applicationLongText || monitoringLongText || settingsLongText || serviceLongText) && !audit.longText)) fail(`Operational workspace refinement failed: ${JSON.stringify(audit)}`);
+                if (applicationLongText || monitoringLongText || settingsLongText || serviceLongText) {
+                    const note = await client.evaluate(`(() => {
+                        const details = document.querySelector('[data-workspace-text-summary] details');
+                        if (!details) return null;
+                        details.querySelector('summary').click();
+                        const visible = details.open && details.innerText.includes('End of note.');
+                        details.querySelector('summary').click(); return visible;
+                    })()`);
+                    if (note === false) fail('A long review note could not be expanded in full.');
+                }
+                if (preparationWrites.length || fixtureErrors.length) fail(`Read-only application verification changed records or failed a fixture: ${JSON.stringify({ preparationWrites, fixtureErrors })}`);
+                console.log(`PASS ${verifyServiceRefinements ? 'Services' : verifySettingsRefinements ? 'Settings' : verifyMonitoringRefinements ? 'Monitoring' : 'Application'} refinements: readable records, statuses and contained table actions ${JSON.stringify(audit)}`);
+            }
+
+            if (verifyProgramRefinements) {
+                await waitFor(() => client.evaluate(`Boolean(document.querySelector('.provider-program-workspace h1')) && !document.body.innerText.includes('Loading program builder...') && !document.body.innerText.includes('Loading programs...')`), 'the loaded program workspace');
+                await client.evaluate('document.fonts.ready');
+                const audit = await client.evaluate(`(() => {
+                    const root = document.querySelector('.provider-program-workspace');
+                    const clipped = (node) => node.clientWidth > 0 && (node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1);
+                    const actions = [...root.querySelectorAll('.program-action')];
+                    const steps = [...root.querySelectorAll('.program-builder-step')];
+                    const fieldset = root.querySelector('.program-builder-form > fieldset');
+                    return { error: root.querySelector('[role="alert"]')?.innerText ?? '', smallLabels: [...root.querySelectorAll('.program-label, .program-status')].filter((node) => parseFloat(getComputedStyle(node).fontSize) < 12).map((node) => node.innerText),
+                        clipped: [...root.querySelectorAll('.program-text, .program-page-title')].filter(clipped).map((node) => node.innerText),
+                        smallActions: actions.filter((node) => node.getBoundingClientRect().height < 39).map((node) => node.innerText),
+                        outsideActions: actions.filter((node) => { const box = node.getBoundingClientRect(); const parent = (node.closest('td') ?? root).getBoundingClientRect(); return box.left < parent.left - 1 || box.right > parent.right + 1; }).map((node) => node.innerText),
+                        steps: steps.length, activeSteps: steps.filter((node) => node.getAttribute('aria-current') === 'step').length,
+                        readOnly: fieldset ? fieldset.disabled : null,
+                        deleteVisible: [...root.querySelectorAll('button')].some((node) => node.innerText.trim() === 'Delete draft'),
+                        longText: root.innerText.includes('Browser-only long program name'),
+                        table: root.querySelector('.program-directory-table') ? { width: root.querySelector('.program-directory-table').getBoundingClientRect().width, viewport: root.querySelector('.staff-table-viewport').clientWidth, scroll: root.querySelector('.staff-table-viewport').scrollWidth } : null,
+                    };
+                })()`);
+                if (audit.error || audit.smallLabels.length || audit.clipped.length || audit.smallActions.length || audit.outsideActions.length || (audit.table && audit.table.viewport >= 896 && audit.table.scroll > audit.table.viewport + 1) || (audit.steps && (audit.steps !== 7 || audit.activeSteps !== 1)) || (typeof capture.expectReadOnly === 'boolean' && audit.readOnly !== capture.expectReadOnly) || (typeof capture.expectDraftDelete === 'boolean' && audit.deleteVisible !== capture.expectDraftDelete) || (programLongText && !audit.longText)) fail(`Program refinement failed: ${JSON.stringify(audit)}`);
+                if (capture.benefitModal) {
+                    await client.evaluate(`(() => {
+                        window.__benefitOpener = [...document.querySelectorAll('.program-builder-form button')].find((node) => node.innerText.trim() === 'Edit');
+                        if (!window.__benefitOpener) throw new Error('No saved benefit is available for the read-only modal check.');
+                        window.__benefitOpener.focus({ preventScroll: true }); window.__benefitOpener.click();
+                    })()`);
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('.program-benefit-dialog'))"), 'the benefit editor');
+                    const modal = await client.evaluate(`(() => {
+                        const panel = document.querySelector('.program-benefit-dialog');
+                        const footer = panel.querySelector('footer'); const scroll = panel.querySelector('.program-benefit-scroll');
+                        window.__benefitOriginalTitle = panel.querySelector('input[type="text"]').value;
+                        const top = footer.getBoundingClientRect().top; scroll.scrollTop = scroll.scrollHeight;
+                        return { locked: document.documentElement.style.overflowY === 'hidden', focused: panel.contains(document.activeElement), footerVisible: footer.getBoundingClientRect().bottom <= innerHeight - 20, stableFooter: Math.abs(top - footer.getBoundingClientRect().top) < 1, scroller: getComputedStyle(scroll).overflowY === 'auto' };
+                    })()`);
+                    if (Object.values(modal).some((value) => !value)) fail(`Benefit modal layout failed: ${JSON.stringify(modal)}`);
+                    await client.evaluate("document.querySelector('.program-benefit-dialog button[type=submit]').focus()");
+                    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+                    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
+                    if (!await client.evaluate("document.activeElement?.getAttribute('aria-label') === 'Close benefit form'")) fail('Tab escaped the benefit modal.');
+                    if (capture.benefitPath) {
+                        await delay(500);
+                        const shot = await client.send('Page.captureScreenshot', { format: 'png' });
+                        await writeFile(path.resolve(capture.benefitPath), Buffer.from(shot.data, 'base64'));
+                    }
+                    await client.evaluate(`(() => { const input = document.querySelector('.program-benefit-dialog input[type="text"]'); input.value = 'Discard this browser-only change'; input.dispatchEvent(new Event('input', { bubbles: true })); [...document.querySelectorAll('.program-benefit-dialog button')].find((node) => node.innerText.trim() === 'Cancel').click(); })()`);
+                    await waitFor(() => client.evaluate("!document.querySelector('.program-benefit-dialog') && document.documentElement.style.overflowY === ''"), 'the benefit editor to release its viewport lock');
+                    if (!await client.evaluate('document.activeElement === window.__benefitOpener')) fail('Benefit cancellation did not restore focus.');
+                    await client.evaluate('window.__benefitOpener.click()');
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('.program-benefit-dialog'))"), 'the unchanged benefit draft');
+                    if (!await client.evaluate("document.querySelector('.program-benefit-dialog input[type=text]').value === window.__benefitOriginalTitle")) fail('Cancel changed the saved benefit.');
+                    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+                    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+                    await waitFor(() => client.evaluate("!document.querySelector('.program-benefit-dialog') && document.documentElement.style.overflowY === ''"), 'Escape to dismiss the benefit editor');
+                    console.log('PASS Benefit modal: pinned footer, focus trap, Cancel discards changes, Escape and focus restoration');
+                }
+                if (preparationWrites.length || fixtureErrors.length) fail(`Program refinement check changed records or failed a fixture: ${JSON.stringify({ preparationWrites, fixtureErrors })}`);
+                console.log(`PASS Program refinements: readable names, statuses, builder steps and contained actions ${JSON.stringify(audit)}`);
+            }
+
+            if (verifyProviderDashboards) {
+                await waitFor(() => client.evaluate(`Boolean(document.querySelector('.provider-dashboard .workspace-metric-strip li'))
+                    && !document.querySelector('.provider-dashboard [role="alert"]')
+                    && !document.body.innerText.includes('Loading dashboard summary...')`), 'the loaded provider dashboard');
+                await waitFor(() => client.evaluate(`(() => {
+                    const icon = document.querySelector('.provider-dashboard .workspace-dashboard-icon > i');
+                    const content = icon && getComputedStyle(icon, '::before').content;
+                    return content && content !== 'none' && content !== 'normal';
+                })()`), 'the dashboard icon stylesheet');
+                await client.evaluate('document.fonts.load(\'900 14px "Font Awesome 6 Free"\', "\\uf19d\\uf0f3")');
+                await client.evaluate('document.fonts.ready');
+                await client.evaluate('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+                const dashboardAudit = await client.evaluate(`(() => {
+                    const root = document.querySelector('.provider-dashboard');
+                    const rect = root.getBoundingClientRect();
+                    const labels = [...root.querySelectorAll('.workspace-dashboard-label, .workspace-dashboard-status')];
+                    const actions = [...root.querySelectorAll('.workspace-dashboard-action')];
+                    const texts = [...root.querySelectorAll('.workspace-dashboard-text')];
+                    const iconOffsets = [...root.querySelectorAll('.workspace-dashboard-heading')].map((heading) => {
+                        const icon = heading.querySelector('.workspace-dashboard-icon')?.getBoundingClientRect();
+                        const box = heading.getBoundingClientRect();
+                        return icon ? Math.abs(icon.top + icon.height / 2 - (box.top + box.height / 2)) : 0;
+                    });
+                    const clipped = (node) => node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1;
+                    return {
+                        labels: labels.length, smallLabels: labels.filter((node) => parseFloat(getComputedStyle(node).fontSize) < 12).map((node) => node.innerText),
+                        clippedText: texts.filter(clipped).map((node) => node.innerText),
+                        smallActions: actions.filter((node) => node.getBoundingClientRect().height < 39).map((node) => node.innerText),
+                        outsideActions: actions.filter((node) => { const box = node.getBoundingClientRect(); return box.left < rect.left - 1 || box.right > rect.right + 1; }).map((node) => node.innerText),
+                        badIconAlignment: iconOffsets.some((offset) => offset > 1),
+                        longTextPresent: root.innerText.includes('Browser-only long scholarship'),
+                        sections: root.querySelectorAll('h2').length,
+                        metrics: root.querySelectorAll('.workspace-metric-strip li').length,
+                        iconsLoaded: document.fonts.check('900 14px "Font Awesome 6 Free"', '\\uf19d\\uf0f3'),
+                        iconSamples: [...root.querySelectorAll('.workspace-dashboard-icon > i, .workspace-metric-content i')].slice(0, 5).map((node) => ({
+                            classes: node.className, content: getComputedStyle(node, '::before').content,
+                            font: getComputedStyle(node).fontFamily, weight: getComputedStyle(node).fontWeight,
+                            color: getComputedStyle(node).color, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height,
+                        })),
+                    };
+                })()`);
+                if (dashboardAudit.metrics !== 4 || !dashboardAudit.labels || !dashboardAudit.iconsLoaded || dashboardAudit.smallLabels.length || dashboardAudit.clippedText.length || dashboardAudit.smallActions.length || dashboardAudit.outsideActions.length || dashboardAudit.badIconAlignment || (dashboardLongText && !dashboardAudit.longTextPresent)) fail(`Provider dashboard refinement failed: ${JSON.stringify(dashboardAudit)}`);
+                if (preparationWrites.length || fixtureErrors.length) fail(`Dashboard check changed records or failed a fixture: ${JSON.stringify({ preparationWrites, fixtureErrors })}`);
+                console.log(`PASS Provider dashboard: readable labels, complete record names, centered icons and contained actions ${JSON.stringify(dashboardAudit)}`);
+            }
+
             const visualAudit = await client.evaluate(`(() => {
                 const visible = (element) => {
                     const style = getComputedStyle(element);
@@ -833,11 +1473,41 @@ async function main() {
                     }))
                     .filter((navigation) => navigation.active > 1);
 
+                const presentation = ${verifyApplicantPresentation} ? (() => {
+                    const elements = (selector) => [...document.querySelectorAll(selector)].filter((node) => visible(node)
+                        && node.getBoundingClientRect().width > 1 && node.getBoundingClientRect().height > 1);
+                    const labels = elements('.student-detail-label');
+                    const badges = elements('.student-badge');
+                    const buttons = elements('.student-button');
+                    const issues = [];
+                    for (const node of [...labels, ...badges, ...buttons]) {
+                        const style = getComputedStyle(node);
+                        const label = node.innerText.trim().slice(0, 70) || node.getAttribute('aria-label') || node.tagName;
+                        if (parseFloat(style.fontSize) < 12) issues.push('Small text: ' + label);
+                        if (!node.disabled && node.getAttribute('aria-disabled') !== 'true' && !node.classList.contains('student-button-on-dark')
+                            && contrast(parseColor(style.color), backgroundFor(node)) < 4.5) issues.push('Faint text: ' + label);
+                        if (node.matches('.student-button, .student-badge') && parseFloat(style.borderTopLeftRadius) > 4.1) issues.push('Inconsistent corners: ' + label);
+                        if (node.matches('.student-button')) {
+                            const minimum = node.classList.contains('student-button-compact') ? 40 : 44;
+                            if (node.getBoundingClientRect().height < minimum - 1) issues.push('Short button: ' + label);
+                            const icon = node.querySelector(':scope > i');
+                            if (icon) {
+                                const iconBounds = icon.getBoundingClientRect();
+                                const buttonBounds = node.getBoundingClientRect();
+                                if (Math.abs((iconBounds.top + iconBounds.height / 2) - (buttonBounds.top + buttonBounds.height / 2)) > 1.5) issues.push('Uncentered icon: ' + label);
+                            }
+                        }
+                        if (node.matches('.student-badge') && node.getBoundingClientRect().height < 27) issues.push('Short badge: ' + label);
+                    }
+                    return { labels: labels.length, badges: badges.length, buttons: buttons.length, issues };
+                })() : null;
+
                 return {
                     horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
                     objectLeak: document.body.innerText.includes('[object Object]'),
                     lowContrastControls,
                     duplicateActiveNavigations,
+                    presentation,
                 };
             })()`);
 
@@ -853,8 +1523,13 @@ async function main() {
             if (visualAudit.duplicateActiveNavigations.length) {
                 fail(`${heading} has conflicting active navigation items.`);
             }
+            if (verifyApplicantPresentation) {
+                const audit = visualAudit.presentation;
+                if (!audit || !(audit.labels + audit.badges + audit.buttons) || audit.issues.length) fail(`Applicant presentation check failed: ${JSON.stringify(audit)}`);
+                console.log(`PASS Applicant presentation: readable labels, consistent badges/buttons and centered icons ${JSON.stringify(audit)}`);
+            }
 
-            for (const check of modalChecks.filter((check) => !check.path || check.path === workspacePath)) {
+            for (const check of modalChecks.filter((check) => (!check.path || check.path === workspacePath) && (!check.recipient || check.recipient === capture.selectRecipient))) {
                 const opener = check.openSelector
                     ? `document.querySelector(${JSON.stringify(check.openSelector)})`
                     : `[...document.querySelectorAll('button')].find((button) => button.innerText.trim() === ${JSON.stringify(check.openText)})`;
@@ -876,17 +1551,32 @@ async function main() {
                 })()`);
                 await delay(200);
                 const before = await client.evaluate('window.__portalModalBackground()');
+                if (verifyApplicationRefinements) await client.evaluate(`(${opener}).focus({ preventScroll: true })`);
                 await client.evaluate(`(${opener}).click()`);
                 await waitFor(() => client.evaluate(`Boolean(document.querySelector(${JSON.stringify(check.dialogSelector)}))`), check.label);
                 await delay(300);
                 const during = await client.evaluate('window.__portalModalBackground()');
+                if (check.checkFooter) {
+                    await waitFor(() => client.evaluate(`Boolean(document.querySelector(${JSON.stringify(check.dialogSelector)})?.querySelector('footer'))`), 'the loaded application modal footer');
+                    const modal = await client.evaluate(`(() => {
+                        const panel = document.querySelector(${JSON.stringify(check.dialogSelector)});
+                        const footer = panel.querySelector('footer');
+                        const body = panel.querySelector('.application-dialog-body, .monitoring-dialog-body, .settings-dialog-body');
+                        const top = footer.getBoundingClientRect().top;
+                        if (body) body.scrollTop = body.scrollHeight;
+                        return { visible: footer.getBoundingClientRect().bottom <= innerHeight - 20, fixed: Math.abs(top - footer.getBoundingClientRect().top) <= 1, focused: panel.contains(document.activeElement) };
+                    })()`);
+                    if (Object.values(modal).some((value) => !value)) fail(`Application modal footer or focus failed: ${JSON.stringify(modal)}`);
+                }
                 if (!stableModalBackground(before, during)) fail(`${check.label} shifts its background: ${JSON.stringify({ before, during })}`);
                 if (!await client.evaluate("document.documentElement.style.overflowY === 'hidden' && !document.body.style.overflow && !document.body.classList.contains('overflow-hidden')")) fail(`${check.label} does not use the shared viewport lock.`);
-                await client.evaluate(`document.querySelector(${JSON.stringify(check.closeSelector)}).click()`);
+                if (check.closeWithEscape) await client.evaluate(`document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`);
+                else await client.evaluate(`document.querySelector(${JSON.stringify(check.closeSelector)}).click()`);
                 await waitFor(() => client.evaluate(`!document.querySelector(${JSON.stringify(check.dialogSelector)}) && document.documentElement.style.overflowY === ''`), `${check.label} to close and release its lock`);
                 await delay(200);
                 const after = await client.evaluate('window.__portalModalBackground()');
                 if (!stableModalBackground(before, after)) fail(`${check.label} changes its page on close: ${JSON.stringify({ before, after })}`);
+                if ((verifyMonitoringRefinements || verifySettingsRefinements || verifyServiceRefinements) && !await client.evaluate(`document.activeElement === (${opener})`)) fail(`${check.label} did not restore focus to its opener.`);
                 if (runtimeErrors.length) fail(`${check.label} raised a browser exception: ${runtimeErrors.join(', ')}`);
                 console.log(`PASS ${check.label}: stable background and scroll position on open and close`);
             }
@@ -922,6 +1612,7 @@ async function main() {
                 await client.evaluate('document.fonts.ready');
                 await waitFor(() => client.evaluate("[...document.images].filter((node) => node.getBoundingClientRect().width > 0).every((node) => node.complete)"), 'page images before capture');
                 await client.evaluate('document.activeElement?.blur(); window.scrollTo(0, 0)');
+                if (verifyProviderDashboards || verifyProgramRefinements || verifyApplicationRefinements) await delay(500);
                 const selector = capture.selector || screenshotSelector;
                 const clip = selector ? await client.evaluate(`(() => {
                     const element = document.querySelector(${JSON.stringify(selector)});
@@ -943,14 +1634,20 @@ async function main() {
                 if (!previewHostReady) {
                     fail('The global staff file preview host was not mounted.');
                 }
-                await client.evaluate(`(() => {
-                    const link = document.createElement('a');
-                    link.href = '/favicon.ico';
-                    link.dataset.filePreview = 'true';
-                    link.dataset.fileName = 'Test image';
-                    link.textContent = 'Open test image';
-                    document.body.appendChild(link);
+                const expectedPreviewTitle = await client.evaluate(`(() => {
+                    let link = ${capture.filePreviewSelector ? `document.querySelector(${JSON.stringify(capture.filePreviewSelector)})` : 'null'};
+                    if (${Boolean(capture.filePreviewSelector)} && !link) throw new Error('The requested service file was not found.');
+                    if (!link) {
+                        link = document.createElement('a');
+                        link.href = '/favicon.ico';
+                        link.dataset.filePreview = 'true';
+                        link.dataset.fileName = 'Test image';
+                        link.textContent = 'Open test image';
+                        document.body.appendChild(link);
+                    }
+                    link.focus({ preventScroll: true });
                     link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 }));
+                    return link.dataset.fileName;
                 })()`);
                 try {
                     await waitFor(
@@ -960,7 +1657,7 @@ async function main() {
                 } catch (error) {
                     const previewSnapshot = await client.evaluate(`({
                         hostHtml: document.querySelector('#staff-file-preview-host')?.innerHTML,
-                        bodyLocked: document.body.classList.contains('overflow-hidden'),
+                        viewportLocked: document.documentElement.style.overflowY === 'hidden' && !document.body.classList.contains('overflow-hidden'),
                     })`);
                     fail(`${error.message}: ${JSON.stringify({ previewSnapshot, runtimeErrors, browserLogs })}`);
                 }
@@ -968,19 +1665,20 @@ async function main() {
                 const previewAudit = await client.evaluate(`({
                     location: location.href,
                     title: document.querySelector('#staff-file-preview-title')?.textContent?.trim(),
-                    bodyLocked: document.body.classList.contains('overflow-hidden'),
+                    viewportLocked: document.documentElement.style.overflowY === 'hidden' && !document.body.classList.contains('overflow-hidden'),
                 })`);
 
                 if (previewAudit.location !== locationBeforePreview) {
                     fail('Opening a staff file preview changed the workspace URL.');
                 }
-                if (previewAudit.title !== 'Test image' || !previewAudit.bodyLocked) {
+                if (previewAudit.title !== expectedPreviewTitle || !previewAudit.viewportLocked) {
                     fail(`The staff file preview did not initialize correctly: ${JSON.stringify(previewAudit)}`);
                 }
+                if (capture.filePreviewSelector) await waitFor(() => client.evaluate("Boolean(document.querySelector('[aria-labelledby=\"staff-file-preview-title\"] iframe'))"), 'the service PDF inside its preview');
 
                 await client.evaluate("document.querySelector('[aria-label=\"Close file preview\"]')?.click()");
                 await waitFor(
-                    () => client.evaluate("!document.querySelector('[role=\"dialog\"][aria-labelledby=\"staff-file-preview-title\"]')"),
+                    () => client.evaluate("!document.querySelector('[role=\"dialog\"][aria-labelledby=\"staff-file-preview-title\"]') && document.documentElement.style.overflowY === ''"),
                     'the staff file preview modal to close',
                 );
                 filePreviewVerified = true;
@@ -1103,6 +1801,7 @@ async function main() {
                 console.log('PASS Map pin selection and clearing without saving');
             }
 
+            if (verifyOpaqueUrls && preparationWrites.length) fail(`Opaque URL verification changed records: ${preparationWrites.join(', ')}`);
             console.log(`PASS ${heading}`);
         }
     } finally {

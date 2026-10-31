@@ -14,8 +14,8 @@ import { showPortalToast } from '../support/portalToast';
 
 const appElement = document.getElementById('app');
 const applicantId = appElement?.dataset.applicantId;
-const usesReviewOfficerWorkspace = window.location.pathname.startsWith('/admin/workspaces/reviews');
-const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const usesReviewOfficerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/reviews');
+const usesPortalManagerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/portal');
 const reviewQueueUrl = usesPortalManagerWorkspace
     ? '/admin/workspaces/portal/reviews?type=applicants'
     : (usesReviewOfficerWorkspace ? '/admin/workspaces/reviews?type=applicants' : '/admin/reviews?type=applicants');

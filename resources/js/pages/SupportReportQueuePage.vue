@@ -5,7 +5,7 @@ import FilePreviewModal from '../components/FilePreviewModal.vue';
 import ProviderSidebar from '../components/ProviderSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
-const isAdmin = window.location.pathname.startsWith('/admin');
+const isAdmin = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin');
 const Sidebar = isAdmin ? AdminSidebar : ProviderSidebar;
 const basePath = isAdmin ? '/admin/reports' : '/provider/reports';
 const isLoading = ref(true);

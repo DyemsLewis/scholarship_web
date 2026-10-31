@@ -1,7 +1,8 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
+import { useModalAccessibility } from '../composables/useModalAccessibility';
 
-defineProps({
+const props = defineProps({
     open: { type: Boolean, default: false },
     title: { type: String, default: 'Choose a background' },
     description: { type: String, default: 'Choose a system image or upload your own.' },
@@ -10,38 +11,52 @@ defineProps({
     selectedKey: { type: String, default: '' },
     providerCoverUrl: { type: String, default: '' },
     busy: { type: Boolean, default: false },
+    error: { type: String, default: '' },
 });
 
 const emit = defineEmits(['close', 'select-system', 'select-provider', 'upload', 'reset']);
 const uploadInput = ref(null);
+const dialogPanel = ref(null);
+const { handleKeydown } = useModalAccessibility(() => props.open, dialogPanel, close);
+
+function close() {
+    if (!props.busy) emit('close');
+}
+
+watch(() => props.error, (message) => {
+    const body = dialogPanel.value?.querySelector('.settings-dialog-body');
+    if (message && body) body.scrollTop = 0;
+}, { flush: 'post' });
 
 function chooseUpload(event) {
     const file = event.target.files?.[0];
-    if (file) emit('upload', file);
+    if (file && !props.busy) emit('upload', file);
     event.target.value = '';
 }
 </script>
 
 <template>
     <Teleport to="body">
-        <div v-if="open" class="fixed inset-0 z-[180] flex items-center justify-center bg-slate-950/65 p-4" role="presentation" @click.self="emit('close')">
-            <section class="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden border border-slate-300 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="cover-picker-title">
+        <div v-if="open" class="fixed inset-0 z-[180] flex items-center justify-center bg-slate-950/65 p-4" role="presentation" @click.self="close">
+            <section ref="dialogPanel" class="provider-settings-workspace settings-dialog flex w-full max-w-5xl flex-col overflow-hidden border border-slate-300 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="cover-picker-title" tabindex="-1" @keydown="handleKeydown">
                 <header class="flex items-start justify-between gap-6 border-b border-slate-200 px-6 py-5">
                     <div>
-                        <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Public image</p>
+                        <p class="text-xs font-bold uppercase tracking-wide text-amber-700">Public image</p>
                         <h2 id="cover-picker-title" class="mt-1 text-xl font-bold text-slate-950">{{ title }}</h2>
                         <p class="mt-1 text-sm text-slate-500">{{ description }}</p>
                     </div>
-                    <button type="button" class="grid h-10 w-10 shrink-0 place-items-center border border-slate-300 text-slate-500 hover:bg-slate-50 hover:text-slate-950" aria-label="Close background picker" @click="emit('close')">
+                    <button type="button" :disabled="busy" class="grid h-10 w-10 shrink-0 place-items-center border border-slate-300 text-slate-500 hover:bg-slate-50 hover:text-slate-950 disabled:opacity-50" aria-label="Close background picker" @click="close">
                         <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                     </button>
                 </header>
 
-                <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                <div class="settings-dialog-body min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                    <p v-if="error" class="mb-5 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ error }}</p>
                     <div v-if="providerCoverUrl" class="mb-5 border-b border-slate-200 pb-5">
                         <button
                             type="button"
                             :disabled="busy"
+                            :aria-pressed="selectedSource === 'provider'"
                             :class="['grid w-full grid-cols-[12rem_minmax(0,1fr)_auto] items-center gap-4 border p-3 text-left', selectedSource === 'provider' ? 'border-slate-950 bg-amber-50' : 'border-slate-200 bg-white hover:border-slate-400']"
                             @click="emit('select-provider')"
                         >
@@ -59,12 +74,14 @@ function chooseUpload(event) {
                         <button type="button" :disabled="busy" class="text-xs font-bold text-slate-600 hover:text-slate-950 hover:underline" @click="emit('reset')">Use recommended</button>
                     </div>
 
-                    <div class="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <p v-if="!images.length" class="mt-4 border border-slate-200 px-4 py-5 text-sm text-slate-600">No system images are available. You can upload your own background.</p>
+                    <div v-else class="mt-4 grid grid-cols-4 gap-3">
                         <button
                             v-for="image in images"
                             :key="image.key"
                             type="button"
                             :disabled="busy"
+                            :aria-pressed="selectedSource === 'system' && selectedKey === image.key"
                             :class="['overflow-hidden border text-left transition', selectedSource === 'system' && selectedKey === image.key ? 'border-slate-950 ring-2 ring-amber-300' : 'border-slate-200 hover:border-slate-500']"
                             @click="emit('select-system', image)"
                         >
@@ -72,7 +89,7 @@ function chooseUpload(event) {
                                 <img :src="image.url" :alt="image.description" class="h-full w-full object-cover">
                                 <span v-if="selectedSource === 'system' && selectedKey === image.key" class="absolute right-2 top-2 grid h-7 w-7 place-items-center bg-slate-950 text-xs text-amber-300"><i class="fa-solid fa-check" aria-hidden="true"></i></span>
                             </span>
-                            <span class="block px-3 py-2.5"><strong class="block text-xs text-slate-950">{{ image.label }}</strong><span class="mt-1 line-clamp-2 block text-[11px] leading-4 text-slate-500">{{ image.description }}</span></span>
+                            <span class="settings-text block px-3 py-2.5"><strong class="block text-xs text-slate-950">{{ image.label }}</strong><span class="mt-1 block text-xs leading-5 text-slate-500">{{ image.description }}</span></span>
                         </button>
                     </div>
 

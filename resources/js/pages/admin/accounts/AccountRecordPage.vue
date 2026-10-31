@@ -2,12 +2,19 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import AdminDialog from '../components/AdminDialog.vue';
+import AdminLoadState from '../components/AdminLoadState.vue';
+import { useAdminResource } from '../../../composables/useAdminResource.js';
 import { showPortalToast } from '../../../support/portalToast';
 
-const accountId = window.location.pathname.match(/\/admin\/workspaces\/accounts\/(\d+)$/)?.[1];
-const loading = ref(true);
+const accountId = (window.portalPathname?.() ?? window.location.pathname).match(/\/admin\/workspaces\/accounts\/(\d+)$/)?.[1];
+const resource = useAdminResource(async ({ signal }) => {
+    const response = await window.axios.get(`/admin/workspaces/accounts/${accountId}/data`, { signal });
+    if (!response.data.user) throw new Error('Missing account.');
+    return response.data;
+}, { failureMessage: 'The account record could not be loaded.' });
+const { isLoading: loading, errorMessage } = resource;
 const actionBusy = ref('');
-const errorMessage = ref('');
 const actionError = ref('');
 const account = ref(null);
 const roleContext = ref({ label: 'Records', count: 0 });
@@ -42,22 +49,15 @@ function firstError(error, fallback) {
 }
 
 async function loadAccount() {
-    loading.value = true;
-    errorMessage.value = '';
-
-    try {
-        const response = await window.axios.get(`/admin/workspaces/accounts/${accountId}/data`);
-        account.value = response.data.user;
-        roleContext.value = response.data.role_context ?? roleContext.value;
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'The account record could not be loaded.';
-    } finally {
-        loading.value = false;
+    const payload = await resource.load();
+    if (payload) {
+        account.value = payload.user;
+        roleContext.value = payload.role_context ?? { label: 'Records', count: 0 };
     }
 }
 
 async function runAction(key, request, successTitle) {
-    if (actionBusy.value) return;
+    if (actionBusy.value || loading.value || errorMessage.value || !account.value) return;
     actionBusy.value = key;
     actionError.value = '';
 
@@ -89,6 +89,7 @@ function requirePasswordReset() {
 }
 
 function openStatusDialog() {
+    if (actionBusy.value || loading.value || errorMessage.value || !account.value) return;
     suspensionReason.value = '';
     actionError.value = '';
     statusDialogOpen.value = true;
@@ -99,6 +100,7 @@ function closeStatusDialog() {
 }
 
 async function updateStatus() {
+    if (actionBusy.value || loading.value || errorMessage.value || !account.value) return;
     if (!isSuspended.value && suspensionReason.value.trim().length < 5) {
         actionError.value = 'Add a short reason for suspending this account.';
         return;
@@ -134,20 +136,19 @@ onMounted(loadAccount);
             </template>
         </AdminWorkspaceHeader>
 
-        <div v-if="loading" class="admin-panel mt-4 px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading account record...</div>
-        <p v-else-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
+        <section v-if="loading || errorMessage" class="admin-panel mt-4 overflow-hidden"><AdminLoadState :loading="loading" :error="errorMessage" loading-message="Loading account record..." error-title="Account unavailable" @retry="loadAccount" /></section>
 
         <template v-else-if="account">
             <section class="admin-panel mt-4 overflow-hidden">
                 <div class="flex items-center gap-4 border-b border-slate-200 px-6 py-5">
                     <span class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-lg text-slate-600">
                         <i :class="roleIcon(account.role)" aria-hidden="true"></i>
-                        <img v-if="account.avatar_url" :src="account.avatar_url" alt="" class="absolute inset-0 h-full w-full object-cover" @error="$event.currentTarget.remove()">
+                        <img v-if="account.avatar_url" :src="account.avatar_url" alt="" :class="['absolute inset-0 h-full w-full bg-white', account.role === 'provider' ? 'object-contain p-1' : 'object-cover']" @error="$event.currentTarget.remove()">
                     </span>
                     <div class="min-w-0">
                         <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">{{ roleLabel }}</p>
-                        <h2 class="truncate text-lg font-black text-slate-950">{{ account.name }}</h2>
-                        <p class="mt-1 truncate text-sm text-slate-500">{{ account.email }} · @{{ account.username }}</p>
+                        <h2 class="break-words text-lg font-black text-slate-950">{{ account.name }}</h2>
+                        <p class="mt-1 text-sm text-slate-500 [overflow-wrap:anywhere]">{{ account.email }} · @{{ account.username }}</p>
                     </div>
                 </div>
                 <dl class="grid grid-cols-4 divide-x divide-slate-200">
@@ -169,35 +170,35 @@ onMounted(loadAccount);
                     <div class="flex items-center justify-between gap-6 px-6 py-5">
                         <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-envelope" aria-hidden="true"></i></span><div><h3 class="text-sm font-bold text-slate-950">Email verification</h3><p class="mt-1 text-sm text-slate-500">{{ account.email_verified ? 'The email address is verified.' : 'Send a new verification link.' }}</p></div></div>
                         <span v-if="account.email_verified" class="text-xs font-bold text-emerald-700">Verified</span>
-                        <button v-else type="button" :disabled="Boolean(actionBusy)" class="border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 disabled:opacity-40" @click="resendVerification">{{ actionBusy === 'verification' ? 'Sending...' : 'Resend verification' }}</button>
+                        <button v-else type="button" :disabled="Boolean(actionBusy)" class="inline-flex h-10 items-center border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950 disabled:opacity-40" @click="resendVerification">{{ actionBusy === 'verification' ? 'Sending...' : 'Resend verification' }}</button>
                     </div>
                     <div class="flex items-center justify-between gap-6 px-6 py-5">
                         <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-key" aria-hidden="true"></i></span><div><h3 class="text-sm font-bold text-slate-950">Password access</h3><p class="mt-1 text-sm text-slate-500">Require a password change before the next sign-in.</p></div></div>
-                        <button type="button" :disabled="Boolean(actionBusy) || account.must_reset_password" class="border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950 disabled:opacity-40" @click="requirePasswordReset">{{ account.must_reset_password ? 'Reset already required' : actionBusy === 'password' ? 'Preparing...' : 'Require password reset' }}</button>
+                        <button type="button" :disabled="Boolean(actionBusy) || account.must_reset_password" class="inline-flex h-10 items-center border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950 disabled:opacity-40" @click="requirePasswordReset">{{ account.must_reset_password ? 'Reset already required' : actionBusy === 'password' ? 'Preparing...' : 'Require password reset' }}</button>
                     </div>
                     <div class="flex items-center justify-between gap-6 px-6 py-5">
                         <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-lock" aria-hidden="true"></i></span><div><h3 class="text-sm font-bold text-slate-950">Account status</h3><p class="mt-1 text-sm text-slate-500">{{ isSuspended ? 'Restore sign-in access when the issue is resolved.' : 'Suspend access when an account should no longer sign in.' }}</p></div></div>
-                        <button type="button" :disabled="Boolean(actionBusy)" :class="['border px-3 py-2 text-xs font-bold disabled:opacity-40', isSuspended ? 'border-slate-950 bg-slate-950 text-white' : 'border-rose-300 bg-white text-rose-700']" @click="openStatusDialog">{{ isSuspended ? 'Reactivate account' : 'Suspend account' }}</button>
+                        <button type="button" :disabled="Boolean(actionBusy)" :class="['inline-flex h-10 items-center border px-4 text-sm font-bold disabled:opacity-40', isSuspended ? 'border-slate-950 bg-slate-950 text-white' : 'border-rose-300 bg-white text-rose-700']" @click="openStatusDialog">{{ isSuspended ? 'Reactivate account' : 'Suspend account' }}</button>
                     </div>
                 </div>
             </section>
         </template>
     </AdminWorkspacePage>
 
-    <div v-if="statusDialogOpen" class="fixed inset-0 z-[90] grid place-items-center bg-slate-950/70 p-4" @click.self="closeStatusDialog">
-        <section class="w-full max-w-lg border border-slate-300 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="status-dialog-title">
-            <header class="border-b border-slate-200 px-5 py-4">
-                <h2 id="status-dialog-title" class="text-lg font-black text-slate-950">{{ isSuspended ? 'Reactivate this account?' : 'Suspend this account?' }}</h2>
-                <p class="mt-1 text-sm text-slate-500">{{ isSuspended ? 'The user will be able to sign in again.' : 'The user will lose sign-in access immediately.' }}</p>
-            </header>
-            <div class="px-5 py-4">
-                <label v-if="!isSuspended" class="block"><span class="text-sm font-bold text-slate-800">Reason</span><textarea v-model="suspensionReason" rows="3" maxlength="1000" class="mt-2 w-full border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-950" placeholder="Briefly explain why access is being suspended."></textarea></label>
-                <p v-if="actionError" class="mt-3 border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{{ actionError }}</p>
-            </div>
-            <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4">
-                <button type="button" class="border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" :disabled="Boolean(actionBusy)" @click="closeStatusDialog">Cancel</button>
-                <button type="button" :disabled="Boolean(actionBusy)" :class="['px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40', isSuspended ? 'bg-slate-950' : 'bg-rose-700']" @click="updateStatus">{{ actionBusy === 'status' ? 'Saving...' : isSuspended ? 'Reactivate' : 'Suspend' }}</button>
-            </footer>
-        </section>
-    </div>
+    <AdminDialog
+        :open="statusDialogOpen"
+        title-id="status-dialog-title"
+        :title="isSuspended ? 'Reactivate this account?' : 'Suspend this account?'"
+        :description="isSuspended ? 'The user will be able to sign in again.' : 'The user will lose sign-in access immediately.'"
+        eyebrow="Account access"
+        icon="fa-solid fa-user-lock"
+        :confirm-label="isSuspended ? 'Reactivate' : 'Suspend'"
+        :busy="Boolean(actionBusy)"
+        :error="actionError"
+        :danger="!isSuspended"
+        @confirm="updateStatus"
+        @cancel="closeStatusDialog"
+    >
+        <label v-if="!isSuspended" class="block"><span class="text-sm font-bold text-slate-800">Reason</span><textarea v-model="suspensionReason" rows="3" maxlength="1000" class="mt-2 w-full rounded-sm border border-slate-300 px-3 py-2.5 text-sm outline-none focus:border-slate-950" placeholder="Briefly explain why access is being suspended."></textarea></label>
+    </AdminDialog>
 </template>

@@ -31,7 +31,7 @@ const queueCopy = {
     },
 };
 
-const path = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/reviews/assigned';
+const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider/workspaces/reviews/assigned';
 const activeQueue = queueByPath[path] ?? 'mine';
 const pageCopy = queueCopy[activeQueue];
 const workspace = ref(null);
@@ -133,19 +133,19 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="review-directory-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-application-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-start justify-between gap-8">
                         <div class="flex min-w-0 items-start gap-4">
                             <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-file-circle-check" aria-hidden="true"></i></span>
                             <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Application review</p>
-                                <h1 id="review-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
+                                <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Application review</p>
+                                <h1 id="review-directory-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
                                 <p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
                             </div>
                         </div>
                         <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Review scope</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Review scope</p>
                             <p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p>
                             <p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p>
                         </div>
@@ -172,9 +172,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     <div class="flex items-center gap-4">
                         <div class="grid h-10 w-10 shrink-0 place-items-center bg-amber-100 text-amber-700"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></div>
                         <div class="min-w-0 flex-1">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Continue reviewing</p>
-                            <h2 id="next-review-title" class="mt-0.5 truncate text-base font-bold text-slate-950">{{ nextReview.applicant.name }}</h2>
-                            <p class="mt-0.5 truncate text-xs text-slate-500">{{ nextReview.program.title }} · {{ nextReview.evidence.label }}</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Continue reviewing</p>
+                            <h2 id="next-review-title" class="mt-0.5 application-text text-base font-bold text-slate-950">{{ nextReview.applicant.name }}</h2>
+                            <p class="mt-0.5 application-text text-xs text-slate-500">{{ nextReview.program.title }} · {{ nextReview.evidence.label }}</p>
                         </div>
                         <a :href="reviewUrl(nextReview)" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">Open review <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
                     </div>
@@ -201,20 +201,20 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
 
                     <div class="staff-table-viewport">
-                        <table class="w-full min-w-[70rem] table-fixed border-collapse text-left">
+                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-40"><col class="w-36"><col class="w-32"><col class="w-36"></colgroup>
                             <caption class="sr-only">Applications in {{ pageCopy.title }}</caption>
                             <thead class="bg-slate-50">
-                                <tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                                    <th class="w-[32%] px-5 py-3">Applicant</th>
-                                    <th class="w-[25%] px-5 py-3">Evidence</th>
-                                    <th class="w-[19%] px-5 py-3">Eligibility</th>
-                                    <th class="w-[14%] px-5 py-3">Queue</th>
-                                    <th class="w-[10%] px-5 py-3 text-right">Action</th>
+                                <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
+                                    <th class="px-5 py-3">Applicant</th>
+                                    <th class="px-5 py-3">Evidence</th>
+                                    <th class="px-5 py-3">Eligibility</th>
+                                    <th class="px-5 py-3">Queue</th>
+                                    <th class="px-5 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applications...</p></td></tr>
-                                <tr v-else-if="!applications.length">
+                                <tr v-else-if="!applications.length && !errorMessage">
                                     <td colspan="5" class="px-5 py-12 text-center">
                                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-circle-check text-sm" aria-hidden="true"></i></span>
                                         <p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p>
@@ -227,14 +227,14 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                             <img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover">
                                             <span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
                                             <div class="min-w-0">
-                                                <p class="truncate text-sm font-bold text-slate-950">{{ application.applicant.name }}</p>
-                                                <p class="mt-1 truncate text-xs text-slate-500">{{ application.program.title }}</p>
-                                                <p v-if="application.applicant.education" class="mt-1 truncate text-xs text-slate-500">{{ application.applicant.education }}</p>
+                                                <p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p>
+                                                <p class="mt-1 application-text text-xs text-slate-500">{{ application.program.title }}</p>
+                                                <p v-if="application.applicant.education" class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education }}</p>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="px-5 py-4">
-                                        <span :class="['inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(application.evidence.state)]">{{ application.evidence.label }}</span>
+                                        <span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(application.evidence.state)]">{{ application.evidence.label }}</span>
                                         <p class="mt-1.5 text-xs text-slate-500">{{ application.evidence.detail }}</p>
                                     </td>
                                     <td class="px-5 py-4">

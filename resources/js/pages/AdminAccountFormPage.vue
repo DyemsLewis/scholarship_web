@@ -4,18 +4,28 @@ import AdminSidebar from '../components/AdminSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
+import AdminLoadState from './admin/components/AdminLoadState.vue';
+import { useAdminResource } from '../composables/useAdminResource.js';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { formatFileSize } from '../support/display';
 import { limitPhoneNumber } from '../support/phoneNumber';
 
-const accountId = window.location.pathname.match(/\/admin\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
+const accountId = (window.portalPathname?.() ?? window.location.pathname).match(/\/admin\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
 const isEditMode = computed(() => Boolean(accountId));
-const isLoading = ref(Boolean(accountId));
+const accountResource = useAdminResource(async ({ signal }) => {
+    const response = await window.axios.get(`/admin/users/${accountId}`, { signal });
+    if (!response.data.user) throw new Error('Missing account.');
+    return response.data;
+}, { failureMessage: 'Unable to load account.' });
+const isLoading = computed(() => isEditMode.value && accountResource.isLoading.value);
+const loadError = accountResource.errorMessage;
 const isSaving = ref(false);
 const errorMessage = ref('');
+const validationErrors = ref({});
 const formElement = ref(null);
 const form = ref(emptyForm());
 const account = ref(null);
+const formAvailable = computed(() => !isLoading.value && !loadError.value && (!isEditMode.value || Boolean(account.value)));
 const accountAction = ref('');
 const suspensionReason = ref('');
 const supportLink = ref('');
@@ -285,6 +295,26 @@ function handleMiddleInitialInput(event) {
     form.value.middleInitial = event.target.value.replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
 }
 
+function fieldError(field) {
+    return validationErrors.value[field]?.[0] ?? '';
+}
+
+function actionError(error, fallback) {
+    return Object.values(error?.response?.data?.errors ?? {})[0]?.[0] || error?.response?.data?.message || fallback;
+}
+
+async function showSaveError(error) {
+    validationErrors.value = error?.response?.data?.errors ?? {};
+    errorMessage.value = actionError(error, 'The account could not be saved. Please try again.');
+    activeWorkspaceSection.value = 'details';
+    const field = Object.keys(validationErrors.value)[0]?.split('.')[0];
+    if (field) activeFormSection.value = ['password', 'password_confirmation'].includes(field) ? 'signin'
+        : ['role', 'account_title', 'permissions'].includes(field) ? 'access' : 'identity';
+    await nextTick();
+    const inputId = { first_name: 'admin-first-name', middle_initial: 'admin-middle-initial', last_name: 'admin-last-name', email: 'admin-email', username: 'admin-username', contact_number: 'admin-contact-number', account_title: 'admin-account-title', password: 'admin-password', password_confirmation: 'admin-password-confirmation' }[field];
+    if (inputId) formElement.value?.querySelector(`#${inputId}`)?.focus();
+}
+
 function handleNumberInput(event) {
     form.value.contactNumber = limitPhoneNumber(event.target.value);
 }
@@ -319,6 +349,16 @@ function resetForm() {
     supportLink.value = '';
     suspensionReason.value = '';
     errorMessage.value = '';
+    validationErrors.value = {};
+    applyRequestedRole();
+}
+
+function applyRequestedRole() {
+    const requested = new URLSearchParams(window.location.search).get('role');
+    if (!isEditMode.value && visibleAccountRoleOptions.value.some((role) => role.value === requested)) {
+        form.value.role = requested;
+        handleRoleChange();
+    }
 }
 
 async function loadAccount() {
@@ -326,27 +366,22 @@ async function loadAccount() {
         return;
     }
 
-    isLoading.value = true;
     errorMessage.value = '';
-
-    try {
-        const response = await window.axios.get(`/admin/users/${accountId}`);
-
-        fillForm(response.data.user);
-        verificationDocuments.value = response.data.verification_documents ?? [];
-        applicantVerificationNotes.value = response.data.user?.applicant_verification_notes ?? '';
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to load account.';
-    } finally {
-        isLoading.value = false;
+    const payload = await accountResource.load();
+    if (payload) {
+        fillForm(payload.user);
+        verificationDocuments.value = payload.verification_documents ?? [];
+        applicantVerificationNotes.value = payload.user?.applicant_verification_notes ?? '';
     }
 }
 
 async function saveAccount() {
+    if (!formAvailable.value || isSaving.value || accountAction.value) return;
     errorMessage.value = '';
+    validationErrors.value = {};
     supportLink.value = '';
 
-    if (!await focusFirstInvalidField()) {
+    if (!await focusFirstInvalidField() || isSaving.value || accountAction.value) {
         return;
     }
 
@@ -394,7 +429,7 @@ async function saveAccount() {
     const payload = {
         first_name: form.value.firstName,
         last_name: form.value.lastName,
-        middle_initial: form.value.middleInitial,
+        middle_initial: form.value.middleInitial.trim().toUpperCase() || null,
         email: form.value.email,
         username: form.value.username,
         contact_number: form.value.contactNumber,
@@ -421,15 +456,16 @@ async function saveAccount() {
         } else {
             resetForm();
         }
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        isSaving.value = false;
+        await showSaveError(error);
     } finally {
         isSaving.value = false;
     }
 }
 
 async function updateAccountStatus(status) {
-    if (!accountId) {
+    if (!accountId || !formAvailable.value || !account.value || accountAction.value || isSaving.value) {
         return;
     }
 
@@ -455,15 +491,15 @@ async function updateAccountStatus(status) {
         });
 
         fillForm(response.data.user);
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        errorMessage.value = actionError(error, 'The account status could not be updated.');
     } finally {
         accountAction.value = '';
     }
 }
 
 async function forcePasswordReset() {
-    if (!accountId) {
+    if (!accountId || !formAvailable.value || !account.value || accountAction.value || isSaving.value) {
         return;
     }
 
@@ -476,7 +512,7 @@ async function forcePasswordReset() {
         confirmLabel: isResending ? 'Send new link' : 'Require reset',
     });
 
-    if (!confirmed) {
+    if (!confirmed || !formAvailable.value || accountAction.value || isSaving.value) {
         return;
     }
 
@@ -489,15 +525,15 @@ async function forcePasswordReset() {
 
         supportLink.value = response.data.reset_url ?? '';
         fillForm(response.data.user);
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        errorMessage.value = actionError(error, 'The reset link could not be sent.');
     } finally {
         accountAction.value = '';
     }
 }
 
 async function verifyEmail() {
-    if (!accountId) {
+    if (!accountId || !formAvailable.value || !account.value || accountAction.value || isSaving.value) {
         return;
     }
 
@@ -509,15 +545,15 @@ async function verifyEmail() {
         const response = await window.axios.patch(`/admin/users/${accountId}/email-verification`);
 
         fillForm(response.data.user);
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        errorMessage.value = actionError(error, 'Email verification could not be updated.');
     } finally {
         accountAction.value = '';
     }
 }
 
 async function resendVerificationEmail() {
-    if (!accountId) {
+    if (!accountId || !formAvailable.value || !account.value || accountAction.value || isSaving.value) {
         return;
     }
 
@@ -529,15 +565,15 @@ async function resendVerificationEmail() {
         const response = await window.axios.post(`/admin/users/${accountId}/verification-email`);
 
         fillForm(response.data.user);
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        errorMessage.value = actionError(error, 'The verification link could not be sent.');
     } finally {
         accountAction.value = '';
     }
 }
 
 async function updateApplicantVerification(status) {
-    if (!accountId || account.value?.role !== 'applicant') {
+    if (!accountId || !formAvailable.value || accountAction.value || isSaving.value || account.value?.role !== 'applicant') {
         return;
     }
 
@@ -563,8 +599,8 @@ async function updateApplicantVerification(status) {
         fillForm(response.data.user);
         verificationDocuments.value = response.data.verification_documents ?? [];
         applicantVerificationNotes.value = response.data.user?.applicant_verification_notes ?? '';
-    } catch (handledError) {
-        void handledError;
+    } catch (error) {
+        errorMessage.value = actionError(error, 'The verification review could not be saved.');
     } finally {
         accountAction.value = '';
     }
@@ -582,7 +618,10 @@ function closeDocumentPreview() {
     previewDocument.value = null;
 }
 
-onMounted(loadAccount);
+onMounted(() => {
+    applyRequestedRole();
+    loadAccount();
+});
 </script>
 
 <template>
@@ -605,7 +644,7 @@ onMounted(loadAccount);
         <section class="admin-page">
             <div class="admin-container">
                 <nav class="mb-4 flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
-                    <a href="/admin/manage-users" class="font-bold text-slate-600 transition hover:text-slate-950">Accounts</a>
+                    <a :href="form.role === 'admin' ? '/admin/governance/team' : '/admin/manage-users'" class="font-bold text-slate-600 transition hover:text-slate-950">{{ form.role === 'admin' ? 'Admin team' : 'Accounts' }}</a>
                     <i class="fa-solid fa-chevron-right text-[9px] text-slate-400" aria-hidden="true"></i>
                     <span class="truncate font-semibold text-slate-950">{{ isEditMode ? 'Edit account' : 'Create account' }}</span>
                 </nav>
@@ -618,12 +657,10 @@ onMounted(loadAccount);
                     :icon="isEditMode ? 'fa-solid fa-user-gear' : 'fa-solid fa-user-plus'"
                 />
 
-                <div v-if="isLoading" class="mt-6 rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">
-                    Loading account...
-                </div>
+                <section v-if="isLoading || loadError" class="admin-panel mt-4 overflow-hidden"><AdminLoadState :loading="isLoading" :error="loadError" loading-message="Loading account..." error-title="Account unavailable" @retry="loadAccount" /></section>
 
                 <nav
-                    v-if="!isLoading && workspaceSections.length > 1"
+                    v-if="formAvailable && workspaceSections.length > 1"
                     class="admin-panel mt-5 grid gap-1 p-1 sm:grid-cols-3"
                     aria-label="Account workspace sections"
                 >
@@ -648,18 +685,22 @@ onMounted(loadAccount);
                 </nav>
 
                 <p
-                    v-if="errorMessage && activeWorkspaceSection !== 'details'"
+                    v-if="errorMessage"
                     class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"
+                    role="alert"
                 >
                     {{ errorMessage }}
                 </p>
 
                 <form
-                    v-if="!isLoading && activeWorkspaceSection === 'details'"
+                    v-if="formAvailable && activeWorkspaceSection === 'details'"
                     ref="formElement"
                     class="mt-4 grid gap-4"
+                    :aria-busy="isSaving"
+                    novalidate
                     @submit.prevent="saveAccount"
                 >
+                    <fieldset :disabled="isSaving" class="contents">
                     <nav class="admin-panel grid gap-1 p-1 sm:grid-cols-3" aria-label="Account form steps">
                         <button
                             v-for="(section, index) in formSections"
@@ -696,14 +737,15 @@ onMounted(loadAccount);
                         </div>
 
                         <div class="grid gap-4 p-5 sm:p-6">
-                            <div class="grid grid-cols-[minmax(0,1fr)_4.75rem] gap-4 lg:grid-cols-[minmax(0,1fr)_5rem_minmax(0,1fr)] lg:items-end">
+                            <div class="grid grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)] items-start gap-4">
                                 <div>
                                     <label :class="labelClass" for="admin-first-name">First name</label>
-                                    <input id="admin-first-name" v-model="form.firstName" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass">
+                                    <input id="admin-first-name" v-model="form.firstName" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass" :aria-invalid="Boolean(fieldError('first_name'))">
+                                    <p v-if="fieldError('first_name')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('first_name') }}</p>
                                 </div>
 
                                 <div>
-                                    <label :class="[labelClass, 'text-center']" for="admin-middle-initial">M.I.</label>
+                                    <label :class="[labelClass, 'text-center']" for="admin-middle-initial">M.I. <span class="text-xs font-normal text-slate-500">(optional)</span></label>
                                     <input
                                         id="admin-middle-initial"
                                         :value="form.middleInitial"
@@ -711,28 +753,32 @@ onMounted(loadAccount);
                                         inputmode="text"
                                         maxlength="1"
                                         pattern="[A-Za-z]"
-                                        required
                                         placeholder="M"
                                         :class="compactInputClass"
+                                        :aria-invalid="Boolean(fieldError('middle_initial'))"
                                         @input="handleMiddleInitialInput"
                                     >
+                                    <p v-if="fieldError('middle_initial')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('middle_initial') }}</p>
                                 </div>
 
-                                <div class="col-span-2 lg:col-span-1">
+                                <div>
                                     <label :class="labelClass" for="admin-last-name">Last name</label>
-                                    <input id="admin-last-name" v-model="form.lastName" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass">
+                                    <input id="admin-last-name" v-model="form.lastName" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass" :aria-invalid="Boolean(fieldError('last_name'))">
+                                    <p v-if="fieldError('last_name')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('last_name') }}</p>
                                 </div>
                             </div>
 
                             <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                                 <div>
                                     <label :class="labelClass" for="admin-email">Email address</label>
-                                    <input id="admin-email" v-model="form.email" type="email" autocomplete="email" required placeholder="name@example.com" :class="inputClass">
+                                    <input id="admin-email" v-model="form.email" type="email" autocomplete="email" required placeholder="name@example.com" :class="inputClass" :aria-invalid="Boolean(fieldError('email'))">
+                                    <p v-if="fieldError('email')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('email') }}</p>
                                 </div>
 
                                 <div>
                                     <label :class="labelClass" for="admin-username">Username</label>
-                                    <input id="admin-username" v-model="form.username" type="text" autocomplete="username" pattern="[A-Za-z0-9_.-]{4,}" required placeholder="At least 4 characters" :class="inputClass">
+                                    <input id="admin-username" v-model="form.username" type="text" autocomplete="username" pattern="[A-Za-z0-9_.\-]{4,}" required placeholder="At least 4 characters" :class="inputClass" :aria-invalid="Boolean(fieldError('username'))">
+                                    <p v-if="fieldError('username')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('username') }}</p>
                                 </div>
 
                                 <div class="md:col-span-2 xl:col-span-1">
@@ -747,8 +793,10 @@ onMounted(loadAccount);
                                         maxlength="20"
                                         placeholder="09XX XXX XXXX"
                                         :class="inputClass"
+                                        :aria-invalid="Boolean(fieldError('contact_number'))"
                                         @input="(event) => { event.target.setCustomValidity(''); handleNumberInput(event); }"
                                     >
+                                    <p v-if="fieldError('contact_number')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('contact_number') }}</p>
                                 </div>
                             </div>
                         </div>
@@ -803,7 +851,7 @@ onMounted(loadAccount);
 
                             <div v-if="form.role === 'admin'" class="mt-5 border-t border-slate-200 pt-5">
                                 <div v-if="needsAdminPermissions" class="grid gap-5">
-                                    <div class="max-w-xl">
+                                    <div class="w-full">
                                         <label :class="labelClass" for="admin-account-title">Admin staff role</label>
                                         <select
                                             id="admin-account-title"
@@ -820,8 +868,9 @@ onMounted(loadAccount);
                                                 {{ role.label }}
                                             </option>
                                         </select>
+                                        <p v-if="fieldError('account_title')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('account_title') }}</p>
                                         <p class="mt-2 text-xs leading-5 text-slate-500">
-                                            {{ selectedAdminRolePreset?.description }} Recommended permissions are selected automatically and can be adjusted below.
+                                            {{ selectedAdminRolePreset?.description }}
                                         </p>
                                     </div>
 
@@ -902,7 +951,9 @@ onMounted(loadAccount);
                                     :required="!isEditMode"
                                     :placeholder="isEditMode ? 'Leave blank to keep current password' : 'At least 8 characters'"
                                     :class="inputClass"
+                                    :aria-invalid="Boolean(fieldError('password'))"
                                 >
+                                <p v-if="fieldError('password')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('password') }}</p>
                             </div>
 
                             <div>
@@ -916,8 +967,10 @@ onMounted(loadAccount);
                                     :required="!isEditMode || Boolean(form.password)"
                                     placeholder="Enter the password again"
                                     :class="inputClass"
+                                    :aria-invalid="Boolean(fieldError('password_confirmation'))"
                                     @input="$event.target.setCustomValidity('')"
                                 >
+                                <p v-if="fieldError('password_confirmation')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('password_confirmation') }}</p>
                             </div>
                         </div>
                         <p v-if="!isEditMode && form.role === 'admin'" class="border-t border-slate-200 bg-amber-50 px-5 py-3 text-xs leading-5 text-amber-900 sm:px-6">
@@ -927,10 +980,7 @@ onMounted(loadAccount);
 
                     <div class="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                         <div class="min-h-5 text-xs font-semibold text-slate-500">
-                            <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
-                                {{ errorMessage }}
-                            </p>
-                            <p v-else>Step {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}</p>
+                            <p>Step {{ activeFormSectionIndex + 1 }} of {{ formSections.length }}</p>
                         </div>
 
                         <div class="flex flex-col gap-2 sm:flex-row">
@@ -960,10 +1010,11 @@ onMounted(loadAccount);
                             </button>
                         </div>
                     </div>
+                    </fieldset>
                 </form>
 
                 <section
-                    v-if="isEditMode && account && activeWorkspaceSection === 'security'"
+                    v-if="formAvailable && isEditMode && account && activeWorkspaceSection === 'security'"
                     class="admin-panel mt-4 overflow-hidden"
                 >
                     <div class="border-b border-slate-200 p-5 sm:p-6">
@@ -1131,7 +1182,7 @@ onMounted(loadAccount);
                 </section>
 
                 <section
-                    v-if="isEditMode && account?.role === 'applicant' && activeWorkspaceSection === 'evidence'"
+                    v-if="formAvailable && isEditMode && account?.role === 'applicant' && activeWorkspaceSection === 'evidence'"
                     class="admin-panel mt-4 overflow-hidden"
                 >
                     <div class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-start sm:justify-between sm:p-6">

@@ -4,8 +4,8 @@ import RecordsOfficerSidebar from '../components/RecordsOfficerSidebar.vue';
 import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
-const isExportsPage = window.location.pathname.endsWith('/exports');
-const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const isExportsPage = (window.portalPathname?.() ?? window.location.pathname).endsWith('/exports');
+const usesPortalManagerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/portal');
 const recordsWorkspaceBase = usesPortalManagerWorkspace ? '/admin/workspaces/portal/records' : '/admin/workspaces/records';
 const isLoading = ref(!isExportsPage);
 const errorMessage = ref('');

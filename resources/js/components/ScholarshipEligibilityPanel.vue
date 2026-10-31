@@ -31,10 +31,10 @@ const contextualHref = (href) => props.preview ? href : withPreparationContext(h
 
 function resultStyle(row) {
     return {
-        ready: { badge: 'border-emerald-200 bg-emerald-50 text-emerald-800', icon: 'fa-solid fa-check' },
-        blocked: { badge: 'border-rose-200 bg-rose-50 text-rose-800', icon: 'fa-solid fa-xmark' },
-        attention: { badge: 'border-amber-200 bg-amber-50 text-amber-900', icon: 'fa-solid fa-circle-info' },
-    }[row.result.state] ?? { badge: 'border-slate-200 bg-slate-50 text-slate-600', icon: 'fa-solid fa-minus' };
+        ready: { badge: 'student-badge-positive', icon: 'fa-solid fa-check' },
+        blocked: { badge: 'student-badge-negative', icon: 'fa-solid fa-xmark' },
+        attention: { badge: 'student-badge-attention', icon: 'fa-solid fa-circle-info' },
+    }[row.result.state] ?? { badge: '', icon: 'fa-solid fa-minus' };
 }
 
 function actionLabel(row) {
@@ -50,7 +50,7 @@ function actionLabel(row) {
                 <p class="student-kicker">{{ generalPreview ? 'Published eligibility' : verdict.eyebrow }}</p>
                 <h3 id="scholarship-eligibility-title" class="mt-2 font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">{{ generalPreview ? 'Who this scholarship is for' : verdict.title }}</h3>
                 <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{{ generalPreview ? 'Applicants see these rules compared with their own saved profile.' : verdict.description }}</p>
-                <a v-if="!preview && (!content.profile?.complete || !content.profile?.verified)" :href="contextualHref(profileAction.href)" class="mt-4 inline-flex min-h-10 items-center gap-2 rounded-sm border border-slate-300 px-3 text-xs font-bold text-slate-800 transition hover:bg-slate-50">{{ profileAction.label }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
+                <a v-if="!preview && (!content.profile?.complete || !content.profile?.verified)" :href="contextualHref(profileAction.href)" class="student-button student-button-secondary mt-4">{{ profileAction.label }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
             </div>
             <figure class="relative hidden min-h-44 overflow-hidden bg-slate-100 lg:block">
                 <img :src="visual.image" :alt="visual.alt" class="absolute inset-0 h-full w-full object-cover">
@@ -71,7 +71,7 @@ function actionLabel(row) {
                 <h4 :id="`eligibility-${group.id}-title`" class="text-sm font-bold text-slate-950">{{ group.label }} <span class="ml-1 text-xs font-normal text-slate-500">({{ group.rows.length }})</span></h4>
                 <p class="text-xs leading-5 text-slate-500">{{ group.description }}</p>
             </header>
-            <div class="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_12rem] gap-5 border-b border-slate-200 px-6 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 md:grid" aria-hidden="true">
+            <div class="student-detail-label hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_12rem] gap-5 border-b border-slate-200 px-6 py-2 md:grid" aria-hidden="true">
                 <span>Program requirement</span><span>{{ preview ? 'Sample profile' : 'Your saved profile' }}</span><span>Comparison</span>
             </div>
             <div class="divide-y divide-slate-200">
@@ -82,12 +82,12 @@ function actionLabel(row) {
                             <p class="mt-1 break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">{{ row.requirementValue }}</p>
                         </div>
                         <div class="min-w-0">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:sr-only">{{ preview ? 'Sample profile' : 'Your saved profile' }}</p>
+                            <p class="student-detail-label md:sr-only">{{ preview ? 'Sample profile' : 'Your saved profile' }}</p>
                             <p class="break-words text-sm font-semibold leading-6 text-slate-800 [overflow-wrap:anywhere]">{{ generalPreview ? 'Compared when an applicant applies' : row.profileValue }}</p>
                         </div>
                         <div data-eligibility-result class="flex min-w-0 items-start md:justify-start">
-                            <span v-if="generalPreview" class="inline-flex items-center gap-2 rounded-sm border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold leading-5 text-slate-600">Not compared</span>
-                            <span v-else :class="['inline-flex items-center gap-2 rounded-sm border px-2.5 py-1 text-xs font-bold leading-5', resultStyle(row).badge]"><i :class="[resultStyle(row).icon, 'block shrink-0 text-[10px] leading-none']" aria-hidden="true"></i>{{ row.result.label }}</span>
+                            <span v-if="generalPreview" class="student-badge">Not compared</span>
+                            <span v-else :class="['student-badge', resultStyle(row).badge]"><i :class="[resultStyle(row).icon, 'block shrink-0 text-[10px] leading-none']" aria-hidden="true"></i>{{ row.result.label }}</span>
                         </div>
                     </div>
 

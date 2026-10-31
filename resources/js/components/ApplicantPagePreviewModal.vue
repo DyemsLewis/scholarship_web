@@ -107,11 +107,11 @@ onBeforeUnmount(releaseModalEnvironment);
                         </span>
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Applicant view</p>
-                                <span v-if="status" class="border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">{{ status }}</span>
+                                <p class="text-xs font-bold uppercase tracking-wide text-amber-700">Applicant view</p>
+                                <span v-if="status" class="border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-600">{{ status }}</span>
                             </div>
-                            <h2 id="applicant-page-preview-title" class="mt-0.5 truncate text-lg font-bold text-slate-950">{{ title }}</h2>
-                            <p id="applicant-page-preview-description" class="mt-0.5 truncate text-xs text-slate-500">{{ description }}</p>
+                            <h2 id="applicant-page-preview-title" class="mt-0.5 break-words text-lg font-bold text-slate-950 [overflow-wrap:anywhere]">{{ title }}</h2>
+                            <p id="applicant-page-preview-description" class="mt-0.5 break-words text-xs text-slate-500 [overflow-wrap:anywhere]">{{ description }}</p>
                         </div>
                     </div>
 

@@ -50,7 +50,7 @@ function saved() {
         </a>
 
         <article class="overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm">
-            <header class="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-6">
+            <header class="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:px-6">
                 <div class="flex min-w-0 items-start gap-4">
                     <span :class="['grid h-11 w-11 shrink-0 place-items-center border', outcomeTone]">
                         <i :class="outcome.decision === 'terminated' ? 'fa-solid fa-circle-exclamation' : outcome.decision === 'completed' ? 'fa-solid fa-flag-checkered' : 'fa-solid fa-rotate'" aria-hidden="true"></i>

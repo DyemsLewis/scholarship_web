@@ -55,10 +55,10 @@ function missingItems(step) {
 
 function badgeStyle(step) {
     return {
-        positive: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-        attention: 'border-amber-200 bg-amber-50 text-amber-900',
-        blocked: 'border-rose-200 bg-rose-50 text-rose-800',
-    }[step.tone] ?? 'border-slate-200 bg-slate-50 text-slate-600';
+        positive: 'student-badge-positive',
+        attention: 'student-badge-attention',
+        blocked: 'student-badge-negative',
+    }[step.tone] ?? '';
 }
 
 function follow(event, action) {
@@ -75,14 +75,14 @@ function follow(event, action) {
         </header>
 
         <div v-if="hasApplied" class="px-5 py-5 sm:px-6" data-guide-existing-application>
-            <a v-if="nextAction?.kind === 'link'" :href="nextAction.href" class="inline-flex min-h-11 items-center justify-center gap-3 rounded-sm bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-600">{{ nextAction.label }}<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+            <a v-if="nextAction?.kind === 'link'" :href="nextAction.href" class="student-button student-button-primary">{{ nextAction.label }}<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
             <p class="mt-3 text-xs leading-5 text-slate-500">You do not need to submit another application for this scholarship.</p>
         </div>
 
         <template v-else>
             <div v-if="unavailable" data-guide-intake-notice class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-3 sm:px-6">
                 <p class="max-w-2xl text-xs leading-5 text-slate-600">{{ guide.state === 'upcoming' ? 'You can prepare now, but must wait until applications open to start.' : 'This intake is not accepting applications. You can still review the requirements below.' }}</p>
-                <button v-if="nextAction?.kind === 'save'" type="button" :disabled="saving" class="inline-flex min-h-10 items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 text-xs font-bold text-slate-800 hover:bg-slate-100 disabled:opacity-60" @click="emit('save')"><i class="fa-regular fa-bookmark" aria-hidden="true"></i>{{ saving ? 'Saving...' : nextAction.label }}</button>
+                <button v-if="nextAction?.kind === 'save'" type="button" :disabled="saving" class="student-button student-button-secondary" @click="emit('save')"><i class="fa-regular fa-bookmark" aria-hidden="true"></i>{{ saving ? 'Saving...' : nextAction.label }}</button>
                 <a v-else-if="nextAction?.kind === 'link'" :href="nextAction.href" class="inline-flex min-h-10 items-center gap-2 text-xs font-bold text-slate-800 hover:underline">{{ nextAction.label }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
             </div>
 
@@ -94,7 +94,7 @@ function follow(event, action) {
                             <div class="min-w-0">
                                 <h4 class="text-sm font-bold leading-6 text-slate-950">Open the application form</h4>
                                 <p class="mt-1 text-sm leading-6 text-slate-600">Choose <strong class="font-semibold text-slate-800">Start pre-screening</strong> on this page. This scholarship will already be selected. Opening the form does not submit it.</p>
-                                <a v-if="startAction" :href="startAction.href" class="mt-3 inline-flex min-h-11 items-center gap-3 rounded-sm bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-600" data-guide-start>{{ startAction.label }}<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                                <a v-if="startAction" :href="startAction.href" class="student-button student-button-primary mt-3" data-guide-start>{{ startAction.label }}<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
                                 <p v-else-if="isPreview" class="mt-2 text-xs font-semibold leading-5 text-slate-500">Applicant-only action. The form cannot be opened from this preview.</p>
                                 <p v-else class="mt-2 text-xs font-semibold leading-5 text-amber-900">{{ unavailable ? 'You can start only while this intake is accepting applications.' : 'The start action is unavailable. See Before you start below for the check that needs attention.' }}</p>
                             </div>
@@ -140,12 +140,12 @@ function follow(event, action) {
                             </details>
                         </div>
                         <div data-guide-status class="col-start-2 min-w-0 xl:col-start-auto">
-                            <span :class="['inline-flex max-w-full rounded-sm border px-2.5 py-1 text-xs font-bold leading-5', badgeStyle(step)]">{{ step.status_label || 'Review this step' }}</span>
+                            <span :class="['student-badge', badgeStyle(step)]">{{ step.status_label || 'Review this step' }}</span>
                             <p v-if="!isPreview && step.blocks_start" class="mt-1.5 text-[11px] leading-5 text-slate-500">Needed before starting</p>
                             <p v-else-if="!isPreview && step.required_before === 'submission' && (step.key === 'submit' || step.details?.required_file_count > 0 || step.details?.required_question_count > 0)" class="mt-1.5 text-[11px] leading-5 text-slate-500">Complete before submitting</p>
                         </div>
                         <div data-guide-action class="col-start-2 min-w-0 xl:col-start-auto">
-                            <a v-if="actionFor(step.action)?.kind === 'link'" :href="contextualHref(step.action.href)" :class="['inline-flex min-h-11 max-w-full items-center gap-2 rounded-sm text-xs font-bold leading-5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-600', isNext(step) ? 'bg-slate-950 px-3 py-2 text-white hover:bg-slate-800' : 'py-2 text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-950']" @click="follow($event, step.action)">{{ step.action.label }}<i class="fa-solid fa-arrow-right shrink-0 text-[10px]" aria-hidden="true"></i></a>
+                            <a v-if="actionFor(step.action)?.kind === 'link'" :href="contextualHref(step.action.href)" :class="isNext(step) ? 'student-button student-button-primary' : 'inline-flex min-h-11 max-w-full items-center gap-2 rounded-sm py-2 text-sm font-semibold leading-5 text-slate-700 underline decoration-slate-300 underline-offset-4 hover:text-slate-950 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-600'" @click="follow($event, step.action)">{{ step.action.label }}<i class="fa-solid fa-arrow-right shrink-0 text-[10px]" aria-hidden="true"></i></a>
                             <span v-else class="inline-flex min-h-11 items-center gap-2 text-xs leading-5 text-slate-400" aria-disabled="true"><i class="fa-solid fa-lock shrink-0 text-[10px]" aria-hidden="true"></i>{{ isPreview ? 'Applicant-only action' : step.action?.label || 'Complete earlier steps first' }}</span>
                         </div>
                     </div>

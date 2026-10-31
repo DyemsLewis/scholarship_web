@@ -265,6 +265,7 @@ onMounted(loadSubmission);
                 :summary="submission.document_summary"
                 :can-edit="submission.actions.can_edit_files"
                 :uploading-requirement="uploadRequirement"
+                :upload-enabled="documentTermsAccepted"
                 @preview="openPreview"
                 @upload="requestUpload"
             >

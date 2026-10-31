@@ -1,5 +1,8 @@
 import axios from 'axios';
 import { installAxiosToastInterceptors } from './support/portalToast';
+import { installOpaqueRecordNavigation } from './support/opaqueRecordNavigation';
+
+installOpaqueRecordNavigation();
 
 window.axios = axios;
 

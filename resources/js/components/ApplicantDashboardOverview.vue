@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import ApplicantTextSummary from './ApplicantTextSummary.vue';
 
 const props = defineProps({
     dashboard: {
@@ -62,7 +63,7 @@ const summaryItems = computed(() => {
             label: 'Profile readiness',
             value: `${Number(profile.percent ?? 0)}%`,
             detail: profile.complete
-                ? 'Ready for applications'
+                ? 'Required details complete'
                 : (missingProfileCount === 1 ? '1 detail still needed' : `${missingProfileCount} details still needed`),
             icon: 'fa-regular fa-id-card',
             href: '/dashboard/profile',
@@ -130,16 +131,14 @@ function primaryLabel(action) {
 
 function statusClass(tone) {
     return {
-        attention: 'bg-amber-100 text-amber-900',
-        positive: 'bg-slate-950 text-white',
-        muted: 'bg-slate-100 text-slate-600',
-        neutral: 'bg-slate-100 text-slate-700',
-    }[tone] ?? 'bg-slate-100 text-slate-700';
+        attention: 'student-badge-attention',
+        positive: 'student-badge-positive',
+    }[tone] ?? '';
 }
 </script>
 
 <template>
-    <div class="mt-4 space-y-5">
+    <div class="mt-4 space-y-5" data-applicant-dashboard>
         <section
             class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_12px_32px_rgba(15,23,42,0.09)]"
             :class="primaryAction.tone === 'calm' ? 'border-t-4 border-t-slate-950' : 'border-t-4 border-t-amber-400'"
@@ -170,11 +169,11 @@ function statusClass(tone) {
                         </p>
 
                         <div v-if="primaryAction.context || primaryAction.due_label" class="mt-4 flex flex-wrap gap-2">
-                            <span v-if="primaryAction.context" class="inline-flex items-center gap-2 rounded-sm bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700">
+                            <span v-if="primaryAction.context" class="student-badge">
                                 <i class="fa-solid fa-award text-amber-700" aria-hidden="true"></i>
                                 {{ primaryAction.context }}
                             </span>
-                            <span v-if="primaryAction.due_label" class="inline-flex items-center gap-2 rounded-sm bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900">
+                            <span v-if="primaryAction.due_label" class="student-badge student-badge-attention">
                                 <i class="fa-regular fa-calendar" aria-hidden="true"></i>
                                 {{ primaryAction.due_label }}
                             </span>
@@ -182,7 +181,7 @@ function statusClass(tone) {
 
                         <a
                             :href="primaryAction.href"
-                            class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-sm bg-slate-950 px-5 py-3 text-sm font-bold text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 sm:w-auto"
+                            class="student-button student-button-primary mt-5 w-full sm:w-auto"
                         >
                             {{ primaryAction.cta }}
                             <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
@@ -200,8 +199,8 @@ function statusClass(tone) {
                                     <i :class="actionIcon(action.kind)" aria-hidden="true"></i>
                                 </span>
                                 <span class="min-w-0 flex-1">
-                                    <span class="block truncate text-sm font-bold text-slate-950">{{ action.title }}</span>
-                                    <span class="mt-0.5 block truncate text-xs text-slate-500">{{ action.context }}</span>
+                                    <span class="block break-words text-sm font-bold text-slate-950">{{ action.title }}</span>
+                                    <span class="mt-0.5 block break-words text-xs leading-5 text-slate-600">{{ action.context }}</span>
                                 </span>
                                 <i class="fa-solid fa-arrow-right text-[10px] text-slate-400 transition group-hover:text-slate-900" aria-hidden="true"></i>
                             </a>
@@ -220,21 +219,21 @@ function statusClass(tone) {
             </div>
         </section>
 
-        <section class="grid grid-cols-2 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm lg:grid-cols-4" aria-label="Dashboard at a glance">
+        <section class="grid grid-cols-2 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm xl:grid-cols-4" aria-label="Dashboard at a glance">
             <a
                 v-for="item in summaryItems"
                 :key="item.label"
                 :href="item.href"
-                class="group flex min-w-0 items-center gap-3 border-b border-slate-200 p-4 odd:border-r hover:bg-slate-50 sm:p-5 lg:border-b-0 lg:border-r lg:last:border-r-0"
+                class="group grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 border-b border-slate-200 p-3 odd:border-r hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-600 sm:flex sm:gap-3 sm:p-5 xl:border-b-0 xl:border-r xl:last:border-r-0"
             >
-                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-700 transition group-hover:bg-slate-950 group-hover:text-amber-300">
+                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-700 transition group-hover:bg-slate-950 group-hover:text-amber-300 sm:h-10 sm:w-10">
                     <i :class="item.icon" aria-hidden="true"></i>
                 </span>
-                <span class="min-w-0 flex-1">
-                    <span class="block text-xs font-bold leading-4 text-slate-700">{{ item.label }}</span>
-                    <span class="mt-1 hidden truncate text-[11px] text-slate-500 sm:block">{{ item.detail }}</span>
+                <span class="col-span-2 row-start-2 min-w-0 flex-1">
+                    <span class="block text-xs font-bold leading-4 text-slate-700" data-dashboard-summary-label>{{ item.label }}</span>
+                    <span class="mt-1 hidden text-xs leading-5 text-slate-600 sm:block">{{ item.detail }}</span>
                 </span>
-                <span data-dashboard-summary-value class="shrink-0 text-right text-xl font-bold leading-none text-slate-950">
+                <span data-dashboard-summary-value class="shrink-0 text-right col-start-2 row-start-1 text-xl font-bold leading-none text-slate-950">
                     {{ item.value }}
                 </span>
             </a>
@@ -288,7 +287,7 @@ function statusClass(tone) {
                     <h2 id="dashboard-applications" class="text-base font-bold text-slate-950">Application progress</h2>
                     <p class="mt-1 text-xs text-slate-500">Your most relevant applications and their current stage.</p>
                 </div>
-                <a href="/dashboard/applications" class="inline-flex items-center gap-2 text-xs font-bold text-slate-600 hover:text-slate-950">
+                <a href="/dashboard/applications" class="student-button student-button-secondary student-button-compact shrink-0">
                     View all
                     <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                 </a>
@@ -299,7 +298,8 @@ function statusClass(tone) {
                     v-for="application in applications"
                     :key="application.id"
                     :href="application.href"
-                    class="group grid gap-4 px-5 py-5 transition hover:bg-slate-50 sm:px-6 lg:grid-cols-[3.5rem_minmax(0,1fr)_minmax(12rem,0.5fr)_auto] lg:items-center"
+                    class="group grid gap-4 px-5 py-4 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-600 sm:px-6 lg:grid-cols-[3.5rem_minmax(0,1fr)_minmax(12rem,0.5fr)_auto] lg:items-center"
+                    data-dashboard-application
                 >
                     <img
                         :src="application.image_url"
@@ -307,16 +307,16 @@ function statusClass(tone) {
                         class="h-14 w-14 shrink-0 rounded-sm bg-white object-contain p-2 ring-1 ring-slate-200"
                     >
                     <span class="min-w-0">
-                        <span class="block truncate text-base font-bold text-slate-950">{{ application.title }}</span>
+                        <span class="block break-words text-base font-bold text-slate-950">{{ application.title }}</span>
                         <span class="mt-0.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                            <span class="truncate">{{ application.provider }}</span>
+                            <span class="break-words">{{ application.provider }}</span>
                             <span v-if="application.submitted_label" class="inline-flex items-center gap-1.5">
                                 <i class="fa-regular fa-calendar text-slate-400" aria-hidden="true"></i>
                                 Submitted {{ application.submitted_label }}
                             </span>
                         </span>
-                        <span class="mt-1.5 block truncate text-xs font-semibold text-slate-700">
-                            <span class="text-slate-400">Next:</span> {{ application.next_step }}
+                        <span class="mt-1.5 block text-xs font-semibold leading-5 text-slate-700">
+                            <span class="text-slate-600">Next:</span> {{ application.next_step }}
                         </span>
                     </span>
                     <span class="min-w-0">
@@ -329,7 +329,7 @@ function statusClass(tone) {
                         </span>
                     </span>
                     <span class="flex items-center justify-between gap-3 lg:justify-end">
-                        <span :class="['inline-flex rounded-sm px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide', statusClass(application.status_tone)]">
+                        <span :class="['student-badge', statusClass(application.status_tone)]">
                             {{ application.status_label }}
                         </span>
                         <span class="grid h-8 w-8 place-items-center border border-slate-200 text-slate-500 transition group-hover:border-slate-950 group-hover:bg-slate-950 group-hover:text-white">
@@ -351,43 +351,42 @@ function statusClass(tone) {
                     v-for="item in upcoming"
                     :key="item.key"
                     :href="item.href"
-                    class="group grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-2 px-5 py-4 transition hover:bg-slate-50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-6"
+                    class="group grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-4 gap-y-2 px-5 py-4 transition hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-600 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:px-6"
                 >
                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-950 text-sm text-amber-300">
                         <i :class="upcomingIcon(item.kind)" aria-hidden="true"></i>
                     </span>
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate text-sm font-bold text-slate-950">{{ item.title }}</span>
-                        <span class="mt-0.5 block truncate text-xs text-slate-500">{{ item.context }} | {{ item.detail }}</span>
+                        <span class="block break-words text-sm font-bold text-slate-950">{{ item.title }}</span>
+                        <span class="mt-0.5 block text-xs leading-5 text-slate-600">{{ item.context }}<template v-if="item.context && item.detail"> | </template>{{ item.detail }}</span>
                     </span>
-                    <span class="col-start-2 w-fit shrink-0 rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 sm:col-start-auto">
+                    <span class="student-badge col-start-2 w-fit sm:col-start-auto">
                         {{ item.date_label }}
                     </span>
                 </a>
             </div>
         </section>
 
-        <section v-if="recommendation" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm" aria-labelledby="dashboard-recommendation">
-            <a :href="recommendation.href" class="group grid transition hover:bg-slate-50 sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:items-center">
-                <span class="grid min-h-32 place-items-center border-b border-slate-200 bg-gradient-to-br from-amber-50 to-slate-100 p-5 sm:h-full sm:border-b-0 sm:border-r">
+        <section v-if="recommendation" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm" aria-labelledby="dashboard-recommendation" data-dashboard-recommendation>
+            <div class="grid sm:grid-cols-[8rem_minmax(0,1fr)_auto] sm:items-center">
+                <a :href="recommendation.href" :aria-label="`View ${recommendation.title}`" class="grid min-h-32 place-items-center border-b border-slate-200 bg-gradient-to-br from-amber-50 to-slate-100 p-5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-600 sm:h-full sm:border-b-0 sm:border-r">
                     <img :src="recommendation.image_url" :alt="`${recommendation.title} program logo`" class="h-20 w-20 bg-white object-contain p-2 shadow-sm ring-1 ring-slate-200">
-                </span>
-                <span class="min-w-0 p-5 sm:p-6">
-                    <span class="student-kicker">Suggested scholarship</span>
-                    <span id="dashboard-recommendation" class="mt-2 block text-lg font-bold text-slate-950">{{ recommendation.title }}</span>
-                    <span class="mt-1 block text-sm text-slate-500">{{ recommendation.provider }}</span>
-                    <span class="mt-3 flex flex-wrap gap-2 text-xs font-bold text-slate-700">
-                        <span class="bg-slate-100 px-2.5 py-1.5">{{ recommendation.benefit_summary }}</span>
-                        <span class="bg-slate-100 px-2.5 py-1.5">{{ recommendation.deadline_label }}</span>
-                    </span>
-                </span>
-                <span class="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 sm:border-l sm:border-t-0 sm:px-6">
-                    <span class="bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900">{{ recommendation.match_score }}% match</span>
-                    <span class="grid h-9 w-9 place-items-center bg-slate-950 text-white transition group-hover:bg-amber-400 group-hover:text-slate-950">
-                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                    </span>
-                </span>
-            </a>
+                </a>
+                <div class="min-w-0 p-5 sm:p-6">
+                    <p class="student-kicker">Suggested scholarship</p>
+                    <h2 id="dashboard-recommendation" class="mt-2 text-lg font-bold text-slate-950"><a :href="recommendation.href" class="break-words hover:underline focus-visible:outline-2 focus-visible:outline-amber-600">{{ recommendation.title }}</a></h2>
+                    <p class="mt-1 text-sm text-slate-600">{{ recommendation.provider }}</p>
+                    <ApplicantTextSummary v-if="recommendation.benefit_summary" :text="recommendation.benefit_summary" :label="`benefit summary for ${recommendation.title}`" class="mt-3" />
+                    <span class="student-badge mt-3">{{ recommendation.deadline_label }}</span>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 sm:flex-col sm:items-stretch sm:border-l sm:border-t-0 sm:px-6">
+                    <span class="student-badge student-badge-attention justify-center">{{ recommendation.match_score }}% match</span>
+                    <a :href="recommendation.href" class="student-button student-button-primary student-button-compact">
+                        View scholarship
+                        <i class="fa-solid fa-arrow-right" aria-hidden="true"></i>
+                    </a>
+                </div>
+            </div>
         </section>
     </div>
 </template>

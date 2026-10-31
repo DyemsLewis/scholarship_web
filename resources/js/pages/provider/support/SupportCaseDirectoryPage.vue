@@ -31,7 +31,7 @@ const queueCopy = {
         empty: 'No resolved support cases match this view.',
     },
 };
-const currentPath = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/support/needs-response';
+const currentPath = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider/workspaces/support/needs-response';
 const activeQueue = queueByPath[currentPath] ?? 'needs_action';
 const pageCopy = queueCopy[activeQueue];
 
@@ -89,10 +89,10 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="support-directory-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
-                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Support workspace</p><h1 id="support-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-1 text-sm text-slate-600">{{ pageCopy.description }}</p></div></div>
+                        <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Support workspace</p><h1 id="support-directory-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-1 text-sm text-slate-600">{{ pageCopy.description }}</p></div></div>
                         <a href="/provider/workspaces/support/report-platform-issue" class="inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800">
                             <i class="fa-solid fa-triangle-exclamation text-amber-300" aria-hidden="true"></i>
                             Report platform issue
@@ -120,36 +120,37 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     </div>
 
                     <div v-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading support cases...</p></div>
-                    <div v-else-if="!reports.length" class="px-6 py-16 text-center">
+                    <div v-else-if="!reports.length && !errorMessage" class="px-6 py-16 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p>
                     </div>
 
-                    <div v-else class="staff-table-viewport">
-                        <table class="w-full min-w-[72rem] table-fixed border-collapse text-left">
+                    <div v-else-if="reports.length" class="staff-table-viewport">
+                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
+                            <colgroup><col><col class="w-56"><col class="w-48"><col class="w-32"><col class="w-24"></colgroup>
                             <caption class="sr-only">{{ pageCopy.title }}</caption>
                             <thead class="bg-slate-50">
-                                <tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                                    <th class="w-[34%] px-5 py-3">Concern</th>
-                                    <th class="w-[25%] px-5 py-3">Reporter</th>
-                                    <th class="w-[24%] px-5 py-3">Related program</th>
-                                    <th class="w-[12%] px-5 py-3">Received</th>
-                                    <th class="w-[5%] px-5 py-3"><span class="sr-only">Open</span></th>
+                                <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
+                                    <th class="px-5 py-3">Concern</th>
+                                    <th class="px-5 py-3">Reporter</th>
+                                    <th class="px-5 py-3">Related program</th>
+                                    <th class="px-5 py-3">Received</th>
+                                    <th class="px-5 py-3"><span class="sr-only">Open</span></th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="report in reports" :key="report.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4">
-                                        <p class="truncate text-sm font-bold text-slate-950">{{ report.subject }}</p>
-                                        <p class="mt-1 truncate text-xs text-slate-500">{{ report.category_label }}</p>
+                                        <p class="service-text text-sm font-bold text-slate-950">{{ report.subject }}</p>
+                                        <p class="mt-1 service-text text-xs text-slate-500">{{ report.category_label }}</p>
                                     </td>
                                     <td class="px-5 py-4">
                                         <div class="flex min-w-0 items-center gap-3">
                                             <ProviderApplicantPhoto :src="report.applicant?.profile_photo_url" :name="report.applicant?.name || 'Provider team'" />
-                                            <div class="min-w-0"><p class="truncate text-sm font-bold text-slate-900">{{ report.applicant?.name || 'Provider team' }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ report.applicant?.email }}</p></div>
+                                            <div class="min-w-0"><p class="service-text text-sm font-bold text-slate-900">{{ report.applicant?.name || 'Provider team' }}</p><p class="mt-1 service-text text-xs text-slate-500">{{ report.applicant?.email }}</p></div>
                                         </div>
                                     </td>
-                                    <td class="px-5 py-4"><p class="truncate text-sm font-semibold text-slate-800">{{ report.program?.title || 'General platform issue' }}</p></td>
+                                    <td class="px-5 py-4"><p class="service-text text-sm font-semibold text-slate-800">{{ report.program?.title || 'General platform issue' }}</p></td>
                                     <td class="px-5 py-4 text-xs font-semibold leading-5 text-slate-600">{{ report.created_at }}</td>
                                     <td class="px-5 py-4 text-right"><a :href="report.action_url" class="inline-grid h-9 w-9 place-items-center bg-slate-950 text-white hover:bg-slate-800" :aria-label="`Open ${report.subject}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                                 </tr>

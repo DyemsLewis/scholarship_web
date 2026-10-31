@@ -27,7 +27,7 @@ const passwordForm = reactive({
     password_confirmation: '',
 });
 
-const labelClass = 'text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500';
+const labelClass = 'text-xs font-bold uppercase tracking-wide text-slate-600';
 const inputClass = 'mt-2 h-11 w-full border border-slate-300 bg-white px-3.5 text-sm text-slate-950 outline-none focus:border-slate-950';
 const initials = computed(() => String(account.value?.name || 'Provider')
     .split(/\s+/)
@@ -71,6 +71,7 @@ async function loadAccount() {
 }
 
 async function saveAccount() {
+    if (!account.value || isLoading.value || isSavingAccount.value || isSavingPassword.value) return;
     isSavingAccount.value = true;
     accountErrors.value = {};
     accountMessage.value = { type: '', text: '' };
@@ -92,6 +93,7 @@ async function saveAccount() {
 }
 
 async function savePassword() {
+    if (!account.value || isLoading.value || isSavingAccount.value || isSavingPassword.value) return;
     isSavingPassword.value = true;
     passwordErrors.value = {};
     passwordMessage.value = { type: '', text: '' };
@@ -121,14 +123,14 @@ onMounted(loadAccount);
         <ProviderSidebar />
 
         <section class="student-page provider-page" aria-labelledby="provider-account-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-settings-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-start justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4">
                             <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300" aria-hidden="true"><i class="fa-solid fa-user-gear"></i></span>
                             <div class="min-w-0">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Personal account</p>
-                                <h1 id="provider-account-title" class="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">My profile</h1>
+                                <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Personal account</p>
+                                <h1 id="provider-account-title" class="settings-page-title mt-1 font-display text-3xl font-bold tracking-tight text-slate-950">My profile</h1>
                                 <p class="mt-2 text-sm leading-6 text-slate-600">Manage your own identity and sign-in details without changing the organization profile.</p>
                             </div>
                         </div>
@@ -145,7 +147,7 @@ onMounted(loadAccount);
                             <div class="flex min-w-0 items-center gap-4">
                                 <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-sm font-black text-amber-300">{{ initials }}</span>
                                 <div class="min-w-0">
-                                    <h2 id="account-identity-title" class="truncate text-xl font-bold text-slate-950">{{ account.name }}</h2>
+                                    <h2 id="account-identity-title" class="settings-text text-xl font-bold text-slate-950">{{ account.name }}</h2>
                                     <p class="mt-1 text-sm text-slate-500">{{ account.organization_name }}</p>
                                 </div>
                             </div>
@@ -160,7 +162,7 @@ onMounted(loadAccount);
                                     <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-id-card text-sm" aria-hidden="true"></i></span>
                                     <div><h3 class="text-base font-bold text-slate-950">Personal identity</h3><p class="mt-1 text-xs text-slate-500">Shown to other authorized members of your provider team.</p></div>
                                 </div>
-                                <div class="mt-5 grid grid-cols-[1fr_8rem_1fr] gap-5">
+                                <div class="mt-5 grid grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)] gap-5">
                                     <label><span :class="labelClass">First name</span><input v-model="accountForm.first_name" required type="text" autocomplete="given-name" :class="inputClass"><span v-if="fieldError(accountErrors, 'first_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'first_name') }}</span></label>
                                     <label><span :class="labelClass">M.I.</span><input v-model="accountForm.middle_initial" maxlength="1" type="text" :class="inputClass"><span v-if="fieldError(accountErrors, 'middle_initial')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'middle_initial') }}</span></label>
                                     <label><span :class="labelClass">Last name</span><input v-model="accountForm.last_name" required type="text" autocomplete="family-name" :class="inputClass"><span v-if="fieldError(accountErrors, 'last_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'last_name') }}</span></label>
@@ -180,8 +182,8 @@ onMounted(loadAccount);
                             </section>
 
                             <footer class="flex items-end justify-between gap-8 border-t border-slate-200 bg-slate-50 px-6 py-5">
-                                <label class="w-full max-w-md"><span :class="labelClass">Current password to confirm changes</span><input v-model="accountForm.current_password" required type="password" autocomplete="current-password" :class="inputClass"><span v-if="fieldError(accountErrors, 'current_password')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'current_password') }}</span></label>
-                                <button type="submit" :disabled="isSavingAccount" class="inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"><i class="fa-solid fa-floppy-disk text-xs text-amber-300" aria-hidden="true"></i>{{ isSavingAccount ? 'Saving...' : 'Save account' }}</button>
+                                <label class="min-w-0 flex-1"><span :class="labelClass">Current password to confirm changes</span><input v-model="accountForm.current_password" required type="password" autocomplete="current-password" :class="inputClass"><span v-if="fieldError(accountErrors, 'current_password')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'current_password') }}</span></label>
+                                <button type="submit" :disabled="isSavingAccount || isSavingPassword" class="inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"><i class="fa-solid fa-floppy-disk text-xs text-amber-300" aria-hidden="true"></i>{{ isSavingAccount ? 'Saving...' : 'Save account' }}</button>
                             </footer>
                         </form>
                     </section>
@@ -200,7 +202,7 @@ onMounted(loadAccount);
                                 <label><span :class="labelClass">New password</span><input v-model="passwordForm.password" required minlength="8" type="password" autocomplete="new-password" :class="inputClass"><span v-if="fieldError(passwordErrors, 'password')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(passwordErrors, 'password') }}</span></label>
                                 <label><span :class="labelClass">Confirm new password</span><input v-model="passwordForm.password_confirmation" required minlength="8" type="password" autocomplete="new-password" :class="inputClass"></label>
                             </div>
-                            <div class="mt-5 flex justify-end"><button type="submit" :disabled="isSavingPassword" class="inline-flex h-11 items-center gap-2 border border-slate-300 bg-white px-5 text-sm font-bold text-slate-800 hover:border-slate-950 disabled:cursor-not-allowed disabled:opacity-50"><i class="fa-solid fa-shield-halved text-xs" aria-hidden="true"></i>{{ isSavingPassword ? 'Updating...' : 'Update password' }}</button></div>
+                            <div class="mt-5 flex justify-end"><button type="submit" :disabled="isSavingAccount || isSavingPassword" class="inline-flex h-11 items-center gap-2 border border-slate-300 bg-white px-5 text-sm font-bold text-slate-800 hover:border-slate-950 disabled:cursor-not-allowed disabled:opacity-50"><i class="fa-solid fa-shield-halved text-xs" aria-hidden="true"></i>{{ isSavingPassword ? 'Updating...' : 'Update password' }}</button></div>
                         </form>
                     </section>
                 </template>

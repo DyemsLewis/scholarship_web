@@ -7,6 +7,7 @@ use App\Models\PortalNotification;
 use App\Models\Scholarship;
 use App\Models\SupportReport;
 use App\Models\User;
+use App\Queries\Admin\SupportCaseQuery;
 use App\Support\AdminWorkspace;
 use App\Support\ProviderWorkspace;
 use Illuminate\Database\Eloquent\Builder;
@@ -234,7 +235,7 @@ class SupportReportController extends Controller
         $nextReport = (clone $base)
             ->where('assigned_role', 'provider')
             ->where('provider_status', 'open')
-            ->with(['applicant:id,role,first_name,last_name,email', 'scholarship:id,title'])
+            ->with($this->supportReportRelations())
             ->oldest()
             ->first();
         $query = clone $base;
@@ -276,21 +277,29 @@ class SupportReportController extends Controller
                     ->where('subject', 'like', $likeSearch)
                     ->orWhere('description', 'like', $likeSearch)
                     ->orWhere('context', 'like', $likeSearch)
-                    ->orWhereHas('applicant', fn (Builder $applicant) => $applicant
-                        ->where('email', 'like', $likeSearch)
-                        ->orWhere('first_name', 'like', $likeSearch)
-                        ->orWhere('last_name', 'like', $likeSearch))
+                    ->orWhereHas('applicant', function (Builder $applicant) use ($likeSearch): void {
+                        $applicant->where(function (Builder $identity) use ($likeSearch): void {
+                            $identity->where('email', 'like', $likeSearch);
+                            foreach ([
+                                'studentProfile' => ['first_name', 'last_name'],
+                                'providerProfile' => ['first_name', 'last_name', 'provider_name'],
+                                'adminProfile' => ['first_name', 'last_name', 'display_name'],
+                            ] as $relation => $columns) {
+                                $identity->orWhereHas($relation, function (Builder $profile) use ($columns, $likeSearch): void {
+                                    $profile->where(function (Builder $names) use ($columns, $likeSearch): void {
+                                        foreach ($columns as $column) {
+                                            $names->orWhere($column, 'like', $likeSearch);
+                                        }
+                                    });
+                                });
+                            }
+                        });
+                    })
                     ->orWhereHas('scholarship', fn (Builder $program) => $program->where('title', 'like', $likeSearch));
             });
         }
 
-        $query->with([
-            'applicant:id,role,first_name,last_name,email',
-            'applicant.studentProfile:id,user_id,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
-            'scholarship:id,title',
-            'providerResolver:id,role,username,email',
-            'adminResolver:id,role,username,email',
-        ]);
+        $query->with($this->supportReportRelations());
 
         if ($queue === 'needs_action') {
             $query->oldest();
@@ -345,13 +354,7 @@ class SupportReportController extends Controller
         abort_unless($this->canAccessProviderSupportReport($staff, $report), 403);
 
         $owner = $staff->providerOrganizationOwner()->loadMissing('providerProfile');
-        $report->load([
-            'applicant:id,role,first_name,last_name,email,contact_number',
-            'applicant.studentProfile:id,user_id,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
-            'scholarship:id,title',
-            'providerResolver:id,role,first_name,last_name,username,email',
-            'adminResolver:id,role,first_name,last_name,username,email',
-        ]);
+        $report->load($this->supportReportRelations());
 
         return response()->json([
             'workspace' => [
@@ -512,7 +515,7 @@ class SupportReportController extends Controller
         return response()->json([
             'message' => 'Your report was sent to platform support.',
             'report' => $this->reportPayload(
-                $report->fresh()->load(['applicant:id,role,first_name,last_name,email', 'scholarship:id,title']),
+                $report->fresh()->load($this->supportReportRelations()),
                 true,
                 'provider',
             ),
@@ -533,7 +536,11 @@ class SupportReportController extends Controller
         return Storage::disk('local')->response(
             $report->attachment_path,
             $report->attachment_original_name ?: 'support-attachment',
-            ['Content-Type' => $report->attachment_mime_type ?: 'application/octet-stream'],
+            [
+                'Content-Type' => $report->attachment_mime_type ?: 'application/octet-stream',
+                'Cache-Control' => 'private, no-store',
+                'X-Content-Type-Options' => 'nosniff',
+            ],
         );
     }
 
@@ -651,7 +658,7 @@ class SupportReportController extends Controller
 
             $providerComplete = $lockedReport->assigned_role !== 'provider'
                 || $lockedReport->provider_status === 'resolved';
-            $adminComplete = $lockedReport->admin_status === 'resolved';
+            $adminComplete = in_array($lockedReport->admin_status, ['resolved', 'not_required'], true);
             $lockedReport->status = $providerComplete && $adminComplete ? 'resolved' : 'open';
             $overallStatusChanged = $previousOverallStatus !== $lockedReport->status;
 
@@ -708,13 +715,7 @@ class SupportReportController extends Controller
         }
 
         $waitingForOtherRole = $validated['status'] === 'resolved' && $report->status !== 'resolved';
-        $freshReport = $report->fresh()->load([
-            'applicant:id,role,first_name,last_name,email,contact_number',
-            'applicant.studentProfile:id,user_id,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
-            'scholarship:id,title',
-            'providerResolver:id,role,first_name,last_name,username,email',
-            'adminResolver:id,role,first_name,last_name,username,email',
-        ]);
+        $freshReport = $report->fresh()->load($this->supportReportRelations());
 
         return response()->json([
             'message' => $waitingForOtherRole
@@ -723,6 +724,9 @@ class SupportReportController extends Controller
             'report' => $viewerRole === 'provider'
                 ? $this->providerSupportWorkspaceItem($freshReport)
                 : $this->reportPayload($freshReport, true, $viewerRole),
+            ...($viewerRole === 'admin'
+                ? ['support_case' => app(SupportCaseQuery::class)->record($freshReport)]
+                : []),
         ]);
     }
 
@@ -735,6 +739,25 @@ class SupportReportController extends Controller
                     ->orWhereHas('applications', fn ($applicationQuery) => $applicationQuery
                         ->where('applicant_id', $applicant->id));
             });
+    }
+
+    private function supportReportRelations(): array
+    {
+        // Identity fields live in role profiles; parent_account_id distinguishes staff from organization owners.
+        $profiles = [
+            'studentProfile' => 'id,user_id,first_name,middle_initial,last_name,suffix,contact_number,profile_photo_path,profile_photo_original_name,profile_photo_mime_type',
+            'providerProfile' => 'id,user_id,first_name,middle_initial,last_name,contact_number,provider_name',
+            'adminProfile' => 'id,user_id,first_name,middle_initial,last_name,contact_number,display_name',
+        ];
+        $relations = ['scholarship:id,title'];
+        foreach (['applicant', 'providerResolver', 'adminResolver'] as $userRelation) {
+            $relations[] = $userRelation.':id,parent_account_id,role,username,email';
+            foreach ($profiles as $profileRelation => $columns) {
+                $relations[] = $userRelation.'.'.$profileRelation.':'.$columns;
+            }
+        }
+
+        return $relations;
     }
 
     private function providerSupportReportsQuery(User $staff): Builder
@@ -827,12 +850,7 @@ class SupportReportController extends Controller
         }
 
         $reports = $query
-            ->with([
-                'applicant:id,role,first_name,last_name,email',
-                'scholarship:id,title',
-                'providerResolver:id,role,username,email',
-                'adminResolver:id,role,username,email',
-            ])
+            ->with($this->supportReportRelations())
             ->latest()
             ->paginate(8);
 

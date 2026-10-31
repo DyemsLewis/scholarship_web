@@ -26,9 +26,10 @@ function fileType(file) {
 async function uploadFile(event) {
     const input = event.target;
     const file = input.files?.[0];
-    if (!file) return;
+    if (!file || !canModify.value || isLoading.value || isUploading.value) return;
     isUploading.value = true;
     errorMessage.value = '';
+    successMessage.value = '';
     const data = new FormData();
     data.append('service_file', file);
 
@@ -71,13 +72,14 @@ async function uploadFile(event) {
                 <p class="mt-1 text-xs text-slate-500">Supporting files and platform deliverables will appear together here.</p>
             </div>
             <div v-else class="staff-table-viewport">
-                <table class="w-full min-w-[880px] table-fixed border-collapse text-left">
-                    <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                        <tr><th class="w-[38%] px-5 py-3">File</th><th class="w-[24%] px-5 py-3">Source</th><th class="w-[22%] px-5 py-3">Shared</th><th class="w-[16%] px-5 py-3 text-right">Actions</th></tr>
+                <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
+                    <colgroup><col><col class="w-52"><col class="w-44"><col class="w-36"></colgroup>
+                    <thead class="bg-slate-50 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
+                        <tr><th class="px-5 py-3">File</th><th class="px-5 py-3">Source</th><th class="px-5 py-3">Shared</th><th class="px-5 py-3 text-right">Actions</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200">
                         <tr v-for="file in files" :key="file.id" class="hover:bg-slate-50/70">
-                            <td class="px-5 py-4"><p class="truncate text-sm font-bold text-slate-950">{{ file.original_name }}</p><p class="mt-1 text-xs text-slate-500">{{ formatServiceFileSize(file.size) }}</p></td>
+                            <td class="px-5 py-4"><p class="service-text text-sm font-bold text-slate-950">{{ file.original_name }}</p><p class="mt-1 text-xs text-slate-500">{{ formatServiceFileSize(file.size) }}</p></td>
                             <td class="px-5 py-4"><p class="text-sm font-semibold text-slate-800">{{ fileType(file) }}</p><p class="mt-1 text-xs text-slate-500">{{ file.uploaded_by }}</p></td>
                             <td class="px-5 py-4 text-sm text-slate-600">{{ formatServiceDateTime(file.created_at) }}</td>
                             <td class="px-5 py-4 text-right"><div class="inline-flex gap-2"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.original_name" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-700 hover:border-slate-950" title="Preview file"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i><span class="sr-only">Preview file</span></a><a :href="file.download_url" class="grid h-9 w-9 place-items-center bg-slate-950 text-white hover:bg-slate-800" title="Download file"><i class="fa-solid fa-download text-xs" aria-hidden="true"></i><span class="sr-only">Download file</span></a></div></td>

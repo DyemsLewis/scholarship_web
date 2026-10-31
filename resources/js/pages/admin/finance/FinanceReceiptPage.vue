@@ -1,12 +1,19 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
+import { useAdminResource } from '../../../composables/useAdminResource.js';
+import AdminLoadState from '../components/AdminLoadState.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
 const purchaseId = document.getElementById('app')?.dataset.purchaseId;
-const loading = ref(true);
-const errorMessage = ref('');
-const receipt = ref(null);
+const resource = useAdminResource(async ({ signal }) => {
+    const response = await window.axios.get(`/admin/workspaces/finance/receipts/${purchaseId}/data`, { signal });
+    if (!response.data.receipt) throw new Error('Missing record');
+    return response.data.receipt;
+}, { failureMessage: 'The payment receipt could not be loaded.' });
+const { isLoading: loading, errorMessage } = resource;
+const receipt = computed(() => resource.data.value);
+const ready = computed(() => !!receipt.value && !loading.value && !errorMessage.value);
 
 function money(amount, currency = 'PHP') {
     return new Intl.NumberFormat('en-PH', { style: 'currency', currency }).format(Number(amount ?? 0) / 100);
@@ -14,31 +21,20 @@ function money(amount, currency = 'PHP') {
 
 function label(value, fallback = 'Not recorded') {
     if (!value) return fallback;
-    return String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    return { gcash: 'GCash', paymaya: 'Maya', grab_pay: 'GrabPay' }[value] || String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-async function loadReceipt() {
-    loading.value = true;
-    errorMessage.value = '';
-    try {
-        const response = await window.axios.get(`/admin/workspaces/finance/receipts/${purchaseId}/data`);
-        receipt.value = response.data.receipt ?? null;
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'The payment receipt could not be loaded.';
-    } finally {
-        loading.value = false;
-    }
-}
+const loadReceipt = () => resource.load();
 
 function printReceipt() {
-    window.print();
+    if (ready.value) window.print();
 }
 
 onMounted(loadReceipt);
 </script>
 
 <template>
-    <AdminWorkspacePage workspace="finance_officer">
+    <AdminWorkspacePage workspace="finance_officer" class="admin-finance-workspace">
         <a href="/admin/workspaces/finance/payments" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to confirmed payments</a>
 
         <AdminWorkspaceHeader
@@ -47,17 +43,16 @@ onMounted(loadReceipt);
             :description="receipt?.receipt_number || 'Confirmed provider service payment.'"
             icon="fa-solid fa-receipt"
         >
-            <template v-if="receipt" #actions>
+            <template v-if="ready" #actions>
                 <button type="button" class="inline-flex h-11 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950" @click="printReceipt"><i class="fa-solid fa-print text-xs" aria-hidden="true"></i>Print receipt</button>
             </template>
         </AdminWorkspaceHeader>
 
-        <div v-if="loading" class="admin-panel mt-4 px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading payment receipt...</div>
-        <p v-else-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
+        <section v-if="!ready" class="admin-panel mt-4"><AdminLoadState :loading="loading" :error="errorMessage" loading-message="Loading payment receipt..." @retry="loadReceipt" /></section>
 
-        <section v-else-if="receipt" class="admin-panel mt-4 overflow-hidden">
+        <section v-else-if="ready" class="admin-panel mt-4 overflow-hidden">
             <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-5">
-                <div class="flex min-w-0 items-center gap-4"><span class="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-building-columns" aria-hidden="true"></i><img v-if="receipt.provider_logo_url" :src="receipt.provider_logo_url" :alt="`${receipt.provider} logo`" class="absolute inset-0 h-full w-full bg-white object-contain p-1" @error="$event.currentTarget.remove()"></span><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Provider</p><h2 class="mt-1 truncate text-lg font-black text-slate-950">{{ receipt.provider }}</h2><p class="mt-1 truncate text-sm text-slate-500">{{ receipt.provider_email }}</p></div></div>
+                <div class="flex min-w-0 items-center gap-4"><span class="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-building-columns" aria-hidden="true"></i><img v-if="receipt.provider_logo_url" :src="receipt.provider_logo_url" :alt="`${receipt.provider} logo`" class="absolute inset-0 h-full w-full bg-white object-contain p-1" @error="$event.currentTarget.remove()"></span><div class="min-w-0"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Provider</p><h2 class="mt-1 text-lg font-black text-slate-950">{{ receipt.provider }}</h2><p class="mt-1 text-sm text-slate-500">{{ receipt.provider_email }}</p></div></div>
                 <span :class="['shrink-0 px-3 py-2 text-xs font-bold uppercase tracking-wide', receipt.livemode ? 'bg-slate-900 text-white' : 'bg-amber-100 text-amber-900']">{{ receipt.livemode ? 'Live payment' : 'Test payment' }}</span>
             </header>
 
@@ -68,12 +63,12 @@ onMounted(loadReceipt);
                 <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Service status</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ label(receipt.fulfillment_status) }}</dd></div>
             </dl>
 
-            <div class="divide-y divide-slate-200">
+            <dl class="divide-y divide-slate-200">
                 <div class="grid grid-cols-[15rem_minmax(0,1fr)] gap-6 px-6 py-4"><dt class="text-sm font-semibold text-slate-500">Service purchased</dt><dd class="text-sm font-bold text-slate-950">{{ receipt.service }}</dd></div>
                 <div class="grid grid-cols-[15rem_minmax(0,1fr)] gap-6 px-6 py-4"><dt class="text-sm font-semibold text-slate-500">Purchased by</dt><dd><p class="text-sm font-bold text-slate-950">{{ receipt.purchased_by || receipt.provider }}</p><p class="mt-0.5 text-xs text-slate-500">{{ receipt.purchased_by_email || receipt.provider_email }}</p></dd></div>
                 <div class="grid grid-cols-[15rem_minmax(0,1fr)] gap-6 px-6 py-4"><dt class="text-sm font-semibold text-slate-500">Terms accepted</dt><dd class="text-sm font-bold text-slate-900">{{ receipt.service_terms_accepted_at || 'Not recorded' }}</dd></div>
                 <div class="grid grid-cols-[15rem_minmax(0,1fr)] gap-6 px-6 py-4"><dt class="text-sm font-semibold text-slate-500">Record created</dt><dd class="text-sm font-bold text-slate-900">{{ receipt.created_at }}</dd></div>
-            </div>
+            </dl>
 
             <details class="group border-t border-slate-200">
                 <summary class="flex cursor-pointer list-none items-center justify-between px-6 py-4 text-sm font-bold text-slate-800 hover:bg-slate-50">

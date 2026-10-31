@@ -53,13 +53,14 @@ final class PortalManagerWorkspaceQuery
     {
         $summary = $this->accountSummary();
         $users = User::query()
-            ->with(['studentProfile', 'providerProfile', 'adminProfile'])
+            ->with(['studentProfile', 'providerProfile', 'parentAccount.providerProfile', 'adminProfile'])
             ->where(function (Builder $query): void {
                 $query->whereNull('email_verified_at')
                     ->orWhere('must_reset_password', true)
                     ->orWhere('account_status', 'suspended');
             })
             ->latest('updated_at')
+            ->latest('id')
             ->limit(12)
             ->get()
             ->map(fn (User $user): array => [
@@ -69,7 +70,7 @@ final class PortalManagerWorkspaceQuery
                 'role' => Str::headline($user->account_title ?: $user->role),
                 'image_url' => match (true) {
                     $user->isApplicant() && filled($user->studentProfile?->profile_photo_path) => route('admin.workspaces.accounts.photo', $user, false),
-                    $user->isProvider() && filled($user->providerProfile?->logo_path) => asset(ltrim($user->providerProfile->logo_path, '/')),
+                    $user->isProvider() => $user->publicPayload()['provider_logo_url'],
                     default => null,
                 },
                 'image_fit' => $user->isProvider() ? 'contain' : 'cover',
@@ -110,6 +111,9 @@ final class PortalManagerWorkspaceQuery
     public function support(): array
     {
         $summary = $this->support->summary();
+        if (isset($summary['next_case'])) {
+            unset($summary['next_case']['action_url']);
+        }
         $cases = $this->support->directory(['queue' => 'needs_response', 'per_page' => 10]);
         $cases['items'] = collect($cases['items'])->map(function (array $item): array {
             unset($item['action_url']);
@@ -123,6 +127,9 @@ final class PortalManagerWorkspaceQuery
     public function services(): array
     {
         $summary = $this->services->summary();
+        if (isset($summary['next_request'])) {
+            unset($summary['next_request']['action_url']);
+        }
         $queues = collect(['ready', 'active', 'waiting'])->mapWithKeys(function (string $queue): array {
             $payload = $this->services->directory(['queue' => $queue, 'per_page' => 5]);
             $payload['items'] = collect($payload['items'])->map(function (array $item): array {
@@ -164,6 +171,11 @@ final class PortalManagerWorkspaceQuery
             unset($dataset['download_url']);
 
             return $dataset;
+        })->values();
+        $exports['recent_exports'] = collect($exports['recent_exports'])->map(function (array $item): array {
+            unset($item['record_url']);
+
+            return $item;
         })->values();
 
         return compact('activity', 'exports');

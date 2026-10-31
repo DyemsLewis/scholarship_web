@@ -4,6 +4,7 @@ import test from 'node:test';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 
 const components = [
+    '../../resources/js/components/ApplicantRecordTabs.vue',
     '../../resources/js/components/application-detail/ApplicationDecisionBanner.vue',
     '../../resources/js/components/application-detail/ApplicantApplicationShell.vue',
     '../../resources/js/components/application-detail/ApplicationProgressRecord.vue',
@@ -60,13 +61,13 @@ test('the overview keeps one primary action and delegates detail views to focuse
     assert.match(shell, /sectionVisuals/);
     assert.match(shell, /application-documents\.jpg/);
     assert.match(shell, /filipino-students-workshop\.jpg/);
-    assert.match(shell, /lg:min-h-\[15rem\]/);
+    assert.match(shell, /lg:min-h-\[12rem\]/);
     assert.match(shell, /lg:grid-cols-\[minmax\(0,1\.35fr\)_minmax\(22rem,0\.65fr\)\]/);
     assert.match(shell, /detail\.page\.title/);
     assert.ok(shell.indexOf('detail.page.title') > shell.indexOf('</header>'));
     assert.match(shell, /v-if="detail\.view !== 'summary'"/);
     assert.match(shell, /aria-labelledby="application-section-title"/);
-    assert.match(shell, /border border-slate-300 bg-white px-5 py-4 shadow-sm/);
+    assert.match(shell, /border border-slate-300 bg-white px-4 py-3 shadow-sm/);
     assert.match(shell, /detail\.navigation/);
     assert.doesNotMatch(shell, /Your scholarship journey/);
     assert.doesNotMatch(overview, /dss_breakdown|rubric_scores|review_notes/);
@@ -96,7 +97,8 @@ test('the submission page uses the scoped contract for files and correction resp
     assert.match(snapshot, /Review submitted information/);
     assert.match(documents, /attentionCount/);
     assert.match(documents, /Start with the highlighted requirement/);
-    assert.match(documents, /sm:grid-cols-\[minmax\(0,1fr\)_10rem_auto\]/);
+    assert.match(documents, /md:grid-cols-\[minmax\(0,1fr\)_10rem_12rem\]/);
+    assert.equal((documents.match(/:class="fileColumns"/g) ?? []).length, 2);
     assert.match(documents, /min-w-28/);
     assert.doesNotMatch(submission, /dss_breakdown|rubric_scores|review_notes/);
 });
@@ -168,8 +170,10 @@ test('shared application states remain distinct and narrow screens keep content 
     const correctionDialog = readFileSync(new URL('../../resources/js/components/application-detail/ApplicationCorrectionDialog.vue', import.meta.url), 'utf8');
     const historyDialog = readFileSync(new URL('../../resources/js/components/application-detail/ApplicationHistoryEventDialog.vue', import.meta.url), 'utf8');
 
-    assert.match(shell, /overflow-x-auto/);
-    assert.match(shell, /min-w-\[42rem\]/);
+    const tabs = readFileSync(new URL('../../resources/js/components/ApplicantRecordTabs.vue', import.meta.url), 'utf8');
+    assert.match(shell, /<ApplicantRecordTabs/);
+    assert.match(tabs, /overflow-x-auto/);
+    assert.match(tabs, /min-w-\[42rem\]/);
     assert.match(decision, /tone === 'negative'/);
     assert.match(decision, /border-rose-300/);
     assert.match(progress, /step\.status === 'not_passed'/);

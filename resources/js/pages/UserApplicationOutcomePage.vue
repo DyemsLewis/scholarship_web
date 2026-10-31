@@ -32,7 +32,7 @@ const shellDetail = computed(() => {
         ? new URL(decision.action.href, window.location.origin).pathname
         : '';
 
-    if (actionPath === window.location.pathname) {
+    if (actionPath === (window.portalPathname?.() ?? window.location.pathname)) {
         decision.action.href = agreement.value ? '#recipient-agreement' : '#application-result';
         decision.action.label = agreement.value?.can_respond ? 'Review agreement' : 'Review result';
     }

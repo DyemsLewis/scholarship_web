@@ -125,7 +125,7 @@ function iconClass(tone) {
         </a>
 
         <article class="overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm">
-            <header class="px-5 py-5 sm:px-6">
+            <header class="px-4 py-4 sm:px-6">
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2">
@@ -142,21 +142,21 @@ function iconClass(tone) {
                 </div>
             </header>
 
-            <dl class="grid border-t border-slate-200 bg-slate-50 sm:grid-cols-4">
-                <div class="px-5 py-3">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Release date</dt>
+            <dl class="grid grid-cols-2 border-t border-slate-200 bg-slate-50 sm:grid-cols-4">
+                <div class="min-w-0 px-4 py-2.5 sm:px-5 sm:py-3">
+                    <dt class="student-detail-label">Release date</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ release.release_label || 'Not scheduled' }}</dd>
                 </div>
-                <div class="border-t border-slate-200 px-5 py-3 sm:border-l sm:border-t-0">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Amount</dt>
+                <div class="min-w-0 border-l border-slate-200 px-4 py-2.5 sm:px-5 sm:py-3">
+                    <dt class="student-detail-label">Amount</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ release.amount_label || 'Non-cash benefit' }}</dd>
                 </div>
-                <div class="border-t border-slate-200 px-5 py-3 sm:border-l sm:border-t-0">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Method</dt>
+                <div class="min-w-0 border-t border-slate-200 px-4 py-2.5 sm:border-l sm:border-t-0 sm:px-5 sm:py-3">
+                    <dt class="student-detail-label">Method</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ release.release_method_label }}</dd>
                 </div>
-                <div class="border-t border-slate-200 px-5 py-3 sm:border-l sm:border-t-0">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Location</dt>
+                <div class="min-w-0 border-l border-t border-slate-200 px-4 py-2.5 sm:border-t-0 sm:px-5 sm:py-3">
+                    <dt class="student-detail-label">Location</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ release.location || 'Provider-coordinated' }}</dd>
                     <LocationMapLink v-if="release.release_method === 'in_person'" :address="release.location || ''" :latitude="release.latitude" :longitude="release.longitude" :title="release.title" />
                 </div>

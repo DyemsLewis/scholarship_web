@@ -159,10 +159,10 @@ onUnmounted(() => {
             @click.self="closePreview"
         >
             <section class="flex h-[min(92vh,56rem)] w-full max-w-6xl flex-col overflow-hidden border border-slate-300 bg-white shadow-2xl">
-                <header class="flex min-h-16 items-center justify-between gap-5 border-b border-slate-200 px-5 py-3">
+                <header class="flex min-h-16 shrink-0 items-center justify-between gap-5 border-b border-slate-200 px-5 py-3">
                     <div class="min-w-0">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">File preview</p>
-                        <h2 id="staff-file-preview-title" class="mt-1 truncate text-lg font-bold text-slate-950">
+                        <p class="text-xs font-bold uppercase tracking-wide text-amber-700">File preview</p>
+                        <h2 id="staff-file-preview-title" class="mt-1 break-words text-lg font-bold text-slate-950 [overflow-wrap:anywhere]">
                             {{ preview.title }}
                         </h2>
                     </div>
@@ -177,7 +177,7 @@ onUnmounted(() => {
                     </button>
                 </header>
 
-                <div class="relative min-h-0 flex-1 bg-slate-100 p-4">
+                <div class="relative min-h-0 flex-1 overflow-hidden bg-slate-100 p-4">
                     <div v-if="loading" class="absolute inset-0 z-10 grid place-items-center bg-slate-100">
                         <div class="text-center text-slate-600">
                             <i class="fa-solid fa-circle-notch fa-spin text-xl" aria-hidden="true"></i>
@@ -189,15 +189,15 @@ onUnmounted(() => {
                         v-else-if="isImage"
                         :src="preview.viewUrl"
                         :alt="preview.title"
-                        class="h-full min-h-[24rem]"
+                        class="h-full min-h-0"
                     />
                     <iframe
                         v-else-if="canEmbed"
                         :src="preview.viewUrl"
                         :title="preview.title"
-                        class="h-full min-h-[24rem] w-full border border-slate-200 bg-white"
+                        class="h-full min-h-0 w-full border border-slate-200 bg-white"
                     ></iframe>
-                    <div v-else class="grid h-full min-h-[24rem] place-items-center border border-dashed border-slate-300 bg-white p-8 text-center">
+                    <div v-else class="grid h-full min-h-0 place-items-center overflow-y-auto border border-dashed border-slate-300 bg-white p-8 text-center">
                         <div class="max-w-md">
                             <span class="grid h-12 w-12 place-items-center bg-slate-100 text-slate-700 mx-auto">
                                 <i class="fa-solid fa-file-arrow-down text-lg" aria-hidden="true"></i>
@@ -212,7 +212,7 @@ onUnmounted(() => {
                     </div>
                 </div>
 
-                <footer class="flex items-center justify-between gap-4 border-t border-slate-200 bg-white px-5 py-3">
+                <footer class="flex shrink-0 items-center justify-between gap-4 border-t border-slate-200 bg-white px-5 py-3">
                     <p class="text-xs text-slate-500">The workspace stays open behind this preview.</p>
                     <div class="flex items-center gap-2">
                         <a

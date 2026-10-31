@@ -34,23 +34,23 @@ const workspaceLabel = computed(() => role.value ? `${role.value.label} workspac
 </script>
 
 <template>
-    <header class="overflow-hidden rounded-sm border border-slate-300 border-t-2 border-t-slate-950 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
+    <header class="provider-page-header overflow-hidden rounded-sm border border-slate-300 border-t-2 border-t-slate-950 bg-white shadow-[0_2px_8px_rgba(8,20,38,0.035)]">
         <div class="flex flex-col gap-4 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
             <div class="flex min-w-0 items-center gap-3.5">
                 <slot name="leading">
-                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-950 text-white">
-                        <i :class="[icon, 'text-sm']" aria-hidden="true"></i>
+                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-950 text-white" aria-hidden="true">
+                        <i :class="[icon, 'block w-4 text-center text-sm leading-none']"></i>
                     </span>
                 </slot>
 
                 <div class="min-w-0">
-                    <p v-if="workspaceLabel" class="mb-1 text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500">{{ workspaceLabel }}</p>
+                    <p v-if="workspaceLabel" class="mb-1 text-xs font-bold uppercase tracking-[0.08em] text-slate-600">{{ workspaceLabel }}</p>
                     <h1 class="font-sans text-xl font-bold leading-tight tracking-[-0.015em] text-slate-950 sm:text-2xl">{{ title }}</h1>
-                    <p v-if="description" class="mt-1 max-w-3xl text-sm leading-5 text-slate-600 sm:line-clamp-2">{{ description }}</p>
+                    <p v-if="description" class="mt-1 max-w-3xl break-words text-sm leading-5 text-slate-600">{{ description }}</p>
                 </div>
             </div>
 
-            <div v-if="$slots.actions" class="grid w-full shrink-0 grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center lg:justify-end">
+            <div v-if="$slots.actions" class="provider-page-header-actions grid w-full shrink-0 grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center lg:justify-end">
                 <slot name="actions"></slot>
             </div>
         </div>

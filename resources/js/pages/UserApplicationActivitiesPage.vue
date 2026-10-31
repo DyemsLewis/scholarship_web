@@ -29,7 +29,7 @@ const shellDetail = computed(() => {
         ...sourceDecision,
         action: sourceDecision.action ? { ...sourceDecision.action } : null,
     };
-    const currentPath = window.location.pathname;
+    const currentPath = (window.portalPathname?.() ?? window.location.pathname);
     const actionPath = decision.action?.href
         ? new URL(decision.action.href, window.location.origin).pathname
         : '';
@@ -166,10 +166,8 @@ onMounted(loadActivities);
             />
 
             <section v-if="primaryActivity" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-                <header class="border-b border-slate-200 px-4 py-5 sm:px-6">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Your schedule</p>
-                    <h2 class="mt-1 font-display text-xl font-bold text-slate-950">Next activity</h2>
-                    <p class="mt-1 text-sm text-slate-600">Check the date, method, and instructions before attending.</p>
+                <header class="border-b border-slate-200 px-4 py-3 sm:px-5">
+                    <h2 class="text-base font-bold text-slate-950">Next activity</h2>
                 </header>
                 <ApplicationActivityRecord
                     :key="activityKey(primaryActivity)"

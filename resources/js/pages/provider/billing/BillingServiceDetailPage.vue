@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
-const planCode = window.location.pathname.match(/\/provider\/workspaces\/billing\/services\/([^/]+)$/)?.[1] ?? '';
+const planCode = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/workspaces\/billing\/services\/([^/]+)$/)?.[1] ?? '';
 const isLoading = ref(true);
 const errorMessage = ref('');
 const plan = ref(null);
@@ -37,7 +37,7 @@ onMounted(loadService);
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="service-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <a href="/provider/workspaces/billing/services" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to services
@@ -52,9 +52,9 @@ onMounted(loadService);
                 <template v-else>
                     <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
                         <div class="flex items-center justify-between gap-10 px-7 py-6">
-                            <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">{{ plan.category }}</p><h1 id="service-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.description }}</p></div></div>
+                            <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">{{ plan.category }}</p><h1 id="service-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.description }}</p></div></div>
                             <div class="shrink-0 text-right">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">One-time fee</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">One-time fee</p>
                                 <p class="mt-1 text-2xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p>
                                 <a :href="`/provider/workspaces/billing/services/${plan.code}/request`" class="mt-3 inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">
                                     Start request
@@ -65,15 +65,15 @@ onMounted(loadService);
 
                         <div class="grid grid-cols-3 border-t border-slate-200 bg-slate-50">
                             <div class="px-6 py-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Best for</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">Best for</p>
                                 <p class="mt-1 text-sm font-semibold leading-5 text-slate-800">{{ plan.best_for }}</p>
                             </div>
                             <div class="border-l border-slate-200 px-6 py-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Typical delivery</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">Typical delivery</p>
                                 <p class="mt-1 text-sm font-semibold text-slate-800">{{ plan.timeline }}</p>
                             </div>
                             <div class="border-l border-slate-200 px-6 py-4">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Format</p>
+                                <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">Format</p>
                                 <p class="mt-1 text-sm font-semibold text-slate-800">{{ plan.format }}</p>
                             </div>
                         </div>
@@ -81,7 +81,7 @@ onMounted(loadService);
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <div class="border-b border-slate-200 px-6 py-5">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.17em] text-amber-700">Expected outcome</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.17em] text-amber-700">Expected outcome</p>
                             <p class="mt-2 max-w-4xl text-base font-semibold leading-7 text-slate-900">{{ plan.outcome }}</p>
                         </div>
 

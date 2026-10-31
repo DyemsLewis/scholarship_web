@@ -25,7 +25,7 @@ const queueCopy = {
     },
 };
 
-const path = window.location.pathname.replace(/\/$/, '') || '/provider/workspaces/decisions/pending';
+const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/$/, '') || '/provider/workspaces/decisions/pending';
 const requestedQueue = new URLSearchParams(window.location.search).get('queue');
 const activeQueue = queueByPath[path] ?? (['pending', 'waitlist', 'recorded'].includes(requestedQueue) ? requestedQueue : 'pending');
 const pageCopy = queueCopy[activeQueue];
@@ -108,19 +108,19 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="decision-directory-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-application-workspace mx-auto max-w-[94rem]">
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-start justify-between gap-8">
                         <div class="flex min-w-0 items-start gap-4">
                             <span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span>
                             <div>
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Final decisions</p>
-                                <h1 id="decision-directory-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
+                                <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Final decisions</p>
+                                <h1 id="decision-directory-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1>
                                 <p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
                             </div>
                         </div>
                         <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Decision scope</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Decision scope</p>
                             <p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p>
                             <p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p>
                         </div>
@@ -144,10 +144,10 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                 </nav>
 
                 <section v-if="selectedProgramSummary" class="mt-4 grid grid-cols-[1fr_auto_auto_auto] items-center border border-slate-200 bg-white shadow-sm" aria-label="Selected program capacity">
-                    <div class="min-w-0 px-5 py-4"><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Selected program</p><p class="mt-1 truncate text-sm font-bold text-slate-950">{{ selectedProgramSummary.title }}</p></div>
-                    <div class="border-l border-slate-200 px-6 py-4 text-center"><p class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Slots</p><p class="mt-1 text-sm font-bold text-slate-950">{{ selectedProgramSummary.slots_total ?? 'No limit' }}</p></div>
-                    <div class="border-l border-slate-200 px-6 py-4 text-center"><p class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Awarded</p><p class="mt-1 text-sm font-bold text-slate-950">{{ selectedProgramSummary.slots_occupied }}</p></div>
-                    <div class="border-l border-slate-200 px-6 py-4 text-center"><p class="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Remaining</p><p class="mt-1 text-sm font-bold text-slate-950">{{ selectedProgramSummary.slots_remaining ?? 'No limit' }}</p></div>
+                    <div class="min-w-0 px-5 py-4"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Selected program</p><p class="mt-1 application-text text-sm font-bold text-slate-950">{{ selectedProgramSummary.title }}</p></div>
+                    <div class="border-l border-slate-200 px-6 py-4 text-center"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Slots</p><p class="mt-1 text-sm font-bold text-slate-950">{{ selectedProgramSummary.slots_total ?? 'No limit' }}</p></div>
+                    <div class="border-l border-slate-200 px-6 py-4 text-center"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Awarded</p><p class="mt-1 text-sm font-bold text-slate-950">{{ selectedProgramSummary.slots_occupied }}</p></div>
+                    <div class="border-l border-slate-200 px-6 py-4 text-center"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Remaining</p><p class="mt-1 text-sm font-bold text-slate-950">{{ selectedProgramSummary.slots_remaining ?? 'No limit' }}</p></div>
                 </section>
 
                 <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Final decision list">
@@ -171,21 +171,21 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-semibold text-slate-500">Loading final decisions...</p>
                     </div>
-                    <div v-else-if="!applications.length" class="px-6 py-16 text-center">
+                    <div v-else-if="!applications.length && !errorMessage" class="px-6 py-16 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel text-sm" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p>
                         <p class="mt-1 text-xs text-slate-500">This docket updates as applicants complete selection.</p>
                     </div>
 
                     <div v-else class="staff-table-viewport">
-                        <table class="w-full min-w-[70rem] table-fixed border-collapse text-left">
+                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-36"><col class="w-36"><col class="w-36"><col class="w-44"></colgroup>
                             <thead class="bg-slate-50">
-                                <tr class="border-b border-slate-200 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
-                                    <th class="w-[31%] px-5 py-3">Applicant</th>
-                                    <th class="w-[19%] px-5 py-3">Review status</th>
-                                    <th class="w-[20%] px-5 py-3">Outcome</th>
-                                    <th class="w-[18%] px-5 py-3">Program capacity</th>
-                                    <th class="w-[12%] px-5 py-3 text-right">Action</th>
+                                <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
+                                    <th class="px-5 py-3">Applicant</th>
+                                    <th class="px-5 py-3">Review status</th>
+                                    <th class="px-5 py-3">Outcome</th>
+                                    <th class="px-5 py-3">Program capacity</th>
+                                    <th class="px-5 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
@@ -194,11 +194,11 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                         <div class="flex items-center gap-3">
                                             <img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover">
                                             <span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
-                                            <div class="min-w-0"><p class="truncate text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ application.program.title }}</p></div>
+                                            <div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.program.title }}</p></div>
                                         </div>
                                     </td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage_status }}</p><p class="mt-1 truncate text-xs text-slate-500">{{ application.applicant.education || 'Verified applicant record' }}</p></td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span><p class="mt-2 text-xs text-slate-500">{{ application.decision.reason || application.decision.recorded_at || `${application.waiting_days} days waiting` }}</p></td>
+                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage_status }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education || 'Verified applicant record' }}</p></td>
+                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span><p class="mt-2 text-xs text-slate-500">{{ application.decision.reason || application.decision.recorded_at || `${application.waiting_days} days waiting` }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.capacity.label }}</p><p class="mt-1 text-xs text-slate-500">{{ application.capacity.remaining === null ? 'Selection is not capped' : `${application.capacity.remaining} remaining` }}</p></td>
                                     <td class="px-5 py-4 text-right"><a :href="recordUrl(application)" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800">{{ application.decision.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                 </tr>

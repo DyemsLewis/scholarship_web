@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ApplicantTextSummary from '../components/ApplicantTextSummary.vue';
 import LocationMapLink from '../components/LocationMapLink.vue';
 import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPreviewToolbar.vue';
 
@@ -101,8 +102,8 @@ function programTiming(program) {
 
 function programTimingClass(program) {
     return program.is_accepting_applications
-        ? 'bg-emerald-100 text-emerald-800'
-        : 'bg-sky-100 text-sky-800';
+        ? 'student-badge-positive'
+        : 'student-badge-info';
 }
 
 function programVisual(program) {
@@ -204,9 +205,9 @@ onMounted(loadPage);
                             <label class="relative min-w-0 flex-1">
                                 <span class="sr-only">Search providers</span>
                                 <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-400" aria-hidden="true"></i>
-                                <input v-model="search" type="search" placeholder="Search provider, service area, or focus" class="w-full rounded-md border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
+                                <input v-model="search" type="search" placeholder="Search provider, service area, or focus" class="w-full rounded-sm border border-slate-300 bg-white py-3 pl-10 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-500 focus:border-amber-500 focus:ring-3 focus:ring-amber-100">
                             </label>
-                            <select v-model="selectedType" aria-label="Filter by provider type" class="rounded-md border border-slate-300 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100 sm:w-56">
+                            <select v-model="selectedType" aria-label="Filter by provider type" class="rounded-sm border border-slate-300 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-amber-500 focus:ring-3 focus:ring-amber-100 sm:w-56">
                                 <option v-for="type in providerTypes" :key="type" :value="type">{{ type === 'all' ? 'All provider types' : typeLabel(type) }}</option>
                             </select>
                         </div>
@@ -220,7 +221,7 @@ onMounted(loadPage);
                         <div v-if="filteredProviders.length === 0" class="student-card p-6">
                             <p class="font-bold text-slate-950">{{ providers.length ? 'No providers match your search' : 'No verified providers yet' }}</p>
                             <p class="mt-1 text-sm leading-6 text-slate-500">{{ providers.length ? 'Try a broader name, location, or provider type.' : 'Organizations will appear here after platform verification.' }}</p>
-                            <button v-if="providers.length" type="button" class="mt-4 rounded-md bg-slate-900 px-4 py-2.5 text-sm font-bold text-white" @click="resetFilters">Clear search</button>
+                            <button v-if="providers.length" type="button" class="student-button student-button-primary mt-4" @click="resetFilters">Clear search</button>
                         </div>
 
                         <article v-for="item in filteredProviders" :key="item.id" class="student-card overflow-hidden">
@@ -231,7 +232,7 @@ onMounted(loadPage);
                                 <div class="min-w-0 flex-1">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <h2 class="font-display text-xl font-bold text-slate-950">{{ item.name }}</h2>
-                                        <span :class="['inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em]', item.is_verified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']"><i :class="item.is_verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-clock'" aria-hidden="true"></i>{{ item.verification_label || (item.is_verified ? 'Verified' : 'Verification pending') }}</span>
+                                        <span :class="['student-badge', item.is_verified ? 'student-badge-positive' : 'student-badge-attention']"><i :class="item.is_verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-clock'" aria-hidden="true"></i>{{ item.verification_label || (item.is_verified ? 'Verified' : 'Verification pending') }}</span>
                                     </div>
                                     <p class="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-slate-500">{{ typeLabel(item.type) }}<span v-if="item.year_established"> | Since {{ item.year_established }}</span></p>
                                     <p class="mt-2 line-clamp-2 max-w-4xl text-sm leading-6 text-slate-600">{{ item.mission || item.description || 'This provider has current scholarship opportunities.' }}</p>
@@ -242,7 +243,7 @@ onMounted(loadPage);
                                     </div>
                                 </div>
 
-                                <a :href="`/dashboard/providers/${item.id}`" class="inline-flex shrink-0 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800">
+                                <a :href="`/dashboard/providers/${item.id}`" class="student-button student-button-primary shrink-0">
                                     View provider
                                     <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                 </a>
@@ -261,7 +262,7 @@ onMounted(loadPage);
                                     <div class="min-w-0">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <p class="student-kicker">{{ typeLabel(provider.type) }}</p>
-                                            <span :class="['inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-[0.08em]', provider.is_verified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']"><i :class="provider.is_verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-clock'" aria-hidden="true"></i>{{ provider.verification_label || (provider.is_verified ? 'Verified' : 'Verification pending') }}</span>
+                                            <span :class="['student-badge', provider.is_verified ? 'student-badge-positive' : 'student-badge-attention']"><i :class="provider.is_verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-clock'" aria-hidden="true"></i>{{ provider.verification_label || (provider.is_verified ? 'Verified' : 'Verification pending') }}</span>
                                         </div>
                                         <h1 class="mt-2 font-display text-3xl font-bold leading-[1.08] text-slate-950 sm:text-4xl">{{ provider.name }}</h1>
                                     </div>
@@ -271,25 +272,25 @@ onMounted(loadPage);
 
                                 <dl class="mt-6 grid border-y border-slate-200 sm:grid-cols-3">
                                     <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:pr-4">
-                                        <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Current programs</dt>
+                                        <dt class="student-detail-label">Current programs</dt>
                                         <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.programs_count }} available</dd>
                                     </div>
                                     <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:px-4">
-                                        <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Service area</dt>
+                                        <dt class="student-detail-label">Service area</dt>
                                         <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.service_area || 'Not listed' }}</dd>
                                     </div>
                                     <div class="py-3 sm:pl-4">
-                                        <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Established</dt>
+                                        <dt class="student-detail-label">Established</dt>
                                         <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.year_established || 'Not listed' }}</dd>
                                     </div>
                                 </dl>
 
                                 <div class="mt-auto flex flex-wrap gap-2 pt-6">
-                                    <a v-if="provider.contact_email" :href="`mailto:${provider.contact_email}`" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
+                                    <a v-if="provider.contact_email" :href="`mailto:${provider.contact_email}`" class="student-button student-button-primary" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                         Email provider
                                         <i class="fa-regular fa-envelope text-xs" aria-hidden="true"></i>
                                     </a>
-                                    <a v-if="websiteUrl(provider.website)" :href="websiteUrl(provider.website)" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-5 text-sm font-bold text-slate-700 transition hover:bg-slate-50" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
+                                    <a v-if="websiteUrl(provider.website)" :href="websiteUrl(provider.website)" target="_blank" rel="noopener noreferrer" class="student-button student-button-secondary" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                         Visit website
                                         <i class="fa-solid fa-arrow-up-right-from-square text-xs" aria-hidden="true"></i>
                                     </a>
@@ -316,19 +317,19 @@ onMounted(loadPage);
 
                         <dl class="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-4">
                             <div class="border-b border-slate-200 px-5 py-4 sm:border-r lg:border-b-0">
-                                <dt class="text-xs font-semibold text-slate-500">Public contact</dt>
+                                <dt class="student-detail-label">Public contact</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.contact_department || 'Scholarship office' }}</dd>
                             </div>
                             <div class="border-b border-slate-200 px-5 py-4 lg:border-b-0 lg:border-r">
-                                <dt class="text-xs font-semibold text-slate-500">Phone</dt>
+                                <dt class="student-detail-label">Phone</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.contact_number || 'Not listed' }}</dd>
                             </div>
                             <div class="border-b border-slate-200 px-5 py-4 sm:border-r lg:border-b-0">
-                                <dt class="text-xs font-semibold text-slate-500">Office hours</dt>
+                                <dt class="student-detail-label">Office hours</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.office_hours || 'Not listed' }}</dd>
                             </div>
                             <div class="px-5 py-4">
-                                <dt class="text-xs font-semibold text-slate-500">Office address</dt>
+                                <dt class="student-detail-label">Office address</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.address || 'Not listed' }}</dd>
                                 <LocationMapLink :address="provider.address || ''" :latitude="provider.latitude" :longitude="provider.longitude" :title="provider.name" />
                             </div>
@@ -341,13 +342,13 @@ onMounted(loadPage);
                                 <p class="student-kicker">Current opportunities</p>
                                 <h2 class="mt-1 font-display text-2xl font-bold text-slate-950">Scholarships from this provider</h2>
                             </div>
-                            <span class="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{{ provider.programs_count }} program{{ provider.programs_count === 1 ? '' : 's' }}</span>
+                            <span class="student-badge">{{ provider.programs_count }} program{{ provider.programs_count === 1 ? '' : 's' }}</span>
                         </div>
 
                         <div v-if="!provider.programs?.length" class="student-card mt-4 p-6 text-sm text-slate-600">This provider has no current public programs.</div>
 
                         <div v-else class="mt-4 space-y-4">
-                            <article v-for="program in provider.programs" :key="program.id" class="student-card overflow-hidden rounded-md border-slate-300">
+                            <article v-for="program in provider.programs" :key="program.id" class="student-card overflow-hidden rounded-md border-slate-300" data-provider-program>
                                 <div class="grid lg:min-h-56 lg:grid-cols-[20rem_minmax(0,1fr)]">
                                     <figure class="relative h-52 overflow-hidden bg-slate-900 lg:h-auto">
                                         <img :src="program.image_url || programVisual(program).image" :alt="program.image_url ? `${program.title} background` : programVisual(program).alt" class="absolute inset-0 h-full w-full object-cover">
@@ -357,19 +358,19 @@ onMounted(loadPage);
 
                                     <div class="flex flex-col p-5 sm:p-6">
                                         <div class="flex flex-wrap items-center gap-2">
-                                            <span class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">{{ program.category || 'Scholarship program' }}</span>
-                                            <span :class="['rounded-md px-2 py-1 text-[10px] font-bold uppercase', programTimingClass(program)]">{{ programTiming(program) }}</span>
+                                            <span class="student-detail-label">{{ program.category || 'Scholarship program' }}</span>
+                                            <span :class="['student-badge', programTimingClass(program)]">{{ programTiming(program) }}</span>
                                         </div>
                                         <h3 class="mt-2 font-display text-2xl font-bold text-slate-950">{{ program.title }}</h3>
                                         <p v-if="program.description" class="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-slate-600">{{ program.description }}</p>
 
-                                        <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-4 text-xs font-semibold text-slate-500">
-                                            <span v-if="isPreview"><strong class="text-slate-950">Varies</strong> by applicant</span>
-                                            <span v-else><strong class="text-slate-950">{{ program.eligibility_match?.score ?? 0 }}%</strong> profile match</span>
-                                            <span><strong class="text-slate-950">{{ program.benefit_summary || 'Support listed' }}</strong></span>
+                                        <div class="mt-4 border-t border-slate-200 pt-4">
+                                            <p class="student-detail-label">Benefits</p>
+                                            <ApplicantTextSummary :text="program.benefit_summary || 'Support listed in scholarship details.'" :label="`benefit summary for ${program.title}`" class="mt-1" />
+                                            <p class="mt-3 text-xs text-slate-600"><template v-if="isPreview"><strong class="text-slate-950">Varies</strong> by applicant</template><template v-else><strong class="text-slate-950">{{ program.eligibility_match?.score ?? 0 }}%</strong> profile match</template></p>
                                         </div>
 
-                                        <a :href="isPreview ? `/provider/previews/programs/${program.id}` : `/dashboard/scholarships/${program.id}`" class="mt-5 inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-md bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
+                                        <a :href="isPreview ? `/provider/previews/programs/${program.id}` : `/dashboard/scholarships/${program.id}`" class="student-button student-button-primary mt-5 w-fit" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">
                                             View scholarship
                                             <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                                         </a>

@@ -31,6 +31,7 @@ function selectAttachment(event) {
 }
 
 async function submitReport() {
+    if (isLoading.value || !workspace.value || isSubmitting.value) return;
     isSubmitting.value = true;
     errorMessage.value = '';
     const payload = new FormData();
@@ -61,17 +62,19 @@ onMounted(loadForm);
         <ProviderSidebar />
 
         <section class="student-page" aria-labelledby="platform-report-title">
-            <div class="mx-auto max-w-[94rem]">
+            <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <a href="/provider/workspaces/support/platform" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to platform reports</a>
 
                 <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
-                    <div class="flex items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Platform support</p><h1 id="platform-report-title" class="mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Report a platform issue</h1><p class="mt-1 text-sm text-slate-600">Describe one issue so platform support can investigate it clearly.</p></div></div>
+                    <div class="flex items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Platform support</p><h1 id="platform-report-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Report a platform issue</h1><p class="mt-1 text-sm text-slate-600">Describe one issue so platform support can investigate it clearly.</p></div></div>
                 </header>
 
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center shadow-sm"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading report form...</p></div>
 
-                <form v-else class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="submitReport">
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-6 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+
+                <form v-if="!isLoading && workspace" class="mt-4 border border-slate-200 bg-white shadow-sm" :aria-busy="isSubmitting" @submit.prevent="submitReport">
+                    <fieldset :disabled="isSubmitting" class="min-w-0">
 
                     <section class="border-b border-slate-200" aria-labelledby="report-context-heading">
                         <header class="flex items-start gap-4 bg-slate-50 px-6 py-4">
@@ -80,8 +83,8 @@ onMounted(loadForm);
                         </header>
                         <div class="grid grid-cols-3 gap-5 px-6 py-5">
                             <label class="block"><span class="text-sm font-bold text-slate-800">Issue type</span><select v-model="form.category" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-950"><option v-for="category in categories" :key="category.value" :value="category.value">{{ category.label }}</option></select></label>
-                            <label class="block"><span class="text-sm font-bold text-slate-800">Related program <span class="font-normal text-slate-400">(optional)</span></span><select v-model="form.scholarship_id" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-950"><option value="">General platform issue</option><option v-for="program in programs" :key="program.id" :value="program.id">{{ program.title }}</option></select></label>
-                            <label class="block"><span class="text-sm font-bold text-slate-800">Affected page <span class="font-normal text-slate-400">(optional)</span></span><input v-model="form.context" type="text" maxlength="255" class="mt-2 h-11 w-full border border-slate-300 px-4 text-sm outline-none focus:border-slate-950" placeholder="Example: Applications page"></label>
+                            <label class="block"><span class="text-sm font-bold text-slate-800">Related program <span class="font-normal text-slate-600">(optional)</span></span><select v-model="form.scholarship_id" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 text-sm outline-none focus:border-slate-950"><option value="">General platform issue</option><option v-for="program in programs" :key="program.id" :value="program.id">{{ program.title }}</option></select></label>
+                            <label class="block"><span class="text-sm font-bold text-slate-800">Affected page <span class="font-normal text-slate-600">(optional)</span></span><input v-model="form.context" type="text" maxlength="255" class="mt-2 h-11 w-full border border-slate-300 px-4 text-sm outline-none focus:border-slate-950" placeholder="Example: Applications page"></label>
                         </div>
                     </section>
 
@@ -99,11 +102,11 @@ onMounted(loadForm);
                     <section aria-labelledby="report-evidence-heading">
                         <header class="flex items-start gap-4 bg-slate-50 px-6 py-4">
                             <span class="grid h-8 w-8 shrink-0 place-items-center bg-slate-950 text-xs font-black text-white">3</span>
-                            <div><h2 id="report-evidence-heading" class="text-base font-bold text-slate-950">Supporting file <span class="font-normal text-slate-400">(optional)</span></h2><p class="mt-1 text-xs text-slate-500">Attach one screenshot or document when it helps explain the issue.</p></div>
+                            <div><h2 id="report-evidence-heading" class="text-base font-bold text-slate-950">Supporting file <span class="font-normal text-slate-600">(optional)</span></h2><p class="mt-1 text-xs text-slate-500">Attach one screenshot or document when it helps explain the issue.</p></div>
                         </header>
                         <div class="flex items-center gap-4 px-6 py-5">
                             <label class="inline-flex h-11 cursor-pointer items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 hover:border-slate-950"><i class="fa-solid fa-paperclip text-slate-500" aria-hidden="true"></i>Choose file<input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf" class="sr-only" @change="selectAttachment"></label>
-                            <div class="min-w-0"><p class="truncate text-sm font-semibold text-slate-700">{{ attachmentLabel }}</p><p class="mt-1 text-xs text-slate-500">JPG, PNG, WEBP, or PDF up to 5 MB.</p></div>
+                            <div class="min-w-0"><p class="service-text text-sm font-semibold text-slate-700">{{ attachmentLabel }}</p><p class="mt-1 text-xs text-slate-500">JPG, PNG, WEBP, or PDF up to 5 MB.</p></div>
                         </div>
                     </section>
 
@@ -111,6 +114,7 @@ onMounted(loadForm);
                         <p class="text-xs font-semibold text-slate-500">Sent as {{ workspace?.organization_name }}</p>
                         <div class="flex gap-3"><a href="/provider/workspaces/support/platform" class="inline-flex h-11 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950"><i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>Cancel</a><button type="submit" :disabled="isSubmitting" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-40"><i :class="['fa-solid', isSubmitting ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>{{ isSubmitting ? 'Sending...' : 'Send report' }}</button></div>
                     </footer>
+                    </fieldset>
                 </form>
             </div>
         </section>

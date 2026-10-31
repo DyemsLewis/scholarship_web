@@ -4,8 +4,8 @@ import FinanceOfficerSidebar from '../components/FinanceOfficerSidebar.vue';
 import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 
-const isReceiptsPage = window.location.pathname.endsWith('/receipts');
-const usesPortalManagerWorkspace = window.location.pathname.startsWith('/admin/workspaces/portal');
+const isReceiptsPage = (window.portalPathname?.() ?? window.location.pathname).endsWith('/receipts');
+const usesPortalManagerWorkspace = (window.portalPathname?.() ?? window.location.pathname).startsWith('/admin/workspaces/portal');
 const financeWorkspaceBase = usesPortalManagerWorkspace ? '/admin/workspaces/portal/finance' : '/admin/workspaces/finance';
 const isLoading = ref(true);
 const errorMessage = ref('');

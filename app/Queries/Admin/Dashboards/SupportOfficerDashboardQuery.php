@@ -34,7 +34,7 @@ final class SupportOfficerDashboardQuery
             ],
             metrics: [
                 ['key' => 'needs-response', 'label' => 'Need response', 'value' => $summary['needs_response'], 'detail' => 'Platform action', 'tone' => 'attention', 'url' => '/admin/workspaces/support/needs-response', 'icon' => 'fa-solid fa-inbox'],
-                ['key' => 'waiting', 'label' => 'Waiting for provider', 'value' => $summary['waiting'], 'detail' => 'Platform work complete', 'url' => '/admin/workspaces/support/waiting', 'icon' => 'fa-solid fa-clock'],
+                ['key' => 'waiting', 'label' => 'Waiting for provider', 'value' => $summary['waiting'], 'detail' => 'No platform response pending', 'url' => '/admin/workspaces/support/waiting', 'icon' => 'fa-solid fa-clock'],
                 ['key' => 'privacy', 'label' => 'Privacy requests', 'value' => $summary['privacy_open'], 'detail' => 'Open cases', 'tone' => 'attention', 'url' => '/admin/workspaces/support/needs-response?category=privacy', 'icon' => 'fa-solid fa-user-shield'],
                 ['key' => 'resolved', 'label' => 'Resolved', 'value' => $summary['resolved'], 'detail' => 'Closed cases', 'tone' => 'positive', 'url' => '/admin/workspaces/support/resolved', 'icon' => 'fa-solid fa-circle-check'],
             ],
@@ -53,7 +53,7 @@ final class SupportOfficerDashboardQuery
                     'key' => 'provider-follow-up',
                     'eyebrow' => 'Coordination',
                     'title' => 'Waiting for provider follow-up',
-                    'description' => 'Cases where platform work is complete and provider action remains.',
+                    'description' => 'Cases awaiting provider action with no platform response pending.',
                     'empty_message' => 'No case is waiting for provider follow-up.',
                     'icon' => 'fa-solid fa-clock',
                     'action' => ['label' => 'Open waiting queue', 'url' => '/admin/workspaces/support/waiting', 'icon' => 'fa-solid fa-arrow-right'],

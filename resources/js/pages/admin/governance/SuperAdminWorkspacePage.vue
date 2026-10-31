@@ -1,17 +1,22 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted } from 'vue';
+import { useAdminResource } from '../../../composables/useAdminResource.js';
+import AdminLoadState from '../components/AdminLoadState.vue';
 import WorkspaceMetricStrip from '../../../components/workspace-dashboard/WorkspaceMetricStrip.vue';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
-const isLoading = ref(true);
-const errorMessage = ref('');
-const summary = ref({ managed_admins: 0, active_admins: 0, covered_roles: 0, total_roles: 0, platform_users: 0, operational_attention: 0 });
-const roleCoverage = ref([]);
-const operationalAreas = ref([]);
-const escalations = ref([]);
+const resource = useAdminResource(async ({ signal }) => {
+    const response = await window.axios.get('/admin/dashboard/data', { signal });
+    return response.data;
+}, { failureMessage: 'Unable to load platform governance.' });
+const { isLoading, errorMessage } = resource;
+const summary = computed(() => resource.data.value?.summary ?? {});
+const roleCoverage = computed(() => resource.data.value?.role_coverage ?? []);
+const operationalAreas = computed(() => resource.data.value?.operational_areas ?? []);
+const escalations = computed(() => resource.data.value?.escalations ?? []);
 
 const workloadByOwner = computed(() => Object.fromEntries(operationalAreas.value.map((area) => [area.owner.toLowerCase(), area.count])));
 const metrics = computed(() => [
@@ -33,21 +38,7 @@ function roleIcon(key) {
     }[key] ?? 'fa-solid fa-user-shield';
 }
 
-async function loadGovernance() {
-    isLoading.value = true;
-    errorMessage.value = '';
-    try {
-        const { data } = await window.axios.get('/admin/dashboard/data');
-        summary.value = { ...summary.value, ...data.summary };
-        roleCoverage.value = data.role_coverage ?? [];
-        operationalAreas.value = data.operational_areas ?? [];
-        escalations.value = data.escalations ?? [];
-    } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to load platform governance.';
-    } finally {
-        isLoading.value = false;
-    }
-}
+const loadGovernance = () => resource.load();
 
 onMounted(loadGovernance);
 </script>
@@ -58,8 +49,9 @@ onMounted(loadGovernance);
             <template #actions><a href="/admin/governance/team" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-users-gear text-xs" aria-hidden="true"></i>Manage admin team</a></template>
         </AdminWorkspaceHeader>
 
-        <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
-        <WorkspaceMetricStrip :metrics="metrics" :loading="isLoading" />
+        <section v-if="isLoading || errorMessage" class="admin-panel mt-4 overflow-hidden"><AdminLoadState :loading="isLoading" :error="errorMessage" loading-message="Loading governance overview..." @retry="loadGovernance" /></section>
+        <template v-else>
+        <WorkspaceMetricStrip :metrics="metrics" />
 
         <section v-if="!isLoading && escalations.length" class="mt-4 flex items-center gap-4 border border-amber-300 bg-amber-50 px-5 py-4">
             <span class="grid h-10 w-10 shrink-0 place-items-center bg-amber-100 text-amber-800"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span>
@@ -69,8 +61,7 @@ onMounted(loadGovernance);
 
         <AdminTableFrame title="Role coverage" description="Ownership and open workload for each administrative role." icon="fa-solid fa-sitemap" class="mt-4">
             <template #actions><a href="/admin/governance/platform" class="text-sm font-bold text-slate-700 hover:text-slate-950">Platform health <i class="fa-solid fa-arrow-right ml-1 text-xs" aria-hidden="true"></i></a></template>
-            <div v-if="isLoading" class="px-6 py-14 text-center text-sm font-semibold text-slate-500">Loading governance overview...</div>
-            <table v-else-if="roleCoverage.length" class="portal-data-table min-w-[62rem]">
+            <table v-if="roleCoverage.length" class="portal-data-table min-w-[56rem]">
                 <thead><tr><th class="px-5">Role</th><th>Active accounts</th><th>Coverage</th><th class="px-5">Open workload</th></tr></thead>
                 <tbody>
                     <tr v-for="role in roleCoverage" :key="role.key">
@@ -81,7 +72,8 @@ onMounted(loadGovernance);
                     </tr>
                 </tbody>
             </table>
-            <AdminEmptyState v-else-if="!isLoading" title="No governance roles found" description="Administrative role definitions are not available." icon="fa-solid fa-sitemap" />
+            <AdminEmptyState v-else title="No governance roles found" description="Administrative role definitions are not available." icon="fa-solid fa-sitemap" />
         </AdminTableFrame>
+        </template>
     </AdminWorkspacePage>
 </template>
