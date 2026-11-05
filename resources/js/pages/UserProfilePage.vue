@@ -34,7 +34,10 @@ import {
 } from '../support/philippineLocations';
 import { showPortalToast } from '../support/portalToast';
 import { applicantProfileOverview } from '../support/applicantProfileOverview';
+import { evidenceFileError, evidenceSummary } from '../support/applicantProfileEvidence';
 import { applicantProfileDetails } from '../support/applicantProfileDetails';
+import { profileValueLabel } from '../support/applicantProfileLabels';
+import { enrollmentStatusOptions, pendingStudyStatuses } from '../support/educationEligibilityPolicy';
 import { hasLocationPin } from '../support/locationPins';
 import { profileFormHasChanges } from '../support/profileFormChanges';
 import { preparationQuery, withPreparationContext } from '../support/scholarshipPreparationContext';
@@ -52,6 +55,7 @@ const preparationParams = preparationQuery(window.location.search);
 const preparationContext = ref(null);
 const contextualHref = (href) => withPreparationContext(href, preparationContext.value?.scholarship_id, preparationContext.value?.return_section);
 const requestedProfileSection = profileSearchParams.get('section');
+const requestedEvidenceType = ref(profileSearchParams.get('evidence') || '');
 const editableProfileSectionIds = ['personal', 'academic', 'household', 'location', 'verification'];
 const showProfileEditorModal = ref(editableProfileSectionIds.includes(requestedProfileSection));
 const activeSection = ref(editableProfileSectionIds.includes(requestedProfileSection)
@@ -96,6 +100,10 @@ const verificationDocumentTermsAccepted = ref(false);
 const uploadingVerificationDocumentType = ref('');
 const deletingVerificationDocumentId = ref(null);
 const rescanningAcademicDocumentId = ref(null);
+const evidenceActionPending = ref(false);
+const evidenceRefreshRequired = ref(false);
+const evidenceRefreshing = ref(false);
+const evidenceSuccess = ref('');
 const previewDocument = ref(null);
 const preparedDocumentsCount = ref(0);
 const platformActiveScholarships = ref([]);
@@ -107,6 +115,7 @@ const {
 } = useConfirmationDialog();
 
 const profileEditorBusy = computed(() => isSaving.value || isUploadingProfilePhoto.value || isDeletingProfilePhoto.value
+    || evidenceActionPending.value || evidenceRefreshing.value
     || Boolean(uploadingVerificationDocumentType.value) || deletingVerificationDocumentId.value !== null || rescanningAcademicDocumentId.value !== null);
 const profileFormHasPin = computed(() => hasLocationPin(form.value.latitude, form.value.longitude));
 const optionButtonBaseClass = 'inline-flex min-h-10 items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-sm font-semibold transition';
@@ -117,7 +126,7 @@ birthdateMinimum.setFullYear(birthdateMinimum.getFullYear() - 100);
 const birthdateMinimumValue = birthdateMinimum.toISOString().slice(0, 10);
 const birthdateMaximumValue = birthdateMaximum.toISOString().slice(0, 10);
 
-const enrollmentOptions = ['Enrolled', 'Incoming student', 'Continuing student', 'Graduating', 'Not currently enrolled'];
+const enrollmentOptions = enrollmentStatusOptions;
 const incomeOptions = ['Below PHP 10,000', 'PHP 10,000 - 20,000', 'PHP 20,001 - 40,000', 'PHP 40,001 - 60,000', 'Above PHP 60,000'];
 const citizenshipOptions = [
     { value: 'filipino', label: 'Filipino citizen' },
@@ -202,6 +211,10 @@ const fieldLabels = {
     citizenship_status: 'Citizenship declaration',
     birthdate: 'Birthdate',
     education_level: 'Education level',
+    completed_qualification: 'Highest completed qualification',
+    completed_qualification_school: 'Awarding school / institution',
+    completed_qualification_year: 'Completion year',
+    completed_qualification_details: 'Qualification name',
     school: 'School / learning institution',
     school_type: 'Institution type',
     learner_reference_number: 'Learner / student ID',
@@ -238,6 +251,10 @@ const profileFieldControlIds = {
     citizenship_status: 'profile-citizenship',
     birthdate: 'profile-birthdate',
     education_level: 'profile-education-level',
+    completed_qualification: 'profile-completed-qualification',
+    completed_qualification_school: 'profile-qualification-school',
+    completed_qualification_year: 'profile-qualification-year',
+    completed_qualification_details: 'profile-qualification-details',
     school: 'profile-school',
     school_type: 'profile-school-type',
     learner_reference_number: 'profile-lrn',
@@ -282,8 +299,8 @@ const profileSections = [
         icon: 'fa-solid fa-book-open-reader',
         impact: 'Matching details.',
         required: true,
-        fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
-        requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa'],
+        fields: ['education_level', 'school', 'school_type', 'learner_reference_number', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa', 'completed_qualification', 'completed_qualification_school', 'completed_qualification_year', 'completed_qualification_details'],
+        requiredFields: ['education_level', 'school', 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year', 'academic_term', 'grading_scale', 'gwa', 'completed_qualification_school', 'completed_qualification_details'],
     },
     {
         id: 'household',
@@ -328,7 +345,8 @@ const profileSections = [
 const courseRequiredLevels = ['senior_high_school', 'college', 'tvet'];
 const gradesRequiredLevels = ['elementary', 'junior_high_school', 'senior_high_school', 'college', 'tvet', 'als', 'other'];
 const guardianRequiredLevels = ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'];
-const requiresProgramPath = computed(() => courseRequiredLevels.includes(form.value.education_level));
+const pendingStudies = computed(() => pendingStudyStatuses.includes(form.value.enrollment_status));
+const requiresProgramPath = computed(() => courseRequiredLevels.includes(form.value.education_level) && !pendingStudies.value);
 const requiresGrades = computed(() => gradesRequiredLevels.includes(form.value.education_level));
 const requiresNumericGrade = computed(() => ['percentage', 'grade_point'].includes(form.value.grading_scale));
 const academicProofOption = computed(() => {
@@ -418,6 +436,8 @@ const schoolProofOption = computed(() => {
     };
 });
 const verificationDocumentOptions = computed(() => (user.value?.profile_evidence_requirements ?? [])
+    .filter((option) => option.value !== 'school_record' || option.required
+        || verificationDocuments.value.some((document) => document.document_type === 'school_record'))
     .filter((option) => option.value !== 'guardian_record' || option.required
         || [user.value?.guardian_name, user.value?.guardian_relationship, user.value?.guardian_contact, user.value?.guardian_email].some(hasValue)
         || user.value?.guardian_is_account_owner)
@@ -434,6 +454,7 @@ const verificationDocumentOptions = computed(() => (user.value?.profile_evidence
             income_record: [saved.income_bracket, saved.household_size ? `${saved.household_size} household members` : ''],
             residency_record: [saved.barangay, saved.city, saved.province, findPhilippineRegion(saved.region)?.label || saved.region],
             guardian_record: [saved.guardian_name, saved.guardian_relationship],
+            qualification_record: [profileValueLabel('completedQualification', saved.completed_qualification), saved.completed_qualification_school, saved.completed_qualification_year],
         };
 
         return {
@@ -468,12 +489,13 @@ const academicVerificationDocument = computed(() => verificationDocuments.value
 const academicOcrActive = computed(() => Boolean(academicOcr.value?.configured));
 const academicScanNeedsAttention = computed(() => academicOcrActive.value
     && academicVerificationDocument.value
+    && !academicVerificationDocument.value.has_current_acceptance && !user.value?.is_profile_verified
     && ['failed', 'needs_review', 'unavailable'].includes(academicVerificationDocument.value.ocr_status));
 const manualAcademicEntryAllowed = computed(() => academicScanNeedsAttention.value);
 const schoolVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'school_record') ?? null);
 const legacyVerificationDocuments = computed(() => verificationDocuments.value
-    .filter((document) => !['academic_record', 'recent_school_id', 'school_record', 'identity_record', 'income_record', 'residency_record', 'guardian_record', 'no_current_scholarship_proof', 'achievement_evidence'].includes(document.document_type)));
+    .filter((document) => !verificationDocumentOptions.value.some((option) => option.value === document.document_type)));
 const verificationDocumentRows = computed(() => verificationDocumentOptions.value.map((option) => ({
     ...option,
     document: verificationDocuments.value.find((document) => document.document_type === option.value) ?? null,
@@ -495,49 +517,9 @@ const verificationDocumentGroups = computed(() => [
     },
 ].filter((group) => group.rows.length > 0));
 const missingVerificationDocumentRows = computed(() => verificationDocumentRows.value
-    .filter((row) => row.required && !row.document));
+    .filter((row) => row.required && (!row.document || row.document.file_available === false)));
 const needsVerificationUpload = computed(() => missingVerificationDocumentRows.value.length > 0);
-const verificationUploadCopy = computed(() => {
-    if (profileVerificationStatus.value === 'rejected') {
-        return {
-            title: 'Replace the requested supporting records',
-            detail: 'Use the reviewer note and upload a clearer file.',
-        };
-    }
-
-    if (needsVerificationUpload.value) {
-        return {
-            title: `Upload ${missingVerificationDocumentRows.value[0].label.toLowerCase()}`,
-            detail: 'Open What to upload for examples and matching profile details.',
-        };
-    }
-
-    if (profileVerificationStatus.value === 'pending') {
-        if (academicScanNeedsAttention.value) {
-            return {
-                title: 'Academic result needs attention',
-                detail: 'Retry the scan, replace the file, or enter the result below.',
-            };
-        }
-
-        return {
-            title: 'Records under review',
-            detail: 'A reviewer compares these files with your saved profile before approving it.',
-        };
-    }
-
-    if (profileVerificationStatus.value === 'approved') {
-        return {
-            title: 'Records reviewed',
-            detail: 'Replace a file only when it changes.',
-        };
-    }
-
-    return {
-        title: 'Add required files',
-        detail: 'Use clear, recent documents.',
-    };
-});
+const verificationUploadCopy = computed(() => evidenceSummary(verificationDocumentRows.value, profileVerificationStatus.value, academicScanNeedsAttention.value));
 const hasUnsavedChanges = computed(() => savedFormSnapshot.value !== '' && profileFormHasChanges(form.value, JSON.parse(savedFormSnapshot.value)));
 const profileDisplayName = computed(() => [
     form.value.first_name,
@@ -591,9 +573,9 @@ const profileRecommendedAction = computed(() => {
 
     if (profileVerificationStatus.value === 'rejected') {
         return {
-            label: 'Replace academic record',
+            label: 'Review requested corrections',
             section: 'verification',
-            detail: 'Review the reviewer note and upload a clearer or updated academic record.',
+            detail: 'Read the feedback on the specific supporting record before replacing it.',
         };
     }
 
@@ -610,9 +592,11 @@ const profileOverview = computed(() => applicantProfileOverview({
     documents: verificationDocuments.value,
     photoReviewStatus: user.value?.profile_photo_review_status,
     scanNeedsAttention: academicScanNeedsAttention.value,
+    evidenceReview: user.value?.evidence_review,
 }));
 
 function continueProfileOverview(action) {
+    if (action.evidence) requestedEvidenceType.value = action.evidence;
     openProfileEditor(action.field ? sectionForField(action.field) : action.section);
 }
 const profileEditorCopy = computed(() => ({
@@ -680,6 +664,10 @@ function emptyForm() {
         account_managed_by: '',
         citizenship_status: '',
         education_level: '',
+        completed_qualification: '',
+        completed_qualification_school: '',
+        completed_qualification_year: '',
+        completed_qualification_details: '',
         school: '',
         school_type: '',
         learner_reference_number: '',
@@ -770,8 +758,12 @@ function sectionRequiredFields(section) {
 }
 
 function isFieldRelevant(field) {
+    if (['completed_qualification_school', 'completed_qualification_year'].includes(field)) {
+        return hasValue(form.value.completed_qualification) && form.value.completed_qualification !== 'none';
+    }
+    if (field === 'completed_qualification_details') return form.value.completed_qualification === 'other';
     if (field === 'course_or_strand') {
-        return requiresProgramPath.value || hasValue(form.value.course_or_strand);
+        return courseRequiredLevels.includes(form.value.education_level) || hasValue(form.value.course_or_strand);
     }
 
     if (field === 'grading_scale') {
@@ -805,6 +797,9 @@ function isFieldRelevant(field) {
 }
 
 function isFieldRequired(field) {
+    if (field === 'year_level') return !pendingStudies.value;
+    if (['completed_qualification', 'completed_qualification_year'].includes(field)) return false;
+    if (['completed_qualification_school', 'completed_qualification_details'].includes(field)) return isFieldRelevant(field);
     if (field === 'account_managed_by') {
         return true;
     }
@@ -1290,6 +1285,10 @@ function fillForm(payload) {
         account_managed_by: payload?.account_managed_by ?? '',
         citizenship_status: payload?.citizenship_status ?? '',
         education_level: payload?.education_level ?? '',
+        completed_qualification: payload?.completed_qualification ?? '',
+        completed_qualification_school: payload?.completed_qualification_school ?? '',
+        completed_qualification_year: payload?.completed_qualification_year ?? '',
+        completed_qualification_details: payload?.completed_qualification_details ?? '',
         school: payload?.school ?? '',
         school_type: payload?.school_type ?? '',
         learner_reference_number: payload?.learner_reference_number ?? '',
@@ -1703,11 +1702,12 @@ function extractedAcademicResult(document = academicVerificationDocument.value) 
     return 'No result extracted yet';
 }
 
-function applyAcademicResponse(payload) {
+function applyAcademicResponse(payload, { syncAcademic = true } = {}) {
     user.value = payload.user;
     savedProfileReadiness.value = payload.profile_readiness ?? null;
     verificationDocuments.value = payload.verification_documents ?? [];
     academicOcr.value = payload.academic_ocr ?? academicOcr.value;
+    if (!syncAcademic) return;
     const savedForm = savedFormSnapshot.value ? JSON.parse(savedFormSnapshot.value) : null;
     const savedGwa = payload.user?.gwa ?? '';
     const savedGradingScale = payload.user?.grading_scale ?? '';
@@ -1728,7 +1728,8 @@ async function uploadVerificationDocument(documentType, event) {
     const input = event.target;
     const file = input.files?.[0] ?? null;
 
-    if (!file) {
+    if (!file || profileEditorBusy.value || evidenceRefreshRequired.value) {
+        input.value = '';
         return;
     }
 
@@ -1744,76 +1745,122 @@ async function uploadVerificationDocument(documentType, event) {
         return;
     }
 
-    uploadingVerificationDocumentType.value = documentType;
-    errorMessage.value = '';
+    const fileError = evidenceFileError(file, documentType, academicOcr.value);
+    if (fileError) {
+        errorMessage.value = fileError;
+        input.value = '';
+        await focusProfileAlert();
+        return;
+    }
 
-    const payload = new FormData();
-    payload.append('document_type', documentType);
-    payload.append('document_file', file);
-    payload.append('terms_accepted', '1');
-
+    const previous = verificationDocuments.value.find((document) => document.document_type === documentType);
+    const row = verificationDocumentRows.value.find((item) => item.value === documentType);
+    evidenceActionPending.value = true;
+    errorMessage.value = ''; evidenceSuccess.value = '';
     try {
+        if (previous && (previous.has_current_acceptance || (row?.required && user.value?.is_profile_verified))) {
+            const confirmed = await requestConfirmation({
+                title: `Replace ${row?.label || 'accepted record'}?`,
+                message: 'The new file needs another review. Replacing required evidence reopens profile verification, so you must wait for it before starting a new application. Other accepted records are kept and existing applications are not restarted.',
+                confirmLabel: 'Replace and send for review', cancelLabel: 'Keep current file',
+            });
+            if (!confirmed) return;
+        }
+        uploadingVerificationDocumentType.value = documentType;
+        const payload = new FormData();
+        payload.append('document_type', documentType);
+        payload.append('document_file', file);
+        payload.append('terms_accepted', '1');
+        payload.append('expected_revision', String(previous?.revision ?? 0));
         const response = await window.axios.post('/dashboard/profile/verification-documents', payload, {
             headers: { 'Content-Type': 'multipart/form-data' },
+            portalToast: false,
         });
 
-        applyAcademicResponse(response.data);
+        applyAcademicResponse(response.data, { syncAcademic: documentType === 'academic_record' });
+        evidenceSuccess.value = response.data.message || 'Record saved. Awaiting review.';
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to upload this record. Check the file and try again.';
+        evidenceRefreshRequired.value = error.response?.status === 409;
+        errorMessage.value = Object.values(error.response?.data?.errors ?? {})[0]?.[0]
+            || error.response?.data?.message || 'Unable to upload this record. Check the file and try again.';
         await focusProfileAlert();
     } finally {
         uploadingVerificationDocumentType.value = '';
+        evidenceActionPending.value = false;
         input.value = '';
     }
 }
 
 async function retryAcademicRecordScan(document) {
+    if (profileEditorBusy.value || evidenceRefreshRequired.value) return;
+    evidenceActionPending.value = true;
     rescanningAcademicDocumentId.value = document.id;
-    errorMessage.value = '';
+    errorMessage.value = ''; evidenceSuccess.value = '';
 
     try {
-        const response = await window.axios.post(`/dashboard/profile/verification-documents/${document.id}/scan`);
+        const response = await window.axios.post(`/dashboard/profile/verification-documents/${document.id}/scan`, { expected_revision: document.revision }, { portalToast: false });
 
         applyAcademicResponse(response.data);
+        evidenceSuccess.value = response.data.message || 'Scan finished. The result still needs reviewer confirmation.';
     } catch (error) {
+        evidenceRefreshRequired.value = error.response?.status === 409;
         const message = error.response?.data?.message ?? 'Unable to scan the academic record right now.';
         errorMessage.value = message;
         showPortalToast({ type: 'error', message });
         await focusProfileAlert();
     } finally {
         rescanningAcademicDocumentId.value = null;
+        evidenceActionPending.value = false;
     }
 }
 
 async function deleteVerificationDocument(document) {
+    if (profileEditorBusy.value || evidenceRefreshRequired.value) return;
     const isAcademicRecord = document.document_type === 'academic_record';
     const isRequiredEvidence = verificationDocumentRows.value.some((row) => row.value === document.document_type && row.required);
-    const confirmed = await requestConfirmation({
-        title: `Remove ${document.label || 'supporting record'}?`,
-        message: `${document.original_name || 'This file'} will be removed from supporting evidence. Its separate copy in My Documents will stay available.${isAcademicRecord ? ' Your academic record review will return to not submitted.' : isRequiredEvidence ? ' Your profile will need review again after a replacement is uploaded.' : ''}`,
-        confirmLabel: 'Remove file',
-        tone: 'danger',
-    });
-
-    if (!confirmed) {
-        return;
-    }
-
-    deletingVerificationDocumentId.value = document.id;
-    errorMessage.value = '';
-
+    evidenceActionPending.value = true;
     try {
-        const response = await window.axios.delete(`/dashboard/profile/verification-documents/${document.id}`);
+        const confirmed = await requestConfirmation({
+            title: `Remove ${document.label || 'supporting record'}?`,
+            message: `${document.original_name || 'This file'} will be removed from supporting evidence. Its separate copy in My Documents will stay available.${isAcademicRecord ? ' Your academic record review will return to not submitted.' : isRequiredEvidence ? ' Your profile will need a replacement record and another review before a new application.' : ''}`,
+            confirmLabel: 'Remove file',
+            tone: 'danger',
+        });
 
-        applyAcademicResponse(response.data);
+        if (!confirmed) return;
+
+        deletingVerificationDocumentId.value = document.id;
+        errorMessage.value = ''; evidenceSuccess.value = '';
+
+        const response = await window.axios.delete(`/dashboard/profile/verification-documents/${document.id}`, { data: { expected_revision: document.revision }, portalToast: false });
+
+        applyAcademicResponse(response.data, { syncAcademic: isAcademicRecord });
+        evidenceSuccess.value = response.data.message || 'Record removed.';
         preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (error) {
+        evidenceRefreshRequired.value = error.response?.status === 409;
         errorMessage.value = error.response?.data?.message ?? 'Unable to remove this record. Please try again.';
         await focusProfileAlert();
     } finally {
         deletingVerificationDocumentId.value = null;
+        evidenceActionPending.value = false;
     }
+}
+
+async function refreshEvidence() {
+    if (profileEditorBusy.value) return;
+    evidenceRefreshing.value = true;
+    try {
+        const response = await window.axios.get('/dashboard/profile/data', { params: preparationParams });
+        applyAcademicResponse(response.data, { syncAcademic: false });
+        evidenceRefreshRequired.value = false;
+        errorMessage.value = '';
+        evidenceSuccess.value = 'Evidence refreshed. Your draft academic result was kept; check it against the current record.';
+    } catch (error) {
+        errorMessage.value = error.response?.data?.message || 'Evidence could not be refreshed. Your current files and draft are unchanged.';
+        await focusProfileAlert();
+    } finally { evidenceRefreshing.value = false; }
 }
 
 async function loadProfile() {
@@ -1869,6 +1916,9 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
         });
 
         user.value = response.data.user;
+        verificationDocuments.value = response.data.verification_documents ?? verificationDocuments.value;
+        evidenceRefreshRequired.value = false;
+        evidenceSuccess.value = '';
         fillForm(response.data.user);
         savedProfileReadiness.value = response.data.profile_readiness ?? null;
         await loadApplicantLocationHierarchy();
@@ -2269,11 +2319,18 @@ watch(() => form.value.grading_scale, (scale) => {
                             :title="verificationUploadCopy.title"
                             :description="verificationUploadCopy.detail"
                             :reviewer-note="user?.applicant_verification_notes || ''"
+                            :verification-status="profileVerificationStatus"
+                            :legacy-approval="user?.evidence_review?.legacy_profile_approval || false"
+                            :focus-type="requestedEvidenceType"
+                            :next-type="verificationUploadCopy.next || ''"
+                            :success="evidenceSuccess"
+                            :refresh-required="evidenceRefreshRequired"
+                            :refreshing="evidenceRefreshing"
                             :ocr="academicOcr"
                             :uploading-type="uploadingVerificationDocumentType"
                             :deleting-id="deletingVerificationDocumentId"
                             :scanning-id="rescanningAcademicDocumentId"
-                            :disabled="profileEditorBusy"
+                            :disabled="profileEditorBusy || evidenceRefreshRequired"
                             :scan-label="academicScanStatusLabel"
                             :result-label="extractedAcademicResult"
                             :manual-result-allowed="manualAcademicEntryAllowed"
@@ -2284,6 +2341,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             @preview="previewDocument = $event"
                             @remove="deleteVerificationDocument"
                             @scan="retryAcademicRecordScan"
+                            @refresh="refreshEvidence"
                         />
                 </ApplicantProfileEditModal>
 

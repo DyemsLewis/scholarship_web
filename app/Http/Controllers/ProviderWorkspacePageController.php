@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\ApplicationStageSession;
+use App\Models\RecipientWithdrawalRequest;
+use App\Services\RecipientWithdrawalService;
 use App\Support\ProviderWorkspace;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -171,6 +173,26 @@ class ProviderWorkspacePageController extends Controller
     public function recipients(Request $request): View
     {
         return $this->workspace($request, 'manage_recipients', 'provider-recipient-officer-workspace');
+    }
+
+    public function recipientWithdrawals(Request $request, ?RecipientWithdrawalRequest $withdrawal = null): View
+    {
+        abort_unless($request->user()?->isProvider() && $request->user()->hasPortalPermission('manage_recipients'), 403);
+        if ($withdrawal) {
+            app(RecipientWithdrawalService::class)->authorizeProvider($request->user(), $withdrawal->application);
+        }
+
+        return view('provider-recipient-withdrawals', ['withdrawal' => $withdrawal]);
+    }
+
+    public function recipientConcerns(Request $request): View
+    {
+        return $this->workspace($request, 'manage_recipients', 'provider-recipient-concerns');
+    }
+
+    public function deliveryReports(Request $request): View
+    {
+        return $this->workspace($request, 'manage_benefit_releases', 'provider-delivery-reports');
     }
 
     public function recipientDashboard(Request $request): View|RedirectResponse

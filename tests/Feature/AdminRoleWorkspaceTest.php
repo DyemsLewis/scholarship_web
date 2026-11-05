@@ -344,6 +344,7 @@ class AdminRoleWorkspaceTest extends TestCase
             ->patchJson("/admin/providers/{$provider->id}/verification", [
                 'verification_status' => 'rejected',
                 'verification_notes' => 'Registration proof needs replacement.',
+                'expected_review_token' => app(\App\Services\ProviderVerificationReviewService::class)->token($provider->fresh()),
             ])
             ->assertOk()
             ->assertJsonPath('provider.verification_status', 'rejected');

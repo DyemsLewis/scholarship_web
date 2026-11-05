@@ -3,6 +3,7 @@
 namespace App\Queries\Provider\Dashboards;
 
 use App\Domain\Shared\Dashboard\RoleDashboardPayload;
+use App\Models\RecipientWithdrawalRequest;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Queries\Provider\ProviderWorkspaceScope;
@@ -25,6 +26,21 @@ final class RecipientOfficerDashboardQuery
         $active = $this->queue(clone $base, 'active');
         $declined = $this->queue(clone $base, 'declined');
         $closed = $this->queue(clone $base, 'closed');
+        $withdrawals = RecipientWithdrawalRequest::query()
+            ->whereIn('scholarship_application_id', $this->scope->applications($officer)->select('scholarship_applications.id'))
+            ->where('status', 'pending');
+        $withdrawalCount = (clone $withdrawals)->count();
+        $withdrawalItems = (clone $withdrawals)->with(['application.applicant.studentProfile', 'application.scholarship'])
+            ->oldest('requested_at')->oldest('id')->limit(5)->get()->map(fn (RecipientWithdrawalRequest $request): array => [
+                'id' => $request->id,
+                'title' => $request->application->applicant->name,
+                'subtitle' => $request->application->scholarship->title,
+                'image_url' => filled($request->application->applicant->studentProfile?->profile_photo_path)
+                    ? route('provider.applications.profile-photo.view', $request->application, false) : null,
+                'status' => ['label' => 'Withdrawal requested', 'tone' => 'attention'],
+                'meta' => ['Requested '.$request->requested_at->format('M d, Y'), 'Support remains active'],
+                'action' => ['label' => 'Review request', 'url' => route('provider.workspaces.recipients.withdrawals.show', $request, false)],
+            ]);
 
         $responses = (clone $declined)
             ->with(['applicant.studentProfile', 'scholarship', 'supportDecisions.decider'])
@@ -94,6 +110,12 @@ final class RecipientOfficerDashboardQuery
                 ],
             ],
             sections: [
+                ...($withdrawalCount > 0 ? [[
+                    'key' => 'withdrawal-requests', 'eyebrow' => 'Recipient requests', 'title' => 'Withdrawals awaiting review',
+                    'description' => $withdrawalCount.' pending request'.($withdrawalCount === 1 ? '' : 's').'. Support stays active until a decision is recorded.',
+                    'action' => ['label' => 'Open withdrawal queue', 'url' => '/provider/workspaces/recipients/withdrawals'],
+                    'items' => $withdrawalItems,
+                ]] : []),
                 [
                     'key' => 'agreement-priorities',
                     'eyebrow' => 'Current focus',

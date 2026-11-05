@@ -1,6 +1,16 @@
 import { labelFromKey } from './display.js';
 
+const completedQualificationLabels = {
+    none: 'No completed qualification yet', elementary: 'Elementary completion',
+    junior_high_school: 'Junior High School completion', senior_high_school: 'Senior High School completion',
+    pre_k12_high_school: 'High school diploma (old curriculum / before K-12)',
+    als_secondary: 'ALS secondary completion / equivalency', tvet: 'TVET / vocational qualification',
+    college: 'College degree', postgraduate: 'Postgraduate qualification', other: 'Other completed qualification',
+};
+export const completedQualificationOptions = Object.entries(completedQualificationLabels).map(([value, label]) => ({ value, label }));
+
 const labels = {
+    completedQualification: completedQualificationLabels,
     educationLevel: {
         preschool: 'Preschool / Kindergarten', elementary: 'Elementary', junior_high_school: 'Junior High School',
         senior_high_school: 'Senior High School', college: 'College / University', tvet: 'TVET / Vocational', als: 'ALS / Alternative Learning', other: 'Other',

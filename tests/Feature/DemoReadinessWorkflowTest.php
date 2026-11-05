@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Mail\RegistrationVerificationCodeMail;
+use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
@@ -18,6 +19,7 @@ use Tests\TestCase;
 
 class DemoReadinessWorkflowTest extends TestCase
 {
+    use \Tests\Concerns\ReviewsProviderDocuments;
     use RefreshDatabase;
 
     public function test_fresh_admin_provider_and_applicant_can_complete_the_core_workflow(): void
@@ -28,7 +30,7 @@ class DemoReadinessWorkflowTest extends TestCase
         $provider = $this->registerAndVerifyUser('provider');
         $applicant = $this->completeApplicant($this->registerAndVerifyUser('applicant'));
 
-        foreach (\App\Models\ApplicantVerificationDocument::requiredTypesFor($applicant) as $type) {
+        foreach (ApplicantVerificationDocument::requiredTypesFor($applicant) as $type) {
             $this->actingAs($applicant)
                 ->post('/dashboard/profile/verification-documents', [
                     'document_type' => $type,
@@ -38,11 +40,17 @@ class DemoReadinessWorkflowTest extends TestCase
                 ->assertCreated();
         }
 
+        foreach ($applicant->applicantVerificationDocuments()->get() as $evidence) {
+            $this->actingAs($admin)
+                ->patchJson("/admin/applicant-verification-documents/{$evidence->id}/review", [
+                    'status' => 'approved', 'expected_revision' => $evidence->revision,
+                    ...($evidence->document_type === 'academic_record' ? ['academic_grading_scale' => 'percentage', 'academic_result' => 90] : []),
+                ])->assertOk();
+        }
+
         $this->actingAs($admin)
             ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
                 'verification_status' => 'approved',
-                'academic_grading_scale' => 'percentage',
-                'academic_result' => 90,
             ])
             ->assertOk();
         $applicant = $applicant->fresh();
@@ -70,9 +78,11 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('document.document_type', 'organization_registration');
 
+        $token = $this->acceptProviderDocuments($admin, $provider);
         $this->actingAs($admin)
             ->patchJson("/admin/providers/{$provider->id}/verification", [
                 'verification_status' => 'approved',
+                'expected_review_token' => $token,
                 'verification_notes' => 'Organization details and proof were reviewed.',
             ])
             ->assertOk()

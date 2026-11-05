@@ -2,11 +2,17 @@
 
 namespace App\Models;
 
+use App\Services\ApplicantEvidenceReviewService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class StudentProfile extends Model
 {
+    protected static function booted(): void
+    {
+        static::updated(fn (self $profile) => app(ApplicantEvidenceReviewService::class)->invalidateClaims($profile));
+    }
+
     protected $fillable = [
         'user_id',
         'first_name',
@@ -18,6 +24,10 @@ class StudentProfile extends Model
         'account_managed_by',
         'citizenship_status',
         'education_level',
+        'completed_qualification',
+        'completed_qualification_school',
+        'completed_qualification_year',
+        'completed_qualification_details',
         'school',
         'school_type',
         'learner_reference_number',
@@ -74,6 +84,7 @@ class StudentProfile extends Model
     {
         return [
             'birthdate' => 'date',
+            'completed_qualification_year' => 'integer',
             'gwa' => 'decimal:2',
             'academic_result_extracted_at' => 'datetime',
             'household_size' => 'integer',

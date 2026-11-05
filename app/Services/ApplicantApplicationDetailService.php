@@ -137,6 +137,45 @@ class ApplicantApplicationDetailService
             ];
         }
 
+        $concern = $application->recipientAgreementCases()->where('case_type', 'agreement_concern')
+            ->where('status', 'awaiting_response')->whereNotNull('notice_sent_at')->oldest('response_due_at')->first();
+        if ($concern) {
+            return [
+                'state' => 'action_required', 'tone' => 'attention', 'eyebrow' => 'Your next action',
+                'title' => 'Respond to an agreement concern',
+                'description' => 'Review the accepted obligation and provider evidence, then explain your circumstances or request a correction or exception. No finding has been made.',
+                'actor' => 'applicant', 'actor_label' => 'You',
+                'due_label' => $concern->response_due_at?->setTimezone('Asia/Manila')->format('M d, Y'),
+                'action' => ['kind' => 'link', 'label' => 'Review concern', 'href' => $this->viewUrl($application, 'outcome').'#agreement-concerns', 'target' => 'agreement-concerns'],
+            ];
+        }
+
+        $reviewRequest = $application->recipientAgreementCases()->where('review_state', 'awaiting_information')->oldest('updated_at')->first();
+        if ($reviewRequest) {
+            return [
+                'state' => 'action_required', 'tone' => 'attention', 'eyebrow' => 'Your next action',
+                'title' => 'Provide information for the case review',
+                'description' => 'Read the independent reviewer request and add the relevant explanation or supporting files. No automatic support change has been made.',
+                'actor' => 'applicant', 'actor_label' => 'You', 'due_label' => null,
+                'action' => ['kind' => 'link', 'label' => 'Open case review', 'href' => ($reviewRequest->case_type === 'agreement_concern'
+                    ? $this->viewUrl($application, 'outcome') : route('dashboard.monitoring.show.section', ['application' => $application, 'section' => 'benefits'], false)).'#case-reviews', 'target' => 'case-reviews'],
+            ];
+        }
+
+        $deliveryReport = $application->recipientAgreementCases()->where('case_type', 'benefit_delivery')
+            ->where('status', 'awaiting_recipient')->oldest('updated_at')->first();
+        if ($deliveryReport) {
+            return [
+                'state' => 'action_required', 'tone' => 'attention', 'eyebrow' => 'Your next action',
+                'title' => 'Review the benefit delivery response',
+                'description' => 'Check the provider response and proof. Confirm only what you actually received, or explain what is still unresolved.',
+                'actor' => 'applicant', 'actor_label' => 'You', 'due_label' => null,
+                'action' => ['kind' => 'link', 'label' => 'Review delivery report',
+                    'href' => route('dashboard.monitoring.show.section', ['application' => $application, 'section' => 'benefits'], false).'#benefit-delivery-reports',
+                    'target' => 'benefit-delivery-reports'],
+            ];
+        }
+
         if ($agreement['can_respond'] ?? false) {
             return [
                 'state' => 'action_required',
@@ -206,6 +245,16 @@ class ApplicantApplicationDetailService
                     'label' => 'Review files',
                     'href' => $this->viewUrl($application, 'submission'),
                 ],
+            ];
+        }
+
+        if ($application->status === 'benefits_terminated' && $application->student_response_status === 'accepted') {
+            return [
+                'state' => 'complete', 'tone' => 'neutral', 'eyebrow' => 'Recipient support',
+                'title' => 'Scholarship support has ended',
+                'description' => 'Future benefits have ended. Your original selection, agreement, and earlier releases remain in your record.',
+                'actor' => 'provider', 'actor_label' => 'Scholarship provider', 'due_label' => null,
+                'action' => ['kind' => 'link', 'label' => 'View support records', 'href' => route('dashboard.monitoring.show', $application, false)],
             ];
         }
 
@@ -468,13 +517,18 @@ class ApplicantApplicationDetailService
                 'award' => $selected ? $this->awardSummary($application) : null,
             ],
             'agreement' => $agreement,
+            'withdrawal' => $selected && $application->student_response_status === 'accepted'
+                ? ['history_url' => route('dashboard.recipient-withdrawals.index', $application, false)]
+                : null,
             'response_endpoint' => $agreement
                 ? route('dashboard.applications.response', $application, false)
                 : null,
             'recipient_support' => $selected && $application->student_response_status === 'accepted'
                 ? [
                     'title' => 'Recipient support',
-                    'description' => 'Monitoring and benefit releases continue in a separate workspace.',
+                    'description' => $application->status === 'benefits_terminated'
+                        ? 'Future support has ended. Earlier monitoring and release records remain available.'
+                        : 'Monitoring and benefit releases continue in a separate workspace.',
                     'href' => route('dashboard.monitoring.show', $application, false),
                 ]
                 : null,

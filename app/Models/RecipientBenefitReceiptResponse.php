@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RecipientBenefitReceiptResponse extends Model
 {
@@ -30,6 +31,7 @@ class RecipientBenefitReceiptResponse extends Model
         'resolution_proof_size',
         'resolved_by',
         'resolved_at',
+        'recipient_resolution_confirmed_at',
     ];
 
     protected function casts(): array
@@ -38,6 +40,7 @@ class RecipientBenefitReceiptResponse extends Model
             'received_on' => 'date',
             'responded_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'recipient_resolution_confirmed_at' => 'datetime',
         ];
     }
 
@@ -59,5 +62,10 @@ class RecipientBenefitReceiptResponse extends Model
     public function resolver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resolved_by');
+    }
+
+    public function deliveryReport(): HasOne
+    {
+        return $this->hasOne(RecipientAgreementCase::class, 'legacy_receipt_response_id');
     }
 }

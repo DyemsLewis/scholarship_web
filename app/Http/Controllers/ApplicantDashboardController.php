@@ -28,19 +28,23 @@ use App\Services\AcademicRecordOcrService;
 use App\Services\ApplicantApplicationDetailService;
 use App\Services\ApplicantDashboardService;
 use App\Services\ApplicantDocumentLibraryService;
+use App\Services\ApplicantEvidenceReviewService;
 use App\Services\ApplicantMonitoringDetailService;
 use App\Services\ApplicantScholarshipDetailService;
 use App\Services\ApplicationStageOperationsService;
 use App\Services\ApplicationWorkflowService;
 use App\Services\DecisionSupportService;
+use App\Services\BenefitDeliveryReportService;
 use App\Services\RecipientBenefitEntitlementService;
 use App\Services\RecipientMonitoringCaseService;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
-use App\Support\EligibilityRulePolicy;
 use App\Support\ApplicantStageActivityPayload;
 use App\Support\ApplicationSchedulePayload;
+use App\Support\CompletedQualification;
+use App\Support\EducationEligibilityPolicy;
+use App\Support\EligibilityRulePolicy;
 use App\Support\PreScreeningHandoffRecord;
 use App\Support\RecipientAgreement;
 use App\Support\RecipientMonitoringRequirementType;
@@ -527,6 +531,7 @@ class ApplicantDashboardController extends Controller
 
         $user = $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile']);
         $verificationDocuments = $user->applicantVerificationDocuments()
+            ->with('latestReviewEvent')
             ->latest('uploaded_at')
             ->get();
 
@@ -842,6 +847,7 @@ class ApplicantDashboardController extends Controller
             'document_type' => ['required', Rule::in(ApplicantVerificationDocument::PROFILE_UPLOAD_TYPES)],
             'document_file' => ['required', 'file', "max:{$maximumFileSize}", "mimes:{$allowedFileTypes}"],
             'terms_accepted' => ['accepted'],
+            'expected_revision' => ['sometimes', 'nullable', 'integer', 'min:0'],
         ]);
 
         $user = $request->user();
@@ -858,6 +864,7 @@ class ApplicantDashboardController extends Controller
             'guardian_record' => 'parent or guardian ID',
             'no_current_scholarship_proof' => 'proof of no current scholarship',
             'achievement_evidence' => 'achievement evidence',
+            'qualification_record' => 'completed qualification record',
         };
         $existing = $user->applicantVerificationDocuments()
             ->where('document_type', $validated['document_type'])
@@ -874,7 +881,11 @@ class ApplicantDashboardController extends Controller
         }
 
         try {
-            $document = DB::transaction(function () use ($user, $validated, $file, $path, $isAcademicRecord, $isRequiredEvidence, $isAchievementEvidence): ApplicantVerificationDocument {
+            $document = DB::transaction(function () use ($user, $validated, $file, $path, $isAcademicRecord, $isRequiredEvidence, $isAchievementEvidence, &$oldPath): ApplicantVerificationDocument {
+                $user = User::query()->lockForUpdate()->findOrFail($user->id);
+                $current = $user->applicantVerificationDocuments()->where('document_type', $validated['document_type'])->lockForUpdate()->first();
+                $this->assertCurrentEvidenceRevision($validated['expected_revision'] ?? null, $current);
+                $oldPath = $current?->path;
                 $document = ApplicantVerificationDocument::query()->updateOrCreate([
                     'applicant_id' => $user->id,
                     'document_type' => $validated['document_type'],
@@ -931,16 +942,11 @@ class ApplicantDashboardController extends Controller
                     ]);
                 }
 
-                if ($isRequiredEvidence && ! $isAcademicRecord) {
-                    $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
-                        'verification_status' => 'pending',
-                        'verification_notes' => null,
-                        'verified_at' => null,
-                        'verified_by' => null,
-                    ]);
+                if ($isRequiredEvidence || ($isAchievementEvidence && filled($user->studentProfile?->achievements))) {
+                    app(ApplicantEvidenceReviewService::class)->reopenProfile($user);
                 }
 
-                return $document;
+                return $document->fresh();
             });
         } catch (Throwable $error) {
             Storage::disk('local')->delete($path);
@@ -994,22 +1000,18 @@ class ApplicantDashboardController extends Controller
             ],
         );
 
-        $message = $existing
-            ? str($documentLabel)->title().' updated.'
-            : str($documentLabel)->title().' uploaded.';
+        $message = str($documentLabel)->title().($existing ? ' replaced. Awaiting a new review.' : ' saved. Awaiting review.');
 
         if ($isAcademicRecord) {
             if (($ocrResult['status'] ?? null) === AcademicRecordOcrService::STATUS_SUCCEEDED) {
                 $message .= ' The academic result was extracted and sent for review.';
             } elseif ($this->academicRecordOcrService->configured()) {
-                $message .= ' The file was saved, but its academic result still needs a successful scan before verification.';
-            } else {
-                $message .= ' It was sent for admin review.';
+                $message .= ' The scan needs attention; an authorized reviewer can confirm the result from your file.';
             }
         }
 
         if ($preparedDocument) {
-            $message .= ' A separate copy was also saved in Documents.';
+            $message .= ' A copy is in My Documents.';
         }
 
         return response()->json([
@@ -1027,6 +1029,8 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($document->applicant_id === $request->user()->id, 403);
         abort_unless($document->document_type === 'academic_record', 404);
+        $validated = $request->validate(['expected_revision' => ['sometimes', 'integer', 'min:1']]);
+        $this->assertCurrentEvidenceRevision($validated['expected_revision'] ?? null, $document);
 
         if (! $this->academicRecordOcrService->enabled()) {
             return response()->json([
@@ -1059,11 +1063,11 @@ class ApplicantDashboardController extends Controller
     {
         abort_unless($request->user()?->isApplicant(), 403);
         abort_unless($document->applicant_id === $request->user()->id, 403);
+        $validated = $request->validate(['expected_revision' => ['sometimes', 'integer', 'min:1']]);
 
         $path = $document->path;
         $user = $request->user();
         $removedAcademicRecord = $document->document_type === 'academic_record';
-        $removedRequiredEvidence = in_array($document->document_type, ApplicantVerificationDocument::requiredTypesFor($user), true);
         $removedAchievementEvidence = $document->document_type === 'achievement_evidence';
 
         if ($removedAchievementEvidence && filled($user->studentProfile?->achievements)) {
@@ -1071,7 +1075,14 @@ class ApplicantDashboardController extends Controller
                 'document' => 'Clear and save the achievement entry before removing its supporting evidence.',
             ]);
         }
-        DB::transaction(function () use ($document, $user, $removedAcademicRecord, $removedRequiredEvidence): void {
+        DB::transaction(function () use ($document, $user, $validated, $removedAcademicRecord, &$path): void {
+            $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $document = $user->applicantVerificationDocuments()->lockForUpdate()->findOrFail($document->id);
+            $this->assertCurrentEvidenceRevision($validated['expected_revision'] ?? null, $document);
+            $path = $document->path;
+            if ($document->document_type === 'achievement_evidence' && filled($user->studentProfile?->achievements)) {
+                throw ValidationException::withMessages(['document' => 'Clear and save the achievement entry before removing its supporting evidence.']);
+            }
             $document->delete();
             $hasAcademicRecord = $user->applicantVerificationDocuments()
                 ->where('document_type', 'academic_record')
@@ -1107,21 +1118,6 @@ class ApplicantDashboardController extends Controller
                 }
             }
 
-            if ($removedRequiredEvidence && ! $removedAcademicRecord) {
-                $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
-                    'verification_status' => $hasAcademicRecord ? 'pending' : 'unsubmitted',
-                    'verification_notes' => null,
-                    'verified_at' => null,
-                    'verified_by' => null,
-                ]);
-                $user->applicantVerificationDocuments()
-                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
-                    ->update([
-                        'status' => 'submitted',
-                        'review_notes' => null,
-                    ]);
-            }
-
         });
         Storage::disk('local')->delete($path);
 
@@ -1134,6 +1130,7 @@ class ApplicantDashboardController extends Controller
                 'school_record' => "{$user->name} removed a school enrollment proof.",
                 'no_current_scholarship_proof' => "{$user->name} removed proof of no current scholarship.",
                 'achievement_evidence' => "{$user->name} removed achievement evidence.",
+                'qualification_record' => "{$user->name} removed a completed qualification record.",
                 default => "{$user->name} removed a legacy profile verification file.",
             },
             $request,
@@ -1147,6 +1144,7 @@ class ApplicantDashboardController extends Controller
                 'identity_record', 'income_record', 'residency_record', 'guardian_record' => 'Supporting record removed. Upload a replacement before your profile can be verified again.',
                 'no_current_scholarship_proof' => 'Proof of no current scholarship removed.',
                 'achievement_evidence' => 'Achievement evidence removed.',
+                'qualification_record' => 'Completed qualification record removed. A declared qualification needs supporting evidence before your profile can be verified again.',
                 default => 'Older proof file removed. Your academic verification was not changed.',
             },
             ...$this->applicantProfileStatePayload($user),
@@ -1327,6 +1325,9 @@ class ApplicantDashboardController extends Controller
         abort_unless($request->user()?->isApplicant(), 403);
 
         $user = $request->user();
+        if ($request->input('profile_section') === null || $request->input('profile_section') === 'academic') {
+            $request->merge(CompletedQualification::input($request->all(), $user->studentProfile));
+        }
         $academicRecord = $user->applicantVerificationDocuments()
             ->where('document_type', 'academic_record')
             ->first();
@@ -1346,6 +1347,7 @@ class ApplicantDashboardController extends Controller
                 'account_managed_by', 'citizenship_status', 'birthdate',
             ],
             'academic' => [
+                ...CompletedQualification::FIELDS,
                 'education_level', 'school', 'school_type', 'learner_reference_number',
                 'course_or_strand', 'year_level', 'enrollment_status', 'academic_year',
                 'academic_term', 'gwa', 'grading_scale',
@@ -1359,6 +1361,7 @@ class ApplicantDashboardController extends Controller
             'verification' => ['gwa', 'grading_scale'],
         ];
         $validationRules = [
+            ...CompletedQualification::rules($request->all()),
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
@@ -1394,8 +1397,8 @@ class ApplicantDashboardController extends Controller
             'city' => ['nullable', 'string', 'max:255'],
             'province' => ['nullable', 'string', 'max:255'],
             'region' => ['nullable', 'string', 'max:255'],
-            'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
+            'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90', new \App\Rules\PhilippineLandPin],
+            'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180', new \App\Rules\PhilippineLandPin],
             'birthdate' => ['nullable', 'date', 'before_or_equal:'.now()->subYears(5)->toDateString(), 'after_or_equal:'.now()->subYears(100)->toDateString()],
             'guardian_name' => ['nullable', 'string', 'max:255'],
             'guardian_relationship' => ['nullable', 'string', 'max:100'],
@@ -1466,6 +1469,7 @@ class ApplicantDashboardController extends Controller
             ]);
         }
         $verifiedFields = [
+            ...CompletedQualification::FIELDS,
             'first_name', 'last_name', 'middle_initial', 'suffix', 'birthdate', 'citizenship_status',
             'income_bracket', 'household_size', 'guardian_name', 'guardian_relationship', 'account_managed_by',
             'address', 'barangay', 'city', 'province', 'region',
@@ -1498,17 +1502,9 @@ class ApplicantDashboardController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($studentProfile, $user, $verificationReset): void {
+        DB::transaction(function () use ($studentProfile, $user): void {
+            User::query()->lockForUpdate()->findOrFail($user->id);
             $studentProfile->save();
-
-            if ($verificationReset) {
-                $user->applicantVerificationDocuments()
-                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
-                    ->update([
-                        'status' => 'submitted',
-                        'review_notes' => null,
-                    ]);
-            }
         });
         $user->unsetRelation('studentProfile');
 
@@ -1561,6 +1557,7 @@ class ApplicantDashboardController extends Controller
             'message' => $verificationReset
                 ? 'Verified profile details updated and returned for review.'
                 : 'Applicant profile updated.',
+            'verification_documents' => $this->applicantVerificationDocumentsPayload($user),
             'user' => $this->userPayload($request),
             'profile_readiness' => $user->applicantProfileReadiness(),
             'match_summary' => $this->profileMatchSummary($user),
@@ -2723,6 +2720,10 @@ class ApplicantDashboardController extends Controller
             ]);
         }
 
+        if (app(BenefitDeliveryReportService::class)->openForRecord($record)->exists()) {
+            throw ValidationException::withMessages(['response_type' => 'An open delivery report covers this benefit. Respond through that report so its resolution is recorded.']);
+        }
+
         $validated = $request->validate([
             'response_type' => ['required', Rule::in(['confirmed', 'issue'])],
             'received_on' => [
@@ -2753,6 +2754,13 @@ class ApplicantDashboardController extends Controller
 
         try {
             $response = DB::transaction(function () use ($request, $record, $validated, $evidence, $evidencePath): RecipientBenefitReceiptResponse {
+                // Serialize normal receipts with report creation and report responses.
+                ScholarshipApplication::query()->lockForUpdate()->findOrFail($record->scholarship_application_id);
+                $record = RecipientBenefitReleaseRecord::query()->lockForUpdate()->findOrFail($record->id);
+                if ($record->status !== 'released' || $record->receiptResponse()->exists()
+                    || app(BenefitDeliveryReportService::class)->openForRecord($record)->exists()) {
+                    throw ValidationException::withMessages(['response_type' => 'This release or its delivery report changed. Reload it before responding.']);
+                }
                 $response = RecipientBenefitReceiptResponse::create([
                     'recipient_benefit_release_record_id' => $record->id,
                     'scholarship_application_id' => $record->scholarship_application_id,
@@ -2770,6 +2778,9 @@ class ApplicantDashboardController extends Controller
                     'responded_at' => now(),
                 ]);
                 app(RecipientBenefitEntitlementService::class)->syncRecipientResponse($response);
+                if ($response->response_type === 'issue') {
+                    app(BenefitDeliveryReportService::class)->importReceipt($request->user(), $response);
+                }
 
                 return $response;
             });
@@ -2884,6 +2895,10 @@ class ApplicantDashboardController extends Controller
             throw ValidationException::withMessages([
                 'response_type' => 'Reconsideration is available only when support was ended early.',
             ]);
+        }
+
+        if ($decision->agreement_case_review_id && $validated['response_type'] !== 'acknowledged') {
+            throw ValidationException::withMessages(['response_type' => 'This support decision has an independent case review. Open Case reviews and appeals to submit information or appeal; the provider cannot decide its own appeal.']);
         }
 
         $attachment = $request->file('attachment');
@@ -3334,6 +3349,7 @@ class ApplicantDashboardController extends Controller
             'eligibility' => $scholarship->eligibility,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
+            'education_eligibility_policy' => EducationEligibilityPolicy::normalize($scholarship->education_eligibility_policy),
             'eligible_courses' => $scholarship->eligible_courses,
             'eligible_school_types' => $scholarship->eligible_school_types,
             'eligible_year_levels' => $scholarship->eligible_year_levels,
@@ -3661,7 +3677,6 @@ class ApplicantDashboardController extends Controller
             return null;
         }
 
-
         return [
             'requirements' => $this->splitDocumentRequirements($scholarship->post_qualification_requirements),
             'mode' => $scholarship->handoff_mode ?: 'provider_contact',
@@ -3843,6 +3858,7 @@ class ApplicantDashboardController extends Controller
     private function applicantVerificationDocumentsPayload(User $user)
     {
         return $user->applicantVerificationDocuments()
+            ->with('latestReviewEvent')
             ->latest('uploaded_at')
             ->get()
             ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
@@ -3860,6 +3876,13 @@ class ApplicantDashboardController extends Controller
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
+            ...$document->reviewPayload(),
+            'file_available' => Storage::disk('local')->exists($document->path),
+            'review_context' => [
+                'action' => $document->latestReviewEvent?->action,
+                'changed_fields' => $document->latestReviewEvent?->changed_fields ?? [],
+                'at' => $document->latestReviewEvent?->created_at?->toIso8601String(),
+            ],
             'ocr_status' => $document->ocr_status ?? AcademicRecordOcrService::STATUS_NOT_REQUESTED,
             'ocr_provider' => $document->ocr_provider,
             'ocr_grade' => $document->ocr_grade,
@@ -3870,6 +3893,12 @@ class ApplicantDashboardController extends Controller
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'view_url' => route('dashboard.applicant-verification-documents.view', $document),
         ];
+    }
+
+    private function assertCurrentEvidenceRevision(?int $expected, ?ApplicantVerificationDocument $document): void
+    {
+        abort_if($expected !== null && $expected !== ($document?->revision ?? 0), 409,
+            'This supporting record changed. Refresh your evidence before replacing, removing, or scanning it.');
     }
 
     private function ensureRecipientMonitoringAdjustmentAllowed(
@@ -4372,7 +4401,10 @@ class ApplicantDashboardController extends Controller
         $record->loadMissing(['allocations.entitlement', 'receiptResponse.resolver']);
         $release = $record->release;
         $response = $record->receiptResponse;
+        $deliveryReportOpen = app(BenefitDeliveryReportService::class)->openForRecord($record)->exists();
         $lifecycleStatus = match (true) {
+            $deliveryReportOpen => 'issue_open',
+            $response?->recipient_resolution_confirmed_at !== null => 'fulfilled',
             $response?->status === 'confirmed' => 'fulfilled',
             $response?->status === 'open' => 'issue_open',
             $response?->status === 'resolved' => 'resolved',
@@ -4418,7 +4450,7 @@ class ApplicantDashboardController extends Controller
             'recorded_by' => $record->recorder?->name,
             'recorded_at' => $record->recorded_at?->format('M d, Y h:i A'),
             'released_at' => $record->released_at?->format('M d, Y h:i A'),
-            'can_respond' => $record->status === 'released' && $response === null,
+            'can_respond' => $record->status === 'released' && $response === null && ! $deliveryReportOpen,
             'benefits' => $record->allocations->map(fn ($allocation): array => [
                 'benefit_id' => $allocation->entitlement?->scholarship_benefit_id,
                 'title' => $allocation->entitlement?->title,
@@ -4493,6 +4525,7 @@ class ApplicantDashboardController extends Controller
             'decided_by' => $decision->decider?->name,
             'decided_at' => $decision->decided_at?->format('M d, Y h:i A'),
             'decided_at_iso' => $decision->decided_at?->toIso8601String(),
+            'case_review_url' => $decision->agreementReview ? route('dashboard.recipient-cases.show', $decision->agreementReview->recipient_agreement_case_id, false) : null,
             'can_respond' => blank($decision->applicant_response_type),
             'applicant_response_type' => $decision->applicant_response_type,
             'applicant_response_label' => match ($decision->applicant_response_type) {
@@ -4674,7 +4707,13 @@ class ApplicantDashboardController extends Controller
             );
         }
 
-        DB::transaction(function () use ($user, $document, $result): void {
+        $applied = DB::transaction(function () use ($user, $document, $result): bool {
+            User::query()->lockForUpdate()->findOrFail($user->id);
+            $current = $user->applicantVerificationDocuments()->lockForUpdate()->find($document->id);
+            if (! $current || $current->revision !== $document->revision || $current->path !== $document->path) {
+                return false;
+            }
+            $document = $current;
             $document->update([
                 'ocr_status' => $result['status'],
                 'ocr_provider' => $result['provider'],
@@ -4686,7 +4725,7 @@ class ApplicantDashboardController extends Controller
             ]);
 
             if ($result['status'] !== AcademicRecordOcrService::STATUS_SUCCEEDED) {
-                return;
+                return true;
             }
 
             $user->studentProfile()->updateOrCreate(['user_id' => $user->id], [
@@ -4699,7 +4738,14 @@ class ApplicantDashboardController extends Controller
                 'verified_at' => null,
                 'verified_by' => null,
             ]);
+
+            return true;
         });
+
+        if (! $applied) {
+            $result['status'] = AcademicRecordOcrService::STATUS_NOT_REQUESTED;
+            $result['message'] = 'The evidence changed during scanning. The old scan was not applied; reload the current record.';
+        }
 
         $user->unsetRelation('studentProfile');
 

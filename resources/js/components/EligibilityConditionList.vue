@@ -89,7 +89,7 @@ function conditionNote(condition, audience) {
         const result = eligibilityCriterionPresentation(condition);
         if (result.status === 'preferred') return 'This preference did not block submission. Consider it with the complete applicant record.';
         if (result.status === 'fail') return 'Confirm this required rule discrepancy using the saved application and supporting evidence.';
-        if (result.status === 'review') return 'Review the academic evidence manually. This condition is not an automatic match or failure.';
+        if (result.status === 'review') return 'Review the relevant supporting records manually. This condition is not an automatic match or failure.';
         if (result.status === 'pass') return 'The saved applicant profile matches this automatic condition. Confirm the supporting evidence.';
     }
     if (condition?.note) {

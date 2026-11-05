@@ -22,7 +22,8 @@ const loadStateUrl = compile('pages/admin/components/AdminLoadState.vue');
 const { default: LoadState } = await import(loadStateUrl);
 const { default: TableFrame } = await import(compile('pages/admin/components/AdminTableFrame.vue', { './AdminLoadState.vue': loadStateUrl }));
 const modalStub = `data:text/javascript,${encodeURIComponent('export function useModalAccessibility() { return { handleKeydown() {} }; }')}`;
-const { default: Dialog } = await import(compile('pages/admin/components/AdminDialog.vue', { '../../../composables/useModalAccessibility': modalStub }));
+const confirmationUrl = compile('components/ConfirmationDialog.vue', { '../composables/useModalAccessibility': modalStub });
+const { default: Dialog } = await import(compile('pages/admin/components/AdminDialog.vue', { '../../../composables/useModalAccessibility': modalStub, '../../../components/ConfirmationDialog.vue': confirmationUrl }));
 const render = (component, props = {}, slots = {}) => renderToString(createSSRApp({ render: () => h(component, props, slots) }));
 
 for (const path of [
@@ -144,7 +145,7 @@ test('shared dialogs retain labelled form semantics and disable controls during 
     for (const value of ['role="dialog"', 'aria-modal="true"', 'aria-labelledby="review-title"', 'aria-busy="true"', 'tabindex="-1"', 'role="alert"', 'Could not save', 'admin-dialog-body', '<fieldset disabled', 'Saving...']) assert.ok(html.includes(value), value);
     assert.equal((html.match(/<form\b/g) ?? []).length, 1);
     assert.equal((html.match(/<button[^>]* disabled/g) ?? []).length, 3);
-    assert.match(read('pages/admin/components/AdminDialog.vue'), /useModalAccessibility\(\(\) => props.open, dialog, close\)/);
+    assert.match(read('pages/admin/components/AdminDialog.vue'), /useModalAccessibility\(\(\) => props.open && isFormDialog.value, dialog, close\)/);
     for (const value of ['@keydown="handleKeydown"', 'if (!props.busy)', '!props.confirmDisabled', 'body.value.scrollTop = 0', ':inert="busy || undefined"', 'if (busy && props.open) dialog.value?.focus']) assert.ok(read('pages/admin/components/AdminDialog.vue').includes(value));
 });
 
@@ -152,7 +153,7 @@ test('dialog close and confirm are guarded during save and disabled confirmation
     const script = parse(read('pages/admin/components/AdminDialog.vue')).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
     const props = { open: true, title: 'Review', busy: true, confirmDisabled: false };
     const emitted = [];
-    const state = new Function('ref', 'computed', 'useId', 'watch', 'defineProps', 'defineEmits', 'useModalAccessibility', `${script}\nreturn { close, confirm };`)(ref, computed, () => 'dialog', () => {}, () => props, () => (event) => emitted.push(event), () => ({ handleKeydown() {} }));
+    const state = new Function('ref', 'computed', 'useId', 'watch', 'defineProps', 'defineEmits', 'useModalAccessibility', 'useSlots', `${script}\nreturn { close, confirm };`)(ref, computed, () => 'dialog', () => {}, () => props, () => (event) => emitted.push(event), () => ({ handleKeydown() {} }), () => ({}));
     state.close(); state.confirm(); assert.deepEqual(emitted, []);
     props.busy = false; props.confirmDisabled = true; state.confirm(); assert.deepEqual(emitted, []);
     state.close(); props.confirmDisabled = false; state.confirm(); assert.deepEqual(emitted, ['cancel', 'confirm']);

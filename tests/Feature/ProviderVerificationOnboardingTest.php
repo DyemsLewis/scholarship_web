@@ -20,11 +20,11 @@ class ProviderVerificationOnboardingTest extends TestCase
         $provider = User::factory()->unverified()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['verification_status' => 'approved']);
 
-        $verificationUrl = route('provider.profile.verification');
-
         $this->actingAs($provider)
             ->get('/provider/programs/create')
-            ->assertRedirect($verificationUrl);
+            ->assertOk()
+            ->assertViewIs('provider-program-access')
+            ->assertViewHas('programAccess', fn ($access) => ! $access['email_verified']);
 
         $provider->forceFill(['email_verified_at' => now()])->save();
 

@@ -14,6 +14,7 @@ const verifyFilePreview = process.env.PROVIDER_SMOKE_FILE_PREVIEW === '1';
 const verifyOpaqueUrls = process.env.PORTAL_SMOKE_OPAQUE_URLS === '1';
 const verifyMapPin = process.env.PROVIDER_SMOKE_MAP_PIN === '1';
 const verifyEligibilityBuilder = process.env.PROVIDER_SMOKE_ELIGIBILITY_BUILDER === '1';
+const verifyEducationPolicy = process.env.PROVIDER_SMOKE_EDUCATION_POLICY === '1';
 const verifyProgramConsistency = process.env.PROVIDER_SMOKE_PROGRAM_CONSISTENCY === '1';
 const windowSize = process.env.PROVIDER_SMOKE_WINDOW_SIZE ?? '1440,1000';
 const screenshotPath = process.env.PROVIDER_SMOKE_SCREENSHOT;
@@ -1685,6 +1686,67 @@ async function main() {
                 console.log('PASS Staff file preview modal');
             }
 
+            if (verifyEducationPolicy) {
+                const target = await client.evaluate(`(async () => {
+                    const data = (await window.axios.get('/provider/scholarships')).data;
+                    const program = data.scholarships.find((item) => ['draft', 'published', 'rejected'].includes(item.status));
+                    if (!program) throw new Error('An editable program is required for the local read-only browser probe.');
+                    return { id: program.id };
+                })()`);
+                await client.send('Page.navigate', { url: new URL('/provider/programs/' + target.id + '/edit/eligibility', baseUrl).href });
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-education-policy-editor]')) && !document.querySelector('fieldset').disabled"), 'the education policy controls');
+                await client.evaluate(`(() => {
+                    window.__educationPolicyWrites = 0;
+                    window.axios.interceptors.request.use((config) => {
+                        if (['post', 'patch', 'put', 'delete'].includes(config.method) && /provider\\/(scholarships|programs)/.test(config.url)) {
+                            window.__educationPolicyWrites++;
+                            throw new Error('Browser probe blocked a program mutation.');
+                        }
+                        return config;
+                    });
+                    const root = document.querySelector('[data-education-policy-editor]');
+                    root.open = true;
+                    const required = root.querySelector('input[type="checkbox"]');
+                    if (!required.checked) required.click();
+                })()`);
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-eligibility-mode=completed_qualification]'))"), 'the qualification rule mode');
+                await client.evaluate("[...document.querySelectorAll('button[type=submit]')].find((button) => button.innerText.includes('Save and continue')).click()");
+                await waitFor(() => client.evaluate("document.querySelector('#form-alert-message')?.innerText.includes('at least one accepted completed qualification')"), 'the empty credential-list alert');
+                await client.evaluate("document.querySelector('[aria-labelledby=form-alert-title] button').click(); document.querySelector('[data-education-policy-editor] input[value=pre_k12_high_school]').click()");
+                await client.evaluate(`(() => {
+                    const mode = document.querySelector('[data-eligibility-mode=completed_qualification]');
+                    mode.value = 'preferred'; mode.dispatchEvent(new Event('change', { bubbles: true }));
+                    const unlisted = document.querySelector('#program-unlisted-qualification');
+                    unlisted.value = 'not_accepted'; unlisted.dispatchEvent(new Event('change', { bubbles: true }));
+                    [...document.querySelectorAll('[data-education-policy-editor] input')].find((input) => input.value === 'Returning enrollment pending').click();
+                    document.querySelector('[data-education-policy-editor]').scrollIntoView({ block: 'start' });
+                })()`);
+                await delay(150);
+                const educationAudit = await client.evaluate(`(() => {
+                    const root = document.querySelector('[data-education-policy-editor]');
+                    const bounds = root.getBoundingClientRect();
+                    return {
+                        preferred: document.querySelector('[data-eligibility-mode=completed_qualification]').value === 'preferred',
+                        enrollmentSelector: Boolean(root.querySelector('[data-eligibility-mode=enrollment_status]')),
+                        clipped: [...root.querySelectorAll('input, select')].some((input) => input.getBoundingClientRect().right > bounds.right + 1),
+                        pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 2,
+                        noWrites: window.__educationPolicyWrites === 0,
+                    };
+                })()`);
+                if (!educationAudit.preferred || !educationAudit.enrollmentSelector || educationAudit.clipped || educationAudit.pageOverflow || !educationAudit.noWrites) fail('Education policy layout or controls failed: ' + JSON.stringify(educationAudit));
+                if (screenshotPath) {
+                    const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+                    await writeFile(path.resolve(screenshotPath.replace(/\.png$/i, '-education-controls.png')), Buffer.from(screenshot.data, 'base64'));
+                }
+                await client.evaluate("[...document.querySelectorAll('[aria-label=\"Program builder steps\"] button')].find((button) => [...button.querySelectorAll('span')].some((label) => label.textContent.trim() === 'Review')).click()");
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-eligibility-policy-summary]'))"), 'the education policy review summary');
+                const summaryText = await client.evaluate("document.querySelector('[data-eligibility-policy-summary]').innerText");
+                if (!summaryText.includes('Completed qualification') || !summaryText.includes('Returning enrollment pending') || !summaryText.includes('old curriculum') || summaryText.includes('pre_k12')) fail('The program review summary omits or exposes machine values for education rules.');
+                if (await client.evaluate('window.__educationPolicyWrites !== 0')) fail('The browser probe attempted to save a program.');
+                if (runtimeErrors.length) fail('Education policy runtime errors: ' + runtimeErrors.join('; '));
+                console.log('PASS Education controls, validation popup, rule modes, readable review summary and no program mutations: ' + JSON.stringify(educationAudit));
+            }
+
             if (verifyEligibilityBuilder) {
                 if (!['127.0.0.1', 'localhost'].includes(baseUrl.hostname)) fail('Eligibility builder write tests are limited to the local demo.');
                 const draft = await client.evaluate(`(async () => {
@@ -1742,7 +1804,7 @@ async function main() {
                     }
                     await client.evaluate(`(() => {
                         const buttons = [...document.querySelectorAll('[aria-label="Program builder steps"] button')];
-                        buttons.find((button) => button.querySelector('.truncate.text-xs.font-bold')?.textContent.trim() === 'Review').click();
+                        buttons.find((button) => [...button.querySelectorAll('span')].some((label) => label.textContent.trim() === 'Review')).click();
                     })()`);
                     await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-eligibility-policy-summary]'))"), 'the eligibility review summary');
                     const summary = await client.evaluate(`({

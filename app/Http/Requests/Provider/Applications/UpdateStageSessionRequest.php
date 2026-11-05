@@ -22,8 +22,8 @@ class UpdateStageSessionRequest extends ProviderStageOperationRequest
                 'max:500',
             ],
             'location_address' => ['nullable', 'string', 'max:1000'],
-            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude', new \App\Rules\PhilippineLandPin],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude', new \App\Rules\PhilippineLandPin],
             'meeting_url' => [
                 Rule::requiredIf(fn (): bool => in_array($this->input('mode'), ['online', 'hybrid'], true)),
                 'nullable',

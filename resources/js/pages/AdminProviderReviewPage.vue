@@ -272,6 +272,7 @@ async function updateProvider(verificationStatus) {
     try {
         const response = await window.axios.patch(`/admin/providers/${providerId}/verification`, {
             verification_status: verificationStatus,
+            expected_review_token: provider.value.document_review?.token,
             verification_notes: verificationNote,
         });
 

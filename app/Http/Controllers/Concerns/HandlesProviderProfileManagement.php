@@ -89,8 +89,8 @@ trait HandlesProviderProfileManagement
                 'provider_type' => ['nullable', Rule::in(['school', 'foundation', 'government', 'company', 'non_profit', 'other'])],
                 'provider_website' => ['nullable', 'string', 'max:255'],
                 'provider_address' => ['nullable', 'string', 'max:500'],
-                'provider_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:provider_longitude'],
-                'provider_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:provider_latitude'],
+                'provider_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:provider_longitude', new \App\Rules\PhilippineLandPin],
+                'provider_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:provider_latitude', new \App\Rules\PhilippineLandPin],
                 'provider_description' => ['nullable', 'string', 'max:1500'],
                 'provider_mission' => ['nullable', 'string', 'max:1000'],
                 'provider_year_established' => ['nullable', 'integer', 'min:1800', 'max:'.now()->year],
@@ -113,7 +113,8 @@ trait HandlesProviderProfileManagement
             'last_name' => $validated['last_name'],
             'middle_initial' => strtoupper($validated['middle_initial']),
             'contact_number' => $validated['contact_number'],
-            'representative_position' => $validated['representative_position'] ?? null,
+            'representative_position' => array_key_exists('representative_position', $validated)
+                ? $validated['representative_position'] : $user->providerProfile?->representative_position,
         ] : [];
         $emailChanged = $editingRepresentative
             && strcasecmp($user->email, $validated['email']) !== 0;
@@ -156,8 +157,11 @@ trait HandlesProviderProfileManagement
                 ? ($validated['provider_longitude'] ?? null)
                 : ($addressChanged ? null : $profile?->longitude);
         }
-        $organizationChanged = $editingOrganization
-            && $profile?->verification_status === 'approved'
+        $representativeChanged = $editingRepresentative && $providerOwner->is($user)
+            && collect(['first_name', 'last_name', 'middle_initial', 'representative_position'])
+                ->contains(fn (string $field): bool => strcasecmp(trim((string) $profile?->{$field}),
+                    trim((string) ($representativeProfile[$field] ?? ''))) !== 0);
+        $organizationChanged = $representativeChanged || ($editingOrganization
             && collect([
                 'provider_name',
                 'provider_type',
@@ -169,7 +173,7 @@ trait HandlesProviderProfileManagement
                 'registration_number',
                 'registration_date',
             ])->contains(fn (string $field): bool => $this->comparableScholarshipValue($profile?->{$field})
-                !== $this->comparableScholarshipValue($organizationProfile[$field] ?? null));
+                !== $this->comparableScholarshipValue($organizationProfile[$field] ?? null)));
 
         if ($organizationChanged) {
             $organizationProfile = [
@@ -193,6 +197,7 @@ trait HandlesProviderProfileManagement
             $emailChanged,
             $organizationChanged,
         ): void {
+            User::query()->lockForUpdate()->findOrFail($providerOwner->id);
             if ($editingRepresentative) {
                 $user->fill([
                     'email' => $validated['email'],
@@ -226,10 +231,7 @@ trait HandlesProviderProfileManagement
             }
 
             if ($organizationChanged) {
-                $providerOwner->providerVerificationDocuments()->update([
-                    'status' => 'submitted',
-                    'review_notes' => null,
-                ]);
+                ProviderVerificationDocument::invalidateFor($providerOwner);
             }
         });
 
@@ -436,8 +438,8 @@ trait HandlesProviderProfileManagement
                 'provider_contact_department' => ['nullable', 'string', 'max:255'],
                 'provider_office_hours' => ['nullable', 'string', 'max:255'],
                 'provider_address' => ['required', 'string', 'max:500'],
-                'provider_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:provider_longitude'],
-                'provider_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:provider_latitude'],
+                'provider_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:provider_longitude', new \App\Rules\PhilippineLandPin],
+                'provider_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:provider_latitude', new \App\Rules\PhilippineLandPin],
                 'provider_service_area' => ['required', 'string', 'max:500'],
             ],
             'legal' => [
@@ -491,8 +493,7 @@ trait HandlesProviderProfileManagement
                 $updates['longitude'] = $addressChanged ? null : $profile->longitude;
             }
         }
-        $verificationReset = $profile->verification_status === 'approved'
-            && collect($reviewedFields)->contains(fn (string $field): bool => $this->comparableScholarshipValue($profile->{$field})
+        $verificationReset = collect($reviewedFields)->contains(fn (string $field): bool => $this->comparableScholarshipValue($profile->{$field})
                 !== $this->comparableScholarshipValue($updates[$field] ?? null));
 
         if ($verificationReset) {
@@ -506,13 +507,11 @@ trait HandlesProviderProfileManagement
         }
 
         DB::transaction(function () use ($owner, $profile, $updates, $verificationReset): void {
+            User::query()->lockForUpdate()->findOrFail($owner->id);
             $profile->update($updates);
 
             if ($verificationReset) {
-                $owner->providerVerificationDocuments()->update([
-                    'status' => 'submitted',
-                    'review_notes' => null,
-                ]);
+                ProviderVerificationDocument::invalidateFor($owner);
             }
         });
 
@@ -555,6 +554,7 @@ trait HandlesProviderProfileManagement
     public function uploadVerificationDocument(Request $request): JsonResponse
     {
         abort_unless($request->user()?->isProvider(), 403);
+        $providerOwner = $request->user()->providerOrganizationOwner();
 
         $validated = $request->validate([
             'document_type' => ['required', Rule::in([
@@ -566,13 +566,25 @@ trait HandlesProviderProfileManagement
             ])],
             'document_file' => ['required', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
             'terms_accepted' => ['accepted'],
+            'replaces_document_id' => ['nullable', 'integer', Rule::exists('provider_verification_documents', 'id')->where('provider_id', $providerOwner->id)],
+            'expected_revision' => ['required_with:replaces_document_id', 'nullable', 'integer', 'min:1'],
         ]);
 
         $file = $validated['document_file'];
-        $providerOwner = $request->user()->providerOrganizationOwner();
         $path = $file->store("provider-verification/{$providerOwner->id}", 'local');
 
-        $document = ProviderVerificationDocument::create([
+        try {
+        [$document, $returnedToReview, $replaced] = DB::transaction(function () use ($providerOwner, $request, $validated, $file, $path): array {
+            User::query()->lockForUpdate()->findOrFail($providerOwner->id);
+            $profile = $providerOwner->providerProfile()->lockForUpdate()->firstOrFail();
+            $replaced = null;
+            if (! empty($validated['replaces_document_id'])) {
+                $replaced = $providerOwner->providerVerificationDocuments()->lockForUpdate()->find($validated['replaces_document_id']);
+                abort_if(! $replaced || $replaced->revision !== (int) $validated['expected_revision'], 409,
+                    'This proof changed. Reload the verification page before replacing it.');
+                $replaced->delete();
+            }
+            $document = ProviderVerificationDocument::create([
             'provider_id' => $providerOwner->id,
             'uploaded_by' => $request->user()->id,
             'document_type' => $validated['document_type'],
@@ -584,17 +596,21 @@ trait HandlesProviderProfileManagement
             'uploaded_at' => now(),
             'terms_accepted_at' => now(),
             'terms_version' => Terms::VERSION,
-        ]);
-
-        $returnedToReview = $providerOwner->providerProfile?->verification_status === 'rejected';
-
-        if ($returnedToReview) {
-            $providerOwner->providerProfile()->update([
+            ]);
+            $returnedToReview = $profile->verification_status !== 'pending';
+            if ($returnedToReview) $profile->update([
                 'verification_status' => 'pending',
+                'verification_notes' => null,
                 'verified_by' => null,
                 'verified_at' => null,
             ]);
+            return [$document, $returnedToReview, $replaced];
+        });
+        } catch (\Throwable $failure) {
+            Storage::disk('local')->delete($path);
+            throw $failure;
         }
+        if ($replaced) Storage::disk('local')->delete($replaced->path);
 
         User::query()
             ->where('role', 'admin')
@@ -613,7 +629,8 @@ trait HandlesProviderProfileManagement
             'provider_verification_document_uploaded',
             "{$request->user()->name} uploaded a provider verification document.",
             $request,
-            ['document_id' => $document->id, 'document_type' => $document->document_type],
+            ['document_id' => $document->id, 'document_type' => $document->document_type,
+                'replaced_document_id' => $replaced?->id, 'replaced_file' => $replaced?->original_name],
         );
 
         return response()->json([
@@ -636,19 +653,23 @@ trait HandlesProviderProfileManagement
         abort_unless($request->user()?->isProvider(), 403);
         $providerOwner = $request->user()->providerOrganizationOwner();
         abort_unless($document->provider_id === $providerOwner->id, 403);
-        $returnedToReview = $providerOwner->providerProfile?->verification_status === 'approved';
-
-        DB::transaction(function () use ($document, $providerOwner, $returnedToReview): void {
-            $document->delete();
+        $returnedToReview = DB::transaction(function () use ($document, $providerOwner): bool {
+            User::query()->lockForUpdate()->findOrFail($providerOwner->id);
+            $profile = $providerOwner->providerProfile()->lockForUpdate()->firstOrFail();
+            $current = $providerOwner->providerVerificationDocuments()->lockForUpdate()->find($document->id);
+            abort_if(! $current, 409, 'This proof was already removed. Reload the organization record.');
+            $current->delete();
+            $returnedToReview = $profile->verification_status === 'approved';
 
             if ($returnedToReview) {
-                $providerOwner->providerProfile()->update([
+                $profile->update([
                     'verification_status' => 'pending',
                     'verification_notes' => null,
                     'verified_by' => null,
                     'verified_at' => null,
                 ]);
             }
+            return $returnedToReview;
         });
 
         if (Storage::disk('local')->exists($document->path)) {
@@ -854,6 +875,7 @@ trait HandlesProviderProfileManagement
     private function verificationDocumentPayload(ProviderVerificationDocument $document): array
     {
         return [
+            ...app(\App\Services\ProviderVerificationReviewService::class)->documentMetadata($document),
             'id' => $document->id,
             'document_type' => $document->document_type,
             'original_name' => $document->original_name,

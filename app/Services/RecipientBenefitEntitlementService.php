@@ -49,7 +49,12 @@ final class RecipientBenefitEntitlementService
             );
 
             if ($this->isCancelled($application)
-                && $entitlement->status !== RecipientSupportCatalog::ENTITLEMENT_CANCELLED) {
+                && ! in_array($entitlement->status, [
+                    RecipientSupportCatalog::ENTITLEMENT_CANCELLED,
+                    RecipientSupportCatalog::ENTITLEMENT_RELEASED,
+                    RecipientSupportCatalog::ENTITLEMENT_FULFILLED,
+                    RecipientSupportCatalog::ENTITLEMENT_ISSUE_OPEN,
+                ], true)) {
                 $entitlement->update([
                     'status' => RecipientSupportCatalog::ENTITLEMENT_CANCELLED,
                     'cancelled_at' => now(),
@@ -76,6 +81,17 @@ final class RecipientBenefitEntitlementService
         }
 
         return $this->ensureForApplication($application);
+    }
+
+    public function cancelUnfulfilledForApplication(ScholarshipApplication $application): void
+    {
+        $application->benefitEntitlements()->whereIn('status', [
+            RecipientSupportCatalog::ENTITLEMENT_PENDING_AGREEMENT,
+            RecipientSupportCatalog::ENTITLEMENT_READY,
+            RecipientSupportCatalog::ENTITLEMENT_ACTIVE,
+            RecipientSupportCatalog::ENTITLEMENT_SCHEDULED,
+            RecipientSupportCatalog::ENTITLEMENT_WITHHELD,
+        ])->update(['status' => RecipientSupportCatalog::ENTITLEMENT_CANCELLED, 'cancelled_at' => now()]);
     }
 
     /**
@@ -222,10 +238,20 @@ final class RecipientBenefitEntitlementService
     public function syncReleaseResult(RecipientBenefitReleaseRecord $record): void
     {
         $record->loadMissing('allocations.entitlement');
+        $reports = app(BenefitDeliveryReportService::class)->openForRecord($record)
+            ->where('issue_kind', '!=', 'delivery_question')->get();
 
         foreach ($record->allocations as $allocation) {
+            $disputed = $record->status === 'released' && $reports->contains(function ($report) use ($record, $allocation): bool {
+                if ($report->benefit_entitlement_id) {
+                    return $report->benefit_entitlement_id === $allocation->recipient_benefit_entitlement_id;
+                }
+
+                return $report->benefit_release_record_id === $record->id
+                    || $report->releaseRecord?->allocations()->where('recipient_benefit_entitlement_id', $allocation->recipient_benefit_entitlement_id)->exists();
+            });
             $allocation->update([
-                'status' => $record->status,
+                'status' => $disputed ? 'issue_open' : $record->status,
                 'released_at' => $record->status === 'released' ? ($record->released_at ?? now()) : null,
             ]);
 
@@ -240,6 +266,13 @@ final class RecipientBenefitEntitlementService
                 'withheld' => RecipientSupportCatalog::ENTITLEMENT_WITHHELD,
                 default => RecipientSupportCatalog::ENTITLEMENT_SCHEDULED,
             };
+            if ($disputed) {
+                $status = RecipientSupportCatalog::ENTITLEMENT_ISSUE_OPEN;
+            }
+            $record->loadMissing('application');
+            if ($this->isCancelled($record->application) && $record->status !== 'released') {
+                $status = RecipientSupportCatalog::ENTITLEMENT_CANCELLED;
+            }
             $this->setOneTimeStatus($entitlement, $status, $record->released_at);
         }
     }
@@ -267,22 +300,23 @@ final class RecipientBenefitEntitlementService
 
     public function syncIssueResolution(RecipientBenefitReceiptResponse $response): void
     {
+        // A provider's statement or planned correction is not confirmed receipt.
+        if (! $response->recipient_resolution_confirmed_at
+            || ! $response->deliveryReport()->where('status', 'closed')->where('outcome', 'receipt_confirmed')->exists()) {
+            return;
+        }
         $response->loadMissing('releaseRecord.allocations.entitlement');
-        $replacementRequired = $response->resolution_outcome === 'replacement_scheduled';
-        $entitlementStatus = $replacementRequired
-            ? RecipientSupportCatalog::ENTITLEMENT_READY
-            : RecipientSupportCatalog::ENTITLEMENT_FULFILLED;
 
         foreach ($response->releaseRecord?->allocations ?? [] as $allocation) {
             $allocation->update([
-                'status' => $replacementRequired ? 'replacement_required' : 'fulfilled',
+                'status' => 'fulfilled',
             ]);
 
             if ($allocation->entitlement?->isOneTime()) {
                 $this->setOneTimeStatus(
                     $allocation->entitlement,
-                    $entitlementStatus,
-                    $response->resolved_at,
+                    RecipientSupportCatalog::ENTITLEMENT_FULFILLED,
+                    $response->recipient_resolution_confirmed_at,
                 );
             }
         }

@@ -48,6 +48,7 @@ export const adminWorkspaceDefinitions = {
             { key: 'selection-activities', href: '/admin/workspaces/reviews/selection-activities', label: 'Selection activities', icon: 'fa-solid fa-calendar-check' },
             { key: 'benefits', href: '/admin/workspaces/reviews/benefits', label: 'Benefit evidence', icon: 'fa-solid fa-receipt' },
             { key: 'monitoring', href: '/admin/workspaces/reviews/monitoring', label: 'Monitoring oversight', icon: 'fa-solid fa-chart-line' },
+            { key: 'recipient-cases', href: '/admin/workspaces/reviews/recipient-cases', label: 'Case reviews', icon: 'fa-solid fa-scale-balanced' },
             sharedProfileLink,
         ],
     },

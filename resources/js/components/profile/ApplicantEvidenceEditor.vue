@@ -1,15 +1,23 @@
 <script setup>
+import { computed } from 'vue';
 import ApplicantProfileEvidenceList from './ApplicantProfileEvidenceList.vue';
 import TermsAgreement from '../TermsAgreement.vue';
 import { disclosureSummary, inputClass, labelClass, optionalLabel, secondaryButton, sectionTitle } from '../../support/profileEditorStyles';
 
 const form = defineModel({ type: Object, required: true });
 const consent = defineModel('consent', { type: Boolean, default: false });
-defineProps({
+const props = defineProps({
     groups: { type: Array, default: () => [] },
     title: { type: String, default: '' },
     description: { type: String, default: '' },
     reviewerNote: { type: String, default: '' },
+    verificationStatus: { type: String, default: 'unsubmitted' },
+    legacyApproval: { type: Boolean, default: false },
+    focusType: { type: String, default: '' },
+    nextType: { type: String, default: '' },
+    success: { type: String, default: '' },
+    refreshRequired: { type: Boolean, default: false },
+    refreshing: { type: Boolean, default: false },
     ocr: { type: Object, default: () => ({}) },
     uploadingType: { type: String, default: '' },
     deletingId: { type: [Number, String], default: null },
@@ -22,18 +30,24 @@ defineProps({
     resultInputLabel: { type: String, default: 'Academic result' },
     legacyDocuments: { type: Array, default: () => [] },
 });
-defineEmits(['upload', 'preview', 'remove', 'scan']);
+const showProfileNote = computed(() => props.reviewerNote && !props.groups.some((group) => group.rows.some((row) => row.document?.review_notes === props.reviewerNote)));
+defineEmits(['upload', 'preview', 'remove', 'scan', 'refresh']);
 </script>
 
 <template>
     <div id="profile-verification" data-evidence-editor class="px-4 pb-4 pt-4 sm:px-6">
-        <p v-if="reviewerNote" data-evidence-reviewer-note class="mb-4 border-l-2 border-amber-400 pl-3 text-xs leading-5 text-slate-700"><strong>Reviewer note:</strong> {{ reviewerNote }}</p>
+        <p v-if="success" data-evidence-success role="status" class="mb-4 border-l-2 border-emerald-400 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900">{{ success }}</p>
+        <p v-if="showProfileNote" data-evidence-reviewer-note class="mb-4 border-l-2 border-amber-400 pl-3 text-xs leading-5 text-slate-700"><strong>Profile reviewer note:</strong> {{ reviewerNote }}</p>
+        <div v-if="refreshRequired" role="alert" data-evidence-refresh class="mb-4 border-l-2 border-amber-400 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-950"><p>This record changed in another session. Refresh before replacing or removing files. No files were changed by this action.</p><button type="button" :disabled="refreshing" :class="[secondaryButton, 'mt-2']" @click="$emit('refresh')">{{ refreshing ? 'Refreshing...' : 'Refresh current evidence' }}</button></div>
+        <p v-if="legacyApproval && verificationStatus === 'approved'" class="mb-4 text-xs leading-5 text-slate-600">Your earlier profile verification is retained. Older document approvals have no individual review record; you do not need to upload them again unless they change or a reviewer asks.</p>
         <ApplicantProfileEvidenceList
             :groups="groups" :title="title" :description="description" :ocr="ocr"
+            :focus-type="focusType" :next-type="nextType"
             :uploading-type="uploadingType" :deleting-id="deletingId" :scanning-id="scanningId"
             :disabled="disabled" :scan-label="scanLabel" :result-label="resultLabel"
             @upload="(type, event) => $emit('upload', type, event)"
             @preview="$emit('preview', $event)" @remove="$emit('remove', $event)" @scan="$emit('scan', $event)"
+            @refresh="$emit('refresh')"
         >
             <template #terms>
                 <div data-profile-evidence-terms><TermsAgreement v-model="consent" context="document" :modal-layer="2700" /></div>

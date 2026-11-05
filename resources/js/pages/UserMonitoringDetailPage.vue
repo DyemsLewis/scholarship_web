@@ -101,6 +101,7 @@ onMounted(loadMonitoringRecord);
 
         <MonitoringBenefits
             v-else-if="detail.view === 'benefits'"
+            :application-id="applicationId"
             :content="detail.content"
             :program-title="detail.identity.program.title"
             @refresh="refreshMonitoringDetail"

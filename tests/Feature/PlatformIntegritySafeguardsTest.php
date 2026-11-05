@@ -19,6 +19,7 @@ use Tests\TestCase;
 
 class PlatformIntegritySafeguardsTest extends TestCase
 {
+    use \Tests\Concerns\ReviewsProviderDocuments;
     use RefreshDatabase;
 
     public function test_admin_cannot_publish_until_provider_proof_and_program_data_are_valid(): void
@@ -47,14 +48,17 @@ class PlatformIntegritySafeguardsTest extends TestCase
         $provider->providerProfile()->update(['verification_status' => 'pending']);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/providers/{$provider->id}/verification", ['verification_status' => 'approved'])
+            ->patchJson("/admin/providers/{$provider->id}/verification", ['verification_status' => 'approved', 'expected_review_token' => app(\App\Services\ProviderVerificationReviewService::class)->token($provider->fresh())])
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'The provider must upload at least one proof before the account can be approved.');
+            ->assertJsonValidationErrors('verification_status');
 
         $proof = $this->providerProof($provider);
+        Storage::fake('local');
+        Storage::disk('local')->put($proof->path, '%PDF-1.4 demo proof');
+        $token = $this->acceptProviderDocuments($admin, $provider);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/providers/{$provider->id}/verification", ['verification_status' => 'approved'])
+            ->patchJson("/admin/providers/{$provider->id}/verification", ['verification_status' => 'approved', 'expected_review_token' => $token])
             ->assertOk()
             ->assertJsonPath('provider.verification_status', 'approved');
 

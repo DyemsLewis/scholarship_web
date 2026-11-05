@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
-use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
 use App\Models\ApplicationStatusHistory;
@@ -22,6 +21,8 @@ use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationSchedulePayload;
+use App\Support\CompletedQualification;
+use App\Support\EducationEligibilityPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -203,9 +204,11 @@ class MobileAuthController extends Controller
             ], 401);
         }
 
-        $gradeMaximum = $request->input('grading_scale') === AcademicRequirement::SCALE_GRADE_POINT ? 5 : 100;
+        $request->merge(CompletedQualification::input($request->all(), $user->studentProfile));
+        $gradeMaximum = $request->input('grading_scale', $user->studentProfile?->grading_scale) === AcademicRequirement::SCALE_GRADE_POINT ? 5 : 100;
 
         $validated = $request->validate([
+            ...CompletedQualification::rules($request->all()),
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
@@ -241,8 +244,8 @@ class MobileAuthController extends Controller
             'city' => ['nullable', 'string', 'max:255'],
             'province' => ['nullable', 'string', 'max:255'],
             'region' => ['nullable', 'string', 'max:255'],
-            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', new \App\Rules\PhilippineLandPin],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', new \App\Rules\PhilippineLandPin],
             'birthdate' => ['nullable', 'date', 'before_or_equal:'.now()->subYears(5)->toDateString(), 'after_or_equal:'.now()->subYears(100)->toDateString()],
             'guardian_name' => ['nullable', 'string', 'max:255'],
             'guardian_relationship' => ['nullable', 'string', 'max:100'],
@@ -251,7 +254,7 @@ class MobileAuthController extends Controller
             'guardian_is_account_owner' => ['nullable', 'boolean'],
         ]);
 
-        if (! AcademicRequirement::requiresNumeric($validated['grading_scale'] ?? null)) {
+        if (array_key_exists('grading_scale', $validated) && ! AcademicRequirement::requiresNumeric($validated['grading_scale'])) {
             $validated['gwa'] = null;
         }
 
@@ -278,6 +281,7 @@ class MobileAuthController extends Controller
         $studentProfile = $user->studentProfile()->firstOrNew(['user_id' => $user->id]);
         $studentProfile->fill($profileValues);
         $verifiedFields = [
+            ...CompletedQualification::FIELDS,
             'first_name', 'last_name', 'middle_initial', 'suffix', 'birthdate', 'citizenship_status',
             'income_bracket', 'household_size', 'guardian_name', 'guardian_relationship', 'account_managed_by',
             'address', 'barangay', 'city', 'province', 'region',
@@ -310,17 +314,9 @@ class MobileAuthController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($studentProfile, $user, $verificationReset): void {
+        DB::transaction(function () use ($studentProfile, $user): void {
+            User::query()->lockForUpdate()->findOrFail($user->id);
             $studentProfile->save();
-
-            if ($verificationReset) {
-                $user->applicantVerificationDocuments()
-                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
-                    ->update([
-                        'status' => 'submitted',
-                        'review_notes' => null,
-                    ]);
-            }
         });
 
         $user->unsetRelation('studentProfile');
@@ -1131,6 +1127,7 @@ class MobileAuthController extends Controller
             'eligibility' => $scholarship->eligibility,
             'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
+            'education_eligibility_policy' => EducationEligibilityPolicy::normalize($scholarship->education_eligibility_policy),
             'eligible_courses' => $scholarship->eligible_courses,
             'eligible_school_types' => $scholarship->eligible_school_types,
             'eligible_year_levels' => $scholarship->eligible_year_levels,

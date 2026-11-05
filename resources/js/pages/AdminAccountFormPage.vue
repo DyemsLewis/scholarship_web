@@ -582,6 +582,11 @@ async function updateApplicantVerification(status) {
         return;
     }
 
+    if (status === 'approved' && account.value?.evidence_review?.required_evidence_accepted !== true) {
+        errorMessage.value = 'Review and accept each required document in the applicant verification workspace first.';
+        return;
+    }
+
     if (status === 'rejected' && !applicantVerificationNotes.value.trim()) {
         errorMessage.value = 'Add a review note explaining what the applicant needs to replace.';
         return;
@@ -1194,7 +1199,7 @@ onMounted(() => {
                                 Review academic and school records
                             </h3>
                             <p class="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
-                                Compare the saved academic result with the submitted grade record. School enrollment proof provides optional supporting context.
+                                Each required document needs an individual review before the profile can be verified.
                             </p>
                         </div>
                         <span :class="['w-fit rounded-md px-3 py-2 text-xs font-bold uppercase tracking-[0.12em]', applicantVerificationClass]">
@@ -1203,6 +1208,7 @@ onMounted(() => {
                     </div>
 
                     <div class="p-5 sm:p-6">
+                        <a :href="`/admin/workspaces/reviews/applicants/${accountId}`" class="mb-4 inline-flex min-h-10 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700"><i class="fa-solid fa-user-check" aria-hidden="true"></i>Open applicant verification workspace</a>
                         <div v-if="verificationDocuments.length" class="divide-y divide-slate-200 rounded-md border border-slate-200">
                             <div
                                 v-for="document in verificationDocuments"
@@ -1261,7 +1267,7 @@ onMounted(() => {
                                 </button>
                                 <button
                                     type="button"
-                                    :disabled="Boolean(accountAction) || !hasAcademicVerificationDocument"
+                                    :disabled="Boolean(accountAction) || !hasAcademicVerificationDocument || account?.evidence_review?.required_evidence_accepted !== true"
                                     class="rounded-md bg-slate-900 px-3.5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                                     @click="updateApplicantVerification('approved')"
                                 >

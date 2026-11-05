@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AccountManagerWorkspaceController;
+use App\Http\Controllers\Admin\ApplicantEvidenceReviewController;
+use App\Http\Controllers\Admin\ProviderDocumentReviewController;
 use App\Http\Controllers\Admin\BillingOfficerWorkspaceController;
 use App\Http\Controllers\Admin\FinanceOfficerWorkspaceController;
 use App\Http\Controllers\Admin\RecordsOfficerWorkspaceController;
@@ -11,16 +13,17 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ApplicantDashboardController;
 use App\Http\Controllers\ApplicationDocumentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BenefitDeliveryReportController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PortalManagerController;
 use App\Http\Controllers\Provider\ApplicationStageOperationController;
-use App\Http\Controllers\Provider\ProviderAccountController;
 use App\Http\Controllers\Provider\Programs\ProgramCoordinatorDashboardController;
 use App\Http\Controllers\Provider\Programs\ProgramDirectoryController;
 use App\Http\Controllers\Provider\Programs\ProgramRecordController;
+use App\Http\Controllers\Provider\ProviderAccountController;
 use App\Http\Controllers\Provider\RoleDashboardController;
 use App\Http\Controllers\Provider\SelectionSessionWorkspaceController;
 use App\Http\Controllers\ProviderApplicationPageController;
@@ -29,6 +32,10 @@ use App\Http\Controllers\ProviderProgramPageController;
 use App\Http\Controllers\ProviderRecipientPageController;
 use App\Http\Controllers\ProviderServiceRequestController;
 use App\Http\Controllers\ProviderWorkspacePageController;
+use App\Http\Controllers\RecipientAgreementConcernController;
+use App\Http\Controllers\RecipientCasePrivacyController;
+use App\Http\Controllers\RecipientCaseReviewController;
+use App\Http\Controllers\RecipientWithdrawalController;
 use App\Http\Controllers\SupportReportController;
 use Illuminate\Support\Facades\Route;
 
@@ -105,6 +112,20 @@ Route::get('/dashboard/benefit-receipt-responses/{response}/files/{kind}', [Appl
 Route::post('/dashboard/support-decisions/{decision}/response', [ApplicantDashboardController::class, 'respondToRecipientSupportDecision'])->middleware(['auth', 'throttle:10,1'])->whereNumber('decision')->name('dashboard.support-decisions.response');
 Route::get('/dashboard/support-decisions/{decision}/files/{kind}', [ApplicantDashboardController::class, 'viewRecipientSupportDecisionFile'])->middleware('auth')->whereNumber('decision')->whereIn('kind', ['decision-document', 'applicant-response', 'resolution-proof'])->name('dashboard.support-decisions.file');
 Route::patch('/dashboard/applications/{application}/withdraw', [ApplicantDashboardController::class, 'withdrawApplication'])->middleware(['auth', 'throttle:6,1'])->name('dashboard.applications.withdraw');
+Route::get('/dashboard/applications/{application}/recipient-withdrawals', [RecipientWithdrawalController::class, 'applicantHistory'])->middleware('auth')->whereNumber('application')->name('dashboard.recipient-withdrawals.index');
+Route::post('/dashboard/applications/{application}/recipient-withdrawals', [RecipientWithdrawalController::class, 'store'])->middleware(['auth', 'throttle:6,1'])->whereNumber('application')->name('dashboard.recipient-withdrawals.store');
+Route::patch('/dashboard/recipient-withdrawals/{withdrawal}/cancel', [RecipientWithdrawalController::class, 'cancel'])->middleware(['auth', 'throttle:10,1'])->whereNumber('withdrawal')->name('dashboard.recipient-withdrawals.cancel');
+Route::get('/dashboard/recipient-withdrawals/{withdrawal}', [RecipientWithdrawalController::class, 'showApplicant'])->middleware('auth')->whereNumber('withdrawal')->name('dashboard.recipient-withdrawals.show');
+Route::get('/dashboard/applications/{application}/agreement-concerns', [RecipientAgreementConcernController::class, 'history'])->middleware('auth')->whereNumber('application')->name('dashboard.agreement-concerns.index');
+Route::get('/dashboard/agreement-concerns/{concern}', [RecipientAgreementConcernController::class, 'show'])->middleware('auth')->whereNumber('concern')->name('dashboard.agreement-concerns.show');
+Route::post('/dashboard/agreement-concerns/{concern}/response', [RecipientAgreementConcernController::class, 'respond'])->middleware(['auth', 'throttle:10,1'])->whereNumber('concern')->name('dashboard.agreement-concerns.respond');
+Route::get('/dashboard/agreement-concern-evidence/{evidence}', [RecipientAgreementConcernController::class, 'evidence'])->middleware('auth')->whereNumber('evidence')->name('dashboard.agreement-concerns.evidence.show');
+Route::get('/dashboard/applications/{application}/delivery-reports', [BenefitDeliveryReportController::class, 'history'])->middleware('auth')->whereNumber('application')->name('dashboard.delivery-reports.index');
+Route::post('/dashboard/applications/{application}/delivery-reports', [BenefitDeliveryReportController::class, 'store'])->middleware(['auth', 'throttle:10,1'])->whereNumber('application')->name('dashboard.delivery-reports.store');
+Route::get('/dashboard/delivery-reports/{report}', [BenefitDeliveryReportController::class, 'show'])->middleware('auth')->whereNumber('report')->name('dashboard.delivery-reports.show');
+Route::post('/dashboard/delivery-reports/{report}/response', [BenefitDeliveryReportController::class, 'respond'])->middleware(['auth', 'throttle:10,1'])->whereNumber('report')->name('dashboard.delivery-reports.respond');
+Route::post('/dashboard/delivery-receipts/{receipt}/report', [BenefitDeliveryReportController::class, 'import'])->middleware(['auth', 'throttle:10,1'])->whereNumber('receipt')->name('dashboard.delivery-reports.import');
+Route::get('/dashboard/delivery-report-evidence/{evidence}', [BenefitDeliveryReportController::class, 'evidence'])->middleware('auth')->whereNumber('evidence')->name('dashboard.delivery-reports.evidence');
 Route::patch('/dashboard/applications/{application}/correction-response', [ApplicantDashboardController::class, 'respondToCorrection'])->middleware(['auth', 'throttle:10,1'])->name('dashboard.applications.correction-response');
 Route::patch('/dashboard/applications/{application}/schedules/{schedule}/acknowledge', [ApplicantDashboardController::class, 'acknowledgeApplicationSchedule'])->middleware('auth')->name('dashboard.applications.schedules.acknowledge');
 Route::patch('/dashboard/applications/{application}/stage-activities/{assignment}/acknowledge', [ApplicantDashboardController::class, 'acknowledgeStageActivity'])->middleware(['auth', 'throttle:10,1'])->whereNumber(['application', 'assignment'])->name('dashboard.applications.stage-activities.acknowledge');
@@ -119,6 +140,16 @@ Route::get('/service-files/{file}/download', [BillingController::class, 'downloa
 Route::get('/notifications', [NotificationController::class, 'index'])->middleware('auth')->name('notifications.index');
 Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->middleware('auth')->name('notifications.read-all');
 Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('auth')->name('notifications.read');
+Route::middleware('auth')->prefix('dashboard')->name('dashboard.')->group(function (): void {
+    Route::get('/applications/{application}/case-reviews', [RecipientCaseReviewController::class, 'history'])->whereNumber('application')->name('recipient-cases.history');
+    Route::get('/recipient-cases/{case}', [RecipientCaseReviewController::class, 'show'])->whereNumber('case')->name('recipient-cases.show');
+    Route::get('/recipient-cases/{case}/privacy', [RecipientCasePrivacyController::class, 'show'])->whereNumber('case')->name('recipient-case-privacy.show');
+    Route::get('/recipient-case-evidence/{evidence}', [RecipientCaseReviewController::class, 'evidence'])->whereNumber('evidence')->name('recipient-cases.evidence');
+    foreach (['request', 'statement', 'appeal'] as $action) {
+        Route::post('/recipient-cases/{case}/'.$action, [RecipientCaseReviewController::class, 'mutate'])->defaults('action', $action)->whereNumber('case')->middleware('throttle:10,1')->name('recipient-cases.'.$action);
+    }
+});
+
 Route::middleware(['auth', 'admin'])
     ->prefix('admin')
     ->name('admin.')
@@ -256,6 +287,17 @@ Route::middleware(['auth', 'admin'])
         Route::get('/accounts/{user}/edit', [AdminController::class, 'accountForm'])->middleware('permission:manage_accounts')->name('accounts.edit');
         Route::get('/profile', [AdminController::class, 'profile'])->name('profile');
         Route::get('/reviews', [AdminController::class, 'reviews'])->middleware('permission:manage_reviews')->name('reviews');
+        Route::middleware('permission:manage_reviews')->group(function (): void {
+            Route::get('/workspaces/reviews/recipient-cases', [RecipientCaseReviewController::class, 'page'])->name('recipient-cases.page');
+            Route::get('/workspaces/reviews/recipient-cases/data', [RecipientCaseReviewController::class, 'queue'])->name('recipient-cases.queue');
+            Route::get('/recipient-cases/{case}', [RecipientCaseReviewController::class, 'show'])->whereNumber('case')->name('recipient-cases.show');
+            Route::get('/recipient-cases/{case}/privacy', [RecipientCasePrivacyController::class, 'show'])->whereNumber('case')->name('recipient-case-privacy.show');
+            Route::post('/recipient-cases/{case}/privacy', [RecipientCasePrivacyController::class, 'store'])->whereNumber('case')->middleware('throttle:20,1')->name('recipient-case-privacy.record');
+            Route::get('/recipient-case-evidence/{evidence}', [RecipientCaseReviewController::class, 'evidence'])->whereNumber('evidence')->name('recipient-cases.evidence');
+            foreach (['information', 'outcome'] as $action) {
+                Route::post('/recipient-cases/{case}/'.$action, [RecipientCaseReviewController::class, 'mutate'])->defaults('action', $action)->whereNumber('case')->middleware('throttle:20,1')->name('recipient-cases.'.$action);
+            }
+        });
         Route::get('/providers/{provider}/review', [AdminController::class, 'providerReview'])->middleware('permission:manage_reviews')->whereNumber('provider')->name('providers.review.show');
         Route::get('/providers/{provider}/review/data', [AdminController::class, 'providerReviewData'])->middleware('permission:manage_reviews')->whereNumber('provider')->name('providers.review.data');
         Route::get('/applicants/{applicant}/review', [AdminController::class, 'applicantReview'])->middleware('permission:manage_reviews')->whereNumber('applicant')->name('applicants.review.show');
@@ -290,6 +332,8 @@ Route::middleware(['auth', 'admin'])
         Route::patch('/users/{user}/email-verification', [AdminController::class, 'verifyUserEmail'])->middleware('permission:manage_accounts')->name('users.email-verification');
         Route::post('/users/{user}/verification-email', [AdminController::class, 'resendUserVerificationEmail'])->middleware('permission:manage_accounts')->name('users.verification-email');
         Route::patch('/users/{applicant}/profile-verification', [AdminController::class, 'updateApplicantVerification'])->middleware('permission:manage_reviews')->name('users.profile-verification');
+        Route::patch('/applicant-verification-documents/{document}/review', [ApplicantEvidenceReviewController::class, 'update'])->middleware('permission:manage_reviews')->name('applicant-verification-documents.review');
+        Route::get('/applicants/{applicant}/evidence-review-history', [ApplicantEvidenceReviewController::class, 'history'])->middleware('permission:manage_reviews')->name('applicants.evidence-review-history');
         Route::get('/applicant-verification-documents/{document}/view', [AdminController::class, 'viewApplicantVerificationDocument'])->middleware('permission:manage_reviews')->name('applicant-verification-documents.view');
         Route::get('/benefit-release-records/{record}/receipt', [AdminController::class, 'viewBenefitReleaseReceipt'])->middleware('permission:manage_reviews')->whereNumber('record')->name('benefit-release-records.receipt');
         Route::get('/monitoring/{application}', [AdminController::class, 'monitoringReview'])->middleware('permission:manage_reviews')->whereNumber('application')->name('monitoring.show');
@@ -303,6 +347,7 @@ Route::middleware(['auth', 'admin'])
         Route::patch('/profile', [AdminController::class, 'updateProfile'])->name('profile.update');
         Route::get('/reviews/data', [AdminController::class, 'reviewsData'])->middleware('permission:manage_reviews')->name('reviews.data');
         Route::patch('/providers/{provider}/verification', [AdminController::class, 'updateProviderVerification'])->middleware('permission:manage_reviews')->name('providers.verification');
+        Route::patch('/provider-verification-documents/{document}/review', [ProviderDocumentReviewController::class, 'update'])->middleware('permission:manage_reviews')->name('provider-verification-documents.review');
         Route::patch('/scholarships/{scholarship}/review', [AdminController::class, 'updateScholarshipReview'])->middleware('permission:manage_reviews')->name('scholarships.review');
         Route::get('/provider-verification-documents/{document}/view', [AdminController::class, 'viewProviderVerificationDocument'])->middleware('permission:manage_reviews')->name('provider-verification-documents.view');
         Route::get('/provider-verification-documents/{document}/download', [AdminController::class, 'downloadProviderVerificationDocument'])->middleware('permission:manage_reviews')->name('provider-verification-documents.download');
@@ -927,6 +972,43 @@ Route::middleware(['auth', 'provider'])
         Route::post('/benefit-receipt-responses/{response}/resolve', [ProviderController::class, 'resolveRecipientBenefitReceiptResponse'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:20,1'])->whereNumber('response')->name('benefit-receipt-responses.resolve');
         Route::get('/benefit-receipt-responses/{response}/files/{kind}', [ProviderController::class, 'viewRecipientBenefitReceiptResponseFile'])->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('response')->whereIn('kind', ['evidence', 'resolution-proof'])->name('benefit-receipt-responses.file');
         Route::get('/applications/{application}/recipient-record', [ProviderController::class, 'recipientSupportRecord'])->middleware(['permission:manage_recipients,manage_monitoring,manage_benefit_releases', 'provider.approved'])->whereNumber('application')->name('applications.recipient-record');
+        Route::middleware(['permission:manage_benefit_releases', 'provider.approved'])->group(function (): void {
+            Route::get('/workspaces/releases/delivery-reports', [ProviderWorkspacePageController::class, 'deliveryReports'])->name('workspaces.releases.delivery-reports');
+            Route::get('/workspaces/releases/delivery-reports/data', [BenefitDeliveryReportController::class, 'queue'])->name('delivery-reports.queue');
+            Route::get('/applications/{application}/delivery-reports', [BenefitDeliveryReportController::class, 'history'])->whereNumber('application')->name('delivery-reports.index');
+            Route::get('/delivery-reports/{report}', [BenefitDeliveryReportController::class, 'show'])->whereNumber('report')->name('delivery-reports.show');
+            Route::post('/delivery-reports/{report}/proposal', [BenefitDeliveryReportController::class, 'propose'])->middleware('throttle:20,1')->whereNumber('report')->name('delivery-reports.propose');
+            Route::post('/delivery-receipts/{receipt}/report', [BenefitDeliveryReportController::class, 'import'])->middleware('throttle:10,1')->whereNumber('receipt')->name('delivery-reports.import');
+            Route::get('/delivery-report-evidence/{evidence}', [BenefitDeliveryReportController::class, 'evidence'])->whereNumber('evidence')->name('delivery-reports.evidence');
+        });
+        Route::get('/workspaces/recipients/withdrawals/data', [RecipientWithdrawalController::class, 'queue'])->middleware(['permission:manage_recipients', 'provider.approved'])->name('recipient-withdrawals.queue');
+        Route::get('/workspaces/recipients/withdrawals', [ProviderWorkspacePageController::class, 'recipientWithdrawals'])->middleware(['permission:manage_recipients', 'provider.approved'])->name('workspaces.recipients.withdrawals');
+        Route::get('/workspaces/recipients/withdrawals/{withdrawal}', [ProviderWorkspacePageController::class, 'recipientWithdrawals'])->middleware(['permission:manage_recipients', 'provider.approved'])->whereNumber('withdrawal')->name('workspaces.recipients.withdrawals.show');
+        Route::get('/recipient-withdrawals/{withdrawal}', [RecipientWithdrawalController::class, 'showProvider'])->middleware(['permission:manage_recipients', 'provider.approved'])->whereNumber('withdrawal')->name('recipient-withdrawals.show');
+        Route::get('/applications/{application}/recipient-withdrawals', [RecipientWithdrawalController::class, 'providerHistory'])->middleware(['permission:manage_recipients', 'provider.approved'])->whereNumber('application')->name('recipient-withdrawals.index');
+        Route::patch('/recipient-withdrawals/{withdrawal}/review', [RecipientWithdrawalController::class, 'review'])->middleware(['permission:manage_recipients', 'provider.approved', 'throttle:20,1'])->whereNumber('withdrawal')->name('recipient-withdrawals.review');
+        Route::middleware(['permission:manage_recipients', 'provider.approved'])->group(function (): void {
+            Route::get('/workspaces/recipients/concerns', [ProviderWorkspacePageController::class, 'recipientConcerns'])->name('workspaces.recipients.concerns');
+            Route::get('/workspaces/recipients/concerns/data', [RecipientAgreementConcernController::class, 'queue'])->name('agreement-concerns.queue');
+            Route::get('/applications/{application}/agreement-concerns', [RecipientAgreementConcernController::class, 'history'])->whereNumber('application')->name('agreement-concerns.index');
+            Route::post('/applications/{application}/agreement-concerns', [RecipientAgreementConcernController::class, 'store'])->middleware('throttle:10,1')->whereNumber('application')->name('agreement-concerns.store');
+            Route::get('/agreement-concerns/{concern}', [RecipientAgreementConcernController::class, 'show'])->whereNumber('concern')->name('agreement-concerns.show');
+            Route::patch('/agreement-concerns/{concern}', [RecipientAgreementConcernController::class, 'update'])->middleware('throttle:20,1')->whereNumber('concern')->name('agreement-concerns.update');
+            Route::patch('/agreement-concerns/{concern}/cancel', [RecipientAgreementConcernController::class, 'cancel'])->middleware('throttle:10,1')->whereNumber('concern')->name('agreement-concerns.cancel');
+            Route::post('/agreement-concerns/{concern}/issue', [RecipientAgreementConcernController::class, 'issue'])->middleware('throttle:10,1')->whereNumber('concern')->name('agreement-concerns.issue');
+            Route::post('/agreement-concerns/{concern}/evidence', [RecipientAgreementConcernController::class, 'upload'])->middleware('throttle:20,1')->whereNumber('concern')->name('agreement-concerns.evidence.store');
+            Route::delete('/agreement-concerns/{concern}/evidence/{evidence}', [RecipientAgreementConcernController::class, 'exclude'])->middleware('throttle:20,1')->whereNumber(['concern', 'evidence'])->name('agreement-concerns.evidence.exclude');
+            Route::get('/agreement-concern-evidence/{evidence}', [RecipientAgreementConcernController::class, 'evidence'])->whereNumber('evidence')->name('agreement-concerns.evidence.show');
+        });
+        Route::middleware(['permission:manage_recipients,manage_benefit_releases', 'provider.approved'])->group(function (): void {
+            Route::get('/applications/{application}/case-reviews', [RecipientCaseReviewController::class, 'history'])->whereNumber('application')->name('recipient-cases.history');
+            Route::get('/recipient-cases/{case}', [RecipientCaseReviewController::class, 'show'])->whereNumber('case')->name('recipient-cases.show');
+            Route::get('/recipient-cases/{case}/privacy', [RecipientCasePrivacyController::class, 'show'])->whereNumber('case')->name('recipient-case-privacy.show');
+            Route::get('/recipient-case-evidence/{evidence}', [RecipientCaseReviewController::class, 'evidence'])->whereNumber('evidence')->name('recipient-cases.evidence');
+            foreach (['request', 'statement', 'appeal'] as $action) {
+                Route::post('/recipient-cases/{case}/'.$action, [RecipientCaseReviewController::class, 'mutate'])->defaults('action', $action)->whereNumber('case')->middleware('throttle:10,1')->name('recipient-cases.'.$action);
+            }
+        });
         Route::post('/applications/{application}/support-decision', [ProviderController::class, 'recordRecipientSupportDecision'])->middleware(['permission:manage_recipients', 'provider.approved', 'throttle:20,1'])->whereNumber('application')->name('applications.support-decision');
         Route::post('/support-decisions/{decision}/resolve', [ProviderController::class, 'resolveRecipientSupportDecisionResponse'])->middleware(['permission:manage_recipients', 'provider.approved', 'throttle:20,1'])->whereNumber('decision')->name('support-decisions.resolve');
         Route::get('/support-decisions/{decision}/files/{kind}', [ProviderController::class, 'viewRecipientSupportDecisionFile'])->middleware(['permission:manage_recipients', 'provider.approved'])->whereNumber('decision')->whereIn('kind', ['decision-document', 'applicant-response', 'resolution-proof'])->name('support-decisions.file');

@@ -13,7 +13,7 @@ const code = script.content.replace(/from (['"])(vue|\.\.\/\.\.\/support\/[^'"]+
 const { default: EvidenceList } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 
 const row = (value, required, document = null) => ({ value, label: value === 'academic_record' ? 'Academic record' : 'Identity record', required, document, icon: 'fa-solid fa-file-lines', description: 'Choose a clear copy.', supports: 'Saved profile information', context: ['Saved school'] });
-const file = (status, overrides = {}) => ({ id: 1, status, original_name: 'profile.pdf', size: 1024, ...overrides });
+const file = (status, overrides = {}) => ({ id: 1, status, original_name: 'profile.pdf', size: 1024, has_current_acceptance: status === 'approved', ...overrides });
 const render = (groups, overrides = {}) => renderToString(createSSRApp(EvidenceList, { groups, scanLabel: () => 'Scan needs attention', resultLabel: () => '91.20%', ...overrides }));
 
 test('required evidence stays expanded and counts distinguish saved files from accepted proof', async () => {
@@ -69,6 +69,26 @@ test('uploads and removals disable conflicting file actions without changing rev
         assert.match(html, /<button[^>]+disabled[^>]+aria-label="Remove Identity record"/);
         assert.match(html, />Accepted</);
     }
+});
+
+test('current decisions show accepted status while legacy approvals are not counted as current acceptance', async () => {
+    const html = await render([{ id: 'required', label: 'Required files', rows: [row('identity_record', true, file('approved', { has_current_acceptance: false, legacy_approval: true })), row('academic_record', true, file('approved', { reviewed_at: '2026-11-01T09:00:00Z', review_notes: 'Compared with the school record.' }))] }]);
+    assert.match(html, /1 accepted/); assert.match(html, /Earlier approval/);
+    assert.match(html, /<details[^>]+data-evidence-review-details(?![^>]* open)/);
+    assert.match(html, /Compared with the school record/);
+});
+
+test('unavailable files are actionable but not shown as saved or previewable', async () => {
+    const html = await render([{ id: 'required', label: 'Required files', rows: [row('identity_record', true, file('approved', { file_available: false }))] }]);
+    assert.match(html, /0 of 1 required saved/); assert.match(html, /Upload needed/);
+    assert.doesNotMatch(html, /aria-label="View Identity record"/);
+    assert.match(html, /saved file is unavailable/);
+});
+
+test('accepted academic evidence does not ask for another scan and re-review guidance avoids unnecessary replacement', async () => {
+    const html = await render([{ id: 'required', label: 'Required files', rows: [row('academic_record', true, file('approved', { ocr_status: 'failed' })), row('identity_record', true, file('submitted', { review_context: { action: 'claims_changed' } }))] }], { ocr: { configured: true } });
+    assert.doesNotMatch(html, /Retry scan/); assert.match(html, /Review needed/);
+    assert.match(html, /only if it is no longer current/);
 });
 
 test('the editor places manual results with the academic file and keeps older records secondary', () => {

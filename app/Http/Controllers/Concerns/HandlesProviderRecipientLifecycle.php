@@ -1371,8 +1371,8 @@ trait HandlesProviderRecipientLifecycle
             'amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
             'release_method' => ['required', Rule::in(['in_person', 'bank_transfer', 'e_wallet', 'other'])],
             'location' => [Rule::requiredIf($request->input('release_method') === 'in_person'), 'nullable', 'string', 'max:255'],
-            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:longitude', new \App\Rules\PhilippineLandPin],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:latitude', new \App\Rules\PhilippineLandPin],
             'instructions' => ['nullable', 'string', 'max:2000'],
             'requires_original_verification' => ['required', 'boolean'],
             'benefit_ids' => ['sometimes', 'array', 'max:10'],
@@ -1439,6 +1439,13 @@ trait HandlesProviderRecipientLifecycle
             $entitlementService,
             $selectedBenefits,
         ): RecipientBenefitRelease {
+            foreach ($selectedApplications->sortBy('id') as $application) {
+                $current = ScholarshipApplication::query()->lockForUpdate()->findOrFail($application->id);
+                if ($current->status === 'benefits_terminated'
+                    || in_array($current->supportDecisions()->first()?->decision, ['completed', 'terminated'], true)) {
+                    throw ValidationException::withMessages(['recipient_ids' => 'A selected recipient no longer has active support. Refresh the release candidates.']);
+                }
+            }
             $release = $scholarship->benefitReleases()->create([
                 'created_by' => $request->user()->id,
                 'title' => $validated['title'],
@@ -1558,6 +1565,17 @@ trait HandlesProviderRecipientLifecycle
 
         try {
             DB::transaction(function () use ($request, $record, $validated, $status, $originalsVerified, $receipt, $newReceiptPath): void {
+                $application = ScholarshipApplication::query()->lockForUpdate()->findOrFail($record->scholarship_application_id);
+                $record->refresh();
+                $record->setRelation('application', $application);
+                if (in_array($record->status, ['released', 'missed'], true) || $record->receiptResponse()->exists()) {
+                    throw ValidationException::withMessages(['status' => 'This release record is already closed. Refresh before recording another result.']);
+                }
+                if (in_array($status, ['prepared', 'released'], true)
+                    && ($application->status === 'benefits_terminated'
+                        || in_array($application->supportDecisions()->first()?->decision, ['completed', 'terminated'], true))) {
+                    throw ValidationException::withMessages(['status' => 'Support has ended for this recipient. No further benefit can be prepared or released.']);
+                }
                 $record->update([
                     'status' => $status,
                     'originals_verified' => $originalsVerified,
@@ -1641,77 +1659,13 @@ trait HandlesProviderRecipientLifecycle
         $scholarship = $release?->scholarship;
         abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
 
-        if ($response->response_type !== 'issue' || $response->status !== 'open') {
-            throw ValidationException::withMessages([
-                'resolution_outcome' => 'This receipt response does not have an open issue to resolve.',
-            ]);
-        }
-
-        $validated = $request->validate([
-            'resolution_outcome' => ['required', Rule::in([
-                'corrected_release',
-                'replacement_scheduled',
-                'delivery_confirmed',
-                'no_change',
-            ])],
-            'resolution_notes' => ['required', 'string', 'min:5', 'max:1500'],
-            'resolution_proof' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
-        ]);
-
-        $proof = $request->file('resolution_proof');
-        $proofPath = $proof?->store("benefit-receipt-responses/{$record->id}/resolution", 'local');
-
-        try {
-            DB::transaction(function () use ($request, $response, $validated, $proof, $proofPath): void {
-                $response->update([
-                    'status' => 'resolved',
-                    'resolution_outcome' => $validated['resolution_outcome'],
-                    'resolution_notes' => $validated['resolution_notes'],
-                    'resolution_proof_original_name' => $proof?->getClientOriginalName(),
-                    'resolution_proof_path' => $proofPath,
-                    'resolution_proof_mime_type' => $proof?->getMimeType(),
-                    'resolution_proof_size' => $proof?->getSize() ?: 0,
-                    'resolved_by' => $request->user()->id,
-                    'resolved_at' => now(),
-                ]);
-                app(RecipientBenefitEntitlementService::class)->syncIssueResolution($response);
-            });
-        } catch (Throwable $error) {
-            if ($proofPath) {
-                Storage::disk('local')->delete($proofPath);
-            }
-
-            throw $error;
-        }
-
-        PortalNotification::create([
-            'user_id' => $response->applicant_id,
-            'type' => 'benefit_receipt_issue_resolved',
-            'title' => 'Benefit release issue updated',
-            'message' => "The provider resolved your report for {$release?->title}.",
-            'action_url' => route('dashboard.monitoring.show', $response->application, false),
-        ]);
-
-        ActivityLog::record(
-            $request->user(),
-            'benefit_receipt_issue_resolved',
-            "{$request->user()->name} resolved a benefit release issue for {$response->applicant?->name}.",
-            $request,
-            [
-                'scholarship_id' => $scholarship?->id,
-                'application_id' => $response->scholarship_application_id,
-                'benefit_release_record_id' => $record?->id,
-                'benefit_receipt_response_id' => $response->id,
-                'resolution_outcome' => $validated['resolution_outcome'],
-            ],
-        );
+        $report = app(\App\Services\BenefitDeliveryReportService::class)->importReceipt($request->user(), $response);
 
         return response()->json([
-            'message' => 'Recipient issue marked resolved.',
-            'release' => $this->recipientBenefitReleasePayload(
-                $release->fresh()->load(['creator', 'records.applicant.studentProfile', 'records.recorder', 'records.receiptResponse.resolver']),
-            ),
-        ]);
+            'message' => 'Use the delivery report to respond. Only the applicant can confirm receipt or accept a clarification.',
+            'errors' => ['resolution_outcome' => ['Provider responses cannot close a benefit report. Open the delivery report instead.']],
+            'report' => app(\App\Services\BenefitDeliveryReportPresenter::class)->payload($report, $request->user()),
+        ], 422);
     }
 
     public function viewRecipientBenefitReceiptResponseFile(
@@ -1774,6 +1728,7 @@ trait HandlesProviderRecipientLifecycle
 
         $record = $this->recipientSupportRecordPayload($application);
         $record['decision_reopen'] = $this->providerDecisionReopenPayload($application, $request->user());
+        $record['eligible_agreement_reviews'] = app(\App\Services\RecipientCaseReviewService::class)->eligibleReviews($application);
 
         return response()->json(['record' => $record]);
     }
@@ -1800,6 +1755,7 @@ trait HandlesProviderRecipientLifecycle
 
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['renewed', 'completed', 'terminated'])],
+            'agreement_case_review_id' => ['nullable', 'integer', 'min:1'],
             'reason_category' => ['required', Rule::in([
                 'requirements_met',
                 'support_period_extended',
@@ -1956,7 +1912,19 @@ trait HandlesProviderRecipientLifecycle
                     ]);
                 }
 
+                if (in_array($validated['decision'], ['completed', 'terminated'], true)
+                    && $application->recipientWithdrawalRequests()->where('status', 'pending')->exists()) {
+                    throw ValidationException::withMessages(['decision' => 'Review the pending withdrawal request before closing this recipient support record.']);
+                }
+
+                if (in_array($application->supportDecisions()->first()?->decision, ['completed', 'terminated'], true)) {
+                    throw ValidationException::withMessages(['decision' => 'This recipient support record was already closed. Refresh before recording an outcome.']);
+                }
+
+                $agreementReview = app(\App\Services\RecipientCaseReviewService::class)->authorizeSupportDecision($application, $validated);
+
                 $decision = $application->supportDecisions()->create([
+                    'agreement_case_review_id' => $agreementReview?->id,
                     'applicant_id' => $application->applicant_id,
                     'decision' => $validated['decision'],
                     'reason_category' => $validated['reason_category'],
@@ -1983,6 +1951,12 @@ trait HandlesProviderRecipientLifecycle
                     'decided_by' => $request->user()->id,
                     'decided_at' => now(),
                 ]);
+
+                if ($agreementReview) {
+                    $case = $agreementReview->agreementCase;
+                    $case->forceFill(['support_decision_id' => $decision->id, 'revision' => $case->revision + 1])->save();
+                    app(\App\Services\RecipientCaseHistory::class)->record($case, $request->user(), 'review_support_decision_linked', $case->status, 'The provider recorded a separate support decision linked to this reviewed case.');
+                }
 
                 if ($nextStatus !== $previousStatus) {
                     $application->update([
@@ -2086,6 +2060,9 @@ trait HandlesProviderRecipientLifecycle
         ]);
 
         $isReinstatement = $validated['resolution_outcome'] === 'support_reinstated';
+        if ($decision->agreement_case_review_id && !$isReinstatement) {
+            throw ValidationException::withMessages(['resolution_outcome' => 'This decision is linked to an independent case review. The provider cannot uphold or close that appeal; use the admin case-review process.']);
+        }
         if ($isReinstatement && $decision->decision !== 'terminated') {
             throw ValidationException::withMessages([
                 'resolution_outcome' => 'Only an early termination can be resolved by reinstating support.',
@@ -2117,6 +2094,7 @@ trait HandlesProviderRecipientLifecycle
                 $proofPath,
                 $isReinstatement,
             ): void {
+                ScholarshipApplication::query()->lockForUpdate()->findOrFail($application->id);
                 $lockedDecision = RecipientSupportDecision::query()
                     ->whereKey($decision->id)
                     ->lockForUpdate()
@@ -2125,6 +2103,10 @@ trait HandlesProviderRecipientLifecycle
                     throw ValidationException::withMessages([
                         'resolution_outcome' => 'This recipient request was already resolved.',
                     ]);
+                }
+
+                if ($lockedDecision->agreement_case_review_id && !app(\App\Services\RecipientCaseReviewService::class)->canReinstate($lockedDecision)) {
+                    throw ValidationException::withMessages(['resolution_outcome' => 'Wait for an independent appeal outcome before reinstating this case-linked decision.']);
                 }
 
                 $lockedDecision->update([
@@ -2898,6 +2880,8 @@ trait HandlesProviderRecipientLifecycle
         $decision->loadMissing(['decider', 'resolver']);
 
         return [
+            'case_review_url' => $decision->agreementReview ? route('provider.recipient-cases.show', $decision->agreementReview->recipient_agreement_case_id, false) : null,
+            'can_reinstate_after_review' => $decision->agreement_case_review_id && app(\App\Services\RecipientCaseReviewService::class)->canReinstate($decision),
             'id' => $decision->id,
             'decision' => $decision->decision,
             'decision_label' => match ($decision->decision) {
@@ -3549,12 +3533,15 @@ trait HandlesProviderRecipientLifecycle
                 'status' => $entitlement->status,
             ])
             ->values();
+        $deliveryReportsByRecord = $release->records->mapWithKeys(fn (RecipientBenefitReleaseRecord $record): array => [
+            $record->id => app(\App\Services\BenefitDeliveryReportService::class)->openForRecord($record)->exists(),
+        ]);
         $openIssueCount = $release->records->filter(
-            fn (RecipientBenefitReleaseRecord $record): bool => $record->receiptResponse?->status === 'open',
+            fn (RecipientBenefitReleaseRecord $record): bool => $record->receiptResponse?->status === 'open' || $deliveryReportsByRecord[$record->id],
         )->count();
         $awaitingConfirmationCount = $release->records->filter(
             fn (RecipientBenefitReleaseRecord $record): bool => $record->status === 'released'
-                && $record->receiptResponse === null,
+                && $record->receiptResponse === null && ! $deliveryReportsByRecord[$record->id],
         )->count();
         $replacementRequiredCount = $release->records
             ->flatMap(fn (RecipientBenefitReleaseRecord $record) => $record->allocations)
@@ -3607,7 +3594,7 @@ trait HandlesProviderRecipientLifecycle
             'released_count' => $release->records->where('status', 'released')->count(),
             'pending_count' => $pendingCount,
             'exception_count' => $release->records->whereIn('status', ['missed', 'withheld'])->count(),
-            'confirmed_count' => $release->records->filter(fn (RecipientBenefitReleaseRecord $record): bool => $record->receiptResponse?->status === 'confirmed')->count(),
+            'confirmed_count' => $release->records->filter(fn (RecipientBenefitReleaseRecord $record): bool => $record->receiptResponse?->status === 'confirmed' || $record->receiptResponse?->recipient_resolution_confirmed_at !== null)->count(),
             'open_issue_count' => $openIssueCount,
             'awaiting_confirmation_count' => $awaitingConfirmationCount,
             'replacement_required_count' => $replacementRequiredCount,
@@ -3615,6 +3602,8 @@ trait HandlesProviderRecipientLifecycle
                 'id' => $record->id,
                 'application_id' => $record->scholarship_application_id,
                 'applicant_id' => $record->applicant_id,
+                'has_open_delivery_report' => $deliveryReportsByRecord[$record->id],
+                'delivery_reports_url' => route('provider.delivery-reports.index', $record->scholarship_application_id, false),
                 'name' => $record->applicant?->name ?? 'Applicant',
                 'email' => $record->applicant?->email,
                 'profile_photo_url' => $record->applicant?->studentProfile?->profile_photo_path
@@ -3622,6 +3611,8 @@ trait HandlesProviderRecipientLifecycle
                     : null,
                 'status' => $record->status,
                 'status_label' => match (true) {
+                    $deliveryReportsByRecord[$record->id] => 'Delivery report open',
+                    $record->receiptResponse?->recipient_resolution_confirmed_at !== null => 'Receipt confirmed',
                     $record->receiptResponse?->status === 'confirmed' => 'Receipt confirmed',
                     $record->receiptResponse?->status === 'open' => 'Issue reported',
                     $record->receiptResponse?->status === 'resolved' => 'Issue resolved',
@@ -3629,6 +3620,8 @@ trait HandlesProviderRecipientLifecycle
                     default => $statusLabels[$record->status] ?? Str::headline($record->status),
                 },
                 'lifecycle_status' => match (true) {
+                    $deliveryReportsByRecord[$record->id] => 'issue_open',
+                    $record->receiptResponse?->recipient_resolution_confirmed_at !== null => 'fulfilled',
                     $record->receiptResponse?->status === 'confirmed' => 'fulfilled',
                     $record->receiptResponse?->status === 'open' => 'issue_open',
                     $record->receiptResponse?->status === 'resolved' => 'resolved',
@@ -3662,7 +3655,14 @@ trait HandlesProviderRecipientLifecycle
 
     private function providerBenefitReceiptResponsePayload(RecipientBenefitReceiptResponse $response): array
     {
+        $report = $response->deliveryReport;
         return [
+            'delivery_report' => $report ? [
+                'read_url' => route('provider.delivery-reports.show', $report, false),
+                'status' => $report->status,
+            ] : null,
+            'import_report_url' => $response->response_type === 'issue' && ! $response->recipient_resolution_confirmed_at
+                ? route('provider.delivery-reports.import', $response, false) : null,
             'id' => $response->id,
             'response_type' => $response->response_type,
             'response_label' => $response->response_type === 'confirmed' ? 'Receipt confirmed' : 'Issue reported',

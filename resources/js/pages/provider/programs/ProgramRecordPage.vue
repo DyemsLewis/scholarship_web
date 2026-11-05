@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewModal.vue';
+import EducationEligibilitySummary from '../../../components/EducationEligibilitySummary.vue';
 import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
@@ -144,6 +145,7 @@ onMounted(loadProgram);
                                 </div>
                             </div>
                             <p id="program-summary-description" class="program-text mt-4 whitespace-pre-line text-sm leading-7 text-slate-700">{{ visibleDescription }}</p>
+                            <EducationEligibilitySummary :policy="program.education_eligibility_policy" :modes="program.eligibility_rule_modes" />
                             <button v-if="descriptionIsLong" type="button" class="program-action mt-2 text-sm font-bold text-amber-700 hover:text-amber-900" :aria-expanded="showFullDescription" aria-controls="program-summary-description" @click="showFullDescription = !showFullDescription">
                                 {{ showFullDescription ? 'Show less' : 'Read full summary' }}
                             </button>

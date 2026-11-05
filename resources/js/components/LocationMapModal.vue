@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import LeafletMapPreview from './LeafletMapPreview.vue';
 import { useModalAccessibility } from '../composables/useModalAccessibility';
 
@@ -29,6 +29,8 @@ const emit = defineEmits(['close', 'resolved', 'picked', 'error']);
 const dialog = ref(null);
 const { handleKeydown } = useModalAccessibility(() => props.open, dialog, () => emit('close'));
 const retryCount = ref(0);
+const selection = ref({ pending: false, valid: false });
+watch(() => props.open, () => { selection.value = { pending: false, valid: false }; });
 const mapGeocodeTrigger = computed(() => retryCount.value);
 const googleMapsUrl = computed(() => {
     const rawLatitude = String(props.latitude ?? '').trim();
@@ -110,12 +112,13 @@ function retryAddressSearch() {
                         @resolved="emit('resolved', $event)"
                         @picked="emit('picked', $event)"
                         @error="emit('error', $event)"
+                        @selection-state="selection = $event"
                     />
                 </div>
 
                 <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                     <p class="text-xs font-semibold leading-5" :class="locationMessage ? 'text-slate-700' : 'text-slate-500'">
-                        {{ locationMessage || (picker ? 'Click the map to set a pin, then drag it for a more exact location.' : 'The location is shown inside the portal.') }}
+                        {{ picker && selection.pending ? 'Checking the selected location...' : locationMessage || (picker ? 'Choose a land location within the Philippines.' : 'The location is shown inside the portal.') }}
                     </p>
                     <div class="flex flex-wrap justify-end gap-2 sm:shrink-0">
                         <a
@@ -129,7 +132,7 @@ function retryAddressSearch() {
                             Open in Google Maps
                         </a>
                         <button v-if="picker && address" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="retryAddressSearch">Search address again</button>
-                        <button type="button" class="rounded-md bg-slate-950 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800" @click="close">{{ picker ? confirmLabel : 'Close map' }}</button>
+                        <button type="button" :disabled="picker && (selection.pending || !selection.valid)" class="rounded-md bg-slate-950 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" @click="close">{{ picker ? confirmLabel : 'Close map' }}</button>
                     </div>
                 </footer>
             </section>

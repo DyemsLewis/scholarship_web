@@ -3,11 +3,11 @@ import { profileValueLabel } from './applicantProfileLabels.js';
 import { labelFromKey } from './display.js';
 
 const profileSections = {
-    academic: 'academic', education_level: 'academic', course: 'academic', school_type: 'academic',
+    academic: 'academic', education_level: 'academic', completed_qualification: 'academic', course: 'academic', school_type: 'academic',
     year_level: 'academic', enrollment_status: 'academic', location: 'location', income: 'household',
     current_scholarship_support: 'household', age: 'personal', citizenship: 'personal',
 };
-const valueTypes = { education_level: 'educationLevel', school_type: 'schoolType', current_scholarship_support: 'currentScholarship' };
+const valueTypes = { education_level: 'educationLevel', completed_qualification: 'completedQualification', school_type: 'schoolType', current_scholarship_support: 'currentScholarship' };
 const attentionStatuses = new Set(['fail', 'missing', 'review', 'preferred', 'unknown']);
 const priority = { fail: 0, missing: 1, review: 2, unknown: 3, preferred: 4, pass: 5 };
 

@@ -66,6 +66,7 @@ test('specialist navigation remains focused on assigned work', () => {
             '/admin/workspaces/reviews/selection-activities',
             '/admin/workspaces/reviews/benefits',
             '/admin/workspaces/reviews/monitoring',
+            '/admin/workspaces/reviews/recipient-cases',
             '/admin/profile',
         ],
     );

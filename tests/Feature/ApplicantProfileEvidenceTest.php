@@ -10,10 +10,12 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\Concerns\AcceptsProfileEvidence;
 use Tests\TestCase;
 
 class ApplicantProfileEvidenceTest extends TestCase
 {
+    use AcceptsProfileEvidence;
     use RefreshDatabase;
 
     public static function profileAreas(): array
@@ -95,6 +97,8 @@ class ApplicantProfileEvidenceTest extends TestCase
         $admin = User::factory()->create(['role' => 'admin']);
         $applicant = User::factory()->verifiedProfile()->create();
         $applicant->studentProfile()->update(['verification_status' => 'pending']);
+
+        $this->acceptProfileEvidence($applicant, $admin);
 
         $this->actingAs($admin)
             ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'approved'])

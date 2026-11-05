@@ -98,3 +98,11 @@ No failed, rejected, withdrawn, terminated, or waitlisted scenario is seeded. Te
 New staff logins ending in `.newstaff` intentionally open first-login password setup.
 
 Registration can also be demonstrated from scratch; no demo data is needed to register a new account.
+
+## Recipient Accountability Extension
+
+See [Recipient Accountability Demo](recipient-accountability-demo.md) for the
+notice/response, missing-benefit, independent-review, appeal, and privacy workflows.
+Use the existing accepted-award accounts; deployment does not pre-create adverse
+cases or make decisions for the tester. A different authorized admin reviews an
+appeal. Cross-provider sharing remains disabled.

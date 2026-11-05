@@ -63,7 +63,7 @@ test('existing monitoring and distribution decision gates are preserved', () => 
     const plan = read('pages/provider/monitoring/MonitoringPlanPage.vue');
     for (const token of ['if (!canEdit.value || isSaving.value) return;', 'canPublishCheckIn', 'form.value.requirements.length', 'savedPlan?.ends_on']) assert.ok(plan.includes(token));
     const release = read('pages/provider/releases/BenefitReleaseRecordPage.vue');
-    for (const token of ['canMarkReleased', ':disabled="!canMarkReleased"', 'release.requires_original_verification', 'receipt_proof', 'askToSaveResult', 'askToResolveIssue']) assert.ok(release.includes(token));
+    for (const token of ['canMarkReleased', ':disabled="!canMarkReleased"', 'release.requires_original_verification', 'receipt_proof', 'askToSaveResult', 'openDeliveryReport', 'BenefitDeliveryReportDialog']) assert.ok(release.includes(token));
 });
 
 test('new layout rules are scoped and keep desktop forms full-width', () => {

@@ -49,10 +49,11 @@ test('new rules are provider-scoped, maintain full-width forms and avoid styling
 });
 
 test('dialogs share scroll and focus protections without altering file or role permissions', () => {
-    for (const path of ['components/ProviderActionDialog.vue', 'components/CoverImagePickerModal.vue']) {
+    for (const path of ['components/ConfirmationDialog.vue', 'components/CoverImagePickerModal.vue']) {
         const source = read(path);
         for (const token of ['useModalAccessibility', 'tabindex="-1"', 'settings-dialog-body', 'if (!props.busy)', 'role="alert"']) assert.ok(source.includes(token), `${path}: ${token}`);
     }
+    assert.match(read('components/ProviderActionDialog.vue'), /<ConfirmationDialog/);
     const team = read('pages/provider/team/TeamAccountFormPage.vue');
     for (const token of ['settings-program-list', 'canAssignAllPrograms', 'isCustomRole', 'applyRolePreset', 'assigned_program_ids', ':aria-current=']) assert.ok(team.includes(token));
     const verification = read('pages/provider/organization/OrganizationVerificationPage.vue');

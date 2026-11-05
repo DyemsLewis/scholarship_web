@@ -16,16 +16,20 @@ use App\Models\RecipientMonitoringSubmission;
 use App\Models\RecipientSupportDecision;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Models\StudentProfile;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\AcademicRecordOcrService;
+use App\Services\ApplicantEvidenceReviewService;
 use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
+use App\Services\ProviderVerificationReviewService;
 use App\Services\RecipientMonitoringCaseService;
 use App\Services\ScholarshipPublicationGuard;
 use App\Support\AcademicRequirement;
 use App\Support\AdminWorkspace;
 use App\Support\CsvExport;
+use App\Support\EducationEligibilityPolicy;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
 use Illuminate\Auth\Events\Verified;
@@ -376,7 +380,7 @@ class AdminController extends Controller
             ));
         }
 
-        return view('admin-applicant-review', [
+        return view('admin-review-applicant-record', [
             'applicant' => $applicant,
         ]);
     }
@@ -1012,266 +1016,170 @@ class AdminController extends Controller
         abort_unless($request->user()?->isAdmin(), 403);
         abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
 
+        if (is_string($request->input('verification_notes'))) {
+            $request->merge(['verification_notes' => trim($request->input('verification_notes'))]);
+        }
+
         $validated = $request->validate([
             'verification_status' => ['required', 'string', 'in:pending,approved,rejected'],
             'verification_notes' => [Rule::requiredIf($request->input('verification_status') === 'rejected'), 'nullable', 'string', 'max:1500'],
+            'expected_review_token' => ['required', 'string', 'size:64'],
         ]);
-
-        if ($validated['verification_status'] === 'approved'
-            && ! $provider->providerVerificationDocuments()->exists()) {
-            return response()->json([
-                'message' => 'The provider must upload at least one proof before the account can be approved.',
-            ], 422);
-        }
-
-        $notes = $validated['verification_status'] === 'rejected'
-            ? $validated['verification_notes']
-            : null;
-        $documentStatus = match ($validated['verification_status']) {
-            'approved' => 'approved',
-            'rejected' => 'rejected',
-            default => 'submitted',
-        };
-
-        DB::transaction(function () use ($provider, $validated, $notes, $documentStatus, $request): void {
-            $provider->providerProfile()->updateOrCreate([
-                'user_id' => $provider->id,
-            ], [
-                'verification_status' => $validated['verification_status'],
-                'verification_notes' => $notes,
-                'verified_by' => $validated['verification_status'] === 'pending' ? null : $request->user()->id,
-                'verified_at' => $validated['verification_status'] === 'pending' ? null : now(),
-            ]);
-
-            $provider->providerVerificationDocuments()->update([
-                'status' => $documentStatus,
-                'review_notes' => $notes,
-            ]);
-        });
-
-        ActivityLog::record(
-            $request->user(),
-            'provider_verification_updated',
-            "{$request->user()->name} marked provider {$provider->name} as {$validated['verification_status']}.",
-            $request,
-            ['provider_id' => $provider->id, 'verification_status' => $validated['verification_status']],
-        );
-
-        $verificationMessage = "Your provider account is now {$validated['verification_status']}.";
-
-        if ($validated['verification_status'] === 'rejected') {
-            $verificationMessage .= " Reason: {$validated['verification_notes']}";
-        }
-
-        $this->providerNotificationRecipients($provider->id, 'manage_profile')
-            ->each(fn (User $recipient) => PortalNotification::create([
-                'user_id' => $recipient->id,
-                'type' => 'provider_verification',
-                'title' => 'Provider verification updated',
-                'message' => $verificationMessage,
-                'action_url' => '/provider',
-            ]));
+        $provider = app(ProviderVerificationReviewService::class)->decide($request, $provider, $validated);
 
         return response()->json([
             'message' => 'Provider verification updated.',
-            'provider' => $this->providerReviewPayload(
-                $provider->fresh(['providerProfile', 'providerVerificationDocuments']),
-            ),
+            'provider' => $this->providerReviewPayload($provider),
         ]);
     }
 
     public function updateApplicantVerification(Request $request, User $applicant): JsonResponse
     {
-        abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($applicant->isApplicant(), 404);
+        return DB::transaction(function () use ($request, $applicant): JsonResponse {
+            $applicant = User::query()->lockForUpdate()->findOrFail($applicant->id);
+            abort_unless($request->user()?->isAdmin(), 403);
+            abort_unless($applicant->isApplicant(), 404);
 
-        $applicant->loadMissing(['studentProfile', 'applicantVerificationDocuments']);
-        $previousStatus = $applicant->applicantAcademicVerificationStatus();
-        $requestedStatus = $request->input('verification_status');
-        $isReopening = $previousStatus === 'approved' && $requestedStatus === 'pending';
-        $reviewedScale = $request->input('academic_grading_scale');
-        $reviewedResultIsNumeric = AcademicRequirement::requiresNumeric($reviewedScale);
+            $applicant->loadMissing(['studentProfile', 'applicantVerificationDocuments']);
+            $previousStatus = $applicant->applicantAcademicVerificationStatus();
+            $requestedStatus = $request->input('verification_status');
+            $isReopening = $previousStatus === 'approved' && $requestedStatus === 'pending';
 
-        $validated = $request->validate([
-            'verification_status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
-            'verification_notes' => [
-                Rule::requiredIf($requestedStatus === 'rejected' || $isReopening),
-                'nullable',
-                'string',
-                'max:1500',
-            ],
-            'academic_grading_scale' => ['nullable', Rule::in(AcademicRequirement::SCALES)],
-            'academic_result' => [
-                Rule::requiredIf($requestedStatus === 'approved' && $reviewedResultIsNumeric),
-                'nullable',
-                'numeric',
-                'gt:0',
-                $reviewedScale === AcademicRequirement::SCALE_GRADE_POINT ? 'max:5' : 'max:100',
-            ],
-        ]);
+            $validated = $request->validate([
+                'verification_status' => ['required', Rule::in(['pending', 'approved', 'rejected'])],
+                'verification_notes' => [
+                    Rule::requiredIf($requestedStatus === 'rejected' || $isReopening),
+                    'nullable',
+                    'string',
+                    'max:1500',
+                ],
+                'academic_grading_scale' => ['prohibited'],
+                'academic_result' => ['prohibited'],
+            ]);
 
-        $academicRecord = $applicant->applicantVerificationDocuments
-            ->firstWhere('document_type', 'academic_record');
-        $reviewedAcademicResult = filled($validated['academic_grading_scale'] ?? null)
-            ? [
-                'grading_scale' => $validated['academic_grading_scale'],
-                'gwa' => $reviewedResultIsNumeric ? (float) $validated['academic_result'] : null,
-            ]
-            : null;
+            $academicRecord = $applicant->applicantVerificationDocuments
+                ->firstWhere('document_type', 'academic_record');
 
-        if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()
-            ->where('document_type', 'academic_record')
-            ->exists()) {
-            return response()->json([
-                'message' => 'The applicant must upload an academic record before the academic result can be verified.',
-            ], 422);
-        }
-
-        if ($validated['verification_status'] === 'approved' && $this->academicRecordOcrService->configured()) {
-            if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED && $reviewedAcademicResult === null) {
+            if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()
+                ->where('document_type', 'academic_record')
+                ->exists()) {
                 return response()->json([
-                    'message' => 'The scan did not produce a usable result. Enter the verified academic result from the uploaded record before approving it.',
+                    'message' => 'The applicant must upload an academic record before the academic result can be verified.',
                 ], 422);
             }
-        }
 
-        if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()
-            ->where('document_type', 'recent_school_id')
-            ->exists()) {
-            return response()->json([
-                'message' => 'The applicant must upload a recent school ID before the profile can be verified.',
-            ], 422);
-        }
+            if ($validated['verification_status'] === 'approved' && $this->academicRecordOcrService->configured()) {
+                if ($academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED
+                    && $applicant->studentProfile?->academic_result_source !== 'admin_review') {
+                    return response()->json([
+                        'message' => 'Review the Academic results in the academic evidence before recording the final profile outcome.',
+                    ], 422);
+                }
+            }
 
-        if ($validated['verification_status'] === 'approved') {
-            $missingEvidence = ApplicantVerificationDocument::missingRequiredTypesFor($applicant);
-
-            if ($missingEvidence !== []) {
+            if ($validated['verification_status'] === 'approved' && ! $applicant->applicantVerificationDocuments()
+                ->where('document_type', 'recent_school_id')
+                ->exists()) {
                 return response()->json([
-                    'message' => 'Upload all required profile evidence before verification: '.collect($missingEvidence)
-                        ->map(fn (string $type): string => ApplicantVerificationDocument::EVIDENCE_DETAILS[$type]['label'])
-                        ->implode(', ').'.',
-                    'missing_evidence' => $missingEvidence,
+                    'message' => 'The applicant must upload a recent school ID before the profile can be verified.',
                 ], 422);
             }
-        }
 
-        $previousAcademicResult = [
-            'grading_scale' => $applicant->studentProfile?->grading_scale,
-            'gwa' => $applicant->studentProfile?->gwa !== null
-                ? (float) $applicant->studentProfile->gwa
-                : null,
-        ];
-        $academicResultCorrected = $validated['verification_status'] === 'approved'
-            && $reviewedAcademicResult !== null
-            && (
-                $reviewedAcademicResult['grading_scale'] !== $previousAcademicResult['grading_scale']
-                || $reviewedAcademicResult['gwa'] !== $previousAcademicResult['gwa']
-                || $academicRecord?->ocr_status !== AcademicRecordOcrService::STATUS_SUCCEEDED
+            if ($validated['verification_status'] === 'approved') {
+                $missingEvidence = ApplicantVerificationDocument::missingRequiredTypesFor($applicant);
+
+                if ($missingEvidence !== []) {
+                    return response()->json([
+                        'message' => 'Upload all required profile evidence before verification: '.collect($missingEvidence)
+                            ->map(fn (string $type): string => ApplicantVerificationDocument::EVIDENCE_DETAILS[$type]['label'])
+                            ->implode(', ').'.',
+                        'missing_evidence' => $missingEvidence,
+                    ], 422);
+                }
+            }
+
+            if ($validated['verification_status'] === 'approved') {
+                app(ApplicantEvidenceReviewService::class)->assertReady($applicant);
+                $scale = $applicant->studentProfile?->grading_scale;
+                validator([
+                    'academic_grading_scale' => $scale,
+                    'academic_result' => $applicant->studentProfile?->gwa,
+                ], [
+                    'academic_grading_scale' => ['required', Rule::in(AcademicRequirement::SCALES)],
+                    'academic_result' => AcademicRequirement::requiresNumeric($scale)
+                        ? ['required', 'numeric', 'gt:0', $scale === 'grade_point' ? 'max:5' : 'max:100'] : ['nullable'],
+                ], ['*.required' => 'Complete the Academic results review in the academic evidence first.'])->validate();
+            }
+            if ($isReopening) {
+                app(ApplicantEvidenceReviewService::class)->resetReviews($applicant, trim($validated['verification_notes']));
+            }
+
+            $notes = filled($validated['verification_notes'] ?? null)
+                ? trim($validated['verification_notes'])
+                : null;
+
+            DB::transaction(function () use ($applicant, $validated, $notes, $request): void {
+                $profileUpdates = [
+                    'verification_status' => $validated['verification_status'],
+                    'verification_notes' => $notes,
+                    'verified_by' => $validated['verification_status'] === 'pending' ? null : $request->user()->id,
+                    'verified_at' => $validated['verification_status'] === 'approved' ? now() : null,
+                ];
+
+                StudentProfile::withoutEvents(fn () => $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], $profileUpdates));
+
+            });
+
+            ActivityLog::record(
+                $request->user(),
+                'applicant_profile_verification_updated',
+                "{$request->user()->name} marked applicant {$applicant->name} as {$validated['verification_status']}.",
+                $request,
+                [
+                    'applicant_id' => $applicant->id,
+                    'previous_status' => $previousStatus,
+                    'verification_status' => $validated['verification_status'],
+                    'verification_notes' => $notes,
+                    'verification_source' => 'admin',
+                ],
             );
 
-        $documentStatus = match ($validated['verification_status']) {
-            'approved' => 'approved',
-            'rejected' => 'rejected',
-            default => 'submitted',
-        };
-        $notes = in_array($validated['verification_status'], ['pending', 'rejected'], true)
-            && filled($validated['verification_notes'] ?? null)
-            ? trim($validated['verification_notes'])
-            : null;
+            $message = match ($validated['verification_status']) {
+                'approved' => 'Your applicant profile has been verified against the submitted identity, school, household, and residence records by the platform review team.',
+                'rejected' => 'Your profile supporting evidence needs to be replaced before your information can be verified.',
+                default => 'Your profile verification was reopened for platform review.',
+            };
 
-        DB::transaction(function () use ($applicant, $validated, $notes, $documentStatus, $request, $reviewedAcademicResult, $academicResultCorrected): void {
-            $profileUpdates = [
-                'verification_status' => $validated['verification_status'],
-                'verification_notes' => $notes,
-                'verified_by' => $validated['verification_status'] === 'pending' ? null : $request->user()->id,
-                'verified_at' => $validated['verification_status'] === 'approved' ? now() : null,
-            ];
-
-            if ($academicResultCorrected) {
-                $profileUpdates = array_merge($profileUpdates, $reviewedAcademicResult, [
-                    'academic_result_source' => 'admin_review',
-                    'academic_result_extracted_at' => now(),
-                ]);
+            if ($notes) {
+                $message .= " Review note: {$notes}";
             }
 
-            $applicant->studentProfile()->updateOrCreate(['user_id' => $applicant->id], $profileUpdates);
+            PortalNotification::create([
+                'user_id' => $applicant->id,
+                'type' => 'applicant_profile_verification',
+                'title' => 'Profile verification updated',
+                'message' => $message,
+                'action_url' => '/dashboard/profile',
+            ]);
 
-            $applicant->applicantVerificationDocuments()
-                ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
-                ->update([
-                    'status' => $documentStatus,
-                    'review_notes' => $notes,
-                ]);
+            $freshApplicant = $applicant->fresh([
+                'studentProfile.verifier.adminProfile',
+                'studentProfile.verifier.providerProfile',
+                'studentProfile.verifier.parentAccount.providerProfile',
+                'applicantVerificationDocuments',
+            ]);
+
+            return response()->json([
+                'message' => 'Applicant profile verification updated.',
+                'user' => $freshApplicant->publicPayload(),
+                'verification_documents' => $freshApplicant->applicantVerificationDocuments
+                    ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
+                    ->sortByDesc('uploaded_at')
+                    ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
+                    ->values(),
+                'applicant' => $this->applicantReviewPayload($freshApplicant, true),
+            ]);
         });
-
-        ActivityLog::record(
-            $request->user(),
-            'applicant_profile_verification_updated',
-            "{$request->user()->name} marked applicant {$applicant->name} as {$validated['verification_status']}.",
-            $request,
-            [
-                'applicant_id' => $applicant->id,
-                'previous_status' => $previousStatus,
-                'verification_status' => $validated['verification_status'],
-                'verification_notes' => $notes,
-                'verification_source' => 'admin',
-                'academic_result_corrected' => $academicResultCorrected,
-                'previous_academic_result' => $previousAcademicResult,
-                'verified_academic_result' => $academicResultCorrected ? $reviewedAcademicResult : null,
-            ],
-        );
-
-        if ($academicResultCorrected) {
-            ScholarshipApplication::query()
-                ->where('applicant_id', $applicant->id)
-                ->where(fn ($query) => $query
-                    ->whereNull('application_state')
-                    ->orWhereNotIn('application_state', ['closed', 'withdrawn']))
-                ->get()
-                ->each(fn (ScholarshipApplication $application) => app(DecisionSupportService::class)
-                    ->syncApplication($application, 'admin_academic_result_corrected'));
-        }
-
-        $message = match ($validated['verification_status']) {
-            'approved' => 'Your applicant profile has been verified against the submitted identity, school, household, and residence records by the platform review team.',
-            'rejected' => 'Your profile supporting evidence needs to be replaced before your information can be verified.',
-            default => 'Your profile verification was reopened for platform review.',
-        };
-
-        if ($notes) {
-            $message .= " Review note: {$notes}";
-        }
-
-        if ($academicResultCorrected) {
-            $message .= ' The academic result was corrected from the submitted record.';
-        }
-
-        PortalNotification::create([
-            'user_id' => $applicant->id,
-            'type' => 'applicant_profile_verification',
-            'title' => 'Profile verification updated',
-            'message' => $message,
-            'action_url' => '/dashboard/profile',
-        ]);
-
-        $freshApplicant = $applicant->fresh([
-            'studentProfile.verifier.adminProfile',
-            'studentProfile.verifier.providerProfile',
-            'studentProfile.verifier.parentAccount.providerProfile',
-            'applicantVerificationDocuments',
-        ]);
-
-        return response()->json([
-            'message' => 'Applicant profile verification updated.',
-            'user' => $freshApplicant->publicPayload(),
-            'verification_documents' => $freshApplicant->applicantVerificationDocuments
-                ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
-                ->sortByDesc('uploaded_at')
-                ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
-                ->values(),
-            'applicant' => $this->applicantReviewPayload($freshApplicant, true),
-        ]);
     }
 
     public function viewApplicantVerificationDocument(Request $request, ApplicantVerificationDocument $document)
@@ -2318,6 +2226,7 @@ class AdminController extends Controller
             'eligibility' => $scholarship->eligibility,
             'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
             'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
+            'education_eligibility_policy' => EducationEligibilityPolicy::normalize($scholarship->education_eligibility_policy),
             'provider' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
             'provider_email' => $scholarship->provider?->email,
             'provider_type' => $scholarship->provider?->provider_type,
@@ -2435,6 +2344,7 @@ class AdminController extends Controller
             'registration_number' => $profile?->registration_number,
             'registration_date' => $profile?->registration_date?->format('M d, Y'),
             'representative_position' => $profile?->representative_position,
+            'document_review' => app(ProviderVerificationReviewService::class)->summary($provider),
             'verification_documents' => $provider->providerVerificationDocuments
                 ->sortByDesc('created_at')
                 ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
@@ -2461,6 +2371,10 @@ class AdminController extends Controller
                 ->map(fn (ApplicantVerificationDocument $document) => $this->applicantVerificationDocumentPayload($document))
                 ->values(),
             'verification_oversight' => $this->applicantVerificationOversightPayload($applicant, $includeOversightHistory),
+            'can_review_evidence' => auth()->user()?->isAdmin()
+                && auth()->user()->hasPortalPermission('manage_reviews')
+                && ! AdminWorkspace::usesPortalManagerWorkspace(auth()->user()),
+            'evidence_review_history_url' => route('admin.applicants.evidence-review-history', $applicant, false),
             'created_at' => $applicant->created_at?->format('M d, Y'),
         ];
     }
@@ -3312,6 +3226,7 @@ class AdminController extends Controller
     private function verificationDocumentPayload(ProviderVerificationDocument $document): array
     {
         return [
+            ...app(ProviderVerificationReviewService::class)->documentMetadata($document),
             'id' => $document->id,
             'document_type' => $document->document_type,
             'original_name' => $document->original_name,
@@ -3322,6 +3237,7 @@ class AdminController extends Controller
             'uploaded_at' => $document->uploaded_at?->format('M d, Y h:i A'),
             'view_url' => route('admin.provider-verification-documents.view', $document),
             'download_url' => route('admin.provider-verification-documents.download', $document),
+            'review_url' => route('admin.provider-verification-documents.review', $document),
         ];
     }
 
@@ -3332,11 +3248,15 @@ class AdminController extends Controller
             'document_type' => $document->document_type,
             'label' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$document->document_type]['label'] ?? str($document->document_type)->headline()->toString(),
             'supports' => ApplicantVerificationDocument::EVIDENCE_DETAILS[$document->document_type]['supports'] ?? null,
+            'claim_fields' => ApplicantEvidenceReviewService::CLAIMS[$document->document_type] ?? [],
+            'file_available' => Storage::disk('local')->exists($document->path),
             'original_name' => $document->original_name,
             'mime_type' => $document->mime_type,
             'size' => $document->size,
             'status' => $document->status,
             'review_notes' => $document->review_notes,
+            ...$document->reviewPayload(),
+            'review_url' => route('admin.applicant-verification-documents.review', $document, false),
             'ocr_status' => $document->ocr_status ?? AcademicRecordOcrService::STATUS_NOT_REQUESTED,
             'ocr_provider' => $document->ocr_provider,
             'ocr_grade' => $document->ocr_grade,

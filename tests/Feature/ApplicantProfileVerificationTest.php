@@ -8,14 +8,17 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\StudentDocument;
 use App\Models\User;
+use App\Services\ApplicantDocumentLibraryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\AcceptsProfileEvidence;
 use Tests\TestCase;
 
 class ApplicantProfileVerificationTest extends TestCase
 {
+    use AcceptsProfileEvidence;
     use RefreshDatabase;
 
     public function test_achievement_entry_requires_private_evidence_visible_to_authorized_reviewers(): void
@@ -161,6 +164,8 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertJsonPath('applicant.academic_scan_required', true)
             ->assertJsonPath('applicant.verification_documents.0.ocr_status', 'succeeded');
 
+        $this->acceptProfileEvidence($applicant);
+
         $this->actingAs($admin)
             ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
                 'verification_status' => 'approved',
@@ -206,7 +211,7 @@ class ApplicantProfileVerificationTest extends TestCase
                 'verification_status' => 'approved',
             ])
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'The scan did not produce a usable result. Enter the verified academic result from the uploaded record before approving it.');
+            ->assertJsonPath('message', 'Review the Academic results in the academic evidence before recording the final profile outcome.');
     }
 
     public function test_applicant_can_enter_an_academic_result_when_cloud_extraction_fails(): void
@@ -291,11 +296,17 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('verification_documents.0.ocr_status', 'needs_review');
 
+        $this->acceptProfileEvidence($applicant);
+
+        $academic = $applicant->applicantVerificationDocuments()->where('document_type', 'academic_record')->sole();
+        $this->actingAs($admin)->patchJson("/admin/applicant-verification-documents/{$academic->id}/review", [
+            'status' => 'approved', 'expected_revision' => $academic->revision,
+            'academic_grading_scale' => 'percentage', 'academic_result' => 91.25,
+        ])->assertOk()->assertJsonPath('user.applicant_verification_status', 'pending');
+
         $this->actingAs($admin)
             ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
                 'verification_status' => 'approved',
-                'academic_grading_scale' => 'percentage',
-                'academic_result' => 91.25,
             ])
             ->assertOk()
             ->assertJsonPath('user.applicant_verification_status', 'approved')
@@ -571,7 +582,7 @@ class ApplicantProfileVerificationTest extends TestCase
             'status' => 'submitted',
             'uploaded_at' => now(),
         ]);
-        $preparedDocument = app(\App\Services\ApplicantDocumentLibraryService::class)->ensureVerificationCopy($applicant, $proof);
+        $preparedDocument = app(ApplicantDocumentLibraryService::class)->ensureVerificationCopy($applicant, $proof);
 
         $this->assertDatabaseHas('student_documents', [
             'user_id' => $applicant->id,
@@ -706,10 +717,12 @@ class ApplicantProfileVerificationTest extends TestCase
             ], ['Accept' => 'application/json'])
             ->assertCreated();
 
+        $this->acceptProfileEvidence($applicant);
+
         $this->actingAs($admin)
             ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
                 'verification_status' => 'approved',
-                'verification_notes' => 'A stale rejection note should not remain after approval.',
+                'verification_notes' => null,
             ])
             ->assertOk()
             ->assertJsonPath('user.is_profile_verified', true)
@@ -755,6 +768,8 @@ class ApplicantProfileVerificationTest extends TestCase
                 'terms_accepted' => '1',
             ], ['Accept' => 'application/json'])
             ->assertCreated();
+
+        $this->acceptProfileEvidence($applicant);
 
         $this->actingAs($admin)
             ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
@@ -928,6 +943,8 @@ class ApplicantProfileVerificationTest extends TestCase
             ->patchJson("/provider/applications/{$application->id}/profile-verification")
             ->assertForbidden();
 
+        $this->acceptProfileEvidence($applicant);
+
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/profile-verification")
             ->assertOk()
@@ -1006,6 +1023,8 @@ class ApplicantProfileVerificationTest extends TestCase
             'submitted_at' => now(),
         ]);
 
+        $this->acceptProfileEvidence($applicant);
+
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/profile-verification", [
                 'academic_grading_scale' => 'grade_point',
@@ -1067,6 +1086,8 @@ class ApplicantProfileVerificationTest extends TestCase
             'submitted_at' => now(),
         ]);
 
+        $this->acceptProfileEvidence($applicant);
+
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/profile-verification")
             ->assertOk();
@@ -1102,8 +1123,9 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->assertDatabaseHas('applicant_verification_documents', [
             'id' => $proof->id,
             'status' => 'submitted',
-            'review_notes' => $reason,
+            'review_notes' => null,
         ]);
+        $this->assertSame($reason, $proof->reviews()->where('action', 'review_reopened')->firstOrFail()->note);
 
         $reopenLog = ActivityLog::query()
             ->where('action', 'applicant_profile_verification_updated')

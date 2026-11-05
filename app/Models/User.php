@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\ApplicantEvidenceReviewService;
 use App\Support\AcademicRequirement;
 use App\Support\AdminWorkspace;
+use App\Support\CoverImageCatalog;
+use App\Support\EducationEligibilityPolicy;
 use App\Support\ProviderWorkspace;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
@@ -514,7 +517,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'provider_cover_source' => $providerProfile?->cover_image_source ?: 'default',
             'provider_cover_key' => $providerProfile?->cover_image_key,
             'provider_cover_url' => $this->isProvider()
-                ? \App\Support\CoverImageCatalog::providerUrl($providerProfile)
+                ? CoverImageCatalog::providerUrl($providerProfile)
                 : null,
             'provider_contact_email' => $providerProfile?->provider_contact_email,
             'provider_contact_number' => $providerProfile?->provider_contact_number,
@@ -532,10 +535,15 @@ class User extends Authenticatable implements MustVerifyEmail
                 ? $this->studentProfile?->verified_at?->format('M d, Y')
                 : null,
             'is_profile_verified' => $this->isApplicant() && $applicantVerificationStatus === 'approved',
+            'evidence_review' => $this->isApplicant() ? app(ApplicantEvidenceReviewService::class)->summary($this) : null,
             'profile_evidence_requirements' => $this->isApplicant()
                 ? ApplicantVerificationDocument::requirementsFor($this)
                 : [],
             'education_level' => $this->studentProfile?->education_level,
+            'completed_qualification' => $this->studentProfile?->completed_qualification,
+            'completed_qualification_school' => $this->studentProfile?->completed_qualification_school,
+            'completed_qualification_year' => $this->studentProfile?->completed_qualification_year,
+            'completed_qualification_details' => $this->studentProfile?->completed_qualification_details,
             'school' => $this->studentProfile?->school,
             'school_type' => $this->studentProfile?->school_type,
             'learner_reference_number' => $this->studentProfile?->learner_reference_number,
@@ -589,7 +597,8 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         $payload ??= [];
         $educationLevel = $payload['education_level'] ?? null;
-        $requiresCoursePath = in_array($educationLevel, ['senior_high_school', 'college', 'tvet'], true);
+        $pendingStudies = in_array($payload['enrollment_status'] ?? null, EducationEligibilityPolicy::PENDING_STUDIES, true);
+        $requiresCoursePath = in_array($educationLevel, ['senior_high_school', 'college', 'tvet'], true) && ! $pendingStudies;
         $requiresGrades = ! in_array($educationLevel, ['preschool'], true);
         $requiresGuardian = self::applicantRequiresGuardian($payload);
 
@@ -613,9 +622,16 @@ class User extends Authenticatable implements MustVerifyEmail
             $fields['course_or_strand'] = 'Track / strand / course / program';
         }
 
-        $fields += [
-            'year_level' => 'Grade / year level',
-        ];
+        if (! $pendingStudies) {
+            $fields['year_level'] = 'Grade / year level';
+        }
+
+        if (filled($payload['completed_qualification'] ?? null) && $payload['completed_qualification'] !== 'none') {
+            $fields['completed_qualification_school'] = 'Completed qualification school / institution';
+            if ($payload['completed_qualification'] === 'other') {
+                $fields['completed_qualification_details'] = 'Completed qualification name';
+            }
+        }
 
         if ($requiresGrades) {
             $fields['academic_year'] = 'Academic year';

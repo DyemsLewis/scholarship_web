@@ -1,6 +1,9 @@
+import { normalizeEducationPolicy, acceptedQualificationOptions } from './educationEligibilityPolicy.js';
+
 export const eligibilityRuleKeys = [
     'academic', 'education_level', 'course', 'school_type', 'year_level',
     'location', 'income', 'current_scholarship_support', 'enrollment_status',
+    'completed_qualification',
 ];
 
 export function normalizeEligibilityRuleModes(modes) {
@@ -34,8 +37,10 @@ export function configuredEligibilityRules(form, catalogs = {}) {
             : hasGrade ? `${scale === 'grade_point' || (!scale && Number(grade) <= 5) ? 'Maximum GWA / GPA' : 'Minimum average'}: ${Number(grade).toFixed(2)}${scale === 'percentage' || (!scale && Number(grade) > 5) ? '%' : ''}`
                 : 'Academic threshold not entered yet';
     const enrollment = (form.eligibilityConditions ?? []).find((condition) => condition.key === 'currently_enrolled' && condition.verification_type === 'automatic');
+    const education = normalizeEducationPolicy(form.educationEligibilityPolicy);
     return [
         { key: 'education_level', label: 'Education levels', value: labels(form.eligibleEducationLevels, catalogs.educationLevels), active: restricts(form.eligibleEducationLevels) },
+        { key: 'completed_qualification', label: 'Completed qualification', value: education.accepted_qualifications.map((value) => acceptedQualificationOptions.find((option) => option.value === value)?.label).join('; ') + (education.unlisted_qualification === 'review' ? '; other credentials need provider review' : '; recognized unlisted credentials do not match; unclear records need review'), active: education.requires_completed_qualification },
         { key: 'course', label: 'Courses, tracks, or strands', value: options(form.eligibleCourses).join(', '), active: restricts(form.eligibleCourses) },
         { key: 'year_level', label: 'Grade or year levels', value: options(form.eligibleYearLevels).join(', '), active: restricts(form.eligibleYearLevels) },
         { key: 'location', label: 'Residency', value: options(form.eligibleLocations).join(', '), active: restricts(form.eligibleLocations) },
@@ -43,6 +48,6 @@ export function configuredEligibilityRules(form, catalogs = {}) {
         { key: 'school_type', label: 'School types', value: labels(form.eligibleSchoolTypes, catalogs.schoolTypes), active: restricts(form.eligibleSchoolTypes) },
         { key: 'academic', label: 'Academic performance', value: academicValue, active: Boolean(scale || hasGrade) },
         { key: 'current_scholarship_support', label: 'Other scholarship support', value: 'No other active scholarship support', active: Boolean(form.excludeCurrentRecipients) },
-        { key: 'enrollment_status', label: 'Current enrollment', value: enrollment?.statement || 'Currently enrolled', active: Boolean(enrollment) },
+        { key: 'enrollment_status', label: 'Enrollment status', value: education.enrollment_statuses.join(', ') || enrollment?.statement || 'Currently enrolled', active: Boolean(enrollment) || education.enrollment_statuses.length > 0 },
     ].filter((rule) => rule.active).map(({ active, ...rule }) => ({ ...rule, mode: modes[rule.key] }));
 }

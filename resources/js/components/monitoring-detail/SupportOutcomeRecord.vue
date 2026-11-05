@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import FilePreviewModal from '../FilePreviewModal.vue';
 import SupportOutcomeResponseModal from './SupportOutcomeResponseModal.vue';
+import RecipientCaseReviewLauncher from '../case-reviews/RecipientCaseReviewLauncher.vue';
 
 const props = defineProps({
     outcome: { type: Object, required: true },
@@ -31,6 +32,7 @@ function saved() {
 
 <template>
     <div data-support-outcome-record class="mt-4 space-y-4">
+        <RecipientCaseReviewLauncher v-if="outcome.case_review_url" :read-url="outcome.case_review_url" />
         <FilePreviewModal
             :file="previewFile"
             :title="previewFile?.original_name || 'Support outcome file'"

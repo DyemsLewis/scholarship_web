@@ -4,6 +4,8 @@ import test from 'node:test';
 import { compileScript, parse } from '@vue/compiler-sfc';
 import { createSSRApp } from 'vue';
 import { renderToString } from '@vue/server-renderer';
+import { completedQualificationOptions, profileValueLabel } from '../../resources/js/support/applicantProfileLabels.js';
+import { applicantProfileDetails } from '../../resources/js/support/applicantProfileDetails.js';
 
 async function loadEditor(name) {
     const source = readFileSync(new URL(`../../resources/js/components/profile/${name}.vue`, import.meta.url), 'utf8');
@@ -66,10 +68,91 @@ test('learning keeps core fields visible and only school identifiers behind a di
 
 test('learning preserves custom study paths and saved years outside the current option list', async () => {
     const props = learningProps();
-    props.modelValue = { ...props.modelValue, course_or_strand: 'Special curriculum', year_level: 'Legacy level', academic_year: '2022-2023' };
+    props.modelValue = { ...props.modelValue, course_or_strand: 'Special curriculum', year_level: 'Legacy level', academic_year: '2022-2023', enrollment_status: 'Graduated' };
     const html = await render(learning, props);
     for (const value of ['Special curriculum', 'Legacy level', '2022-2023']) assert.match(html, new RegExp(`<option value="${value}">`));
     assert.match(html, /aria-label="Exact track \/ strand"/);
+    assert.match(html, /data-custom-academic-year/);
+    assert.match(html, /Use an earlier \/ other year/);
+    assert.match(html, /<option value="Graduated">Graduated<\/option>/);
+    assert.equal(props.modelValue.enrollment_status, 'Graduated');
+});
+
+test('a former student is shown most-recent studies guidance instead of a fabricated senior-high path', async () => {
+    const props = learningProps();
+    const html = await render(learning, { ...props, modelValue: { ...props.modelValue, education_level: 'other', enrollment_status: 'Not currently enrolled', course_or_strand: '', year_level: 'Fourth year high school' }, courseOptions: [], yearOptions: [], fieldRelevant: (field) => field !== 'course_or_strand' });
+    assert.match(html, /Most recent studies/);
+    assert.match(html, /do not invent a strand or Grade 12/);
+    assert.doesNotMatch(html, /id="profile-course"/);
+});
+
+test('pending studies allow an unknown course and year without clearing saved records', async () => {
+    const props = learningProps();
+    props.modelValue.enrollment_status = 'Returning enrollment pending';
+    const html = await render(learning, { ...props, fieldRequired: (key) => !['course_or_strand', 'year_level'].includes(key) });
+    assert.doesNotMatch(html.match(/id="profile-course"[^>]*>/)[0], /required/);
+    assert.doesNotMatch(html.match(/id="profile-year"[^>]*>/)[0], /required/);
+    assert.equal(props.modelValue.course_or_strand, 'STEM');
+    assert.equal(props.modelValue.year_level, 'Grade 12');
+});
+
+test('completed education stays optional and collapsed until declared', async () => {
+    const html = await render(learning, learningProps());
+    assert.match(html, /<details data-completed-qualification(?![^>]* open)/);
+    assert.doesNotMatch(html.match(/id="profile-completed-qualification"[^>]*>/)[0], /required/);
+    assert.doesNotMatch(html, /id="profile-qualification-school"|id="profile-qualification-year"|id="profile-qualification-details"/);
+    for (const value of ['pre_k12_high_school', 'als_secondary', 'senior_high_school', 'none']) {
+        assert.ok(completedQualificationOptions.some((option) => option.value === value));
+    }
+});
+
+test('old-curriculum qualification asks only for its own institution and optional completion year', async () => {
+    const props = learningProps();
+    props.modelValue = { ...props.modelValue, completed_qualification: 'pre_k12_high_school', completed_qualification_school: 'Former high school', completed_qualification_year: 2014 };
+    const html = await render(learning, props);
+    const qualification = html.slice(html.indexOf('<details data-completed-qualification'), html.indexOf('<details data-school-identifiers'));
+    assert.match(qualification, /<details data-completed-qualification[^>]* open/);
+    assert.match(qualification, /id="profile-qualification-school"[^>]*required/);
+    assert.match(qualification, /id="profile-qualification-year"[^>]*min="1900"/);
+    assert.match(qualification, new RegExp(`id="profile-qualification-year"[^>]*max="${new Date().getFullYear()}"`));
+    assert.doesNotMatch(qualification.match(/id="profile-qualification-year"[^>]*>/)[0], /required/);
+    assert.doesNotMatch(qualification, /id="profile-course"|id="profile-year"|id="profile-qualification-details"/);
+    assert.match(qualification, /Supporting evidence/);
+    assert.match(qualification, /does not automatically make it equivalent/);
+    assert.equal(props.modelValue.course_or_strand, 'STEM');
+    assert.equal(props.modelValue.year_level, 'Grade 12');
+});
+
+test('other qualifications request their exact name; no-completion choice asks for no proof details', async () => {
+    const props = learningProps();
+    const other = await render(learning, { ...props, modelValue: { ...props.modelValue, completed_qualification: 'other' } });
+    assert.match(other, /id="profile-qualification-details"[^>]*required/);
+    const none = await render(learning, { ...props, modelValue: { ...props.modelValue, completed_qualification: 'none' } });
+    assert.doesNotMatch(none, /id="profile-qualification-school"|id="profile-qualification-year"|id="profile-qualification-details"/);
+});
+
+test('saved education history uses readable labels and does not invent current studies or equivalence', () => {
+    const user = { education_level: 'college', course_or_strand: 'BS Mathematics', year_level: '1st year',
+        completed_qualification: 'pre_k12_high_school', completed_qualification_school: 'Former high school', completed_qualification_year: 2014 };
+    const before = JSON.stringify(user);
+    const sections = applicantProfileDetails(user, { omitUnavailable: true });
+    const learningRecord = sections.find((section) => section.id === 'academic');
+    const history = learningRecord.groups.find((group) => group.id === 'completed-qualification');
+    assert.equal(history.items.find((item) => item.key === 'completed_qualification').value, profileValueLabel('completedQualification', user.completed_qualification));
+    assert.equal(history.items.find((item) => item.key === 'completed_qualification_year').value, '2014');
+    assert.equal(learningRecord.groups[0].items.find((item) => item.key === 'education_level').value, 'College / University');
+    assert.equal(JSON.stringify(user), before);
+    assert.equal(applicantProfileDetails({ education_level: 'college' })[1].groups.length, 1);
+    assert.equal(applicantProfileDetails({ completed_qualification: 'none' })[1].groups[1].items.length, 1);
+});
+
+test('profile editor hydrates and submits qualification fields in the learning section', () => {
+    const page = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
+    for (const field of ['completed_qualification', 'completed_qualification_school', 'completed_qualification_year', 'completed_qualification_details']) {
+        assert.match(page, new RegExp(`${field}: payload\\?\\.${field} \\?\\? ''`));
+        assert.match(page, new RegExp(`${field}: 'profile-`));
+    }
+    assert.match(page, /qualification_record: \[profileValueLabel\('completedQualification'/);
 });
 
 test('manual and OCR-managed academic results remain separate', async () => {

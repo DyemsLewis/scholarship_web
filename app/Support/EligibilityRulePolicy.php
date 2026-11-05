@@ -4,13 +4,14 @@ namespace App\Support;
 
 class EligibilityRulePolicy
 {
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     public const MODES = ['required', 'preferred'];
 
     public const KEYS = [
         'academic', 'education_level', 'course', 'school_type', 'year_level',
         'location', 'income', 'current_scholarship_support', 'enrollment_status',
+        'completed_qualification',
     ];
 
     public static function normalize(mixed $modes): array

@@ -4,6 +4,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import ProviderActionDialog from '../../../components/ProviderActionDialog.vue';
 import { labelFromKey } from '../../../support/display';
+import { providerProofUploadType } from '../../../support/providerVerification.js';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -19,6 +20,7 @@ const documentType = ref('organization_registration');
 const termsAccepted = ref(false);
 const deleteTarget = ref(null);
 const deleteError = ref('');
+const replacementTarget = ref(null);
 const form = reactive({ legal_name: '', registration_authority: '', registration_number: '', registration_date: '' });
 const fieldClass = 'mt-2 h-11 w-full border border-slate-300 bg-white px-3.5 text-sm text-slate-900 outline-none focus:border-slate-950';
 const labelClass = 'text-sm font-bold text-slate-800';
@@ -100,9 +102,14 @@ async function uploadProof() {
     payload.append('document_type', documentType.value);
     payload.append('document_file', selectedFile.value);
     payload.append('terms_accepted', '1');
+    if (replacementTarget.value) {
+        payload.append('replaces_document_id', replacementTarget.value.id);
+        payload.append('expected_revision', replacementTarget.value.revision);
+    }
     try {
         await window.axios.post('/provider/verification-documents', payload, { headers: { 'Content-Type': 'multipart/form-data' } });
         selectedFile.value = null;
+        replacementTarget.value = null;
         termsAccepted.value = false;
         if (fileInput.value) fileInput.value.value = '';
         await loadVerification();
@@ -116,6 +123,15 @@ async function uploadProof() {
 function requestDelete(document) {
     deleteError.value = '';
     deleteTarget.value = document;
+}
+
+function replaceDocument(document) {
+    if (isUploading.value) return;
+    replacementTarget.value = document;
+    documentType.value = providerProofUploadType(document.document_type);
+    selectedFile.value = null;
+    termsAccepted.value = false;
+    if (fileInput.value) { fileInput.value.value = ''; fileInput.value.scrollIntoView({ block: 'center', behavior: 'smooth' }); fileInput.value.focus({ preventScroll: true }); }
 }
 
 function cancelDelete() {
@@ -176,8 +192,9 @@ onMounted(loadVerification);
                     </form>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="verification-proof-title">
-                        <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><h2 id="verification-proof-title" class="text-lg font-bold text-slate-950">Verification proof</h2><p class="mt-1 text-sm text-slate-500">Upload readable organization evidence for administrator review.</p></div></header>
+                        <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><h2 id="verification-proof-title" class="text-lg font-bold text-slate-950">Verification proof</h2><p class="mt-1 text-sm text-slate-500">Each file is reviewed separately. Accepted files do not verify the account until an administrator records the final decision.</p></div></header>
                         <form class="border-b border-slate-200 bg-slate-50 px-6 py-5" @submit.prevent="uploadProof">
+                            <p v-if="replacementTarget" class="mb-4 flex items-center justify-between gap-3 text-sm text-slate-700"><span>Replacing <strong>{{ replacementTarget.original_name }}</strong>. The new file needs its own review.</span><button type="button" :disabled="isUploading" class="shrink-0 text-xs font-bold underline underline-offset-2" @click="replacementTarget = null">Cancel replacement</button></p>
                             <div class="grid grid-cols-[minmax(14rem,1fr)_minmax(0,1.5fr)_auto] items-end gap-4">
                                 <label><span :class="labelClass">Document type</span><select v-model="documentType" :class="fieldClass"><option value="organization_registration">Organization registration</option><option value="authorization_letter">Authorization letter</option><option value="valid_id">Authorized representative ID</option><option value="school_or_office_proof">School or office proof</option><option value="other">Other supporting proof</option></select></label>
                                 <label><span :class="labelClass">File</span><input ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" class="mt-2 block h-11 w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 file:mr-3 file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-bold" @change="chooseFile"></label>
@@ -196,9 +213,9 @@ onMounted(loadVerification);
                                     <tr v-for="document in documents" :key="document.id" class="align-middle hover:bg-slate-50/70">
                                         <td class="px-5 py-4"><p class="settings-text text-sm font-bold text-slate-950">{{ document.original_name }}</p><p class="mt-1 text-xs text-slate-500">{{ fileSize(document.size) }}</p></td>
                                         <td class="px-5 py-4 text-sm text-slate-700">{{ labelFromKey(document.document_type) }}</td>
-                                        <td class="px-5 py-4"><span :class="['inline-flex px-2.5 py-1 text-xs font-bold uppercase tracking-wide', documentStatusClass(document.status)]">{{ statusLabel(document.status) }}</span><WorkspaceTextSummary v-if="document.review_notes" class="mt-2 text-xs text-rose-700" :text="document.review_notes" label="details" /></td>
+                                        <td class="px-5 py-4"><span :class="['inline-flex px-2.5 py-1 text-xs font-bold uppercase tracking-wide', documentStatusClass(document.status)]">{{ statusLabel(document.status) }}</span><p v-if="document.reviewed_at" class="mt-1 text-xs text-slate-500">Reviewed {{ document.reviewed_at }}</p><WorkspaceTextSummary v-if="document.review_notes" class="mt-2 text-xs text-slate-600" :text="document.review_notes" label="review note" /></td>
                                         <td class="px-5 py-4 text-xs font-semibold text-slate-600">{{ document.uploaded_at }}</td>
-                                        <td class="px-5 py-4"><div class="flex justify-end gap-2"><a :href="document.view_url" target="_blank" rel="noopener" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 hover:border-slate-950" aria-label="View document"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><a :href="document.download_url" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 hover:border-slate-950" aria-label="Download document"><i class="fa-solid fa-download text-xs" aria-hidden="true"></i></a><button type="button" :disabled="deletingId === document.id" class="grid h-9 w-9 place-items-center border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40" aria-label="Remove document" @click="requestDelete(document)"><i class="fa-solid fa-trash text-xs" aria-hidden="true"></i></button></div></td>
+                                        <td class="px-5 py-4"><div class="flex justify-end gap-2"><a :href="document.view_url" target="_blank" rel="noopener" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 hover:border-slate-950" aria-label="View document"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><a :href="document.download_url" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 hover:border-slate-950" aria-label="Download document"><i class="fa-solid fa-download text-xs" aria-hidden="true"></i></a><button type="button" :disabled="isUploading" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 disabled:opacity-40" :aria-label="`Replace ${document.original_name}`" title="Replace document" @click="replaceDocument(document)"><i class="fa-solid fa-file-arrow-up text-xs" aria-hidden="true"></i></button><button type="button" :disabled="deletingId === document.id" class="grid h-9 w-9 place-items-center border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40" aria-label="Remove document" @click="requestDelete(document)"><i class="fa-solid fa-trash text-xs" aria-hidden="true"></i></button></div></td>
                                     </tr>
                                 </tbody>
                             </table>

@@ -4,6 +4,9 @@ import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ApplicantApplicationShell from '../components/application-detail/ApplicantApplicationShell.vue';
 import ApplicationOutcomeRecord from '../components/application-detail/ApplicationOutcomeRecord.vue';
 import RecipientAgreementDialog from '../components/application-detail/RecipientAgreementDialog.vue';
+import WithdrawalRequestPanel from '../components/withdrawals/WithdrawalRequestPanel.vue';
+import AgreementConcernPanel from '../components/agreement-concerns/AgreementConcernPanel.vue';
+import RecipientCaseReviewPanel from '../components/case-reviews/RecipientCaseReviewPanel.vue';
 import { showPortalToast } from '../support/portalToast';
 
 const appElement = document.getElementById('app');
@@ -33,8 +36,13 @@ const shellDetail = computed(() => {
         : '';
 
     if (actionPath === (window.portalPathname?.() ?? window.location.pathname)) {
-        decision.action.href = agreement.value ? '#recipient-agreement' : '#application-result';
-        decision.action.label = agreement.value?.can_respond ? 'Review agreement' : 'Review result';
+        if (decision.action.target === 'agreement-concerns') {
+            decision.action.href = '#agreement-concerns';
+            decision.action.label = 'Review concern';
+        } else {
+            decision.action.href = agreement.value ? '#recipient-agreement' : '#application-result';
+            decision.action.label = agreement.value?.can_respond ? 'Review agreement' : 'Review result';
+        }
     }
 
     return { ...detail.value, decision };
@@ -110,6 +118,24 @@ async function respondToAgreement(response) {
         });
     } finally {
         isSubmittingAgreement.value = false;
+    }
+}
+
+async function refreshAfterWithdrawal() {
+    try {
+        const response = await window.axios.get(`/dashboard/applications/${applicationId}/data`, { params: { view: 'outcome' }, portalToast: false });
+        detail.value = response.data.detail;
+    } catch {
+        showPortalToast({ type: 'error', title: 'Request saved', message: 'Your withdrawal action was saved, but the application summary could not refresh. Reload the page to see the latest support status.' });
+    }
+}
+
+async function refreshAfterConcern() {
+    try {
+        const response = await window.axios.get(`/dashboard/applications/${applicationId}/data`, { params: { view: 'outcome' }, portalToast: false });
+        detail.value = response.data.detail;
+    } catch {
+        showPortalToast({ type: 'error', title: 'Concern updated', message: 'Your action was saved. Reload this page to refresh the next-action guide.' });
     }
 }
 
@@ -201,6 +227,10 @@ onMounted(loadOutcome);
                     </button>
                 </div>
             </section>
+
+            <WithdrawalRequestPanel v-if="outcome.withdrawal?.history_url" :history-url="outcome.withdrawal.history_url" :context="detail.identity?.program?.title" :agreement="agreement" @saved="refreshAfterWithdrawal" />
+            <AgreementConcernPanel :history-url="`/dashboard/applications/${applicationId}/agreement-concerns`" :context="detail.identity?.program?.title" @status-change="refreshAfterConcern" />
+            <RecipientCaseReviewPanel :history-url="`/dashboard/applications/${applicationId}/case-reviews`" />
 
         </div>
     </ApplicantApplicationShell>

@@ -1,9 +1,12 @@
 <script setup>
 import BenefitReleaseRecord from './BenefitReleaseRecord.vue';
+import BenefitDeliveryReportPanel from '../benefit-delivery/BenefitDeliveryReportPanel.vue';
+import RecipientCaseReviewPanel from '../case-reviews/RecipientCaseReviewPanel.vue';
 
 defineProps({
     content: { type: Object, required: true },
     programTitle: { type: String, default: 'Scholarship program' },
+    applicationId: { type: [String, Number], required: true },
 });
 const emit = defineEmits(['refresh']);
 
@@ -119,4 +122,6 @@ function statusClass(status) {
             </div>
         </details>
     </div>
+    <BenefitDeliveryReportPanel :history-url="`/dashboard/applications/${applicationId}/delivery-reports`" @status-change="emit('refresh')" />
+    <RecipientCaseReviewPanel :history-url="`/dashboard/applications/${applicationId}/case-reviews`" />
 </template>

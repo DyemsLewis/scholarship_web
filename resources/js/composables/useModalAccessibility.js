@@ -31,7 +31,7 @@ export function useModalAccessibility(isOpen, dialog, close) {
             close();
         } else if (event.key === 'Tab') {
             const elements = [...dialog.value.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex="0"]')]
-                .filter((element) => element.offsetParent !== null && !element.closest('[inert]'));
+                .filter((element) => !element.matches(':disabled') && element.offsetParent !== null && !element.closest('[inert]'));
             const first = elements[0];
             const last = elements.at(-1);
             if (!first) {

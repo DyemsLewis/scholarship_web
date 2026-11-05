@@ -3,6 +3,9 @@ import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
+import WithdrawalRequestPanel from '../../../components/withdrawals/WithdrawalRequestPanel.vue';
+import AgreementConcernPanel from '../../../components/agreement-concerns/AgreementConcernPanel.vue';
+import RecipientCaseReviewPanel from '../../../components/case-reviews/RecipientCaseReviewPanel.vue';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
 const returnTo = new URLSearchParams(window.location.search).get('return_to');
@@ -24,9 +27,11 @@ const errorMessage = ref('');
 const successMessage = ref('');
 const confirmation = ref(null);
 const showReopenDialog = ref(false);
+const pendingWithdrawal = ref(false);
 const supportForm = ref({
     decision: 'renewed',
     reason_category: 'requirements_met',
+    agreement_case_review_id: '',
     effective_on: today(),
     support_ends_on: '',
     next_review_on: '',
@@ -123,6 +128,7 @@ function resetSupportForm() {
     supportForm.value = {
         decision,
         reason_category: decision === 'renewed' ? 'requirements_met' : 'program_completed',
+        agreement_case_review_id: '',
         effective_on: today(),
         support_ends_on: '',
         next_review_on: '',
@@ -141,6 +147,7 @@ async function loadRecord() {
         const response = await window.axios.get(`/provider/applications/${applicationId}/recipient-record`);
         record.value = response.data.record;
         resetSupportForm();
+        if (openResponse.value?.case_review_url) resolutionForm.value.resolution_outcome = 'support_reinstated';
         if (!requestedSection && agreementAccepted.value) activeSection.value = 'support';
     } catch (error) {
         errorMessage.value = firstError(error, 'The recipient record could not be loaded.');
@@ -247,6 +254,15 @@ function updateSection(section) {
 }
 
 onMounted(loadRecord);
+
+async function refreshAfterWithdrawal() {
+    try {
+        const response = await window.axios.get(`/provider/applications/${applicationId}/recipient-record`, { portalToast: false });
+        record.value = response.data.record;
+    } catch {
+        errorMessage.value = 'The withdrawal decision was saved, but the support summary could not refresh. Reload this record before recording another outcome.';
+    }
+}
 </script>
 
 <template>
@@ -268,6 +284,10 @@ onMounted(loadRecord);
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Recipient identity">
                         <div class="flex items-center gap-4 px-6 py-4"><img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile`" class="h-14 w-14 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-14 w-14 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Recipient</p><h2 class="mt-1 application-text text-xl font-bold text-slate-950">{{ recipient.name }}</h2><p class="mt-1 application-text text-sm text-slate-500">{{ program.title }} · {{ recipient.email }}</p></div><div class="border-l border-slate-200 pl-6 text-right"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Current support</p><p class="mt-1 text-sm font-bold text-slate-950">{{ support.support_status_label }}</p><p class="mt-1 text-xs text-slate-500">{{ agreement.status_label }}</p></div></div>
                     </section>
+
+                    <WithdrawalRequestPanel v-if="agreementAccepted" class="mt-4" :history-url="`/provider/applications/${applicationId}/recipient-withdrawals`" :context="program.title" :agreement="agreement" reviewer @pending-change="pendingWithdrawal = $event" @saved="refreshAfterWithdrawal" />
+                    <AgreementConcernPanel v-if="agreementAccepted" class="mt-4" :history-url="`/provider/applications/${applicationId}/agreement-concerns`" :context="program.title" provider />
+                    <RecipientCaseReviewPanel :history-url="`/provider/applications/${applicationId}/case-reviews`" />
 
                     <nav class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Recipient record sections">
                         <button v-for="section in sections" :key="section.key" type="button" :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950']" @click="updateSection(section.key)"><i :class="[section.icon, activeSection === section.key ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>{{ section.label }}</button>
@@ -293,17 +313,20 @@ onMounted(loadRecord);
                         <div v-if="!agreementAccepted" class="px-6 py-10 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-signature text-sm" aria-hidden="true"></i></span><h3 class="mt-3 text-lg font-bold text-slate-950">Agreement acceptance required</h3><p class="mt-2 text-sm text-slate-500">Support actions become available after the recipient accepts the terms.</p><button type="button" class="mt-5 inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700" @click="updateSection('agreement')"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Review agreement</button></div>
 
                         <template v-else>
-                            <div v-if="openResponse" class="border-b border-slate-200 px-6 py-6">
+                            <p v-if="openResponse?.case_review_url && !openResponse.can_reinstate_after_review" class="border-b border-slate-200 bg-amber-50 px-6 py-4 text-sm leading-6 text-slate-700">An independent case appeal is awaiting review. Read Case reviews and appeals above. The provider cannot uphold or close its own appeal.</p>
+                            <div v-if="openResponse && (!openResponse.case_review_url || openResponse.can_reinstate_after_review)" class="border-b border-slate-200 px-6 py-6">
                                 <div class="border-l-4 border-l-amber-400 bg-amber-50 px-5 py-4"><p class="text-xs font-bold uppercase tracking-[0.14em] text-amber-800">Recipient request</p><h3 class="mt-1 text-base font-bold text-amber-950">{{ openResponse.applicant_response_label }}</h3><p class="mt-2 text-sm leading-6 text-amber-900">{{ openResponse.applicant_response_message }}</p><a v-if="openResponse.applicant_response_file" :href="openResponse.applicant_response_file.view_url" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-xs font-bold text-amber-950 underline">Open attached file<i class="fa-solid fa-arrow-up-right-from-square text-[9px]" aria-hidden="true"></i></a></div>
                                 <form class="mt-5" @submit.prevent="askToResolveRequest"><div class="grid grid-cols-3 gap-4"><label class="text-sm font-semibold text-slate-700">Resolution<select v-model="resolutionForm.resolution_outcome" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="clarified">Clarification provided</option><option value="decision_upheld">Decision upheld</option><option v-if="openResponse.decision === 'terminated'" value="support_reinstated">Support reinstated</option></select></label><label v-if="resolutionForm.resolution_outcome === 'support_reinstated'" class="text-sm font-semibold text-slate-700">Support ends<input v-model="resolutionForm.support_ends_on" type="date" :min="today()" required class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label><label v-if="resolutionForm.resolution_outcome === 'support_reinstated'" class="text-sm font-semibold text-slate-700">Next review <span class="font-normal text-slate-600">(optional)</span><input v-model="resolutionForm.next_review_on" type="date" :min="today()" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label><label class="col-span-3 text-sm font-semibold text-slate-700">Resolution notes<textarea v-model="resolutionForm.resolution_notes" required minlength="5" maxlength="1500" rows="3" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950"></textarea></label><label v-if="resolutionForm.resolution_outcome === 'support_reinstated'" class="col-span-3 text-sm font-semibold text-slate-700">Reinstated terms<textarea v-model="resolutionForm.next_period_terms" required minlength="10" maxlength="2000" rows="3" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950"></textarea></label><label class="col-span-3 text-sm font-semibold text-slate-700">Resolution proof <span class="font-normal text-slate-600">(optional)</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="mt-2 block w-full border border-slate-300 bg-white px-3 py-2 text-sm" @change="resolutionForm.resolution_proof = $event.target.files?.[0] || null"></label></div><button type="submit" class="mt-5 inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-circle-check']" aria-hidden="true"></i>Resolve request</button></form>
                             </div>
 
                             <div v-if="supportClosed" class="px-6 py-8"><h3 class="text-lg font-bold text-slate-950">Support record closed</h3><p class="mt-2 text-sm text-slate-600">{{ latestDecision?.reason || latestDecision?.next_period_terms || 'The recorded support period is complete.' }}</p></div>
 
+                            <div v-else-if="pendingWithdrawal" class="px-6 py-6"><h3 class="text-base font-bold text-slate-950">Review the withdrawal request first</h3><p class="mt-2 text-sm leading-6 text-slate-600">Support is still active. Record the request outcome before closing recipient support.</p><a href="#scholarship-withdrawal" class="mt-3 inline-flex text-sm font-bold underline">Go to withdrawal request</a></div>
                             <form v-else class="px-6 py-6" @submit.prevent="askToSaveSupport">
                                 <p class="text-sm font-semibold text-slate-700">{{ support.renewal_eligibility_reason }}</p>
                                 <div class="mt-5 grid grid-cols-3 gap-3"><label :class="['cursor-pointer border px-4 py-4', supportForm.decision === 'renewed' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700', !support.renewal_eligible ? 'cursor-not-allowed opacity-40' : '']"><input v-model="supportForm.decision" class="sr-only" type="radio" value="renewed" :disabled="!support.renewal_eligible"><span class="text-sm font-bold">Renew support</span><span class="mt-1 block text-xs opacity-70">Continue for another period.</span></label><label :class="['cursor-pointer border px-4 py-4', supportForm.decision === 'completed' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700']"><input v-model="supportForm.decision" class="sr-only" type="radio" value="completed"><span class="text-sm font-bold">Complete support</span><span class="mt-1 block text-xs opacity-70">Close a finished program period.</span></label><label :class="['cursor-pointer border px-4 py-4', supportForm.decision === 'terminated' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700']"><input v-model="supportForm.decision" class="sr-only" type="radio" value="terminated"><span class="text-sm font-bold">End support early</span><span class="mt-1 block text-xs opacity-70">Close before normal completion.</span></label></div>
                                 <div class="mt-5 grid grid-cols-3 gap-4"><label class="text-sm font-semibold text-slate-700">Reason category<select v-model="supportForm.reason_category" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option v-for="([value, label]) in decisionCategories" :key="value" :value="value">{{ label }}</option></select></label><label class="text-sm font-semibold text-slate-700">Effective date<input v-model="supportForm.effective_on" type="date" required :max="today()" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label><label v-if="supportForm.decision === 'renewed'" class="text-sm font-semibold text-slate-700">Support ends<input v-model="supportForm.support_ends_on" type="date" required :min="supportForm.effective_on" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label><label v-if="supportForm.decision === 'renewed'" class="text-sm font-semibold text-slate-700">Next review <span class="font-normal text-slate-600">(optional)</span><input v-model="supportForm.next_review_on" type="date" :min="supportForm.effective_on" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label><label v-if="supportForm.decision === 'terminated'" class="text-sm font-semibold text-slate-700">Notice date<input v-model="supportForm.notice_given_on" type="date" required :max="supportForm.effective_on" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label><label :class="['text-sm font-semibold text-slate-700', supportForm.decision === 'renewed' ? 'col-span-3' : 'col-span-2']">{{ supportForm.decision === 'renewed' ? 'Next period terms' : 'Reason' }}<textarea v-if="supportForm.decision === 'renewed'" v-model="supportForm.next_period_terms" required minlength="10" maxlength="2000" rows="3" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950"></textarea><textarea v-else v-model="supportForm.reason" required minlength="10" maxlength="2000" rows="3" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950"></textarea></label><label class="col-span-3 text-sm font-semibold text-slate-700">Decision document <span class="font-normal text-slate-600">(optional)</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="mt-2 block w-full border border-slate-300 bg-white px-3 py-2 text-sm" @change="supportForm.decision_document = $event.target.files?.[0] || null"></label></div>
+                                <label v-if="supportForm.decision === 'terminated' && !['provider_funding_ended', 'recipient_withdrew'].includes(supportForm.reason_category)" class="mt-5 block text-sm font-bold text-slate-700">Reviewed agreement concern<select v-model="supportForm.agreement_case_review_id" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="" disabled>Choose an eligible independent review</option><option v-for="review in record.eligible_agreement_reviews || []" :key="review.id" :value="review.id">{{ review.label }}</option></select><span class="mt-2 block text-xs font-normal leading-5 text-slate-500">A supported review and a completed appeal opportunity are required. A pending appeal cannot authorize termination. Funding-ended and voluntary-withdrawal decisions remain separate.</span></label>
                                 <label class="mt-5 flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"><input v-model="supportForm.confirmed" type="checkbox" required class="mt-0.5 h-4 w-4">I confirmed the supporting monitoring and release records before saving this outcome.</label><button type="submit" class="mt-5 inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>Record support outcome</button>
                             </form>
                         </template>

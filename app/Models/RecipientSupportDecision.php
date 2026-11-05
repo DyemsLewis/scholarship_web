@@ -40,6 +40,7 @@ class RecipientSupportDecision extends Model
         'resolution_proof_size',
         'resolved_by',
         'resolved_at',
+        'agreement_case_review_id',
     ];
 
     protected function casts(): array
@@ -73,5 +74,10 @@ class RecipientSupportDecision extends Model
     public function resolver(): BelongsTo
     {
         return $this->belongsTo(User::class, 'resolved_by');
+    }
+
+    public function agreementReview(): BelongsTo
+    {
+        return $this->belongsTo(RecipientCaseReview::class, 'agreement_case_review_id');
     }
 }

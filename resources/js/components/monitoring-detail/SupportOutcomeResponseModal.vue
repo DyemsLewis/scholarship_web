@@ -104,12 +104,12 @@ async function submit() {
                                 <span class="block text-sm font-bold">Acknowledge outcome</span>
                                 <span class="mt-1 block text-xs text-slate-500">Confirm that you received and reviewed it.</span>
                             </label>
-                            <label :class="['block cursor-pointer border bg-white p-3', form.response_type === 'clarification_requested' ? 'border-amber-500 ring-1 ring-amber-500' : 'border-slate-200']">
+                            <label v-if="!outcome?.case_review_url" :class="['block cursor-pointer border bg-white p-3', form.response_type === 'clarification_requested' ? 'border-amber-500 ring-1 ring-amber-500' : 'border-slate-200']">
                                 <input v-model="form.response_type" type="radio" value="clarification_requested" class="sr-only">
                                 <span class="block text-sm font-bold">Ask for clarification</span>
                                 <span class="mt-1 block text-xs text-slate-500">Ask the provider to explain part of the decision.</span>
                             </label>
-                            <label v-if="outcome?.decision === 'terminated'" :class="['block cursor-pointer border bg-white p-3', form.response_type === 'reconsideration_requested' ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200']">
+                            <label v-if="outcome?.decision === 'terminated' && !outcome?.case_review_url" :class="['block cursor-pointer border bg-white p-3', form.response_type === 'reconsideration_requested' ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200']">
                                 <input v-model="form.response_type" type="radio" value="reconsideration_requested" class="sr-only">
                                 <span class="block text-sm font-bold">Request reconsideration</span>
                                 <span class="mt-1 block text-xs text-slate-500">Provide information the provider should review again.</span>

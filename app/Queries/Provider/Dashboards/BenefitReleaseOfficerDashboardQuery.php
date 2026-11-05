@@ -6,6 +6,8 @@ use App\Domain\Shared\Dashboard\RoleDashboardPayload;
 use App\Models\RecipientBenefitRelease;
 use App\Models\User;
 use App\Queries\Provider\ProviderWorkspaceScope;
+use App\Services\BenefitDeliveryReportService;
+use App\Services\RecipientAgreementCaseAccess;
 
 final class BenefitReleaseOfficerDashboardQuery
 {
@@ -15,6 +17,8 @@ final class BenefitReleaseOfficerDashboardQuery
     public function get(User $officer): array
     {
         $context = $this->scope->context($officer);
+        $deliveryReportCount = app(RecipientAgreementCaseAccess::class)->visibleTo($officer)
+            ->where('case_type', 'benefit_delivery')->whereIn('status', BenefitDeliveryReportService::OPEN)->count();
         $programIds = $this->scope->programs($officer)->pluck('id');
         $items = RecipientBenefitRelease::query()
             ->whereIn('scholarship_id', $programIds)
@@ -47,10 +51,10 @@ final class BenefitReleaseOfficerDashboardQuery
                 'access_scope' => $this->accessScope($context),
             ],
             primaryAction: [
-                'label' => $counts['issues'] > 0 ? 'Open reported issues' : 'Record distributions',
-                'url' => $counts['issues'] > 0
+                'label' => $deliveryReportCount > 0 ? 'Open delivery reports' : ($counts['issues'] > 0 ? 'Open reported issues' : 'Record distributions'),
+                'url' => $deliveryReportCount > 0 ? '/provider/workspaces/releases/delivery-reports' : ($counts['issues'] > 0
                     ? '/provider/workspaces/releases/issues'
-                    : '/provider/workspaces/releases/record',
+                    : '/provider/workspaces/releases/record'),
             ],
             metrics: [
                 ['key' => 'issues', 'label' => 'Reported issues', 'value' => $counts['issues'], 'detail' => 'Need resolution', 'tone' => 'attention', 'url' => '/provider/workspaces/releases/issues'],

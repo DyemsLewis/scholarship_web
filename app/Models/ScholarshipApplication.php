@@ -217,6 +217,16 @@ class ScholarshipApplication extends Model
             ->orderByDesc('id');
     }
 
+    public function recipientWithdrawalRequests(): HasMany
+    {
+        return $this->hasMany(RecipientWithdrawalRequest::class)->orderByDesc('id');
+    }
+
+    public function recipientAgreementCases(): HasMany
+    {
+        return $this->hasMany(RecipientAgreementCase::class)->orderByDesc('id');
+    }
+
     public function monitoringOversightReviews(): HasMany
     {
         return $this->hasMany(RecipientMonitoringOversightReview::class)

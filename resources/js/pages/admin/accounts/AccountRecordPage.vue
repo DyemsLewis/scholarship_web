@@ -187,6 +187,7 @@ onMounted(loadAccount);
 
     <AdminDialog
         :open="statusDialogOpen"
+        :confirmation-only="isSuspended"
         title-id="status-dialog-title"
         :title="isSuspended ? 'Reactivate this account?' : 'Suspend this account?'"
         :description="isSuspended ? 'The user will be able to sign in again.' : 'The user will lose sign-in access immediately.'"

@@ -5,8 +5,11 @@ namespace App\Support;
 class AcademicRequirement
 {
     public const SCALE_PERCENTAGE = 'percentage';
+
     public const SCALE_GRADE_POINT = 'grade_point';
+
     public const SCALE_PASS_FAIL = 'pass_fail';
+
     public const SCALE_OTHER = 'other';
 
     public const SCALES = [
@@ -38,6 +41,10 @@ class AcademicRequirement
 
         if (in_array($scale, self::SCALES, true)) {
             return $scale;
+        }
+
+        if ($scale !== '') {
+            return self::SCALE_OTHER;
         }
 
         if (self::hasValue($minimum)) {
@@ -133,6 +140,16 @@ class AcademicRequirement
             ], 'not_required');
         }
 
+        if (in_array($studentScale, [self::SCALE_PASS_FAIL, self::SCALE_OTHER], true)) {
+            return $withComparison([
+                'label' => 'Academic requirement', 'status' => 'missing',
+                'student_value' => self::studentLabel($studentValue, $studentScale),
+                'requirement' => self::requirementLabel($minimum, $requiredScale),
+                'note' => 'Your record uses a non-numeric or unfamiliar grading system. The provider must review the actual record; no numerical average or conversion has been assumed.',
+                'counts' => true,
+            ], 'manual_review');
+        }
+
         if (! self::hasValue($studentValue)) {
             return $withComparison([
                 'label' => 'Academic requirement',
@@ -181,11 +198,14 @@ class AcademicRequirement
 
     public static function studentLabel(mixed $studentValue, ?string $studentScale): ?string
     {
+        $studentScale = self::normalizeScale($studentScale, $studentValue);
+        if (in_array($studentScale, [self::SCALE_PASS_FAIL, self::SCALE_OTHER], true)) {
+            return self::scaleLabel($studentScale).' record';
+        }
         if (! self::hasValue($studentValue)) {
             return null;
         }
 
-        $studentScale = self::normalizeScale($studentScale, $studentValue);
         $value = number_format((float) $studentValue, 2);
 
         return $studentScale === self::SCALE_GRADE_POINT

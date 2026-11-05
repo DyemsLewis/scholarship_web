@@ -14,9 +14,12 @@ use App\Rules\PhoneNumber;
 use App\Services\ScholarshipBenefitService as SB;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
+use App\Support\CompletedQualification;
 use App\Support\CoverImageCatalog;
+use App\Support\EducationEligibilityPolicy;
 use App\Support\EligibilityRulePolicy;
 use App\Support\LearnerProgramPath;
+use App\Support\OpaqueRecordUrl;
 use App\Support\ProgramConfigurationRules;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEligibilityCondition;
@@ -392,7 +395,7 @@ trait HandlesProviderProgramManagement
                 ? 'Scholarship submitted for admin review.'
                 : 'Scholarship draft saved.',
             'scholarship' => $this->scholarshipPayload($scholarship),
-            'record_navigation' => app(\App\Support\OpaqueRecordUrl::class)->encode('/provider/programs/'.$scholarship->id),
+            'record_navigation' => app(OpaqueRecordUrl::class)->encode('/provider/programs/'.$scholarship->id),
         ], 201);
     }
 
@@ -542,7 +545,7 @@ trait HandlesProviderProgramManagement
                 default => 'Scholarship draft saved.',
             },
             'scholarship' => $this->scholarshipPayload($scholarship->fresh()),
-            'record_navigation' => app(\App\Support\OpaqueRecordUrl::class)->encode('/provider/programs/'.$scholarship->id),
+            'record_navigation' => app(OpaqueRecordUrl::class)->encode('/provider/programs/'.$scholarship->id),
         ]);
     }
 
@@ -672,6 +675,7 @@ trait HandlesProviderProgramManagement
         ])->contains(fn ($field): bool => filled($field))
             || ($value('income_requirement') !== null && $value('income_requirement') !== 'Any')
             || (bool) $value('exclude_current_scholarship_recipients')
+            || EducationEligibilityPolicy::configured($value('education_eligibility_policy'))
             || in_array($value('minimum_grade_scale'), ['pass_fail', 'other'], true);
 
         if (! $hasFinderRule) {
@@ -758,6 +762,8 @@ trait HandlesProviderProgramManagement
                     || $educationLevels->diff($allEducationLevels)->isNotEmpty());
             $ruleModes = EligibilityRulePolicy::normalize($value('eligibility_rule_modes'));
             $restrictions = [
+                'completed_qualification' => EducationEligibilityPolicy::normalize($value('education_eligibility_policy'))['requires_completed_qualification'],
+                'enrollment_status' => EducationEligibilityPolicy::normalize($value('education_eligibility_policy'))['enrollment_statuses'] !== [],
                 'education_level' => $hasEducationRestriction,
                 'course' => ! $this->isOpenScholarshipRule($value('eligible_courses')),
                 'school_type' => filled($value('eligible_school_types')),
@@ -823,6 +829,14 @@ trait HandlesProviderProgramManagement
 
     private function validateScholarship(Request $request, ?Scholarship $scholarship = null): array
     {
+        if (is_string($request->input('education_eligibility_policy'))) {
+            try {
+                $policy = json_decode($request->input('education_eligibility_policy'), true, flags: JSON_THROW_ON_ERROR);
+            } catch (\JsonException) {
+                throw ValidationException::withMessages(['education_eligibility_policy' => 'Check the completed qualification and enrollment rules.']);
+            }
+            $request->merge(['education_eligibility_policy' => $policy]);
+        }
         if (is_string($request->input('eligibility_rule_modes'))) {
             try {
                 $modes = json_decode($request->input('eligibility_rule_modes'), true, flags: JSON_THROW_ON_ERROR);
@@ -834,6 +848,13 @@ trait HandlesProviderProgramManagement
         $requiresCompleteSubmission = ! in_array($request->input('status'), ['draft', 'closed'], true);
 
         $validated = $request->validate([
+            'education_eligibility_policy' => ['sometimes', 'nullable', 'array:requires_completed_qualification,accepted_qualifications,unlisted_qualification,enrollment_statuses'],
+            'education_eligibility_policy.requires_completed_qualification' => ['required_with:education_eligibility_policy', 'boolean'],
+            'education_eligibility_policy.accepted_qualifications' => ['required_if:education_eligibility_policy.requires_completed_qualification,1,true', 'array', 'list', 'max:9'],
+            'education_eligibility_policy.accepted_qualifications.*' => ['required', 'string', 'distinct', Rule::in(array_diff(array_keys(CompletedQualification::OPTIONS), ['none']))],
+            'education_eligibility_policy.unlisted_qualification' => ['required_with:education_eligibility_policy', Rule::in(['review', 'not_accepted'])],
+            'education_eligibility_policy.enrollment_statuses' => ['sometimes', 'array', 'list', 'max:7'],
+            'education_eligibility_policy.enrollment_statuses.*' => ['required', 'string', 'distinct', Rule::in(EducationEligibilityPolicy::ENROLLMENT_STATUSES)],
             'title' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:100'],
             'program_cycle' => ['nullable', 'string', 'max:100'],
@@ -858,8 +879,8 @@ trait HandlesProviderProgramManagement
             'exclude_current_scholarship_recipients' => ['nullable', 'boolean'],
             'location_name' => ['nullable', 'string', 'max:255'],
             'location_address' => ['nullable', 'string', 'max:500'],
-            'latitude' => ['nullable', 'numeric', 'between:-90,90'],
-            'longitude' => ['nullable', 'numeric', 'between:-180,180'],
+            'latitude' => ['nullable', 'numeric', 'between:-90,90', new \App\Rules\PhilippineLandPin],
+            'longitude' => ['nullable', 'numeric', 'between:-180,180', new \App\Rules\PhilippineLandPin],
             'requirements' => ['nullable', 'string', 'max:5000'],
             'optional_requirements' => ['nullable', 'string', 'max:5000'],
             'post_qualification_requirements' => ['nullable', 'string', 'max:5000'],
@@ -868,8 +889,8 @@ trait HandlesProviderProgramManagement
             'handoff_deadline' => ['nullable', 'date'],
             'handoff_location_name' => ['nullable', 'string', 'max:255'],
             'handoff_location_address' => ['nullable', 'string', 'max:500'],
-            'handoff_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:handoff_longitude'],
-            'handoff_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:handoff_latitude'],
+            'handoff_latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:handoff_longitude', new \App\Rules\PhilippineLandPin],
+            'handoff_longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:handoff_latitude', new \App\Rules\PhilippineLandPin],
             'handoff_url' => ['nullable', 'url:http,https', 'max:2048'],
             'award_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'benefits' => ['nullable', 'string', 'max:20000', 'json'],
@@ -916,6 +937,18 @@ trait HandlesProviderProgramManagement
         ]);
 
         ProgramConfigurationRules::assertConsistent($validated, $scholarship);
+
+        if (array_key_exists('education_eligibility_policy', $validated)) {
+            $validated['education_eligibility_policy'] = EducationEligibilityPolicy::normalize($validated['education_eligibility_policy']);
+        }
+        $educationPolicy = $validated['education_eligibility_policy'] ?? EducationEligibilityPolicy::normalize($scholarship?->education_eligibility_policy);
+        $conditions = array_key_exists('eligibility_conditions', $validated)
+            ? ScholarshipEligibilityCondition::fromJson($validated['eligibility_conditions'])
+            : ($scholarship?->eligibility_conditions ?? []);
+        if (collect($conditions)->contains(fn (array $condition): bool => ($condition['key'] ?? null) === 'currently_enrolled' && ($condition['verification_type'] ?? null) === 'automatic')
+            && array_diff($educationPolicy['enrollment_statuses'], EducationEligibilityPolicy::ACTIVE_ENROLLMENT) !== []) {
+            throw ValidationException::withMessages(['education_eligibility_policy.enrollment_statuses' => 'This program also requires active enrollment. Remove that condition before accepting pending admission, transfer, returning, or not-enrolled applicants.']);
+        }
 
         if (array_key_exists('eligibility_rule_modes', $validated)) {
             $validated['eligibility_rule_modes'] = EligibilityRulePolicy::normalize($validated['eligibility_rule_modes']);
@@ -1199,8 +1232,8 @@ trait HandlesProviderProgramManagement
             'program_events.*.mode' => ['required', Rule::in(['onsite', 'online', 'hybrid', 'provider_managed'])],
             'program_events.*.venue' => ['nullable', 'string', 'max:500'],
             'program_events.*.location_address' => ['nullable', 'string', 'max:1000'],
-            'program_events.*.latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:program_events.*.longitude'],
-            'program_events.*.longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:program_events.*.latitude'],
+            'program_events.*.latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:program_events.*.longitude', new \App\Rules\PhilippineLandPin],
+            'program_events.*.longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:program_events.*.latitude', new \App\Rules\PhilippineLandPin],
             'program_events.*.online_url' => ['nullable', 'url:http,https', 'max:2000'],
             'program_events.*.instructions' => ['required', 'string', 'max:3000'],
         ])->validate()['program_events'] ?? [];
@@ -1438,6 +1471,7 @@ trait HandlesProviderProgramManagement
             'provider_objective_notes',
             'eligibility',
             'eligibility_rule_modes',
+            'education_eligibility_policy',
             'eligible_education_levels',
             'eligible_courses',
             'eligible_school_types',
@@ -1500,6 +1534,10 @@ trait HandlesProviderProgramManagement
             if ($field === 'eligibility_rule_modes') {
                 $currentValue = EligibilityRulePolicy::normalize($currentValue);
                 $nextValue = EligibilityRulePolicy::normalize($nextValue);
+            }
+            if ($field === 'education_eligibility_policy') {
+                $currentValue = EducationEligibilityPolicy::normalize($currentValue);
+                $nextValue = EducationEligibilityPolicy::normalize($nextValue);
             }
 
             if ($this->comparableScholarshipValue($currentValue)
@@ -1812,6 +1850,7 @@ trait HandlesProviderProgramManagement
             'eligibility' => $scholarship->eligibility,
             'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
             'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
+            'education_eligibility_policy' => EducationEligibilityPolicy::normalize($scholarship->education_eligibility_policy),
             'eligible_education_levels' => $scholarship->eligible_education_levels,
             'eligible_courses' => $scholarship->eligible_courses,
             'eligible_school_types' => $scholarship->eligible_school_types,

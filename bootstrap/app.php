@@ -1,15 +1,16 @@
 <?php
 
-use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\ApplySecurityHeaders;
-use App\Http\Middleware\ResolveOpaqueRecordUrl;
-use App\Http\Middleware\SecureRecordNavigation;
+use App\Http\Middleware\AuditRecipientCaseAccess;
+use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureManagedAccountSetupIsComplete;
-use App\Http\Middleware\EnsureProviderIsApproved;
 use App\Http\Middleware\EnsurePortalManagerWorkspace;
+use App\Http\Middleware\EnsureProviderIsApproved;
 use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsProvider;
+use App\Http\Middleware\ResolveOpaqueRecordUrl;
+use App\Http\Middleware\SecureRecordNavigation;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -28,6 +29,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->web(append: [
+            AuditRecipientCaseAccess::class,
             EnsureAccountIsActive::class,
             EnsureManagedAccountSetupIsComplete::class,
             SecureRecordNavigation::class,

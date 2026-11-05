@@ -3,23 +3,23 @@
 namespace Tests\Feature;
 
 use App\Models\ApplicantVerificationDocument;
-use App\Models\ApplicationStageSession;
 use App\Models\ProviderServicePurchase;
 use App\Models\RecipientMonitoringCase;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Database\Seeders\FreshWorkflowDemoSeeder;
-use Database\Seeders\Support\WorkflowDemoCatalog;
 use Database\Seeders\Support\WorkflowDemoAudit;
+use Database\Seeders\Support\WorkflowDemoCatalog;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class FreshWorkflowDemoSeederTest extends TestCase
 {
+    use \Tests\Concerns\ReviewsProviderDocuments;
     use RefreshDatabase;
 
     public function test_the_fresh_demo_covers_roles_and_leaves_each_current_decision_to_the_tester(): void
@@ -41,6 +41,7 @@ class FreshWorkflowDemoSeederTest extends TestCase
             Storage::disk('local')->assertExists($user->studentProfile->profile_photo_path);
             if (in_array($record['scenario'], ['profile', 'verification'], true)) {
                 $this->assertFalse($user->applicantProfileReadiness()['verified']);
+
                 continue;
             }
             $this->assertTrue($user->applicantProfileReadiness()['complete'], $record['username']);
@@ -103,11 +104,20 @@ class FreshWorkflowDemoSeederTest extends TestCase
             'response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true,
         ])->assertCreated();
 
+        $token = $this->acceptProviderDocuments($actor('platform.reviews'), $actor('dalisay'));
         $this->actingAs($actor('platform.reviews'))->patchJson('/admin/providers/'.$actor('dalisay')->id.'/verification', [
             'verification_status' => 'approved',
+            'expected_review_token' => $token,
         ])->assertOk();
+        foreach ($actor('learner.verification')->applicantVerificationDocuments()->get() as $evidence) {
+            $this->actingAs($actor('platform.reviews'))
+                ->patchJson("/admin/applicant-verification-documents/{$evidence->id}/review", [
+                    'status' => 'approved', 'expected_revision' => $evidence->revision,
+                    ...($evidence->document_type === 'academic_record' ? ['academic_grading_scale' => 'percentage', 'academic_result' => 92] : []),
+                ])->assertOk();
+        }
         $this->actingAs($actor('platform.reviews'))->patchJson('/admin/users/'.$actor('learner.verification')->id.'/profile-verification', [
-            'verification_status' => 'approved', 'academic_grading_scale' => 'percentage', 'academic_result' => 92,
+            'verification_status' => 'approved',
         ])->assertOk();
         $pending = Scholarship::where('status', 'pending_review')->sole();
         $this->actingAs($actor('platform.reviews'))->patchJson("/admin/scholarships/{$pending->id}/review", ['status' => 'published'])->assertOk();

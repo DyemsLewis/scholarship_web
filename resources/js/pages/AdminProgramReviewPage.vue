@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
+import EducationEligibilitySummary from '../components/EducationEligibilitySummary.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
 import RecipientAgreementPanel from '../components/RecipientAgreementPanel.vue';
@@ -776,6 +777,7 @@ onMounted(loadScholarship);
                                     <p class="text-sm font-bold text-slate-950">How each required condition is verified</p>
                                     <p class="mt-1 text-xs leading-5 text-slate-500">Confirm that automatic, applicant-confirmed, and provider-reviewed rules are classified correctly before publishing.</p>
                                     <EligibilityConditionList class="mt-3" :conditions="eligibilityConditions" audience="reviewer" />
+                                    <EducationEligibilitySummary :policy="scholarship.education_eligibility_policy" :modes="scholarship.eligibility_rule_modes" />
                                 </div>
 
                                 <div class="mt-4 border-l-4 border-amber-300 bg-amber-50 px-4 py-3">

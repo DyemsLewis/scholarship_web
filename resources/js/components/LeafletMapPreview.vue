@@ -1,5 +1,7 @@
 <script setup>
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue';
+import { loadLeaflet } from '../support/leafletLoader.js';
+import { isPhilippineLandPoint, loadPhilippineLand, PHILIPPINE_LAND_MESSAGE } from '../support/philippineLand.js';
 
 const props = defineProps({
     address: {
@@ -80,19 +82,42 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['resolved', 'picked', 'error']);
+const emit = defineEmits(['resolved', 'picked', 'error', 'selection-state']);
 
 const mapElement = ref(null);
 const statusMessage = ref('Loading map...');
-const mapInstance = ref(null);
-const markerInstance = ref(null);
-const secondaryMarkerInstance = ref(null);
-const routeLineInstance = ref(null);
+// Leaflet objects must not be wrapped in Vue's deep reactive proxies.
+const mapInstance = shallowRef(null);
+const markerInstance = shallowRef(null);
+const secondaryMarkerInstance = shallowRef(null);
+const routeLineInstance = shallowRef(null);
 let isMounted = false;
 let pendingPickedCoordinates = null;
 let pendingGeocodedCoordinates = null;
 let automaticGeocodeTimer = null;
 let geocodeController = null;
+let reverseController = null;
+let selectionRevision = 0;
+let acceptedCoordinates = null;
+let resizeTimer = null;
+
+function selectionState(pending = false) {
+    emit('selection-state', { pending, valid: Boolean(acceptedCoordinates) });
+}
+
+function reportError(message) {
+    if (!isMounted) return;
+    statusMessage.value = message;
+    emit('error', message);
+}
+
+async function isAllowed(coordinates) {
+    try {
+        return isPhilippineLandPoint(await loadPhilippineLand(), coordinates?.latitude, coordinates?.longitude);
+    } catch {
+        throw new Error('Location checks could not load. Check your connection and reopen the map.');
+    }
+}
 
 function numberOrNull(value) {
     if (value === null || value === undefined || value === '') {
@@ -139,45 +164,6 @@ function philippineSearchQuery(query) {
     return /\bphilippines\b/i.test(query) ? query : `${query}, Philippines`;
 }
 
-function loadScript(src, id) {
-    return new Promise((resolve, reject) => {
-        const existingScript = document.getElementById(id);
-
-        if (existingScript) {
-            if (window.L) {
-                resolve();
-                return;
-            }
-
-            existingScript.addEventListener('load', resolve, { once: true });
-            existingScript.addEventListener('error', reject, { once: true });
-            return;
-        }
-
-        const script = document.createElement('script');
-        script.id = id;
-        script.src = src;
-        script.async = true;
-        script.addEventListener('load', resolve, { once: true });
-        script.addEventListener('error', reject, { once: true });
-        document.head.appendChild(script);
-    });
-}
-
-async function ensureLeaflet() {
-    if (!document.getElementById('leaflet-cdn-css')) {
-        const stylesheet = document.createElement('link');
-        stylesheet.id = 'leaflet-cdn-css';
-        stylesheet.rel = 'stylesheet';
-        stylesheet.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(stylesheet);
-    }
-
-    if (!window.L) {
-        await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', 'leaflet-cdn-js');
-    }
-}
-
 async function geocodeAddress(address = props.address) {
     const query = String(address ?? '').trim();
 
@@ -190,6 +176,8 @@ async function geocodeAddress(address = props.address) {
     geocodeController?.abort();
     geocodeController = new AbortController();
     const activeController = geocodeController;
+    const timeout = setTimeout(() => activeController.abort(), 12000);
+    if (props.picker) selectionState(true);
 
     try {
         const params = new URLSearchParams({
@@ -200,6 +188,7 @@ async function geocodeAddress(address = props.address) {
             q: philippineSearchQuery(query),
         });
         const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+            referrerPolicy: 'strict-origin',
             headers: {
                 Accept: 'application/json',
             },
@@ -213,7 +202,7 @@ async function geocodeAddress(address = props.address) {
         const results = await response.json();
         const firstResult = results[0];
 
-        if (activeController.signal.aborted || query !== props.address.trim()) {
+        if (!isMounted || activeController.signal.aborted || query !== props.address.trim()) {
             return null;
         }
 
@@ -229,12 +218,20 @@ async function geocodeAddress(address = props.address) {
             displayName: firstResult.display_name,
         };
 
+        if (props.picker && !await isAllowed(coordinates)) {
+            reportError('The address search did not find a land location in the Philippines. Place the pin manually.');
+            return null;
+        }
+        if (!isMounted || activeController.signal.aborted || query !== props.address.trim()) return null;
+        if (props.picker) acceptedCoordinates = coordinates;
+
         pendingGeocodedCoordinates = coordinates;
         emit('resolved', coordinates);
 
         return coordinates;
     } catch (error) {
         if (error?.name === 'AbortError') {
+            if (geocodeController === activeController) reportError('Address search timed out. You can still place the pin manually.');
             return null;
         }
 
@@ -242,14 +239,19 @@ async function geocodeAddress(address = props.address) {
         emit('error', statusMessage.value);
         return null;
     } finally {
+        clearTimeout(timeout);
         if (geocodeController === activeController) {
             geocodeController = null;
+            if (isMounted && props.picker) selectionState();
         }
     }
 }
 
 async function reverseGeocodeCoordinates(coordinates) {
     statusMessage.value = 'Finding address from selected pin...';
+    reverseController?.abort();
+    const controller = reverseController = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
 
     try {
         const params = new URLSearchParams({
@@ -260,9 +262,11 @@ async function reverseGeocodeCoordinates(coordinates) {
             'accept-language': 'en',
         });
         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
+            referrerPolicy: 'strict-origin',
             headers: {
                 Accept: 'application/json',
             },
+            signal: controller.signal,
         });
 
         if (!response.ok) {
@@ -276,10 +280,11 @@ async function reverseGeocodeCoordinates(coordinates) {
             displayName: result.display_name ?? '',
             address: result.address ?? {},
         };
-    } catch (error) {
-        statusMessage.value = 'Pin set, but address lookup is unavailable. Check internet connection and try again.';
-        emit('error', statusMessage.value);
+    } catch {
         return null;
+    } finally {
+        clearTimeout(timeout);
+        if (reverseController === controller) reverseController = null;
     }
 }
 
@@ -390,23 +395,38 @@ async function renderMap(coordinates = currentCoordinates(), preserveView = fals
         return;
     }
 
-    await ensureLeaflet();
+    try {
+        await loadLeaflet();
+    } catch {
+        reportError('The map could not load. Check your connection, then close and reopen the map.');
+        return;
+    }
     await nextTick();
+    if (!isMounted || !mapElement.value?.isConnected) return;
 
     if (!mapInstance.value) {
         mapInstance.value = window.L.map(mapElement.value, {
             scrollWheelZoom: false,
+            maxBounds: props.picker ? [[3, 115], [23, 130]] : undefined,
+            maxBoundsViscosity: 1,
+            minZoom: props.picker ? 5 : 0,
+            worldCopyJump: false,
         });
 
-        window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
+        window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
+            // Identify the website without disclosing private page paths or tokens.
+            referrerPolicy: 'strict-origin',
             maxZoom: 19,
         }).addTo(mapInstance.value);
+        if (props.picker) mapInstance.value.attributionControl.addAttribution('<a href="/maps/SOURCES.txt" target="_blank" rel="noopener noreferrer">Land checks: geoBoundaries / GSHHG</a>');
     }
 
     enablePickerEvents();
 
     if (!coordinates) {
+        markerInstance.value?.remove();
+        markerInstance.value = null;
         const fallback = defaultCoordinates();
         mapInstance.value.setView([fallback.latitude, fallback.longitude], props.defaultZoom);
         removeSecondaryLayers();
@@ -414,7 +434,8 @@ async function renderMap(coordinates = currentCoordinates(), preserveView = fals
             ? 'Click the map to set a pin, or search an address first.'
             : props.address ? 'Use address search to preview this location.' : 'Add an address to preview the map.';
 
-        setTimeout(() => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
             mapInstance.value?.invalidateSize();
         }, 100);
 
@@ -431,32 +452,45 @@ async function renderMap(coordinates = currentCoordinates(), preserveView = fals
     updateRouteLine(coordinates, secondaryCoordinates());
     statusMessage.value = props.picker ? 'Pin set. You can drag it to adjust the location.' : '';
 
-    setTimeout(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
         mapInstance.value?.invalidateSize();
     }, 100);
 }
 
 async function setPickedCoordinates(coordinates) {
-    pendingPickedCoordinates = coordinates;
-    await renderMap(coordinates, true);
-
-    if (!props.reverseGeocodeOnPick) {
-        emit('picked', coordinates);
-        statusMessage.value = 'Pin set. Save to keep this map point.';
-        return;
-    }
-
-    const location = await reverseGeocodeCoordinates(coordinates);
-
-    if (location) {
-        emit('picked', location);
-        statusMessage.value = location.displayName
+    const revision = ++selectionRevision;
+    const search = geocodeController;
+    geocodeController = null;
+    search?.abort();
+    reverseController?.abort();
+    selectionState(true);
+    try {
+        const allowed = await isAllowed(coordinates);
+        if (!isMounted || revision !== selectionRevision) return;
+        if (!allowed) {
+            await renderMap(acceptedCoordinates, true);
+            reportError(PHILIPPINE_LAND_MESSAGE + (acceptedCoordinates ? ' Your previous pin has been kept.' : ''));
+            return;
+        }
+        // Land validation is independent of the optional address lookup.
+        const location = props.reverseGeocodeOnPick ? await reverseGeocodeCoordinates(coordinates) : null;
+        if (!isMounted || revision !== selectionRevision) return;
+        acceptedCoordinates = coordinates;
+        pendingPickedCoordinates = coordinates;
+        await renderMap(coordinates, true);
+        if (!isMounted || revision !== selectionRevision) return;
+        emit('picked', location || coordinates);
+        statusMessage.value = location?.displayName
             ? 'Pin set. Address fields were filled from this map point.'
-            : 'Pin set. Save to keep this map point.';
-        return;
+            : 'Land location selected. Address lookup is unavailable; enter the address yourself before saving.';
+    } catch (error) {
+        if (!isMounted || revision !== selectionRevision) return;
+        await renderMap(acceptedCoordinates, true);
+        reportError(error.message);
+    } finally {
+        if (isMounted && revision === selectionRevision) selectionState();
     }
-
-    emit('picked', coordinates);
 }
 
 async function handleMapClick(event) {
@@ -480,7 +514,11 @@ async function previewAddress() {
     const coordinates = savedCoordinates || await geocodeAddress();
 
     if (!coordinates) {
-        if (props.picker) await renderMap(null);
+        if (props.picker && !mapInstance.value) {
+            const message = statusMessage.value;
+            await renderMap(null);
+            statusMessage.value = message;
+        }
         return;
     }
 
@@ -513,7 +551,7 @@ function scheduleAutomaticGeocode() {
 
 watch(
     () => [props.latitude, props.longitude, props.secondaryLatitude, props.secondaryLongitude],
-    () => {
+    async () => {
         const coordinates = currentCoordinates();
         const preserveView = props.picker && coordinatesMatch(coordinates, pendingPickedCoordinates);
         const useGeocodeZoom = coordinatesMatch(coordinates, pendingGeocodedCoordinates);
@@ -526,7 +564,21 @@ watch(
             pendingGeocodedCoordinates = null;
         }
 
-        renderMap(coordinates, preserveView, useGeocodeZoom ? props.geocodeZoom : 15);
+        if (props.picker && !coordinatesMatch(coordinates, acceptedCoordinates)) {
+            const revision = ++selectionRevision;
+            acceptedCoordinates = null;
+            selectionState(Boolean(coordinates));
+            try {
+                const allowed = coordinates && await isAllowed(coordinates);
+                if (!isMounted || revision !== selectionRevision) return;
+                if (allowed) acceptedCoordinates = coordinates;
+            } catch (error) {
+                reportError(error.message);
+            }
+            if (!isMounted || revision !== selectionRevision) return;
+            selectionState();
+        }
+        await renderMap(coordinates, preserveView, useGeocodeZoom ? props.geocodeZoom : 15);
     },
 );
 
@@ -553,8 +605,20 @@ watch(
 onMounted(async () => {
     isMounted = true;
 
+    if (props.picker && currentCoordinates()) {
+        selectionState(true);
+        try {
+            if (await isAllowed(currentCoordinates())) acceptedCoordinates = currentCoordinates();
+        } catch (error) {
+            reportError(error.message);
+        }
+        if (!isMounted) return;
+        selectionState();
+    }
+
     if (currentCoordinates()) {
         await renderMap();
+        if (props.picker && !acceptedCoordinates) reportError(PHILIPPINE_LAND_MESSAGE);
         return;
     }
 
@@ -573,8 +637,11 @@ onMounted(async () => {
 
 onUnmounted(() => {
     isMounted = false;
+    selectionRevision += 1;
+    clearTimeout(resizeTimer);
     window.clearTimeout(automaticGeocodeTimer);
     geocodeController?.abort();
+    reverseController?.abort();
     mapInstance.value?.off('click', handleMapClick);
     markerInstance.value?.off('dragend', handleMarkerDragEnd);
     removeSecondaryLayers();
@@ -605,11 +672,11 @@ onUnmounted(() => {
                 </p>
             </div>
         </div>
-        <p v-if="statusMessage" class="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
+        <p v-if="statusMessage" role="status" aria-live="polite" class="border-t border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-600">
             {{ statusMessage }}
         </p>
         <p v-if="picker" class="border-t border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-500">
-            Tip: click the map to set a pin, then drag the marker for a more exact location.
+            Select a land location in the Philippines. Pins on the sea, mapped lakes, or other countries are not accepted.
         </p>
     </div>
 </template>

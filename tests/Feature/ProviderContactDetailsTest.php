@@ -52,14 +52,14 @@ class ProviderContactDetailsTest extends TestCase
         $response = $this->actingAs($provider)->postJson('/provider/scholarships', [
             'title' => 'Distinct locations draft',
             'status' => 'draft',
-            'latitude' => 14.5,
+            'latitude' => 14.676,
             'longitude' => 121.1,
             'handoff_mode' => 'onsite',
             'handoff_location_address' => 'Antipolo City, Rizal',
             'handoff_latitude' => 14.5861,
             'handoff_longitude' => 121.1756,
         ])->assertCreated()->assertJsonPath('scholarship.handoff_latitude', '14.5861000')
-            ->assertJsonPath('scholarship.latitude', '14.5000000');
+            ->assertJsonPath('scholarship.latitude', '14.6760000');
         $program = Scholarship::findOrFail($response->json('scholarship.id'));
         $this->assertStringContainsString('mlat=14.5861000', $program->handoffMapUrl());
 
@@ -123,7 +123,8 @@ class ProviderContactDetailsTest extends TestCase
                 'representative_position' => 'Scholarship Director',
             ])
             ->assertOk()
-            ->assertJsonPath('message', 'Representative details updated successfully.');
+            ->assertJsonPath('message', 'Provider profile updated and returned for admin verification.')
+            ->assertJsonPath('verification_reset', true);
 
         $updatedProfile = $profile->fresh();
         $this->assertSame('Updated', $updatedProfile->first_name);

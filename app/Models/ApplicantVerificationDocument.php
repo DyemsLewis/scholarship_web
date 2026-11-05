@@ -2,8 +2,12 @@
 
 namespace App\Models;
 
+use App\Services\ApplicantEvidenceReviewService;
+use App\Support\CompletedQualification;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ApplicantVerificationDocument extends Model
 {
@@ -16,6 +20,7 @@ class ApplicantVerificationDocument extends Model
         'residency_record',
         'guardian_record',
         'achievement_evidence',
+        'qualification_record',
     ];
 
     // Retired evidence remains accessible in existing review records.
@@ -32,11 +37,14 @@ class ApplicantVerificationDocument extends Model
         'income_record' => ['label' => 'Household income proof', 'supports' => 'Declared household income and financial circumstances', 'examples' => 'Income tax return, payslip, certificate of income, or certificate of indigency. Use a parent or guardian record when they support your household.', 'icon' => 'fa-solid fa-file-invoice'],
         'residency_record' => ['label' => 'Residence proof', 'supports' => 'Barangay, city or municipality, province, and region', 'examples' => 'Barangay residency certificate or a recent utility bill matching your residence. A parent or guardian record is accepted when you live with them.', 'icon' => 'fa-solid fa-location-dot'],
         'guardian_record' => ['label' => 'Parent or guardian ID', 'supports' => 'Named parent, guardian, or person managing the account', 'examples' => 'Valid ID of the parent or guardian named in your profile.', 'icon' => 'fa-solid fa-user-shield'],
+        'qualification_record' => ['label' => 'Completed qualification record', 'supports' => 'Declared completed qualification, awarding school or institution, and completion year', 'examples' => 'Diploma, completion certificate, final school record, or ALS certificate matching your completed qualification. This is separate from your current academic record; it does not automatically establish scholarship eligibility.', 'icon' => 'fa-solid fa-award'],
     ];
 
     public static function requirementsFor(User $user): array
     {
         $profile = $user->studentProfile;
+        $historicalStudies = $profile?->enrollment_status === 'Not currently enrolled'
+            && CompletedQualification::requiresEvidence($profile);
         $requiresGuardian = User::applicantRequiresGuardian([
             'birthdate' => $profile?->birthdate,
             'education_level' => $profile?->education_level,
@@ -44,10 +52,15 @@ class ApplicantVerificationDocument extends Model
         ]);
 
         return collect(self::EVIDENCE_DETAILS)
+            ->filter(fn (array $details, string $type): bool => $type !== 'qualification_record' || CompletedQualification::requiresEvidence($profile))
             ->map(fn (array $details, string $type): array => [
                 'value' => $type,
                 ...$details,
-                'required' => $type !== 'guardian_record' || $requiresGuardian,
+                'required' => match ($type) {
+                    'guardian_record' => $requiresGuardian,
+                    'school_record' => ! $historicalStudies,
+                    default => true,
+                },
             ])
             ->values()
             ->all();
@@ -66,6 +79,7 @@ class ApplicantVerificationDocument extends Model
     }
 
     protected $fillable = [
+        'revision', 'reviewed_revision', 'reviewed_by', 'reviewed_at',
         'applicant_id',
         'uploaded_by',
         'document_type',
@@ -90,6 +104,9 @@ class ApplicantVerificationDocument extends Model
     protected function casts(): array
     {
         return [
+            'revision' => 'integer',
+            'reviewed_revision' => 'integer',
+            'reviewed_at' => 'datetime',
             'uploaded_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
             'ocr_grade' => 'decimal:2',
@@ -105,5 +122,61 @@ class ApplicantVerificationDocument extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    public function reviews(): HasMany
+    {
+        return $this->hasMany(ApplicantEvidenceReview::class, 'document_id')->orderByDesc('id');
+    }
+
+    public function latestReviewEvent(): HasOne
+    {
+        return $this->hasOne(ApplicantEvidenceReview::class, 'document_id')->latestOfMany();
+    }
+
+    public function hasCurrentAcceptance(): bool
+    {
+        return $this->status === 'approved' && $this->reviewed_at !== null
+            && $this->reviewed_revision === $this->revision;
+    }
+
+    public function reviewPayload(): array
+    {
+        return [
+            'revision' => $this->revision,
+            'reviewed_revision' => $this->reviewed_revision,
+            'reviewed_at' => $this->reviewed_at?->toIso8601String(),
+            'reviewed_by' => $this->reviewer?->name,
+            'has_current_acceptance' => $this->hasCurrentAcceptance(),
+            'legacy_approval' => $this->status === 'approved' && $this->reviewed_at === null,
+        ];
+    }
+
+    protected static function booted(): void
+    {
+        static::created(fn (self $document) => app(ApplicantEvidenceReviewService::class)->uploaded($document->fresh()));
+        static::updating(function (self $document): void {
+            if ($document->isDirty(['path', 'original_name', 'mime_type', 'size'])) {
+                $document->fill(['revision' => ((int) $document->getOriginal('revision')) + 1,
+                    'status' => 'submitted', 'review_notes' => null, 'reviewed_revision' => null,
+                    'reviewed_by' => null, 'reviewed_at' => null]);
+            }
+        });
+        static::updated(function (self $document): void {
+            if ($document->wasChanged(['path', 'original_name', 'mime_type', 'size'])) {
+                app(ApplicantEvidenceReviewService::class)->uploaded($document, true);
+            }
+        });
+        static::deleting(fn (self $document) => app(ApplicantEvidenceReviewService::class)->deleting($document));
+        static::deleted(function (self $document): void {
+            if (in_array($document->document_type, self::requiredTypesFor($document->applicant), true)) {
+                app(ApplicantEvidenceReviewService::class)->reopenProfile($document->applicant);
+            }
+        });
     }
 }

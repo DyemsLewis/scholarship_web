@@ -87,6 +87,8 @@ if (permissions.has('manage_recipients')) {
         children: [
             { href: '/provider/workspaces/recipients/agreements', label: 'Agreement responses', exact: true },
             { href: '/provider/workspaces/recipients/active', label: 'Active recipients', exact: true },
+            { href: '/provider/workspaces/recipients/withdrawals', label: 'Withdrawal requests', exact: false },
+            { href: '/provider/workspaces/recipients/concerns', label: 'Agreement concerns', exact: true },
             { href: '/provider/workspaces/recipients/declined', label: 'Declined responses', exact: true },
             { href: '/provider/workspaces/recipients/closed', label: 'Closed recipients', exact: true },
         ],
@@ -116,6 +118,7 @@ if (permissions.has('manage_benefit_releases')) {
         icon: 'fa-solid fa-hand-holding-dollar',
         key: 'releases',
         children: [
+            { href: '/provider/workspaces/releases/delivery-reports', label: 'Delivery reports', exact: true },
             { href: '/provider/workspaces/releases/issues', label: 'Reported issues', exact: true },
             { href: '/provider/workspaces/releases/record', label: 'Record distribution', exact: true },
             { href: '/provider/workspaces/releases/upcoming', label: 'Upcoming releases', exact: true },

@@ -17,6 +17,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class RecipientMonitoringWorkflowTest extends TestCase
@@ -416,7 +417,7 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->assertJsonValidationErrors('status');
     }
 
-    public function test_recipient_can_report_a_release_issue_and_provider_can_resolve_it_separately(): void
+    public function test_recipient_issue_requires_delivery_proof_and_applicant_confirmation_to_resolve(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedApplication();
         $application->update([
@@ -481,9 +482,20 @@ class RecipientMonitoringWorkflowTest extends TestCase
                 'resolution_notes' => 'The missing books were verified and a replacement pickup was arranged.',
                 'resolution_proof' => $resolutionProof,
             ])
-            ->assertOk()
-            ->assertJsonPath('release.records.0.receipt_response.status', 'resolved')
-            ->assertJsonPath('release.records.0.receipt_response.resolution_outcome', 'replacement_scheduled');
+            ->assertUnprocessable();
+
+        $report = $receiptResponse->deliveryReport()->sole();
+        $this->actingAs($provider)->post('/provider/delivery-reports/'.$report->id.'/proposal', [
+            'expected_revision' => $report->revision, 'request_key' => (string) Str::uuid(),
+            'response_kind' => 'delivery_proposed', 'details' => 'The missing reference books were delivered to the recipient.',
+            'delivery_record_id' => $record->id, 'delivered_on' => now()->toDateString(),
+            'evidence' => [$resolutionProof], 'confirmed' => '1',
+        ], ['Accept' => 'application/json'])->assertOk()->assertJsonPath('report.status', 'awaiting_recipient');
+        $this->assertSame('open', $receiptResponse->fresh()->status);
+        $this->actingAs($applicant)->postJson('/dashboard/delivery-reports/'.$report->id.'/response', [
+            'expected_revision' => $report->fresh()->revision, 'request_key' => (string) Str::uuid(),
+            'response_kind' => 'receipt_confirmed', 'received_on' => now()->toDateString(), 'confirmed' => true,
+        ])->assertOk()->assertJsonPath('report.status', 'closed');
 
         $receiptResponse->refresh();
         Storage::disk('local')->assertExists($receiptResponse->resolution_proof_path);
@@ -493,7 +505,7 @@ class RecipientMonitoringWorkflowTest extends TestCase
         $this->assertSame('benefit-release-receipts/original/provider-proof.pdf', $record->fresh()->receipt_path);
         $this->assertTrue(PortalNotification::query()
             ->where('user_id', $applicant->id)
-            ->where('type', 'benefit_receipt_issue_resolved')
+            ->where('type', 'benefit_delivery_report_updated')
             ->exists());
     }
 
@@ -592,7 +604,7 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->exists());
     }
 
-    public function test_terminated_recipient_can_request_reconsideration_and_have_support_reinstated(): void
+    public function test_funding_ended_recipient_can_request_reconsideration_and_have_support_reinstated(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedApplication();
         $application->update([
@@ -606,16 +618,16 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->withHeader('Accept', 'application/json')
             ->post("/provider/applications/{$application->id}/support-decision", [
                 'decision' => 'terminated',
-                'reason_category' => 'requirement_not_met',
+                'reason_category' => 'provider_funding_ended',
                 'effective_on' => now()->toDateString(),
                 'notice_given_on' => now()->subDay()->toDateString(),
-                'reason' => 'The required academic record remained unresolved after provider follow-up.',
+                'reason' => 'Provider funding was paused and must be restored before support continues.',
                 'decision_document' => $decisionFile,
                 'confirmed' => '1',
             ])
             ->assertOk()
             ->assertJsonPath('recipient.support_status', 'terminated')
-            ->assertJsonPath('recipient.latest_decision.reason_category', 'requirement_not_met');
+            ->assertJsonPath('recipient.latest_decision.reason_category', 'provider_funding_ended');
 
         $termination = RecipientSupportDecision::findOrFail($terminationResponse->json('recipient.latest_decision.id'));
         Storage::disk('local')->assertExists($termination->decision_document_path);

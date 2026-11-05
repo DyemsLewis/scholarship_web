@@ -5,6 +5,7 @@ import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, ref } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
 import { reviewErrorMessage, reviewRequirementItems, reviewQueueStatus, reviewStatusClass, reviewStatusLabel } from '../../resources/js/support/adminReviewPresentation.js';
+import { evidenceRows, evidenceReviewDate } from '../../resources/js/support/applicantEvidenceReview.js';
 
 const read = (name) => readFileSync(new URL(`../../resources/js/pages/admin/reviews/${name}.vue`, import.meta.url), 'utf8');
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
@@ -17,14 +18,15 @@ function harness(name, exposed, payload, pathname = '/admin/workspaces/reviews/a
         post: async (...args) => { writes.push(args); return { data: payload }; },
     } };
     const deps = { ref, computed, useAdminResource, reviewErrorMessage, reviewRequirementItems, onMounted() {}, window, URLSearchParams,
-        applicantProfileDetails: () => [], profileEducationSummary: () => '' };
+        applicantProfileDetails: () => [], profileEducationSummary: () => '', evidenceRows, evidenceReviewDate };
     return { ...new Function(...Object.keys(deps), `${script}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes, gets };
 }
 const applicant = { name: 'Mira Cruz', applicant_verification_status: 'pending', grading_scale: 'percentage', gwa: 91,
+    can_review_evidence: true, evidence_review: { required_evidence_accepted: true, required_count: 1, accepted_count: 1 },
     profile_photo_url: '/admin/applicants/39/profile-photo', verification_documents: [{ id: 1, document_type: 'academic_record', original_name: 'current-report.pdf', view_url: '/proof' }],
     profile_evidence_requirements: [{ value: 'academic_record', label: 'Academic record', required: true }] };
 
-for (const name of ['ReviewOverviewPage', 'ReviewQueuePage', 'ProviderReviewRecordPage', 'ProgramReviewRecordPage', 'ApplicantReviewRecordPage', 'SelectionActivityRecordPage', 'MonitoringReviewRecordPage']) {
+for (const name of ['ReviewOverviewPage', 'ReviewQueuePage', 'ProviderReviewRecordPage', 'ProgramReviewRecordPage', 'ApplicantReviewRecordPage', 'ApplicantEvidenceReviewDialog', 'ApplicantEvidenceHistory', 'SelectionActivityRecordPage', 'MonitoringReviewRecordPage']) {
     test(`${name} compiles with review refinements`, () => {
         const { descriptor, errors } = parse(read(name), { filename: name });
         assert.deepEqual(errors, []);
@@ -98,7 +100,7 @@ test('provider review guards missing proof and reasons and retains counters afte
 });
 
 for (const [name, payload, path] of [
-    ['ProviderReviewRecordPage', { provider: { verification_status: 'pending', verification_documents: [{ id: 1 }] } }, '/admin/workspaces/reviews/providers/11'],
+    ['ProviderReviewRecordPage', { provider: { verification_status: 'pending', verification_documents: [{ id: 1 }], document_review: { can_approve: true, token: 'current-review' } } }, '/admin/workspaces/reviews/providers/11'],
     ['ProgramReviewRecordPage', { scholarship: { status: 'pending_review' } }, '/admin/workspaces/reviews/programs/4'],
     ['ApplicantReviewRecordPage', { applicant: structuredClone(applicant) }, '/admin/workspaces/reviews/applicants/39'],
 ]) {
@@ -126,13 +128,9 @@ test('draft and closed programs remain read-only and zero slots are not shown as
     assert.ok(read('ProgramReviewRecordPage').includes("program.slots_available ?? 'Not limited'"));
 });
 
-test('applicant verification requires all evidence, valid grades and conditional review notes', async () => {
-    const state = harness('ApplicantReviewRecordPage', 'loadRecord, applicant, decision, notes, gradingScale, academicResult, canSave, noteRequired', { applicant: structuredClone(applicant) });
+test('final profile verification requires all evidence and conditional review notes without editing grades', async () => {
+    const state = harness('ApplicantReviewRecordPage', 'loadRecord, applicant, decision, notes, canSave, noteRequired', { applicant: structuredClone(applicant) });
     await state.loadRecord(); assert.equal(state.canSave.value, true);
-    for (const result of ['', 0, -1, 101, 'NaN']) { state.academicResult.value = result; assert.equal(state.canSave.value, false); }
-    state.gradingScale.value = 'grade_point'; state.academicResult.value = 5; assert.equal(state.canSave.value, true);
-    state.academicResult.value = 5.01; assert.equal(state.canSave.value, false);
-    state.gradingScale.value = 'pass_fail'; assert.equal(state.canSave.value, true);
     state.applicant.value.verification_documents = []; assert.equal(state.canSave.value, false);
     state.decision.value = 'rejected'; assert.equal(state.canSave.value, false);
     state.notes.value = 'Please upload the missing evidence.'; assert.equal(state.canSave.value, true);
@@ -141,16 +139,16 @@ test('applicant verification requires all evidence, valid grades and conditional
     assert.equal(state.canSave.value, false);
 });
 
-test('photo reviews cannot overlap a profile decision and do not erase unsaved academic values', async () => {
-    const state = harness('ApplicantReviewRecordPage', 'loadRecord, saveDecision, reviewPhoto, photoReason, photoError, notes, gradingScale, academicResult, applicant', { applicant: structuredClone(applicant) });
-    await state.loadRecord(); state.notes.value = 'Draft profile note'; state.academicResult.value = 94;
+test('photo reviews cannot overlap a profile decision and do not erase unsaved final notes', async () => {
+    const state = harness('ApplicantReviewRecordPage', 'loadRecord, saveDecision, reviewPhoto, photoReason, photoError, notes, applicant', { applicant: structuredClone(applicant) });
+    await state.loadRecord(); state.notes.value = 'Draft profile note';
     await state.reviewPhoto('request_replacement'); assert.equal(state.writes.length, 0);
     const pending = deferred(); state.window.axios.patch = (...args) => { state.writes.push(args); return pending.promise; };
     const request = state.reviewPhoto('approve'); await state.saveDecision(); await state.reviewPhoto('approve');
     assert.equal(state.writes.length, 1);
     pending.resolve({ data: { applicant: { ...applicant, gwa: 91 }, photo_review_status: 'approved', reason: null } }); await request;
     assert.equal(state.applicant.value.profile_photo_review_status, 'approved');
-    assert.equal(state.academicResult.value, 94); assert.equal(state.notes.value, 'Draft profile note');
+    assert.equal(state.applicant.value.gwa, 91); assert.equal(state.notes.value, 'Draft profile note');
     state.window.axios.patch = async () => { throw { response: { data: { message: 'Photo review unavailable' } } }; };
     state.photoReason.value = 'Please use a clearer photo.'; await state.reviewPhoto('request_replacement');
     assert.equal(state.photoError.value, 'Photo review unavailable'); assert.equal(state.photoReason.value, 'Please use a clearer photo.');
@@ -180,7 +178,12 @@ test('review tables retain whole filenames, modal previews and dedicated action 
     for (const name of ['ReviewQueuePage', 'ProviderReviewRecordPage', 'ApplicantReviewRecordPage', 'SelectionActivityRecordPage', 'MonitoringReviewRecordPage']) {
         const source = read(name);
         assert.match(source, /table-fixed/); assert.match(source, /<colgroup>/);
-        assert.match(source, /data-file-preview="true"/); assert.match(source, /h-10 w-10/);
+        if (name === 'ProviderReviewRecordPage') {
+            assert.match(source, /ProviderDocumentReviewDialog/);
+            assert.match(source, /data-review-provider-document/);
+        } else {
+            assert.match(source, /data-file-preview="true"/); assert.match(source, /h-10 w-10/);
+        }
         assert.doesNotMatch(source, /truncate/);
         assert.match(source, /admin-review-workspace/);
     }

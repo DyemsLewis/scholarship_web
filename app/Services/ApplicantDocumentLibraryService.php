@@ -21,6 +21,7 @@ class ApplicantDocumentLibraryService
         'guardian_record' => 'Parent or guardian valid ID',
         'no_current_scholarship_proof' => 'Proof of no current scholarship',
         'achievement_evidence' => 'Achievement evidence',
+        'qualification_record' => 'Completed qualification record',
     ];
 
     public function ensureVerificationCopy(User $user, ApplicantVerificationDocument $verificationDocument): ?StudentDocument

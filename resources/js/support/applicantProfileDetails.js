@@ -76,7 +76,18 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
                 item('academic_year', 'Academic year', saved.academic_year),
                 item('academic_term', 'Record period', label('academicTerm', saved.academic_term)),
                 ...(hasValue(saved.learner_reference_number) ? [item('learner_reference_number', 'Student / learner reference', saved.learner_reference_number, { span: 'full' })] : []),
-            ] }],
+            ] }, ...(hasValue(saved.completed_qualification) ? [{
+                id: 'completed-qualification', title: 'Completed qualification',
+                description: 'Declared education history, separate from current studies. Acceptance by a program is reviewed separately.',
+                items: [
+                    item('completed_qualification', 'Highest completed qualification', label('completedQualification', saved.completed_qualification), { span: 'two' }),
+                    ...(saved.completed_qualification !== 'none' ? [
+                        item('completed_qualification_school', 'Awarding school / institution', saved.completed_qualification_school, { span: 'two' }),
+                        ...(hasValue(saved.completed_qualification_year) ? [item('completed_qualification_year', 'Completion year', String(saved.completed_qualification_year))] : []),
+                        ...(saved.completed_qualification === 'other' ? [item('completed_qualification_details', 'Qualification name', saved.completed_qualification_details, { span: 'two' })] : []),
+                    ] : []),
+                ],
+            }] : [])],
         },
         {
             id: 'household', title: 'Household and guardian', icon: 'fa-solid fa-house-chimney-user',

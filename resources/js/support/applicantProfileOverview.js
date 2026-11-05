@@ -5,11 +5,12 @@ export function applicantProfileOverview({
     documents = [],
     photoReviewStatus = '',
     scanNeedsAttention = false,
+    evidenceReview = null,
 } = {}) {
     const required = requirements.filter((item) => item.required);
     const records = new Map(documents.map((item) => [item.document_type, item]));
-    const missingRecord = required.find((item) => !records.has(item.value));
-    const returnedRecord = required.some((item) => records.get(item.value)?.status === 'rejected');
+    const missingRecord = required.find((item) => !records.has(item.value) || records.get(item.value)?.file_available === false);
+    const returnedRecord = required.find((item) => records.get(item.value)?.status === 'rejected');
     const complete = readiness?.complete === true;
     const verified = readiness?.verified === true && verificationStatus === 'approved';
     const percent = Number(readiness?.percent ?? 0);
@@ -43,7 +44,7 @@ export function applicantProfileOverview({
             ...base, canApply: false, key: 'changes_requested', label: 'Changes requested', tone: 'attention', icon: 'fa-solid fa-file-pen',
             title: 'Update the records requested by your reviewer',
             description: 'Read the review note and replace the requested evidence before verification can continue.',
-            action: { label: 'Review changes', section: 'verification' },
+            action: { label: 'Review changes', section: 'verification', evidence: returnedRecord?.value },
         };
     }
     if (missingRecord) {
@@ -51,7 +52,7 @@ export function applicantProfileOverview({
             ...base, key: 'files_needed', label: 'Files needed', tone: 'attention', icon: 'fa-solid fa-file-arrow-up',
             title: 'Support your profile with the required records',
             description: 'Upload the remaining evidence. Completing your details alone does not verify your profile.',
-            action: { label: 'Add supporting evidence', section: 'verification' },
+            action: { label: missingRecord && records.get(missingRecord.value)?.file_available === false ? 'Replace unavailable record' : 'Add supporting evidence', section: 'verification', evidence: missingRecord?.value },
         };
     }
     if (base.canApply) {
@@ -59,6 +60,13 @@ export function applicantProfileOverview({
             ...base, key: 'ready', label: 'Verified', tone: 'positive', icon: 'fa-solid fa-check',
             title: 'Your profile is ready for applications',
             description: 'Required details are complete and the required supporting records are approved.',
+        };
+    }
+    if (evidenceReview?.required_evidence_accepted === true) {
+        return {
+            ...base, canApply: false, key: 'verification_pending', label: 'Final verification pending', tone: 'neutral', icon: 'fa-regular fa-clock',
+            title: 'Your documents are accepted; profile verification is next',
+            description: 'No more uploads are needed. A reviewer must finish the overall profile decision before you can apply.',
         };
     }
     if (scanNeedsAttention) {

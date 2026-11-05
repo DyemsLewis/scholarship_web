@@ -1,0 +1,20 @@
+Philippine map validation data, version 1 (2026-11-03).
+
+Land: geoBoundaries gbOpen PHL ADM0, revision 9469f09,
+boundary ID PHL-ADM0-24100683. Source: OCHA Philippines and NAMRIA.
+License: CC BY 3.0 IGO, https://creativecommons.org/licenses/by/3.0/igo/.
+Original: https://media.githubusercontent.com/media/wmgeolab/geoBoundaries/9469f09/releaseData/gbOpen/PHL/ADM0/geoBoundaries-PHL-ADM0.geojson
+
+Inland water: GSHHG 2.3.7 full resolution. Paul Wessel (SOEST,
+University of Hawai'i) and Walter H. F. Smith (NOAA).
+License: GNU LGPL v3 or later; see GSHHG-LICENSE.TXT,
+GSHHG-COPYINGv3, and GSHHG-COPYING.LESSERv3 in this directory.
+Original: https://www.soest.hawaii.edu/pwessel/gshhg/gshhg-bin-2.3.7.zip
+
+Modified: geographic subset, 0.00010-degree simplification, six-decimal
+delta encoding with per-polygon bounds. Approximate map guard, not a
+legal boundary survey; not every small waterway or recent reclamation
+is represented. No distance buffer is applied to accept offshore pins.
+
+Reproduction script: scripts/build_philippine_map_data.py in the
+application source repository. No new runtime package is required.

@@ -6,8 +6,9 @@ use App\Models\ApplicationDocument;
 use App\Models\DssCalculationSnapshot;
 use App\Models\ScholarshipApplication;
 use App\Support\AcademicRequirement;
-use App\Support\EligibilityRulePolicy;
+use App\Support\EducationEligibilityPolicy;
 use App\Support\EligibilityReviewSummary;
+use App\Support\EligibilityRulePolicy;
 use App\Support\ScholarshipSelectionPlan;
 
 class DecisionSupportService
@@ -244,7 +245,8 @@ class DecisionSupportService
                 if (! ($isOpen($old) && $isOpen($new))
                     && ($old === null || $new === null
                         || ($old['rule_mode'] ?? 'required') !== ($new['rule_mode'] ?? 'required')
-                        || $normalize($old['requirement'] ?? null) !== $normalize($new['requirement'] ?? null))) {
+                        || $normalize($old['requirement'] ?? null) !== $normalize($new['requirement'] ?? null)
+                        || ($old['rule_context'] ?? null) !== ($new['rule_context'] ?? null))) {
                     $ruleChanges[] = $label;
                 }
                 if ($old !== null && $new !== null
@@ -374,6 +376,10 @@ class DecisionSupportService
         $applicantInputs = [
             'profile_updated_at' => $profile->updated_at?->toISOString(),
             'education_level' => $profile->education_level,
+            'completed_qualification' => $profile->completed_qualification,
+            'completed_qualification_school' => $profile->completed_qualification_school,
+            'completed_qualification_year' => $profile->completed_qualification_year,
+            'completed_qualification_details' => $profile->completed_qualification_details,
             'school_type' => $profile->school_type,
             'course_or_strand' => $profile->course_or_strand,
             'year_level' => $profile->year_level,
@@ -400,6 +406,7 @@ class DecisionSupportService
             'minimum_gwa' => $scholarship->minimum_gwa,
             'minimum_grade_scale' => AcademicRequirement::normalizeScale($scholarship->minimum_grade_scale, $scholarship->minimum_gwa),
             'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
+            'education_eligibility_policy' => EducationEligibilityPolicy::normalize($scholarship->education_eligibility_policy),
             'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
             'exclude_current_scholarship_recipients' => (bool) $scholarship->exclude_current_scholarship_recipients,
             'requirements' => $scholarship->requirements,

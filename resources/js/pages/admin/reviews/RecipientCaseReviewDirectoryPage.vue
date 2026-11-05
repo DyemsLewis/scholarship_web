@@ -1,0 +1,5 @@
+<script setup>
+import AdminWorkspaceSidebar from '../../../components/AdminWorkspaceSidebar.vue';
+import RecipientCaseReviewPanel from '../../../components/case-reviews/RecipientCaseReviewPanel.vue';
+</script>
+<template><main class="student-shell"><AdminWorkspaceSidebar /><section class="student-page" aria-labelledby="recipient-case-title"><div class="mx-auto max-w-[94rem]"><header class="flex items-start gap-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Review workspace</p><h1 id="recipient-case-title" class="mt-1 font-display text-2xl font-bold text-slate-950">Recipient case reviews</h1><p class="mt-2 text-sm text-slate-600">Resolve escalated concerns fairly. A review does not apply a support penalty or confirm a benefit receipt.</p></div></header><RecipientCaseReviewPanel history-url="/admin/workspaces/reviews/recipient-cases/data" admin /></div></section></main></template>

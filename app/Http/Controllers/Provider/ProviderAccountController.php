@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Provider;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\ProviderVerificationDocument;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use Illuminate\Http\JsonResponse;
@@ -48,7 +49,16 @@ class ProviderAccountController extends Controller
 
         $emailChanged = $user->email !== $validated['email'];
 
-        DB::transaction(function () use ($user, $validated, $emailChanged): void {
+        $verificationReset = DB::transaction(function () use ($user, $validated, $emailChanged): bool {
+            User::query()->lockForUpdate()->findOrFail($user->id);
+            $profile = $user->providerProfile()->lockForUpdate()->first();
+            $identity = [
+                'first_name' => trim($validated['first_name']),
+                'last_name' => trim($validated['last_name']),
+                'middle_initial' => filled($validated['middle_initial'] ?? null) ? strtoupper($validated['middle_initial']) : null,
+            ];
+            $verificationReset = ! $user->isManagedAccount() && collect($identity)
+                ->contains(fn ($value, $field) => strcasecmp(trim((string) $profile?->{$field}), trim((string) $value)) !== 0);
             $user->forceFill([
                 'email' => $validated['email'],
                 'username' => $validated['username'],
@@ -56,13 +66,16 @@ class ProviderAccountController extends Controller
             ])->save();
 
             $user->providerProfile()->updateOrCreate(['user_id' => $user->id], [
-                'first_name' => trim($validated['first_name']),
-                'last_name' => trim($validated['last_name']),
-                'middle_initial' => filled($validated['middle_initial'] ?? null)
-                    ? strtoupper($validated['middle_initial'])
-                    : null,
+                ...$identity,
                 'contact_number' => trim($validated['contact_number']),
+                ...($verificationReset ? ['verification_status' => 'pending', 'verification_notes' => null,
+                    'verified_by' => null, 'verified_at' => null] : []),
             ]);
+            if ($verificationReset) {
+                ProviderVerificationDocument::invalidateFor($user);
+            }
+
+            return $verificationReset;
         });
 
         ActivityLog::record(
@@ -70,7 +83,7 @@ class ProviderAccountController extends Controller
             'provider_account_updated',
             "{$user->fresh('providerProfile')->name} updated their provider account.",
             $request,
-            ['provider_user_id' => $user->id, 'email_changed' => $emailChanged],
+            ['provider_user_id' => $user->id, 'email_changed' => $emailChanged, 'verification_reset' => $verificationReset],
         );
 
         $verificationEmailSent = null;
@@ -86,9 +99,10 @@ class ProviderAccountController extends Controller
         }
 
         return response()->json([
-            'message' => $emailChanged
+            'message' => ($emailChanged
                 ? 'Account updated. Verify the new email address before your next sign-in.'
-                : 'Account details updated successfully.',
+                : 'Account details updated successfully.').($verificationReset ? ' The organization representative changed, so its proof needs another review.' : ''),
+            'verification_reset' => $verificationReset,
             'email_verification_sent' => $verificationEmailSent,
             'account' => $this->accountPayload($user->fresh('providerProfile')),
         ]);

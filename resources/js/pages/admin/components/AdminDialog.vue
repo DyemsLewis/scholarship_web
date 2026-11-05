@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref, useId, watch } from 'vue';
+import { computed, ref, useId, useSlots, watch } from 'vue';
+import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 
 const props = defineProps({
@@ -15,6 +16,7 @@ const props = defineProps({
     error: { type: String, default: '' },
     danger: { type: Boolean, default: false },
     wide: { type: Boolean, default: false },
+    confirmationOnly: { type: Boolean, default: false },
 });
 const emit = defineEmits(['confirm', 'cancel']);
 const dialog = ref(null);
@@ -22,7 +24,9 @@ const body = ref(null);
 const id = useId();
 const headingId = computed(() => props.titleId || `${id}-title`);
 const descriptionId = `${id}-description`;
-const { handleKeydown } = useModalAccessibility(() => props.open, dialog, close);
+const slots = useSlots();
+const isFormDialog = computed(() => !props.confirmationOnly && Boolean(slots.default));
+const { handleKeydown } = useModalAccessibility(() => props.open && isFormDialog.value, dialog, close);
 
 function close() {
     if (!props.busy) emit('cancel');
@@ -42,7 +46,8 @@ watch(() => props.busy, (busy) => {
 </script>
 
 <template>
-    <Teleport to="body">
+    <ConfirmationDialog v-if="!isFormDialog" :open="open" :title="title" :message="description" :title-id="titleId" :eyebrow="eyebrow" :confirm-label="confirmLabel" :confirm-disabled="confirmDisabled" :busy="busy" :error="error" :tone="danger ? 'danger' : 'warning'" @confirm="confirm" @cancel="close" />
+    <Teleport v-else to="body">
         <div v-if="open" class="fixed inset-0 z-[2000] grid place-items-center bg-slate-950/60 p-6" @click.self="close">
             <form ref="dialog" :class="['admin-dialog w-full rounded-sm border border-slate-300 bg-white text-slate-900 shadow-2xl', wide ? 'max-w-2xl' : 'max-w-lg']" role="dialog" aria-modal="true" :aria-labelledby="headingId" :aria-describedby="description ? descriptionId : undefined" :aria-busy="busy" tabindex="-1" @keydown="handleKeydown" @submit.prevent="confirm">
                 <header class="flex items-start justify-between gap-5 border-b border-slate-200 px-6 py-5">

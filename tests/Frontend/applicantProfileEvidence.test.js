@@ -7,14 +7,15 @@ import { evidenceFilePolicy, evidenceProgress, evidenceStatus } from '../../reso
 test('evidence statuses never confuse an uploaded file with accepted proof', () => {
     assert.equal(evidenceStatus(null).label, 'Not uploaded');
     assert.equal(evidenceStatus({ status: 'submitted' }).label, 'Awaiting review');
-    assert.equal(evidenceStatus({ status: 'approved' }).label, 'Accepted');
+    assert.equal(evidenceStatus({ status: 'approved' }).label, 'Earlier approval');
+    assert.equal(evidenceStatus({ status: 'approved', has_current_acceptance: true }).label, 'Accepted');
     assert.equal(evidenceStatus({ status: 'rejected' }).label, 'Needs replacement');
     assert.equal(evidenceStatus({ status: 'unknown_value' }).label, 'Awaiting review');
 });
 
 test('required evidence progress excludes optional records and distinguishes returned files', () => {
     assert.deepEqual(evidenceProgress([
-        { required: true, document: { status: 'approved' } },
+        { required: true, document: { status: 'approved', has_current_acceptance: true } },
         { required: true, document: { status: 'submitted' } },
         { required: true, document: { status: 'rejected' } },
         { required: true },

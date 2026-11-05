@@ -22,6 +22,7 @@ const mockUploads = process.env.APPLICANT_PROFILE_SMOKE_MOCK_UPLOADS === '1';
 const modalScreenshotDir = process.env.APPLICANT_PROFILE_SMOKE_MODAL_SCREENSHOT_DIR;
 const verifyBackground = process.env.APPLICANT_PROFILE_SMOKE_BACKGROUND === '1';
 const verifySections = process.env.APPLICANT_PROFILE_SMOKE_SECTIONS === '1';
+const verifyQualification = process.env.APPLICANT_PROFILE_SMOKE_QUALIFICATION === '1';
 
 function fail(message) {
     throw new Error(message);
@@ -402,6 +403,85 @@ async function main() {
             if (runtimeErrors.length) fail(`The ${section} profile editor raised a browser exception: ${runtimeErrors[0]}`);
             if (requestErrors.length) fail(`The ${section} profile editor had failed requests: ${requestErrors.join(', ')}`);
             audits.push(audit);
+            if (verifyQualification && section === 'academic') {
+                const originalEnrollment = await client.evaluate("document.querySelector('#profile-enrollment').value");
+                const originalYearRequired = await client.evaluate("document.querySelector('#profile-year').required");
+                const studyValues = await client.evaluate("['profile-course', 'profile-year'].map((id) => document.getElementById(id)?.value ?? null)");
+                await client.evaluate("document.querySelector('#profile-enrollment').value = 'Returning enrollment pending'; document.querySelector('#profile-enrollment').dispatchEvent(new Event('change', { bubbles: true }))");
+                await waitFor(() => client.evaluate("!document.querySelector('#profile-year').required && !document.querySelector('#profile-course')?.required"), 'pending-study optional fields');
+                if (JSON.stringify(studyValues) !== JSON.stringify(await client.evaluate("['profile-course', 'profile-year'].map((id) => document.getElementById(id)?.value ?? null)"))) fail('A pending study status cleared the saved course or year.');
+                await client.evaluate(`(() => { const status = document.querySelector('#profile-enrollment'); status.value = ${JSON.stringify(originalEnrollment)}; status.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+                await waitFor(() => client.evaluate(`document.querySelector('#profile-year').required === ${JSON.stringify(originalYearRequired)}`), 'the original study requirements to return');
+                const originalAcademicYear = await client.evaluate("document.querySelector('#profile-academic-year').value");
+                await client.evaluate("document.querySelector('[data-custom-academic-year]').click()");
+                await waitFor(() => client.evaluate("document.querySelector('#profile-academic-year')?.tagName === 'INPUT'"), 'earlier academic year input');
+                if (!await client.evaluate(`(() => {
+                    const field = document.querySelector('#profile-academic-year');
+                    field.value = '2013-2014'; field.dispatchEvent(new Event('input', { bubbles: true }));
+                    return field.checkValidity();
+                })()`)) fail('An earlier academic year cannot be entered.');
+                await client.evaluate(`(() => {
+                    const field = document.querySelector('#profile-academic-year');
+                    field.value = ${JSON.stringify(originalAcademicYear)}; field.dispatchEvent(new Event('input', { bubbles: true }));
+                    document.querySelector('[data-custom-academic-year]').click();
+                })()`);
+                await waitFor(() => client.evaluate("document.querySelector('#profile-academic-year')?.tagName === 'SELECT'"), 'listed academic years to return');
+                await client.evaluate(`(() => {
+                    const root = document.querySelector('[data-completed-qualification]');
+                    window.__qualificationDraft = Object.fromEntries([...root.querySelectorAll('input, select')].map((field) => [field.id, field.value]));
+                    window.__currentStudyDraft = ['profile-education-level', 'profile-school', 'profile-course', 'profile-year'].map((id) => document.getElementById(id)?.value ?? null);
+                    root.open = true;
+                    const choice = root.querySelector('select');
+                    choice.value = 'pre_k12_high_school';
+                    choice.dispatchEvent(new Event('change', { bubbles: true }));
+                })()`);
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('#profile-qualification-school'))"), 'completed qualification fields');
+                const qualificationAudit = await client.evaluate(`(() => {
+                    const school = document.getElementById('profile-qualification-school');
+                    school.value = 'Demonstration former high school';
+                    school.dispatchEvent(new Event('input', { bubbles: true }));
+                    const year = document.getElementById('profile-qualification-year');
+                    year.value = String(new Date().getFullYear() + 1);
+                    year.dispatchEvent(new Event('input', { bubbles: true }));
+                    const futureYearRejected = !year.checkValidity();
+                    year.value = '2014';
+                    year.dispatchEvent(new Event('input', { bubbles: true }));
+                    const root = school.closest('[data-completed-qualification]');
+                    return {
+                        futureYearRejected, validPastYear: year.checkValidity(), yearOptional: !year.required,
+                        institutionRequired: school.required,
+                        currentStudiesUnchanged: JSON.stringify(window.__currentStudyDraft) === JSON.stringify(['profile-education-level', 'profile-school', 'profile-course', 'profile-year'].map((id) => document.getElementById(id)?.value ?? null)),
+                        clipped: [...root.querySelectorAll('input, select')].some((field) => field.getBoundingClientRect().right > root.getBoundingClientRect().right + 1),
+                    };
+                })()`);
+                if (!qualificationAudit.futureYearRejected || !qualificationAudit.validPastYear || !qualificationAudit.yearOptional || !qualificationAudit.institutionRequired || !qualificationAudit.currentStudiesUnchanged || qualificationAudit.clipped) fail(`Completed qualification validation or separation failed: ${JSON.stringify(qualificationAudit)}`);
+                if (modalScreenshotDir) {
+                    await client.evaluate("document.querySelector('[data-completed-qualification]').scrollIntoView({ block: 'center' })");
+                    await delay(150);
+                    const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
+                    await writeFile(path.join(path.resolve(modalScreenshotDir), `profile-qualification-${viewportWidth}.png`), Buffer.from(screenshot.data, 'base64'));
+                }
+                await client.evaluate("document.querySelector('#profile-completed-qualification').value = 'other'; document.querySelector('#profile-completed-qualification').dispatchEvent(new Event('change', { bubbles: true }))");
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('#profile-qualification-details')?.required)"), 'the other-qualification name');
+                await client.evaluate("document.querySelector('#profile-completed-qualification').value = 'none'; document.querySelector('#profile-completed-qualification').dispatchEvent(new Event('change', { bubbles: true }))");
+                await waitFor(() => client.evaluate("!document.querySelector('#profile-qualification-school') && !document.querySelector('#profile-qualification-details')"), 'no-completion details to clear');
+                await client.evaluate(`(() => {
+                    const choice = document.querySelector('#profile-completed-qualification');
+                    choice.value = window.__qualificationDraft['profile-completed-qualification'];
+                    choice.dispatchEvent(new Event('change', { bubbles: true }));
+                })()`);
+                await delay(100);
+                await client.evaluate(`(() => {
+                    for (const [id, value] of Object.entries(window.__qualificationDraft)) {
+                        const field = document.getElementById(id);
+                        if (!field) continue;
+                        field.value = value;
+                        field.dispatchEvent(new Event(field.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+                    }
+                    document.querySelector('[data-profile-editor-body]').scrollTop = 0;
+                })()`);
+                console.log('PASS Completed qualification native validation, conditional fields and unchanged current studies: ' + JSON.stringify(qualificationAudit));
+            }
             if (section === 'personal') {
                 const personal = await client.evaluate(`(() => {
                     const editor = document.querySelector('[data-personal-editor]');

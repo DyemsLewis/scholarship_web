@@ -110,11 +110,12 @@ test('learning and household editors use a focused review hierarchy', () => {
     const learning = readFileSync(new URL('../../resources/js/components/profile/ApplicantLearningEditor.vue', import.meta.url), 'utf8');
     const household = readFileSync(new URL('../../resources/js/components/profile/ApplicantHouseholdEditor.vue', import.meta.url), 'utf8');
     const modal = learning + household;
-    const currentStudies = modal.indexOf('>Current studies<');
+    const currentStudies = modal.indexOf('id="learning-studies-title"');
     const recordResult = modal.indexOf('>Record period and result<');
     const schoolIdentifiers = modal.indexOf('>School identifiers ');
 
     assert.ok(currentStudies > -1, 'The learning editor should begin with the current study context.');
+    assert.match(learning, /'Most recent studies' : 'Current studies'/);
     assert.ok(currentStudies < recordResult, 'The academic result should follow the current studies.');
     assert.ok(recordResult < schoolIdentifiers, 'Optional school identifiers should come last.');
     assert.doesNotMatch(modal, />Current learning stage<|>Academic record period<|>Program and grades<|>Additional school details/);

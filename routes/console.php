@@ -28,3 +28,6 @@ Schedule::command('platform:backup')
 Schedule::command('platform:prune-data')
     ->dailyAt('03:00')
     ->withoutOverlapping();
+
+Schedule::command('agreement-cases:prune-files')->dailyAt('03:30')->withoutOverlapping();
+Schedule::command('case-privacy:prune-access')->dailyAt('04:00')->withoutOverlapping();

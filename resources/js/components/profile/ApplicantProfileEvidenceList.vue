@@ -1,13 +1,15 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { formatFileSize } from '../../support/display';
-import { evidenceFilePolicy, evidenceProgress, evidenceStatus } from '../../support/applicantProfileEvidence';
+import { evidenceDecisionDate, evidenceFilePolicy, evidenceProgress, evidenceReviewDetail, evidenceStatus } from '../../support/applicantProfileEvidence';
 import { disclosureSummary } from '../../support/profileEditorStyles';
 
 const props = defineProps({
     groups: { type: Array, default: () => [] },
     title: { type: String, default: '' },
     description: { type: String, default: '' },
+    focusType: { type: String, default: '' },
+    nextType: { type: String, default: '' },
     ocr: { type: Object, default: () => ({}) },
     uploadingType: { type: String, default: '' },
     deletingId: { type: [Number, String], default: null },
@@ -16,18 +18,36 @@ const props = defineProps({
     scanLabel: { type: Function, required: true },
     resultLabel: { type: Function, required: true },
 });
-defineEmits(['upload', 'preview', 'remove', 'scan']);
+defineEmits(['upload', 'preview', 'remove', 'scan', 'refresh']);
 
 const progress = computed(() => evidenceProgress(props.groups.flatMap((group) => group.rows)));
 const working = computed(() => props.disabled || Boolean(props.uploadingType) || props.deletingId !== null || props.scanningId !== null);
 const canRetry = (row) => props.ocr.configured && row.value === 'academic_record' && row.document
+    && row.document.file_available !== false && !row.document.has_current_acceptance
     && ['failed', 'needs_review', 'unavailable', 'not_requested'].includes(row.document.ocr_status);
 const policy = (row) => evidenceFilePolicy(row.value, props.ocr);
-const groupNeedsAttention = (group) => group.rows.some((row) => row.document?.status === 'rejected');
+const groupNeedsAttention = (group) => group.rows.some((row) => ['replacement', 'unavailable'].includes(evidenceStatus(row.document).key));
+const root = ref(null);
+async function focusEvidence(type) {
+    if (!type) return;
+    await nextTick();
+    const row = [...(root.value?.querySelectorAll('[data-evidence-type]') ?? [])].find((item) => item.dataset.evidenceType === type);
+    if (!row) return;
+    // Target the record after the modal has set its initial focus.
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    if (!row.isConnected) return;
+    const group = row.closest('details[data-evidence-group]');
+    if (group) group.open = true;
+    row.scrollIntoView({ block: 'center' });
+    row.focus({ preventScroll: true });
+}
+onMounted(() => focusEvidence(props.focusType));
+watch([() => props.focusType, () => props.groups.some((group) => group.rows.some((row) => row.value === props.focusType))],
+    ([type, present]) => { if (present) focusEvidence(type); }, { flush: 'post' });
 </script>
 
 <template>
-    <div data-profile-evidence-list>
+    <div ref="root" data-profile-evidence-list>
         <div class="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
                 <h3 class="text-sm font-bold text-slate-950">{{ title }}</h3>
@@ -37,6 +57,11 @@ const groupNeedsAttention = (group) => group.rows.some((row) => row.document?.st
                 <p class="font-bold text-slate-800">{{ progress.saved }} of {{ progress.total }} required saved</p>
                 <p class="text-slate-500">{{ progress.accepted }} accepted<span v-if="progress.needsReplacement" class="text-rose-700"> | {{ progress.needsReplacement }} need replacement</span></p>
             </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-3 text-xs">
+            <button v-if="nextType" type="button" :disabled="working" class="inline-flex min-h-9 items-center gap-2 font-bold text-amber-800 underline underline-offset-2 disabled:opacity-50" @click="focusEvidence(nextType)">Go to the next record<i class="fa-solid fa-arrow-down text-[10px]" aria-hidden="true"></i></button>
+            <button type="button" :disabled="working" class="ml-auto inline-flex min-h-9 items-center gap-2 font-bold text-slate-600 disabled:opacity-50" @click="$emit('refresh')"><i class="fa-solid fa-rotate-right text-[10px]" aria-hidden="true"></i>Refresh review status</button>
         </div>
 
         <div class="py-4"><slot name="terms" /></div>
@@ -50,7 +75,7 @@ const groupNeedsAttention = (group) => group.rows.some((row) => row.document?.st
                 </span>
             </component>
             <div class="divide-y divide-slate-200">
-                <article v-for="row in group.rows" :key="row.value" :data-evidence-type="row.value" class="py-4">
+                <article v-for="row in group.rows" :key="row.value" :data-evidence-type="row.value" tabindex="-1" class="py-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-400">
                     <div class="grid min-w-0 gap-x-5 gap-y-2 md:grid-cols-[minmax(0,1fr)_9rem_14rem] md:items-center">
                         <div class="flex min-w-0 items-start gap-3">
                             <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-600"><i :class="[row.icon, 'block leading-none']" aria-hidden="true"></i></span>
@@ -64,7 +89,7 @@ const groupNeedsAttention = (group) => group.rows.some((row) => row.document?.st
                             <span :class="['inline-flex rounded-sm border px-2 py-1 text-[11px] font-bold leading-4', evidenceStatus(row.document).className]">{{ evidenceStatus(row.document).label }}</span>
                         </div>
                         <div data-evidence-actions class="flex flex-wrap items-center gap-2 pl-12 md:justify-end md:pl-0">
-                            <button v-if="row.document" type="button" class="inline-flex min-h-9 items-center gap-2 rounded-sm border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600" :aria-label="`View ${row.label}`" @click="$emit('preview', row.document)"><i class="fa-solid fa-eye" aria-hidden="true"></i>View</button>
+                            <button v-if="row.document && row.document.file_available !== false" type="button" class="inline-flex min-h-9 items-center gap-2 rounded-sm border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600" :aria-label="`View ${row.label}`" @click="$emit('preview', row.document)"><i class="fa-solid fa-eye" aria-hidden="true"></i>View</button>
                             <label :class="['relative inline-flex min-h-9 items-center gap-2 overflow-hidden rounded-sm border px-3 text-xs font-bold focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-amber-600', working ? 'cursor-wait border-slate-200 bg-slate-100 text-slate-400' : row.document ? 'cursor-pointer border-slate-300 bg-white text-slate-700 hover:bg-slate-50' : 'cursor-pointer border-slate-950 bg-slate-950 text-white hover:bg-slate-800']">
                                 <input type="file" class="absolute inset-0 h-full w-full cursor-pointer opacity-0" :aria-label="`${row.document ? 'Replace' : 'Upload'} ${row.label}`" :accept="policy(row).accept" :disabled="working" @change="$emit('upload', row.value, $event)">
                                 <i :class="uploadingType === row.value ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrow-up-from-bracket'" aria-hidden="true"></i>
@@ -73,8 +98,13 @@ const groupNeedsAttention = (group) => group.rows.some((row) => row.document?.st
                             <button v-if="row.document" type="button" :disabled="working" class="grid h-9 w-9 place-items-center rounded-sm text-slate-500 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-40" :aria-label="`Remove ${row.label}`" @click="$emit('remove', row.document)"><i :class="deletingId === row.document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can'" aria-hidden="true"></i></button>
                         </div>
                     </div>
-                    <p v-if="row.document?.review_notes" class="mt-3 border-l-2 border-amber-400 pl-3 text-xs leading-5 text-slate-700"><strong>Reviewer note:</strong> {{ row.document.review_notes }}</p>
+                    <p v-if="row.document?.review_notes && row.document.status === 'rejected'" class="mt-3 whitespace-pre-line break-words border-l-2 border-amber-400 pl-3 text-xs leading-5 text-slate-700"><strong>What to correct:</strong> {{ row.document.review_notes }}</p>
+                    <p v-if="evidenceReviewDetail(row.document)" class="mt-2 pl-12 text-xs leading-5 text-slate-600">{{ evidenceReviewDetail(row.document) }}</p>
+                    <details v-if="row.document?.reviewed_at || (row.document?.review_notes && row.document.status !== 'rejected')" class="ml-12 mt-2 text-xs" data-evidence-review-details>
+                        <summary class="w-fit cursor-pointer py-1 font-semibold text-slate-500">Review details</summary><p v-if="row.document.reviewed_at" class="mt-1 leading-5 text-slate-600">{{ evidenceStatus(row.document).label }} on {{ evidenceDecisionDate(row.document.reviewed_at) }}.</p><p v-if="row.document.review_notes && row.document.status !== 'rejected'" class="mt-1 whitespace-pre-line break-words leading-5 text-slate-600">{{ row.document.review_notes }}</p>
+                    </details>
                     <div v-if="ocr.configured && row.value === 'academic_record' && row.document" class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 pl-12 text-xs leading-5" data-evidence-scan>
+                        <span class="text-slate-500">Scan only:</span>
                         <span class="font-semibold text-slate-600">{{ scanLabel(row.document.ocr_status) }}</span>
                         <strong v-if="row.document.ocr_status === 'succeeded'" class="text-slate-900">{{ resultLabel(row.document) }}</strong>
                         <button v-if="canRetry(row)" type="button" :disabled="working" class="min-h-8 font-bold text-amber-800 underline underline-offset-2 disabled:opacity-50" @click="$emit('scan', row.document)">{{ scanningId === row.document.id ? 'Scanning...' : 'Retry scan' }}</button>

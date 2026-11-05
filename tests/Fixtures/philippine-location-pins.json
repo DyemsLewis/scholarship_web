@@ -1,0 +1,22 @@
+[
+  {"name":"Manila", "latitude":14.5995,"longitude":120.9842,"allowed":true},
+  {"name":"Quezon City", "latitude":14.676,"longitude":121.0437,"allowed":true},
+  {"name":"Antipolo", "latitude":14.5861,"longitude":121.1756,"allowed":true},
+  {"name":"Cebu", "latitude":10.3157,"longitude":123.8854,"allowed":true},
+  {"name":"Davao", "latitude":7.1907,"longitude":125.4553,"allowed":true},
+  {"name":"Puerto Princesa", "latitude":9.7392,"longitude":118.7353,"allowed":true},
+  {"name":"Batanes", "latitude":20.4485,"longitude":121.9708,"allowed":true},
+  {"name":"Boracay", "latitude":11.9674,"longitude":121.9248,"allowed":true},
+  {"name":"Manila Bay", "latitude":14.5,"longitude":120.8,"allowed":false},
+  {"name":"Open Pacific", "latitude":12,"longitude":127,"allowed":false},
+  {"name":"Lake Taal", "latitude":14.02,"longitude":121.06,"allowed":false},
+  {"name":"Laguna de Bay", "latitude":14.35,"longitude":121.32,"allowed":false},
+  {"name":"Lake Lanao", "latitude":7.9,"longitude":124.25,"allowed":false},
+  {"name":"Lake Mainit", "latitude":9.42,"longitude":125.53,"allowed":false},
+  {"name":"Taal Volcano Island", "latitude":14.005,"longitude":120.995,"allowed":true},
+  {"name":"Talím Island", "latitude":14.35,"longitude":121.24,"allowed":true},
+  {"name":"Taiwan", "latitude":22.6,"longitude":120.3,"allowed":false},
+  {"name":"Malaysia inside regional rectangle", "latitude":6.1,"longitude":116.5,"allowed":false},
+  {"name":"Singapore", "latitude":1.35,"longitude":103.8,"allowed":false},
+  {"name":"Zero", "latitude":0,"longitude":0,"allowed":false}
+]

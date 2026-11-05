@@ -281,7 +281,7 @@ class RecipientBenefitEntitlementTest extends TestCase
         $this->assertDatabaseCount('recipient_benefit_release_allocations', 2);
     }
 
-    public function test_open_issue_blocks_completion_until_provider_resolves_or_replaces_the_benefit(): void
+    public function test_provider_only_resolution_cannot_fulfill_or_reopen_a_one_time_entitlement_for_duplicate_release(): void
     {
         [$provider, $applicant, $program, $application] = $this->selectedApplication(true);
         $benefit = $program->benefits()->create([
@@ -326,17 +326,17 @@ class RecipientBenefitEntitlementTest extends TestCase
                 'resolution_outcome' => 'replacement_scheduled',
                 'resolution_notes' => 'The damaged unit was verified and a replacement must be scheduled.',
             ])
-            ->assertOk()
-            ->assertJsonPath('release.records.0.lifecycle_status', 'resolved');
+            ->assertUnprocessable()
+            ->assertJsonPath('report.status', 'awaiting_provider');
 
         $this->assertDatabaseHas('recipient_benefit_release_allocations', [
             'recipient_benefit_release_record_id' => $recordId,
-            'status' => 'replacement_required',
+            'status' => 'issue_open',
         ]);
         $this->assertDatabaseHas('recipient_benefit_entitlements', [
             'scholarship_application_id' => $application->id,
             'scholarship_benefit_id' => $benefit->id,
-            'status' => RecipientSupportCatalog::ENTITLEMENT_READY,
+            'status' => RecipientSupportCatalog::ENTITLEMENT_ISSUE_OPEN,
         ]);
 
         $this->actingAs($provider)
@@ -344,7 +344,7 @@ class RecipientBenefitEntitlementTest extends TestCase
                 "/provider/scholarships/{$program->id}/benefit-releases",
                 $this->releasePayload($application, $benefit, 'Replacement device release'),
             )
-            ->assertCreated();
+            ->assertUnprocessable();
     }
 
     private function selectedApplication(bool $agreementAccepted = false): array

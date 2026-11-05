@@ -43,13 +43,21 @@ class ProviderProgramPageController extends Controller
 
         $providerOwner = $request->user()->providerOrganizationOwner();
 
+        if ($scholarship) {
+            abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+        }
+
         if (! $providerOwner->hasVerifiedEmail() || ! $providerOwner->providerProfile?->isVerified()) {
-            return redirect()->route('provider.profile.verification');
+            return view('provider-program-access', ['programAccess' => [
+                'organization' => $providerOwner->provider_name ?: $providerOwner->name,
+                'email_verified' => $providerOwner->hasVerifiedEmail(),
+                'verification_status' => $providerOwner->providerProfile?->verification_status ?: 'pending',
+                'can_manage_profile' => $request->user()->hasPortalPermission('manage_profile'),
+                'is_edit' => (bool) $scholarship,
+            ]]);
         }
 
         if ($scholarship) {
-            abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
-
             if (! $request->route('step')) {
                 return redirect()->route('provider.programs.edit.step', [
                     'scholarship' => $scholarship,

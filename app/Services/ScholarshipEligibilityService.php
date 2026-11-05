@@ -8,6 +8,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\StudentDocument;
 use App\Models\User;
 use App\Support\AcademicRequirement;
+use App\Support\EducationEligibilityPolicy;
 use App\Support\EligibilityRulePolicy;
 use App\Support\LearnerProgramPath;
 use App\Support\ScholarshipEligibilityCondition;
@@ -42,7 +43,13 @@ class ScholarshipEligibilityService
             ?string $comparisonMode = null,
             string $category = 'eligibility',
             array $metadata = [],
-        ) use (&$criteria, &$passed, &$applicable, $ruleModes): void {
+        ) use (&$criteria, &$passed, &$applicable, $ruleModes, $profile): void {
+            $context = EducationEligibilityPolicy::contextualize([
+                'key' => $key, 'status' => $status, 'comparison_mode' => $comparisonMode, 'note' => $note,
+            ], $profile);
+            $status = $context['status'];
+            $comparisonMode = $context['comparison_mode'];
+            $note = $context['note'];
             $ruleMode = $category === 'eligibility' ? ($ruleModes[$key] ?? 'required') : null;
             $criteria[] = [
                 'key' => $key,
@@ -138,6 +145,14 @@ class ScholarshipEligibilityService
             'Confirm if your grade or year level is eligible.',
             'No grade or year level restriction listed.',
         );
+
+        $educationPolicy = EducationEligibilityPolicy::normalize($scholarship->education_eligibility_policy);
+        $qualification = EducationEligibilityPolicy::qualification($educationPolicy, $profile);
+        if ($qualification !== null) {
+            $addCriterion($qualification['key'], $qualification['label'], $qualification['status'],
+                $qualification['student_value'], $qualification['requirement'], $qualification['note'], true,
+                $qualification['comparison_mode'], metadata: ['rule_context' => $qualification['rule_context']]);
+        }
 
         $studentLocation = collect([
             $profile?->barangay,
@@ -245,22 +260,11 @@ class ScholarshipEligibilityService
                 && $condition['verification_type'] === 'automatic',
         );
 
-        if ($requiresEnrollmentCheck) {
-            $enrollmentStatus = $profile?->enrollment_status;
-            $acceptedStatuses = ['Enrolled', 'Continuing student', 'Graduating'];
-            $isEnrolled = filled($enrollmentStatus) && collect($acceptedStatuses)->contains(
-                fn (string $status): bool => $this->normalizeOption($enrollmentStatus) === $this->normalizeOption($status),
-            );
-            $addCriterion(
-                'enrollment_status',
-                'Enrollment status',
-                filled($enrollmentStatus) ? ($isEnrolled ? 'pass' : 'fail') : 'missing',
-                $enrollmentStatus,
-                implode(', ', $acceptedStatuses),
-                $isEnrolled
-                    ? 'Your profile shows an active enrollment status.'
-                    : 'This program requires an active enrollment status.',
-            );
+        $enrollment = EducationEligibilityPolicy::enrollment($educationPolicy, $requiresEnrollmentCheck, $profile);
+        if ($enrollment !== null) {
+            $addCriterion($enrollment['key'], $enrollment['label'], $enrollment['status'],
+                $enrollment['student_value'], $enrollment['requirement'], $enrollment['note'], true,
+                $enrollment['comparison_mode'], metadata: ['rule_context' => $enrollment['rule_context']]);
         }
 
         $score = $applicable === 0 ? 100 : (int) round(($passed / $applicable) * 100);
@@ -672,7 +676,7 @@ class ScholarshipEligibilityService
         $criteriaByKey = collect($criteria)->keyBy('key');
         $criterionKeys = [
             'currently_enrolled' => ['enrollment_status'],
-            'learner_group' => ['education_level', 'course', 'school_type', 'year_level'],
+            'learner_group' => ['education_level', 'completed_qualification', 'course', 'school_type', 'year_level'],
             'academic_performance' => ['academic'],
             'financial_need' => ['income'],
             'location_coverage' => ['location'],
@@ -742,7 +746,7 @@ class ScholarshipEligibilityService
                 'rule_mode' => $isBlocking ? 'required' : ($attentionCheck['rule_mode'] ?? 'required'),
                 'needs_review' => $needsReview,
                 'note' => $needsReview && $status !== 'fail'
-                    ? 'The provider must review the academic evidence. This condition is not a confirmed match.'
+                    ? 'The provider must review the relevant supporting records. This condition is not a confirmed match.'
                     : ($status === 'pass'
                     ? 'Your profile satisfies this automatically checked condition.'
                     : ($attentionCheck['comparison'] ?? $attentionCheck['note'] ?? 'Review this condition.')),

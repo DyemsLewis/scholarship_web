@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Provider\Programs;
 
 use App\Domain\Provider\Programs\ProgramLifecycle;
+use App\Support\EducationEligibilityPolicy;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Str;
@@ -30,6 +31,8 @@ class ProgramRecordResource extends JsonResource
             'category' => $this->category,
             'cycle' => $this->program_cycle,
             'description' => $this->description,
+            'education_eligibility_policy' => EducationEligibilityPolicy::normalize($this->education_eligibility_policy),
+            'eligibility_rule_modes' => $this->eligibilityRuleModes(),
             'logo_url' => $this->logoUrl(),
             'cover_image_url' => $this->coverImageUrl(),
             'status' => $lifecycle->status($this->status),

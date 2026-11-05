@@ -12,6 +12,9 @@ import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import EligibilityRuleModeSelect from './components/EligibilityRuleModeSelect.vue';
 import EligibilityRulesSummary from './components/EligibilityRulesSummary.vue';
+import EducationEligibilityPolicyEditor from './components/EducationEligibilityPolicyEditor.vue';
+import DocumentRequirementsPicker from './components/DocumentRequirementsPicker.vue';
+import { normalizeEducationPolicy, educationPolicyError } from '../../../support/educationEligibilityPolicy';
 import { configuredEligibilityRules, normalizeEligibilityRuleModes } from '../../../support/providerEligibilityRules';
 import { programConfigurationErrors } from '../../../support/programConfiguration';
 
@@ -130,6 +133,7 @@ function emptyForm() {
         eligibleYearLevels: '', eligibleLocations: '', incomeRequirement: 'Any',
         minimumGradeScale: '', minimumGwa: '', excludeCurrentRecipients: false,
         eligibilityRuleModes: normalizeEligibilityRuleModes(), eligibilityConditions: [],
+        educationEligibilityPolicy: normalizeEducationPolicy(),
         applicationMode: 'online',
         requirements: 'Certificate of enrollment\nLatest report card or grades\nRecent school ID',
         optionalRequirements: '',
@@ -241,8 +245,11 @@ const stepChecks = computed(() => ({
             || form.value.minimumGradeScale
             || form.value.incomeRequirement !== 'Any'
             || form.value.excludeCurrentRecipients
+            || form.value.educationEligibilityPolicy.requires_completed_qualification
+            || form.value.educationEligibilityPolicy.enrollment_statuses.length
         )
         && (!['percentage', 'grade_point'].includes(form.value.minimumGradeScale) || numericValue(form.value.minimumGwa) !== null)
+        && !educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions)
     ),
     application: Boolean(
         form.value.applicationMode
@@ -300,6 +307,7 @@ function closeAlert() {
 }
 
 function stepMessage(stepId) {
+    if (stepId === 'eligibility' && educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions)) return educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions);
     if (configurationErrorForStep(stepId)) return configurationErrorForStep(stepId);
     return {
         basics: 'Add the title, category, cycle, summary, scholarship logo, and background image.',
@@ -527,6 +535,7 @@ function fillForm(program) {
         officialProgramUrl: program.official_program_url ?? '',
         eligibility: program.eligibility ?? '',
         eligibilityRuleModes: normalizeEligibilityRuleModes(program.eligibility_rule_modes),
+        educationEligibilityPolicy: normalizeEducationPolicy(program.education_eligibility_policy),
         eligibilityConditions: program.eligibility_conditions ?? [],
         eligibleEducationLevels: splitList(program.eligible_education_levels),
         eligibleCourses: program.eligible_courses ?? '',
@@ -591,6 +600,7 @@ function createPayload(status, termsAccepted = false) {
         contact_person: form.value.contactPerson.trim(), contact_department: form.value.contactDepartment.trim(),
         official_program_url: form.value.officialProgramUrl.trim(), eligibility: form.value.eligibility.trim(),
         eligibility_rule_modes: JSON.stringify(normalizeEligibilityRuleModes(form.value.eligibilityRuleModes)),
+        education_eligibility_policy: JSON.stringify(normalizeEducationPolicy(form.value.educationEligibilityPolicy)),
         eligible_education_levels: form.value.eligibleEducationLevels.join('\n'),
         eligible_courses: form.value.eligibleCourses.trim(), eligible_school_types: form.value.eligibleSchoolTypes.join('\n'),
         eligible_year_levels: form.value.eligibleYearLevels.trim(), eligible_locations: form.value.eligibleLocations.trim(),
@@ -628,7 +638,7 @@ function stepForBackendField(field) {
     if (/^(title|category|program_cycle|description|image|cover)/.test(field)) return 'basics';
     if (/^(benefits|slots_available|application_limit|support_)/.test(field)) return 'support';
     if (/^(application_opens_at|deadline|expected_results_at|location_|latitude|longitude|contact_|official_program_url)/.test(field)) return 'dates-location';
-    if (/^(eligibility|eligible_|income_|minimum_|exclude_)/.test(field)) return 'eligibility';
+    if (/^(eligibility|education_eligibility_policy|eligible_|income_|minimum_|exclude_)/.test(field)) return 'eligibility';
     if (/^(application_mode|requirements|optional_requirements|post_qualification|handoff_)/.test(field)) return 'application';
     if (/^(selection_stages|review_rubric|recipient_agreement)/.test(field)) return 'selection';
     return activeStep.value;
@@ -1008,7 +1018,8 @@ onBeforeUnmount(() => {
                                     <label><span :class="labelClass">Eligibility summary <span class="text-amber-700">Required</span></span><textarea v-model="form.eligibility" rows="4" maxlength="5000" :class="textareaClass" placeholder="Example: Open to enrolled Grade 12 STEM students who meet the stated academic requirement."></textarea></label>
 
                                     <div class="mt-6 border-t border-slate-200 pt-6">
-                                        <div class="flex items-center justify-between gap-4"><p class="text-xs font-bold text-slate-700">Education levels</p><EligibilityRuleModeSelect v-if="hasEligibilityRule('education_level')" v-model="form.eligibilityRuleModes.education_level" rule-key="education_level" label="Education levels" /></div>
+                                        <div class="flex items-center justify-between gap-4"><p class="text-xs font-bold text-slate-700">Current study levels</p><EligibilityRuleModeSelect v-if="hasEligibilityRule('education_level')" v-model="form.eligibilityRuleModes.education_level" rule-key="education_level" label="Current study levels" /></div>
+                                        <p class="mt-1 text-xs leading-5 text-slate-500">Use these filters for current studies, not a diploma the applicant already completed.</p>
                                         <div class="mt-3 grid grid-cols-4 gap-2">
                                             <label v-for="([value, label]) in educationLevels" :key="value" class="flex min-h-11 items-center gap-2 border border-slate-200 px-3 text-xs font-semibold text-slate-700">
                                                 <input type="checkbox" :checked="form.eligibleEducationLevels.includes(value)" class="border-slate-300 text-slate-950 focus:ring-slate-700" @change="toggleArrayValue('eligibleEducationLevels', value)">
@@ -1016,6 +1027,8 @@ onBeforeUnmount(() => {
                                             </label>
                                         </div>
                                     </div>
+
+                                    <EducationEligibilityPolicyEditor v-model="form.educationEligibilityPolicy" v-model:modes="form.eligibilityRuleModes" :input-class="inputClass" />
 
                                     <div class="mt-6 grid grid-cols-2 gap-5">
                                         <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-courses" class="text-xs font-bold text-slate-700">Courses, tracks, or strands</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('course')" v-model="form.eligibilityRuleModes.course" rule-key="course" label="Courses, tracks, or strands" /></div><textarea id="program-eligible-courses" v-model="form.eligibleCourses" rows="3" :class="textareaClass" placeholder="One per line, or Any"></textarea></div>
@@ -1038,7 +1051,7 @@ onBeforeUnmount(() => {
                                         <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-academic-rule" class="text-xs font-bold text-slate-700">Academic rule</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('academic')" v-model="form.eligibilityRuleModes.academic" rule-key="academic" label="Academic performance" /></div><select id="program-academic-rule" v-model="form.minimumGradeScale" :class="inputClass" @change="form.minimumGwa = ''"><option value="">No academic minimum</option><option value="percentage">General average / percentage</option><option value="grade_point">GWA / GPA grade point</option><option value="pass_fail">Pass/fail or competency</option><option value="other">Other / manual review</option></select></div>
                                         <label v-if="['percentage', 'grade_point'].includes(form.minimumGradeScale)"><span class="mb-2 flex min-h-8 items-center text-xs font-bold text-slate-700">{{ form.minimumGradeScale === 'grade_point' ? 'Maximum GWA / GPA' : 'Minimum average' }}</span><input v-model="form.minimumGwa" type="number" min="0" :max="form.minimumGradeScale === 'grade_point' ? 5 : 100" step="0.01" :class="inputClass"></label>
                                         <div class="col-span-2 flex items-center justify-between gap-4 border-t border-slate-200 py-4"><label class="flex items-center gap-3 text-sm font-semibold text-slate-700"><input v-model="form.excludeCurrentRecipients" type="checkbox" class="border-slate-300 text-slate-950 focus:ring-slate-700">Applicant is not receiving another active scholarship</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('current_scholarship_support')" v-model="form.eligibilityRuleModes.current_scholarship_support" rule-key="current_scholarship_support" label="Other active scholarship support" /></div>
-                                        <div v-if="hasEligibilityRule('enrollment_status')" class="col-span-2 flex items-center justify-between gap-4 border-t border-slate-200 py-4"><div><p class="text-sm font-semibold text-slate-700">Current enrollment</p><p class="mt-1 text-xs text-slate-500">This program already includes an automatic enrollment check.</p></div><EligibilityRuleModeSelect v-model="form.eligibilityRuleModes.enrollment_status" rule-key="enrollment_status" label="Current enrollment" /></div>
+                                        <div v-if="hasEligibilityRule('enrollment_status') && !form.educationEligibilityPolicy.enrollment_statuses.length" class="col-span-2 flex items-center justify-between gap-4 border-t border-slate-200 py-4"><div><p class="text-sm font-semibold text-slate-700">Current enrollment</p><p class="mt-1 text-xs text-slate-500">This program already includes an automatic enrollment check.</p></div><EligibilityRuleModeSelect v-model="form.eligibilityRuleModes.enrollment_status" rule-key="enrollment_status" label="Current enrollment" /></div>
                                     </div>
                                 </div>
                             </section>
@@ -1061,9 +1074,9 @@ onBeforeUnmount(() => {
                                     </div>
 
                                     <div class="mt-6 grid grid-cols-2 gap-5">
-                                        <label><span :class="labelClass">Pre-screening files <span v-if="form.applicationMode !== 'provider_review'" class="text-amber-700">Required</span></span><textarea v-model="form.requirements" rows="5" :class="textareaClass" placeholder="One file per line"></textarea></label>
-                                        <label><span :class="labelClass">Optional files</span><textarea v-model="form.optionalRequirements" rows="5" :class="textareaClass" placeholder="One file per line"></textarea></label>
-                                        <label class="col-span-2"><span :class="labelClass">Files needed after qualification <span class="text-amber-700">Required</span></span><textarea v-model="form.postQualificationRequirements" rows="3" :class="textareaClass" placeholder="One item per line"></textarea></label>
+                                        <DocumentRequirementsPicker v-model="form.requirements" label="Pre-screening files" :required="form.applicationMode !== 'provider_review'" :disabled="isSaving" />
+                                        <DocumentRequirementsPicker v-model="form.optionalRequirements" label="Optional files" :disabled="isSaving" />
+                                        <DocumentRequirementsPicker v-model="form.postQualificationRequirements" class="col-span-2" label="Files needed after qualification" required :disabled="isSaving" />
                                     </div>
 
                                     <div class="mt-7 border-t border-slate-200 pt-6">
