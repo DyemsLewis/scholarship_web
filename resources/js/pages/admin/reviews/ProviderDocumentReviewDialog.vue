@@ -3,6 +3,7 @@ import { computed, ref, useId, watch } from 'vue';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 import { labelFromKey } from '../../../support/display.js';
 import { reviewErrorMessage } from '../../../support/adminReviewPresentation.js';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 
 const props = defineProps({ document: { type: Object, default: null }, provider: { type: Object, required: true } });
 const emit = defineEmits(['close', 'saved', 'reload', 'busy']);
@@ -33,6 +34,9 @@ watch(saving, value => emit('busy', value), { flush: 'sync' });
 function close() { if (!saving.value) emit('close'); }
 async function save() {
     if (!canSave.value) return;
+    if (!await confirmOutcome({ record: `${props.provider.provider_name || props.provider.name} - ${props.document.original_name}`,
+        outcome: outcome.value === 'approved' ? 'Accept document' : 'Request replacement', danger: outcome.value === 'rejected',
+        consequence: 'This records this document review only. The provider account decision remains separate.' }, () => canSave.value)) return;
     saving.value = true; error.value = '';
     try {
         const response = await window.axios.patch(props.document.review_url, {

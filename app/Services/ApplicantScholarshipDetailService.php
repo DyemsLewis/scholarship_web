@@ -435,6 +435,8 @@ class ApplicantScholarshipDetailService
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'program_cycle' => $scholarship->program_cycle,
+            'logo_url' => $scholarship->logoUrl(),
+            'cover_image_url' => $scholarship->coverImageUrl(),
             'image_url' => $scholarship->coverImageUrl(),
             'provider' => [
                 'id' => $scholarship->provider?->id,

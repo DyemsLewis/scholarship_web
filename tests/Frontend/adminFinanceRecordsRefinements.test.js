@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { createStaffQueueState } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, ref, watch } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -12,13 +13,18 @@ const directories = [['finance/FinancePaymentsPage', 'Payments'], ['finance/Fina
 function harness(name, exposed) {
     const gets = [], mounted = [], cleanup = [], clicks = [], revoked = [];
     let prints = 0;
-    const window = { location: { search: '', origin: 'http://localhost' }, print: () => prints++, axios: {
+    const pathname = {
+        'finance/FinancePaymentsPage': '/admin/workspaces/finance/payments',
+        'finance/FinanceExceptionsPage': '/admin/workspaces/finance/exceptions',
+        'records/RecordsActivityPage': '/admin/workspaces/records/activity',
+    }[name] ?? '/admin';
+    const window = { location: { pathname, search: '', origin: 'http://localhost' }, print: () => prints++, axios: {
         get: async (...args) => { gets.push(args); return { data: { items: [], pagination: { current_page: 1, last_page: 3, total: 0 }, datasets: [], recent_exports: [] } }; },
     } };
     class BrowserURL extends URL { static createObjectURL() { return 'blob:demo'; } static revokeObjectURL(url) { revoked.push(url); } }
     const document = { getElementById: () => ({ dataset: { purchaseId: '2', entryId: '1' } }), body: { appendChild() {} }, createElement: () => ({ click() { clicks.push(this.download); }, remove() {} }) };
     const source = parse(read(name)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
-    const deps = { computed, ref, watch, useAdminResource, normalizeWorkspaceDashboard, window, document, URL: BrowserURL, URLSearchParams, Blob, AbortController,
+    const deps = { createStaffQueueState, computed, ref, watch, useAdminResource, normalizeWorkspaceDashboard, window, document, URL: BrowserURL, URLSearchParams, Blob, AbortController,
         onMounted: (fn) => mounted.push(fn), onBeforeUnmount: (fn) => cleanup.push(fn) };
     return { ...new Function(...Object.keys(deps), `${source}\nreturn { ${exposed} };`)(...Object.values(deps)), window, gets, mounted, cleanup, clicks, revoked, prints: () => prints };
 }

@@ -2,6 +2,7 @@ import './bootstrap';
 import { createApp } from 'vue';
 import GlobalToastHost from './components/GlobalToastHost.vue';
 import StaffFilePreviewHost from './components/StaffFilePreviewHost.vue';
+import OutcomeConfirmationHost from './components/OutcomeConfirmationHost.vue';
 import { installModalScrollEnvironment } from './support/modalScrollEnvironment';
 
 function loadIconCdn() {
@@ -186,12 +187,23 @@ function mountStaffFilePreviewHost() {
     createApp(StaffFilePreviewHost).mount(previewHost);
 }
 
+function mountOutcomeConfirmationHost() {
+    if (document.getElementById('outcome-confirmation-host')) return;
+    const host = document.createElement('div');
+    host.id = 'outcome-confirmation-host';
+    document.body.appendChild(host);
+    const app = createApp(OutcomeConfirmationHost);
+    app.config.idPrefix = 'outcome-';
+    app.mount(host);
+}
+
 if (appElement) {
     const cleanupModalEnvironment = installModalScrollEnvironment();
     if (import.meta.hot) import.meta.hot.dispose(cleanupModalEnvironment);
     loadIconCdn();
     mountGlobalToastHost();
     mountStaffFilePreviewHost();
+    mountOutcomeConfirmationHost();
 
     const page = appElement.dataset.page ?? 'landing';
     const loadPage = pages[page] ?? pages.landing;

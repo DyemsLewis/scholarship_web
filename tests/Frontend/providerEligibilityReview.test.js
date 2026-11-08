@@ -20,6 +20,9 @@ test('the comparison separates saved and current data and discloses the advisory
     assert.match(panel, /<details[^>]*data-current-eligibility-comparison/);
     assert.match(panel, /data-eligibility-advisory-score/);
     assert.match(panel, /The saved comparison below is unchanged/);
+    assert.match(panel, /About the advisory suitability score/);
+    assert.match(panel, /saved match reflects the eligibility comparison recorded on the application/);
+    assert.match(panel, /suitability score also considers academic merit and financial need/);
     assert.match(panel, /File readiness is separate from suitability/);
 });
 

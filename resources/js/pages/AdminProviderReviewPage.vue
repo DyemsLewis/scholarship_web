@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -266,6 +267,7 @@ async function updateProvider(verificationStatus) {
         return;
     }
 
+    if (!await confirmOutcome({ record: provider.value.name, outcome: verificationStatus, consequence: 'This saves the organization verification decision. Program publication is reviewed separately.', danger: verificationStatus === 'rejected' }, () => !!provider.value && !isSaving.value)) return;
     isSaving.value = true;
     decisionError.value = '';
 

@@ -88,7 +88,7 @@ onMounted(loadWorkspace);
                             </div>
                         </header>
 
-                        <div class="staff-table-viewport">
+                        <div class="staff-table-viewport staff-table-viewport--compact">
                             <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
                                 <colgroup><col><col class="w-36"><col class="w-64"><col class="w-32"></colgroup>
                                 <caption class="sr-only">Organization profile readiness by area</caption>

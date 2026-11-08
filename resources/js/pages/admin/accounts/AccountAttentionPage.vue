@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
@@ -12,11 +13,12 @@ const issueOptions = [
     { value: 'password_reset', label: 'Password reset' },
     { value: 'suspended', label: 'Suspended' },
 ];
-const requestedIssue = new URLSearchParams(window.location.search).get('issue');
+const queueState = createStaffQueueState(window, {'search':'search','issue':'attention'});
+const requestedIssue = queueState.get('issue');
 const issue = ref(issueOptions.some((option) => option.value === requestedIssue) ? requestedIssue : 'needs_attention');
-const search = ref('');
+const search = ref(queueState.get('search') ?? '');
 const resource = useAdminResource(async ({ signal }, params) => {
-    const response = await window.axios.get('/admin/workspaces/accounts/data', { params, signal });
+    const response = await queueState.load((query) => window.axios.get('/admin/workspaces/accounts/data', { params: query, signal }), params, () => !signal.aborted);
     return response.data;
 }, { failureMessage: 'The attention queue could not be loaded.' });
 const { isLoading: loading, errorMessage, hasLoaded } = resource;
@@ -56,7 +58,7 @@ watch([search, issue], () => {
 }, { flush: 'sync' });
 onBeforeUnmount(() => clearTimeout(searchTimer));
 
-onMounted(loadAccounts);
+onMounted(() => loadAccounts(queueState.page));
 </script>
 
 <template>
@@ -68,7 +70,7 @@ onMounted(loadAccounts);
             icon="fa-solid fa-triangle-exclamation"
         />
 
-        <AdminTableFrame title="Access queue" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : `${pagination.total} account${pagination.total === 1 ? '' : 's'} in this view`" :loading="loading" :error="errorMessage" loading-message="Loading accounts..." icon="fa-solid fa-shield-halved" class="mt-4" @retry="loadAccounts(1)">
+        <AdminTableFrame title="Access queue" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : `${pagination.total} account${pagination.total === 1 ? '' : 's'} in this view`" :loading="loading" :error="errorMessage" loading-message="Loading accounts..." icon="fa-solid fa-shield-halved" class="mt-4" @retry="resource.retry">
             <template #filters>
                 <div class="grid gap-3">
                     <div class="grid grid-cols-4 overflow-hidden border border-slate-300 bg-white">
@@ -92,7 +94,7 @@ onMounted(loadAccounts);
             </template>
 
             <AccountDirectoryTable
-                :accounts="accounts"
+                :accounts="accounts" :record-link="queueState.link"
                 show-issue
                 empty-title="No accounts need attention here"
             />

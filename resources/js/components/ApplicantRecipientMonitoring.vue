@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, ref } from 'vue';
 import FilePreviewModal from './FilePreviewModal.vue';
 import LocationMapLink from './LocationMapLink.vue';
@@ -181,6 +182,7 @@ function closeSupportDecisionResponse() {
 
 async function submitSupportDecisionResponse() {
     if (!supportDecisionTarget.value || isSavingSupportResponse.value) return;
+    if (!await confirmOutcome({ record: 'Scholarship support decision', outcome: supportResponseForm.value.response_type, consequence: 'Your response will be recorded and sent to the provider. An acknowledgement is not agreement with the decision.' }, () => !!supportDecisionTarget.value && !isSavingSupportResponse.value && supportResponseForm.value.confirmed)) return;
 
     isSavingSupportResponse.value = true;
     const data = new FormData();
@@ -225,6 +227,7 @@ function closeReceiptResponse() {
 
 async function submitReceiptResponse() {
     if (!receiptResponseTarget.value || isSavingReceiptResponse.value) return;
+    if (!await confirmOutcome({ record: receiptResponseTarget.value.title || 'Benefit release', outcome: receiptResponseForm.value.response_type === 'confirmed' ? 'Received as listed' : 'Benefit issue reported', consequence: 'Confirm receipt only if you actually received this benefit. Otherwise report the issue to the provider.' }, () => !!receiptResponseTarget.value && !isSavingReceiptResponse.value && receiptResponseForm.value.acknowledged)) return;
 
     isSavingReceiptResponse.value = true;
     const data = new FormData();
@@ -305,6 +308,7 @@ async function saveManualGrade(cycle) {
         showPortalToast({ type: 'error', title: 'Result required', message: 'Enter the final result shown on the uploaded grade record.' });
         return;
     }
+    if (!await confirmOutcome({ record: cycle.title || 'Academic check-in', outcome: `Reported result: ${form.grade}`, consequence: 'This saves your reported result, not a provider verification.' }, () => !savingManualCycleId.value && !!form.grade)) return;
     savingManualCycleId.value = cycle.id;
     try {
         const response = await window.axios.patch(`/dashboard/applications/${props.applicationId}/monitoring-cycles/${cycle.id}/manual-grade`, form);

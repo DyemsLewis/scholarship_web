@@ -1,6 +1,8 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
@@ -13,11 +15,11 @@ const configs = {
     resolved: { queue: 'resolved', eyebrow: 'Case history', title: 'Resolved cases', description: 'Completed support records.', empty: 'No resolved cases yet', icon: 'fa-solid fa-circle-check' },
 };
 const config = configs[slug] ?? configs['needs-response'];
-const query = new URLSearchParams(window.location.search);
-const search = ref(query.get('search') ?? '');
-const category = ref(query.get('category') ?? 'all');
+const queueState = createStaffQueueState(window, ['search','category']);
+const search = ref(queueState.get('search') ?? '');
+const category = ref(queueState.get('category') ?? 'all');
 const resource = useAdminResource(async ({ signal }, params) => {
-    const response = await window.axios.get('/admin/workspaces/support/data', { params, signal });
+    const response = await queueState.load((query) => window.axios.get('/admin/workspaces/support/data', { params: query, signal }), params, () => !signal.aborted);
     return response.data;
 }, { failureMessage: 'This support queue could not be loaded.' });
 const { isLoading: loading, errorMessage } = resource;
@@ -44,13 +46,13 @@ watch([search, category], () => {
     searchTimer = setTimeout(() => loadCases(1), 250);
 }, { flush: 'sync' });
 onBeforeUnmount(() => clearTimeout(searchTimer));
-onMounted(loadCases);
+onMounted(() => loadCases(queueState.page));
 </script>
 
 <template>
     <AdminWorkspacePage workspace="support_officer" class="admin-support-workspace">
         <AdminWorkspaceHeader :eyebrow="config.eyebrow" :title="config.title" :description="config.description" :icon="config.icon" />
-        <AdminTableFrame title="Support cases" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : resultLabel" :icon="config.icon" :loading="loading" :error="errorMessage" loading-message="Loading support cases..." class="mt-4" @retry="loadCases(1)">
+        <AdminTableFrame title="Support cases" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : resultLabel" :icon="config.icon" :loading="loading" :error="errorMessage" loading-message="Loading support cases..." class="mt-4" @retry="resource.retry">
             <template #filters>
                 <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_16rem]">
                     <label class="relative"><span class="sr-only">Search support cases</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" placeholder="Search subject, reporter, or program" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
@@ -64,10 +66,10 @@ onMounted(loadCases);
                 <tbody class="divide-y divide-slate-200 bg-white">
                     <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
                         <td class="px-5 py-3.5"><p class="support-text text-sm font-bold text-slate-950">{{ item.subject }}</p><p class="mt-1 text-xs font-semibold text-amber-700">{{ item.category_label }}<span v-if="item.has_attachment" class="ml-2 text-slate-500"><i class="fa-solid fa-paperclip mr-1" aria-hidden="true"></i>Attachment</span></p></td>
-                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i :class="item.reporter.type === 'Provider team' ? 'fa-solid fa-building-columns' : 'fa-solid fa-user'" aria-hidden="true"></i><img v-if="item.reporter.image_url" :src="item.reporter.image_url" :alt="item.reporter.type === 'Provider team' ? `${item.reporter.name} logo` : `${item.reporter.name} profile photo`" :class="['absolute inset-0 h-full w-full bg-white', item.reporter.image_fit === 'contain' ? 'object-contain p-1' : 'object-cover']" @error="$event.currentTarget.remove()"></span><span class="min-w-0"><span class="support-text block text-sm font-semibold text-slate-800">{{ item.reporter.name }}</span><span class="support-text mt-0.5 block text-xs text-slate-500">{{ item.reporter.type }} · {{ item.reporter.email }}</span></span></div></td>
+                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity :kind="item.reporter.image_fit === 'contain' ? 'provider' : 'applicant'" :src="item.reporter.image_url" class="h-10 w-10" /><span class="min-w-0"><span class="support-text block text-sm font-semibold text-slate-800">{{ item.reporter.name }}</span><span class="support-text mt-0.5 block text-xs text-slate-500">{{ item.reporter.type }} · {{ item.reporter.email }}</span></span></div></td>
                         <td class="px-4 py-3.5"><span :class="['inline-flex px-2 py-1 text-xs font-bold', item.state === 'resolved' ? 'bg-emerald-100 text-emerald-800' : item.state === 'waiting' ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-900']">{{ item.state_label }}</span><p class="support-text mt-1 text-xs text-slate-600">{{ item.coordination_label }}</p><p class="support-text mt-0.5 text-xs text-slate-500">{{ item.program?.title || 'General platform concern' }}</p></td>
                         <td class="px-4 py-3.5 text-sm text-slate-600">{{ item.submitted_at }}</td>
-                        <td class="px-5 py-3.5 text-right"><a :href="item.action_url" class="inline-grid h-10 w-10 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open ${item.subject}`" title="Open case"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                        <td class="px-5 py-3.5 text-right"><a :href="queueState.link(item.action_url)" class="staff-row-action h-10 w-10" :aria-label="`Open ${item.subject}`" title="Open case"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                     </tr>
                 </tbody>
             </table>

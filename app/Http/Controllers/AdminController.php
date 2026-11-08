@@ -2238,6 +2238,7 @@ class AdminController extends Controller
             'provider_verification_status' => $scholarship->provider?->providerProfile?->verification_status,
             'status' => $scholarship->status,
             'logo_url' => $scholarship->logoUrl(),
+            'cover_image_url' => $scholarship->coverImageUrl(),
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),
@@ -2301,7 +2302,7 @@ class AdminController extends Controller
 
     private function scholarshipImageUrl(Scholarship $scholarship): string
     {
-        return $scholarship->coverImageUrl();
+        return $scholarship->logoUrl();
     }
 
     private function mapUrl(Scholarship $scholarship): ?string

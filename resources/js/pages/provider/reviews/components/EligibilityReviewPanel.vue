@@ -55,8 +55,13 @@ const counts = computed(() => [
             <EligibilityCriteriaTable :criteria="context.current_comparison.criteria ?? []" />
         </details>
         <details class="border-t border-slate-200" data-eligibility-advisory-score>
-            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-4 text-sm font-bold text-slate-700"><span><i class="fa-solid fa-circle-info mr-2 text-slate-400" aria-hidden="true"></i>About the advisory DSS score</span><span>{{ score?.score ?? 'Not calculated' }}<template v-if="score?.score !== undefined && score?.score !== null"> / 100</template></span></summary>
-            <div class="space-y-2 bg-slate-50 px-6 py-4 text-xs leading-5 text-slate-600"><p>{{ context.score_basis }}</p><p>File readiness is separate from suitability. Required discrepancies, preferred differences, and uncertain grades must not be reduced to a single pass/fail percentage.</p><p>{{ score?.decision_notice || 'The provider records the decision after reviewing the complete record. No result is recorded automatically.' }}</p></div>
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-6 py-4 text-sm font-bold text-slate-700"><span><i class="fa-solid fa-circle-info mr-2 text-slate-400" aria-hidden="true"></i>About the advisory suitability score</span><span>{{ score?.score ?? 'Not calculated' }}<template v-if="score?.score !== undefined && score?.score !== null"> / 100</template></span></summary>
+            <div class="space-y-2 bg-slate-50 px-6 py-4 text-xs leading-5 text-slate-600">
+                <p>The review queue's saved match reflects the eligibility comparison recorded on the application. This separate suitability score also considers academic merit and financial need.</p>
+                <p v-if="context.score_basis">{{ context.score_basis }}</p>
+                <p>File readiness is separate from suitability. Review each required rule and its evidence instead of treating either score as a pass or fail.</p>
+                <p>{{ score?.decision_notice || 'The provider records the decision after reviewing the complete record. No result is recorded automatically.' }}</p>
+            </div>
         </details>
     </section>
 </template>

@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { computed, nextTick, ref, useId, watch } from 'vue';
 import { useModalAccessibility } from '../../composables/useModalAccessibility';
 import { useWithdrawalAction } from '../../composables/useWithdrawalAction.js';
@@ -70,6 +71,13 @@ async function reload() {
     finally { reloading.value = false; }
 }
 async function submit() {
+    if (intent.value === 'review' && !await confirmOutcome({
+        record: `${current.value?.applicant?.name || 'Recipient'} / ${current.value?.program?.title || props.context}`,
+        outcome: outcome.value === 'approved' ? 'Withdrawal approved' : 'Withdrawal declined',
+        consequence: outcome.value === 'approved' ? 'This ends future scholarship support. Earlier benefit records remain in history.' : 'Support remains unchanged and the applicant will receive your decision.',
+        danger: outcome.value === 'approved',
+        confirmLabel: buttonLabel.value,
+    }, () => props.open && canSave.value && !busy.value && !discardPrompt.value)) return;
     await save();
     if (error.value) {
         await nextTick();

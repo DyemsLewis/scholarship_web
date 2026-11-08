@@ -107,7 +107,9 @@ class ApplicantMonitoringDetailService
         return [
             'program' => [
                 'title' => $scholarship?->title ?? 'Scholarship program',
-                'image_url' => $scholarship?->coverImageUrl(),
+                'image_url' => $scholarship?->logoUrl() ?? asset('uploads/scholarship-default.jpg'),
+                'logo_url' => $scholarship?->logoUrl() ?? asset('uploads/scholarship-default.jpg'),
+                'cover_image_url' => $scholarship?->coverImageUrl(),
             ],
             'provider' => [
                 'name' => $provider?->provider_name ?? $provider?->name ?? 'Scholarship provider',

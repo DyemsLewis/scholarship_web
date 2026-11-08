@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, reactive, ref } from 'vue';
 
@@ -33,7 +34,7 @@ test('support, payment and file tables keep fixed viewports and contain their ac
         assert.doesNotMatch(source, /<th[^>]*w-\[\d+%\]|min-w-\[(?:72rem|920px|880px)\]/);
     }
     const support = read('pages/provider/support/SupportCaseDirectoryPage.vue');
-    for (const token of ['ProviderApplicantPhoto', 'profile_photo_url', 'selectedProgram', 'pagination', 'requestVersion', '!reports.length && !errorMessage']) assert.ok(support.includes(token));
+    for (const token of ['StaffTableIdentity', 'profile_photo_url', 'selectedProgram', 'pagination', 'requestVersion', '!reports.length && !errorMessage']) assert.ok(support.includes(token));
     const billing = read('pages/provider/billing/BillingRequestDirectoryPage.vue');
     for (const token of ['exportUrl', 'isRequestQueue', 'entry.can_refresh_payment', '!entries.length && !errorMessage']) assert.ok(billing.includes(token));
 });
@@ -83,7 +84,7 @@ function pageHarness(path, exposed, overrides = {}) {
     const navigation = [];
     const window = { location: { pathname: '/provider/workspaces/billing/service-requests/1/review', href: 'http://localhost/provider', search: '', assign: (url) => navigation.push(url) }, history: { replaceState() {} },
         axios: { post: async (...args) => { writes.push(args); return { data: {} }; }, patch: async (...args) => { writes.push(args); return { data: {} }; } } };
-    const deps = { ref, reactive, computed, onMounted() {}, watch() {}, window, URLSearchParams, URL, FormData: class { append() {} }, ...overrides };
+    const deps = { staffQueueReturn, ref, reactive, computed, onMounted() {}, watch() {}, window, URLSearchParams, URL, FormData: class { append() {} }, ...overrides };
     return { ...new Function(...Object.keys(deps), `${source}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes, navigation };
 }
 

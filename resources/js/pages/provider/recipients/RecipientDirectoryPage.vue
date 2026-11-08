@@ -1,7 +1,10 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/recipients/agreements': 'awaiting',
@@ -24,11 +27,13 @@ const summary = ref({ awaiting: 0, active: 0, declined: 0, closed: 0 });
 const programs = ref([]);
 const recipients = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const selectedProgram = ref(new URLSearchParams(window.location.search).get('program_id') ?? '');
+const queueState = createStaffQueueState(window, ['search','program_id']);
+const search = ref(queueState.get('search') ?? '');
+const selectedProgram = ref(queueState.get('program_id') ?? '');
 const isLoading = ref(true);
 const errorMessage = ref('');
 let requestVersion = 0;
+let requestedPage = 1;
 let searchTimer = null;
 
 const queues = computed(() => [
@@ -37,13 +42,12 @@ const queues = computed(() => [
     { key: 'declined', label: 'Declined', count: summary.value.declined, href: '/provider/workspaces/recipients/declined' },
     { key: 'closed', label: 'Closed', count: summary.value.closed, href: '/provider/workspaces/recipients/closed' },
 ]);
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : '0 recipients');
 
 function recordUrl(recipient) {
-    const returnTo = `${path}${window.location.search}`;
-    return `/provider/applications/${recipient.id}?return_to=${encodeURIComponent(returnTo)}`;
+    return queueState.link(`/provider/applications/${recipient.id}`);
 }
 
 function statusClass(state) {
@@ -56,18 +60,19 @@ function statusClass(state) {
 }
 
 async function loadRecipients(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
     try {
-        const response = await window.axios.get('/provider/workspaces/recipients/data', {
-            params: {
-                queue: activeQueue,
-                search: search.value.trim() || undefined,
-                program_id: selectedProgram.value || undefined,
-                page,
-            },
-        });
+        const params = {
+            queue: activeQueue,
+            search: search.value.trim() || undefined,
+            program_id: selectedProgram.value || undefined,
+            page,
+        };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/recipients/data', { params: query }), params, () => version === requestVersion);
         if (version !== requestVersion) return;
         workspace.value = response.data.workspace;
         summary.value = response.data.summary ?? summary.value;
@@ -83,12 +88,18 @@ async function loadRecipients(page = 1) {
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadRecipients(1), 300);
+}, { flush: 'sync' });
+watch(selectedProgram, () => loadRecipients(1), { flush: 'sync' });
+onMounted(() => loadRecipients(queueState.page));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
 });
-watch(selectedProgram, () => loadRecipients(1));
-onMounted(() => loadRecipients());
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
 <template>
@@ -114,8 +125,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         <label class="w-72"><span class="sr-only">Filter by program</span><select v-model="selectedProgram" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-slate-950"><option value="">All programs</option><option v-for="program in programs" :key="program.id" :value="program.id">{{ program.title }}</option></select></label>
                     </div>
 
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                    <div v-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading recipient records...</p></div>
+
+                    <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadRecipients(requestedPage)" />
+                    <div v-else-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading recipient records...</p></div>
                     <div v-else-if="!recipients.length && !errorMessage" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-user-shield text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Recipient records move here after a scholarship is awarded.</p></div>
 
                     <div v-else class="staff-table-viewport">
@@ -123,17 +135,17 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                             <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600"><th class="px-5 py-3">Recipient</th><th class="px-5 py-3">Onboarding</th><th class="px-5 py-3">Support</th><th class="px-5 py-3">Award</th><th class="px-5 py-3 text-right">Action</th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="recipient in recipients" :key="recipient.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><div class="flex items-center gap-3"><img v-if="recipient.applicant.profile_photo_url" :src="recipient.applicant.profile_photo_url" :alt="`${recipient.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ recipient.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ recipient.program.title }}</p></div></div></td>
+                                    <td class="px-5 py-4"><div class="flex items-center gap-3"><StaffTableIdentity :src="recipient.applicant.profile_photo_url" class="h-11 w-11" /><div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ recipient.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ recipient.program.title }}</p></div></div></td>
                                     <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(recipient.onboarding.state)]">{{ recipient.onboarding.label }}</span><WorkspaceTextSummary class="mt-2 text-xs text-slate-500" :text="recipient.onboarding.response_note || recipient.onboarding.next_step" label="note" /></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ recipient.onboarding.state === 'active' ? 'Support active' : recipient.onboarding.state === 'closed' ? 'Support record closed' : 'Not started' }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ recipient.program.support_period || recipient.support.latest_decision_at || 'Dates set by the program' }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ recipient.award.amount_label }}</p><p class="mt-1 text-xs text-slate-500">{{ recipient.onboarding.responded_at || `${recipient.waiting_days} days waiting` }}</p></td>
-                                    <td class="px-5 py-4 text-right"><a :href="recordUrl(recipient)" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800">{{ recipient.onboarding.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
+                                    <td class="px-5 py-4 text-right"><a :href="recordUrl(recipient)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`${recipient.onboarding.action_label} for ${recipient.applicant.name}`">{{ recipient.onboarding.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p><div class="flex gap-2"><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadRecipients(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadRecipients(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button></div></footer>
+                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p><div class="flex gap-2"><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" @click="loadRecipients(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" @click="loadRecipients(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button></div></footer>
                 </section>
             </div>
         </section>

@@ -109,7 +109,8 @@ class ReviewQueueQuery
             'deadline' => $program->deadline?->format('M d, Y'),
             'updated_at' => $program->updated_at?->format('M d, Y'),
             'logo_url' => $program->logoUrl(),
-            'image_url' => $program->coverImageUrl(),
+            'image_url' => $program->logoUrl(),
+            'cover_image_url' => $program->coverImageUrl(),
             'review_url' => route('admin.workspaces.reviews.programs.show', $program),
         ]);
     }
@@ -318,7 +319,8 @@ class ReviewQueueQuery
                 'program' => $program?->title,
                 'provider' => $program?->provider?->providerProfile?->provider_name ?: $program?->provider?->name,
                 'logo_url' => $program?->logoUrl(),
-                'image_url' => $program?->coverImageUrl(),
+                'image_url' => $program?->logoUrl(),
+                'cover_image_url' => $program?->coverImageUrl(),
                 'stage_key' => $session->stage_key,
                 'stage_label' => $this->stageLabel($session->stage_key),
                 'mode' => str($session->mode)->headline()->toString(),

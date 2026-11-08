@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useModalAccessibility } from '../../composables/useModalAccessibility';
 import { useConcernMutation } from '../../composables/useConcernMutation.js';
@@ -27,6 +28,12 @@ async function begin(value) { if (locked.value || privacyDirty.value) return; cl
 function chooseFiles(event) { const items = Array.from(event.target.files || []); const warning = evidenceError(items); files.value = warning ? [] : items; error.value = warning || ''; if (warning) event.target.value = ''; }
 async function save() {
     if (!valid.value) return;
+    if (action.value === 'outcome' && !await confirmOutcome({
+        record: `${current.value.applicant.name} / ${current.value.program.title}`,
+        outcome: { not_established: 'Concern not established', excused: 'Circumstances accepted / excused', confirmed: 'Concern supported by evidence' }[finding.value],
+        consequence: 'This saves the finding and recommendation. Any support decision remains a separate action, and the applicant can appeal the finding.',
+        danger: finding.value === 'confirmed',
+    }, () => props.open && valid.value && action.value === 'outcome')) return;
     const body = new FormData(); body.append('expected_revision', current.value.revision); body.append('request_key', requestKey.value); body.append('details', details.value.trim()); body.append('confirmed', '1');
     if (action.value === 'outcome') { body.append('finding', finding.value); body.append('recommendation', recommendation.value); body.append('terms_reviewed', '1'); body.append('responses_reviewed', '1'); for (const id of cited.value) body.append('evidence_ids[]', id); }
     for (const file of files.value) body.append('evidence[]', file);

@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { reviewErrorMessage } from '../support/adminReviewPresentation.js';
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 
 export function useApplicantEvidenceDecision({ document, allowed, submit, onSaved, extraPayload = () => ({}), extraValid = () => true }) {
     const outcome = ref('');
@@ -23,6 +24,9 @@ export function useApplicantEvidenceDecision({ document, allowed, submit, onSave
 
     async function save() {
         if (!canSave.value) return;
+        if (!await confirmOutcome({ record: document()?.original_name || 'Applicant supporting evidence',
+            outcome: outcome.value === 'approved' ? 'Accept document' : 'Request replacement', danger: outcome.value === 'rejected',
+            consequence: 'This saves the evidence review and any verified academic result. Final profile verification is a separate decision.' }, () => canSave.value)) return;
         saving.value = true; error.value = '';
         const current = document();
         try {

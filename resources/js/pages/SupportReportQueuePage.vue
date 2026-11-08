@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -233,6 +234,7 @@ async function updateStatus(report) {
         return;
     }
 
+    if (!await confirmOutcome({ record: report.subject || 'Support report', outcome: nextStatus, consequence: 'This saves the report status and your response.' }, () => !updatingId.value && !!selectedReport.value)) return;
     updatingId.value = report.id;
     actionError.value = '';
 

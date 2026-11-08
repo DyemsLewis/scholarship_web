@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import SupportOfficerSidebar from '../components/SupportOfficerSidebar.vue';
@@ -133,6 +134,7 @@ function closeReport() {
 }
 
 async function updateStatus(report) {
+    if (!await confirmOutcome({ record: report.subject || 'Support report', outcome: report.status === 'resolved' ? 'Reopened' : 'Resolved' }, () => !updatingId.value && !!selectedReport.value)) return;
     updatingId.value = report.id;
     actionError.value = '';
 

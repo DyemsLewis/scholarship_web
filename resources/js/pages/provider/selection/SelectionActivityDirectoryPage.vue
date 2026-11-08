@@ -1,6 +1,9 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import SelectionSessionFormModal from './components/SelectionSessionFormModal.vue';
 
 const queueByPath = {
@@ -27,14 +30,16 @@ const programs = ref([]);
 const sessions = ref([]);
 const applications = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const selectedProgram = ref(pageQuery.get('program_id') ?? '');
-const selectedStage = ref(pageQuery.get('stage_key') ?? '');
+const queueState = createStaffQueueState(window, ['search','program_id','stage_key']);
+const search = ref(queueState.get('search') ?? '');
+const selectedProgram = ref(queueState.get('program_id') ?? '');
+const selectedStage = ref(queueState.get('stage_key') ?? '');
 const isLoading = ref(true);
 const errorMessage = ref('');
 const showSessionModal = ref(false);
 const sessionContext = ref({ programId: '', stageKey: '', applicationId: null });
 let requestVersion = 0;
+let requestedPage = 1;
 let searchTimer = null;
 
 const queues = computed(() => [
@@ -49,7 +54,7 @@ const stageOptions = computed(() => {
     return [...labels].map(([key, label]) => ({ key, label }));
 });
 const isSessionQueue = computed(() => ['active', 'history'].includes(activeQueue));
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : isSessionQueue.value ? '0 sessions' : '0 applicants');
 
@@ -99,17 +104,18 @@ function closeSessionModal() {
 
 function handleSessionSaved(session) {
     showSessionModal.value = false;
-    window.location.href = `/provider/workspaces/selection/sessions/${session.id}`;
+    window.location.href = queueState.link(`/provider/workspaces/selection/sessions/${session.id}`);
 }
 
 async function loadRecords(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
     try {
-        const response = await window.axios.get('/provider/workspaces/selection/sessions/data', {
-            params: { queue: activeQueue, search: search.value.trim() || undefined, program_id: selectedProgram.value || undefined, stage_key: selectedStage.value || undefined, page },
-        });
+        const params = { queue: activeQueue, search: search.value.trim() || undefined, program_id: selectedProgram.value || undefined, stage_key: selectedStage.value || undefined, page };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/selection/sessions/data', { params: query }), params, () => version === requestVersion);
         if (version !== requestVersion) return;
         workspace.value = response.data.workspace;
         summary.value = response.data.summary ?? summary.value;
@@ -126,12 +132,15 @@ async function loadRecords(page = 1) {
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadRecords(1), 300);
-});
-watch([selectedProgram, selectedStage], () => loadRecords(1));
+}, { flush: 'sync' });
+watch([selectedProgram, selectedStage], () => loadRecords(1), { flush: 'sync' });
 onMounted(() => {
-    loadRecords();
+    loadRecords(queueState.page);
     if (pageQuery.get('create_session') === '1') {
         openSessionModal({
             programId: pageQuery.get('program_id') ?? '',
@@ -140,7 +149,10 @@ onMounted(() => {
         });
     }
 });
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
+});
 </script>
 
 <template>
@@ -175,22 +187,23 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         <label class="w-72"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Program</span><select v-model="selectedProgram" class="h-10 w-full border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 focus:border-slate-700 focus:ring-slate-700"><option value="">All assigned programs</option><option v-for="program in programs" :key="program.id" :value="String(program.id)">{{ program.title }}</option></select></label>
                         <label class="w-56"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Stage</span><select v-model="selectedStage" class="h-10 w-full border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 focus:border-slate-700 focus:ring-slate-700"><option value="">All stages</option><option v-for="stage in stageOptions" :key="stage.key" :value="stage.key">{{ stage.label }}</option></select></label>
                     </header>
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
 
-                    <div class="staff-table-viewport">
-                        <table v-if="isSessionQueue" class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-48"><col class="w-40"><col class="w-28"><col class="w-36"><col class="w-20"></colgroup>
+
+                    <div class="staff-table-viewport" :aria-busy="isLoading">
+                        <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadRecords(requestedPage)" />
+                        <table v-else-if="isSessionQueue" class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-48"><col class="w-40"><col class="w-28"><col class="w-36"><col class="w-20"></colgroup>
                             <caption class="sr-only">{{ pageCopy.title }}</caption>
                             <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.14em] text-slate-600"><th class="px-5 py-3">Session</th><th class="px-5 py-3">Program</th><th class="px-5 py-3">Schedule</th><th class="px-5 py-3">Roster</th><th class="px-5 py-3">Status</th><th class="px-5 py-3 text-right"><span class="sr-only">Action</span></th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
-                                <tr v-if="isLoading && !sessions.length"><td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading sessions...</p></td></tr>
+                                <tr v-if="isLoading"><td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading sessions...</p></td></tr>
                                 <tr v-else-if="!sessions.length && !errorMessage"><td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Create a session when applicants reach a selection stage.' }}</p></td></tr>
-                                <tr v-for="session in sessions" :key="session.id" class="align-middle hover:bg-slate-50/70">
+                                <tr v-else v-for="session in sessions" :key="session.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4"><p class="application-text text-sm font-bold text-slate-950">{{ session.title }}</p><p class="mt-1 text-xs text-slate-500">{{ labelize(session.stage_key) }} · {{ labelize(session.mode) }}</p></td>
                                     <td class="px-5 py-4"><p class="application-text text-sm font-semibold text-slate-800">{{ session.program?.title }}</p><p v-if="session.proof_required" class="mt-1 text-xs text-slate-500">Proof required</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-semibold text-slate-800">{{ formatDate(session.starts_at) }}</p><p v-if="session.venue" class="mt-1 application-text text-xs text-slate-500">{{ session.venue }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ session.capacity.assigned }} assigned</p><p class="mt-1 text-xs text-slate-500">{{ session.capacity.limit ? `${session.capacity.remaining} spaces left` : 'No capacity limit' }}</p></td>
                                     <td class="px-5 py-4"><span :class="['inline-flex border px-2 py-1 text-xs font-bold uppercase tracking-wide', statusClass(session.status)]">{{ labelize(session.status) }}</span></td>
-                                    <td class="px-5 py-4 text-right"><a :href="`/provider/workspaces/selection/sessions/${session.id}`" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open ${session.title}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                                    <td class="px-5 py-4 text-right"><a :href="queueState.link(`/provider/workspaces/selection/sessions/${session.id}`)" class="staff-row-action h-9 w-9" :aria-label="`Open ${session.title}`" title="Open session"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -199,18 +212,18 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                             <caption class="sr-only">{{ pageCopy.title }}</caption>
                             <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.14em] text-slate-600"><th class="px-5 py-3">Applicant</th><th class="px-5 py-3">Program</th><th class="px-5 py-3">Stage</th><th class="px-5 py-3">Submitted</th><th class="px-5 py-3 text-right"><span class="sr-only">Actions</span></th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
-                                <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applicants...</p></td></tr>
+                                <tr v-if="isLoading"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applicants...</p></td></tr>
                                 <tr v-else-if="!applications.length && !errorMessage"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Records move here automatically as work is completed.' }}</p></td></tr>
-                                <tr v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><div class="flex min-w-0 items-center gap-3"><img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education || 'Education not provided' }}</p></div></div></td>
+                                <tr v-else v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
+                                    <td class="px-5 py-4"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity :src="application.applicant.profile_photo_url" class="h-11 w-11" /><div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education || 'Education not provided' }}</p></div></div></td>
                                     <td class="px-5 py-4"><p class="application-text text-sm font-semibold text-slate-800">{{ application.program.title }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage.label }}</p><p class="mt-1 text-xs text-slate-500">{{ applicationQueueNote(application) }}</p></td>
                                     <td class="px-5 py-4 text-sm text-slate-600">{{ application.submitted_at || 'Not available' }}</td>
                                     <td class="px-5 py-4 text-right"><div class="flex justify-end gap-2">
-                                        <button v-if="activeQueue === 'unassigned'" type="button" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${application.action.label} for ${application.applicant.name}`" @click="openSessionModal({ programId: application.program.id, stageKey: application.stage.key, applicationId: application.id })"><i class="fa-solid fa-calendar-plus text-xs" aria-hidden="true"></i></button>
+                                        <button v-if="activeQueue === 'unassigned'" type="button" class="staff-row-action h-9 w-9" :aria-label="`${application.action.label} for ${application.applicant.name}`" @click="openSessionModal({ programId: application.program.id, stageKey: application.stage.key, applicationId: application.id })" title="Schedule session"><i class="fa-solid fa-calendar-plus text-xs" aria-hidden="true"></i></button>
                                         <template v-else>
-                                            <button v-if="application.stage.key === 'formal_application'" type="button" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Schedule an optional appointment for ${application.applicant.name}`" @click="openSessionModal({ programId: application.program.id, stageKey: application.stage.key, applicationId: application.id })"><i class="fa-solid fa-calendar-plus text-xs" aria-hidden="true"></i></button>
-                                            <a :href="application.action.url" class="inline-flex h-9 w-9 items-center justify-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${application.action.label} for ${application.applicant.name}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                                            <button v-if="application.stage.key === 'formal_application'" type="button" class="staff-row-action h-9 w-9" :aria-label="`Schedule an optional appointment for ${application.applicant.name}`" @click="openSessionModal({ programId: application.program.id, stageKey: application.stage.key, applicationId: application.id })" title="Schedule appointment"><i class="fa-solid fa-calendar-plus text-xs" aria-hidden="true"></i></button>
+                                            <a :href="queueState.link(application.action.url)" class="staff-row-action h-9 w-9" :aria-label="`${application.action.label} for ${application.applicant.name}`" title="Open activity"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
                                         </template>
                                     </div></td>
                                 </tr>
@@ -218,7 +231,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         </table>
                     </div>
 
-                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p><div class="flex gap-2"><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadRecords(pagination.current_page - 1)">Previous</button><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadRecords(pagination.current_page + 1)">Next</button></div></footer>
+                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p><div class="flex gap-2"><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" @click="loadRecords(pagination.current_page - 1)">Previous</button><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" @click="loadRecords(pagination.current_page + 1)">Next</button></div></footer>
                 </section>
             </div>
         </section>

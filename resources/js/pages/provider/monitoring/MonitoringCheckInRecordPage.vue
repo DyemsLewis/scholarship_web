@@ -1,7 +1,9 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import MonitoringCaseHistoryModal from '../../../components/MonitoringCaseHistoryModal.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
@@ -170,6 +172,11 @@ async function submitCaseDecision() {
     const mode = caseDecisionMode.value;
     if (!monitoringCase || !mode || caseDecisionBusy.value) return;
 
+    if (!await confirmOutcome({ record: recipient.name || recipient.applicant_name || 'Recipient check-in',
+        outcome: mode === 'reopen' ? 'Reopen check-in' : caseDecisionForm.value.outcome,
+        danger: caseDecisionForm.value.outcome === 'incomplete', consequence: 'This saves the check-in case outcome and its explanation. Scholarship support decisions remain separate.' },
+    () => !caseDecisionBusy.value && caseDecisionMode.value === mode)) return;
+
     caseDecisionBusy.value = true;
     caseDecisionError.value = '';
     errorMessage.value = '';
@@ -336,7 +343,7 @@ onMounted(loadRecord);
                         <template v-else>
                             <div class="monitoring-recipient-picker gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3" role="group" aria-label="Choose a recipient">
                                 <button v-for="recipient in filteredRecipients" :key="recipient.application_id" type="button" :aria-pressed="selectedRecipientId === recipient.application_id" :class="['flex min-w-0 items-center gap-3 border px-3 py-2 text-left', selectedRecipientId === recipient.application_id ? 'border-slate-950 bg-white' : 'border-slate-200 bg-slate-50 hover:border-slate-400']" @click="selectRecipient(recipient)">
-                                    <img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile`" class="h-9 w-9 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-9 w-9 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user text-xs" aria-hidden="true"></i></span>
+                                    <StaffTableIdentity :src="recipient.profile_photo_url" class="h-9 w-9" />
                                     <span class="min-w-0 flex-1"><span class="block monitoring-text text-xs font-bold text-slate-950">{{ recipient.name }}</span><span class="mt-0.5 block text-xs font-semibold text-slate-500">{{ recipientStatusLabel(recipient) }}</span></span>
                                 </button>
                             </div>

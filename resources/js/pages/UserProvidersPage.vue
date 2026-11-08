@@ -78,6 +78,12 @@ function markLogoFailed(item) {
     failedLogos.value = new Set([...failedLogos.value, item.id]);
 }
 
+function useDefaultProgramLogo(event) {
+    if (!event.currentTarget.src.endsWith('/uploads/scholarship-default.jpg')) {
+        event.currentTarget.src = '/uploads/scholarship-default.jpg';
+    }
+}
+
 function websiteUrl(value) {
     const website = String(value ?? '').trim();
 
@@ -351,9 +357,9 @@ onMounted(loadPage);
                             <article v-for="program in provider.programs" :key="program.id" class="student-card overflow-hidden rounded-md border-slate-300" data-provider-program>
                                 <div class="grid lg:min-h-56 lg:grid-cols-[20rem_minmax(0,1fr)]">
                                     <figure class="relative h-52 overflow-hidden bg-slate-900 lg:h-auto">
-                                        <img :src="program.image_url || programVisual(program).image" :alt="program.image_url ? `${program.title} background` : programVisual(program).alt" class="absolute inset-0 h-full w-full object-cover">
+                                        <img :src="program.cover_image_url || programVisual(program).image" :alt="program.cover_image_url ? `${program.title} background` : programVisual(program).alt" class="absolute inset-0 h-full w-full object-cover" data-program-cover>
                                         <div class="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-transparent"></div>
-                                        <img v-if="hasLogo(provider)" :src="provider.logo_url" :alt="`${provider.name} logo`" class="absolute bottom-4 left-4 h-16 w-16 rounded-md bg-white object-contain p-2 shadow-lg ring-1 ring-white/70">
+                                        <img :src="program.logo_url || '/uploads/scholarship-default.jpg'" :alt="`${program.title} logo`" class="absolute bottom-4 left-4 h-16 w-16 rounded-md bg-white object-contain p-2 shadow-lg ring-1 ring-white/70" data-program-logo @error="useDefaultProgramLogo">
                                     </figure>
 
                                     <div class="flex flex-col p-5 sm:p-6">

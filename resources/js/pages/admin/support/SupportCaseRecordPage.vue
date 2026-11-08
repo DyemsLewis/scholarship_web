@@ -1,4 +1,6 @@
 <script setup>
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
 import { formatFileSize } from '../../../support/display.js';
@@ -43,6 +45,11 @@ async function updateStatus(status) {
         actionError.value = 'Add a response of 10 to 2000 characters before completing the platform response.';
         return;
     }
+    if (status === 'resolved' && !await confirmOutcome({
+        record: report.value.subject || 'Platform support case',
+        outcome: 'Resolved',
+        consequence: 'Your response will be saved and this support case will be marked resolved.',
+    }, () => ready.value && !saving.value && canResolve.value && responseLength.value >= 10 && responseLength.value <= 2000)) return;
     saving.value = true;
     actionError.value = '';
     confirmation.value = '';
@@ -72,11 +79,12 @@ function closeReopen() {
 }
 
 onMounted(loadCase);
+const originatingQueue = staffQueueReturn(window, 'adminSupport');
 </script>
 
 <template>
     <AdminWorkspacePage workspace="support_officer" class="admin-support-workspace">
-        <a :href="backUrl" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to support cases</a>
+        <a :href="originatingQueue || backUrl" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to support cases</a>
 
         <AdminWorkspaceHeader eyebrow="Platform support" title="Case review" description="Review the reported issue and record the platform response." icon="fa-solid fa-life-ring">
             <template v-if="ready" #actions><span :class="['inline-flex px-3 py-2 text-xs font-bold uppercase tracking-wide', report.state === 'resolved' ? 'bg-emerald-100 text-emerald-800' : report.state === 'waiting' ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-900']">{{ report.state_label }}</span></template>

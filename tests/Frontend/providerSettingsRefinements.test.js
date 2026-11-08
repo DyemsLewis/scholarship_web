@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { createStaffQueueState, staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, reactive, ref } from 'vue';
 
@@ -66,7 +67,7 @@ function harness(path, exposed, overrides = {}) {
     const writes = [];
     const window = { location: { pathname: '/provider/team/accounts/88/edit', href: '', search: '' }, scrollTo() {}, clearTimeout() {}, setTimeout() {},
         axios: { get: async () => { throw new Error('Unavailable'); }, patch: async (...args) => { writes.push(args); return { data: {} }; }, post: async (...args) => { writes.push(args); return { data: { user: { provider_logo_url: '/new-logo.png' } } }; }, delete: async (...args) => { writes.push(args); return { data: {} }; } } };
-    const deps = { ref, reactive, computed, onMounted() {}, onBeforeUnmount() {}, watch() {}, window, URLSearchParams,
+    const deps = { createStaffQueueState, staffQueueReturn, ref, reactive, computed, onMounted() {}, onBeforeUnmount() {}, watch() {}, window, URLSearchParams,
         FormData: class { append() {} }, labelFromKey: (value) => value, limitPhoneNumber: (value) => value, ...overrides };
     return { ...new Function(...Object.keys(deps), `${source}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes };
 }

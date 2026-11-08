@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useConcernMutation } from '../../composables/useConcernMutation.js';
 import { concernDate, concernError } from '../../support/agreementConcerns.js';
@@ -32,6 +33,7 @@ async function begin() {
 }
 async function save() {
     if (!valid.value) return;
+    if (!await confirmOutcome({ record: 'Internal case privacy assessment', outcome: { blocked: 'Do not disclose', policy_review_needed: 'Further privacy review needed', not_necessary: 'Disclosure is not necessary' }[assessment.value], consequence: 'This records an internal assessment only. It does not authorize disclosure, change support, or decide an application.' }, () => editing.value && valid.value)) return;
     const data = await run('post', privacy.value.record_url, { expected_revision: privacy.value.revision, request_key: requestKey.value, assessment: assessment.value, audience: audience.value, purpose: purpose.value.trim(), basis_reference: reference.value.trim() || null, rationale: rationale.value.trim(), recheck_on: recheck.value, audit_retention_hold: hold.value, confirmed: true });
     if (!data) return;
     privacy.value = data.privacy; saved.value = data.message; editing.value = false; emit('recorded');

@@ -23,7 +23,7 @@ function toneClass(tone) {
     <div class="divide-y divide-slate-200">
         <article v-for="item in items" :key="item.id" class="workspace-dashboard-item grid min-h-24 grid-cols-[minmax(0,1fr)_15rem_9rem] items-center gap-6 px-6 py-4">
             <div class="flex min-w-0 items-center gap-4">
-                <img v-if="item.image_url" :src="item.image_url" :alt="`${item.title} profile`" class="h-12 w-12 shrink-0 border border-slate-200 object-cover">
+                <img v-if="item.image_url" :src="item.image_url" :alt="item.image_fit === 'contain' ? `${item.subtitle || item.title} logo` : `${item.title} profile`" :class="['h-12 w-12 shrink-0 border border-slate-200 bg-white', item.image_fit === 'contain' ? 'object-contain p-1' : 'object-cover']">
                 <span v-else class="workspace-dashboard-icon grid h-12 w-12 shrink-0 place-items-center bg-slate-100 text-slate-500" aria-hidden="true">
                     <i :class="fallbackIcon"></i>
                 </span>

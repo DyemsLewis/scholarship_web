@@ -1,4 +1,5 @@
 <script setup>
+import StaffTableIdentity from '../../components/StaffTableIdentity.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from './ProviderSidebar.vue';
 import WorkspaceDashboardHeader from '../../components/workspace-dashboard/WorkspaceDashboardHeader.vue';
@@ -135,7 +136,7 @@ onMounted(loadDashboard);
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="program-snapshot-title">
                         <header class="workspace-dashboard-section-header flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4"><div class="workspace-dashboard-heading flex min-w-0 items-center gap-3"><span class="workspace-dashboard-icon grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-graduation-cap text-sm" aria-hidden="true"></i></span><div class="min-w-0"><h2 id="program-snapshot-title" class="text-base font-bold text-slate-950">Program snapshot</h2><p class="mt-1 text-xs text-slate-600">Recently updated scholarship programs.</p></div></div><a href="/provider/programs" class="workspace-dashboard-action inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-amber-700">View all programs <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></header>
-                        <div v-if="recentPrograms.length" class="staff-table-viewport">
+                        <div v-if="recentPrograms.length" class="staff-table-viewport staff-table-viewport--compact">
                             <table class="w-full min-w-[850px] table-fixed border-collapse text-left">
                                 <colgroup><col class="w-[38%]"><col class="w-[18%]"><col class="w-[16%]"><col><col class="w-20"></colgroup>
                                 <thead class="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-600">
@@ -145,15 +146,14 @@ onMounted(loadDashboard);
                                     <tr v-for="program in recentPrograms" :key="program.id" class="hover:bg-slate-50">
                                         <td class="px-6 py-4">
                                             <div class="flex min-w-0 items-center gap-3">
-                                                <img v-if="program.logo_url" :src="program.logo_url" :alt="`${program.title} logo`" class="h-10 w-10 shrink-0 border border-slate-200 bg-white object-contain">
-                                                <span v-else class="workspace-dashboard-icon grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-graduation-cap text-sm"></i></span>
+                                                <StaffTableIdentity kind="program" :src="program.logo_url" class="h-10 w-10" />
                                                 <div class="min-w-0"><p class="workspace-dashboard-text text-sm font-bold text-slate-950">{{ program.title }}</p><p class="workspace-dashboard-text mt-1 text-xs text-slate-600">{{ program.category || 'Scholarship program' }}</p></div>
                                             </div>
                                         </td>
                                         <td class="px-6 py-4"><span :class="['workspace-dashboard-status inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(program.status)]">{{ statusLabel(program.status) }}</span></td>
                                         <td class="px-6 py-4 text-sm font-bold text-slate-900">{{ program.applications_count || 0 }}</td>
                                         <td class="px-6 py-4 text-xs font-semibold text-slate-600">{{ dateLabel(program.deadline) }}</td>
-                                        <td class="px-4 py-4"><a :href="`/provider/programs/${program.id}`" class="workspace-dashboard-action grid h-10 w-10 place-items-center bg-slate-950 text-white" :aria-label="`Open ${program.title}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                                        <td class="px-4 py-4"><a :href="`/provider/programs/${program.id}`" class="staff-row-action staff-row-action--primary workspace-dashboard-action h-10 w-10" :aria-label="`Open ${program.title}`" title="Open program"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                                     </tr>
                                 </tbody>
                             </table>

@@ -114,7 +114,7 @@ onMounted(loadArea);
                             <td class="font-bold text-slate-800">{{ member.permission_count }}</td>
                             <td><span :class="['inline-flex px-2.5 py-1 text-xs font-bold', member.status === 'suspended' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700']">{{ labelFromKey(member.status) }}</span></td>
                             <td class="text-sm text-slate-500">{{ member.updated_at }}</td>
-                            <td class="px-5 text-right"><a :href="member.edit_url" class="inline-grid h-9 w-9 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open ${member.name}`" title="Open account"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                            <td class="px-5 text-right"><a :href="member.edit_url" class="staff-row-action h-9 w-9" :aria-label="`Open ${member.name}`" title="Open account"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                         </tr>
                     </tbody>
                 </table>

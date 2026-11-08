@@ -71,6 +71,7 @@ final class SupportOfficerDashboardQuery
             'title' => $case['subject'],
             'subtitle' => $case['reporter']['name'].' · '.$case['category_label'],
             'image_url' => $case['reporter']['image_url'],
+            'image_fit' => $case['reporter']['image_fit'] ?? 'cover',
             'status' => [
                 'label' => $case['state_label'],
                 'tone' => $attention ? 'attention' : 'neutral',

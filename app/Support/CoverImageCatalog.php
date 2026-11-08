@@ -120,10 +120,6 @@ final class CoverImageCatalog
             return $systemUrl;
         }
 
-        if (filled($scholarship->image_path)) {
-            return asset(ltrim($scholarship->image_path, '/'));
-        }
-
         return self::urlForKey(self::defaultScholarshipKey($scholarship->category));
     }
 }

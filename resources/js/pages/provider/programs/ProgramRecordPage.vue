@@ -1,4 +1,5 @@
 <script setup>
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, ref } from 'vue';
 import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewModal.vue';
 import EducationEligibilitySummary from '../../../components/EducationEligibilitySummary.vue';
@@ -63,6 +64,7 @@ async function loadProgram() {
 }
 
 onMounted(loadProgram);
+const backToQueue = staffQueueReturn(window, 'programs', '/provider/programs');
 </script>
 
 <template>
@@ -71,7 +73,7 @@ onMounted(loadProgram);
 
         <section class="student-page" aria-labelledby="program-record-title">
             <div class="provider-program-workspace mx-auto max-w-[94rem]">
-                <a href="/provider/programs" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950">
+                <a :href="backToQueue" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to programs
                 </a>

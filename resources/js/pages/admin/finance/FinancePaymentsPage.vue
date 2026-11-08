@@ -1,16 +1,18 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
-const query = new URLSearchParams(window.location.search);
-const search = ref(query.get('search') ?? '');
-const period = ref(['today', 'month', 'year', 'all'].includes(query.get('period')) ? query.get('period') : 'month');
+const queueState = createStaffQueueState(window, ['search','period']);
+const search = ref(queueState.get('search') ?? '');
+const period = ref(['today', 'month', 'year', 'all'].includes(queueState.get('period')) ? queueState.get('period') : 'month');
 const resource = useAdminResource(async ({ signal }, params) => {
-    const response = await window.axios.get('/admin/workspaces/finance/payments/data', { params, signal });
+    const response = await queueState.load((query) => window.axios.get('/admin/workspaces/finance/payments/data', { params: query, signal }), params, () => !signal.aborted);
     return response.data;
 }, { failureMessage: 'Confirmed payments could not be loaded.' });
 const { isLoading: loading, errorMessage } = resource;
@@ -47,7 +49,7 @@ watch(period, () => {
     loadPayments(1);
 }, { flush: 'sync' });
 onBeforeUnmount(() => clearTimeout(searchTimer));
-onMounted(loadPayments);
+onMounted(() => loadPayments(queueState.page));
 </script>
 
 <template>
@@ -59,7 +61,7 @@ onMounted(loadPayments);
             icon="fa-solid fa-receipt"
         />
 
-        <AdminTableFrame title="Payment records" :description="resultLabel" icon="fa-solid fa-receipt" class="mt-4" :loading="loading" :error="errorMessage" @retry="loadPayments">
+        <AdminTableFrame title="Payment records" :description="resultLabel" icon="fa-solid fa-receipt" class="mt-4" :loading="loading" :error="errorMessage" @retry="resource.retry">
             <template #filters>
                 <div class="grid grid-cols-[minmax(24rem,1fr)_14rem] gap-3">
                     <label class="relative block">
@@ -87,11 +89,11 @@ onMounted(loadPayments);
                 <tbody class="divide-y divide-slate-200 bg-white">
                     <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
                         <td class="px-5 py-3.5"><p class="font-mono text-xs font-bold text-slate-900">{{ item.receipt_number }}</p><p class="mt-1 text-xs text-slate-500">{{ item.livemode ? 'Live payment' : 'Test payment' }}</p></td>
-                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-building-columns" aria-hidden="true"></i><img v-if="item.provider_logo_url" :src="item.provider_logo_url" :alt="`${item.provider} logo`" class="absolute inset-0 h-full w-full bg-white object-contain p-1" @error="$event.currentTarget.remove()"></span><span class="min-w-0"><span class="block break-words text-sm font-bold text-slate-900">{{ item.provider }}</span><span class="mt-0.5 block break-words text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
+                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0"><span class="block break-words text-sm font-bold text-slate-900">{{ item.provider }}</span><span class="mt-0.5 block break-words text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
                         <td class="px-4 py-3.5 text-sm font-semibold text-slate-700">{{ item.service }}</td>
                         <td class="px-4 py-3.5"><p class="text-sm font-semibold text-slate-700">{{ paymentMethod(item.payment_method) }}</p><p class="mt-0.5 text-xs text-slate-500">{{ item.paid_at }}</p></td>
                         <td class="px-4 py-3.5 text-sm font-black text-slate-950">{{ money(item.amount, item.currency) }}</td>
-                        <td class="px-5 py-3.5 text-right"><a :href="item.receipt_url" class="inline-grid h-10 w-10 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open receipt ${item.receipt_number}`" title="Open receipt"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                        <td class="px-5 py-3.5 text-right"><a :href="item.receipt_url" class="staff-row-action h-10 w-10" :aria-label="`Open receipt ${item.receipt_number}`" title="Open receipt"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                     </tr>
                 </tbody>
             </table>

@@ -2,6 +2,8 @@
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/releases/issues': 'issues',
@@ -24,12 +26,14 @@ const summary = ref({ issues: 0, record: 0, upcoming: 0, history: 0 });
 const programs = ref([]);
 const releases = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const selectedProgram = ref(new URLSearchParams(window.location.search).get('program_id') ?? '');
+const queueState = createStaffQueueState(window, ['search','program_id']);
+const search = ref(queueState.get('search') ?? '');
+const selectedProgram = ref(queueState.get('program_id') ?? '');
 const isLoading = ref(true);
 const errorMessage = ref('');
 let searchTimer = null;
 let requestVersion = 0;
+let requestedPage = 1;
 
 const queues = computed(() => [
     { key: 'issues', label: 'Reported issues', count: summary.value.issues, href: '/provider/workspaces/releases/issues' },
@@ -37,7 +41,7 @@ const queues = computed(() => [
     { key: 'upcoming', label: 'Upcoming', count: summary.value.upcoming, href: '/provider/workspaces/releases/upcoming' },
     { key: 'history', label: 'History', count: summary.value.history, href: '/provider/workspaces/releases/history' },
 ]);
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : '0 releases');
 
@@ -62,18 +66,19 @@ function progressLabel(release) {
 }
 
 async function loadReleases(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
     try {
-        const response = await window.axios.get('/provider/workspaces/releases/data', {
-            params: {
-                queue: activeQueue,
-                search: search.value.trim() || undefined,
-                program_id: selectedProgram.value || undefined,
-                page,
-            },
-        });
+        const params = {
+            queue: activeQueue,
+            search: search.value.trim() || undefined,
+            program_id: selectedProgram.value || undefined,
+            page,
+        };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/releases/data', { params: query }), params, () => version === requestVersion);
         if (version !== requestVersion) return;
         workspace.value = response.data.workspace;
         summary.value = response.data.summary ?? summary.value;
@@ -89,12 +94,18 @@ async function loadReleases(page = 1) {
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadReleases(1), 300);
+}, { flush: 'sync' });
+watch(selectedProgram, () => loadReleases(1), { flush: 'sync' });
+onMounted(() => loadReleases(queueState.page));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
 });
-watch(selectedProgram, () => loadReleases(1));
-onMounted(() => loadReleases());
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
 <template>
@@ -120,8 +131,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         <label class="w-72"><span class="sr-only">Filter by program</span><select v-model="selectedProgram" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-slate-950"><option value="">All programs</option><option v-for="program in programs" :key="program.id" :value="program.id">{{ program.title }}</option></select></label>
                     </div>
 
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                    <div v-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading benefit releases...</p></div>
+
+                    <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadReleases(requestedPage)" />
+                    <div v-else-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading benefit releases...</p></div>
                     <div v-else-if="!releases.length && !errorMessage" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Scheduled distributions move here as their status changes.</p></div>
 
                     <div v-else-if="releases.length" class="staff-table-viewport">
@@ -134,13 +146,13 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                     <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', stateClass(release.work_state)]">{{ release.work_label }}</span><p class="monitoring-text mt-2 text-xs text-slate-500">{{ release.detail }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ progressLabel(release) }}</p><p class="mt-1 text-xs text-slate-500">{{ release.counts.proof }} proof file{{ release.counts.proof === 1 ? '' : 's' }}</p></td>
                                     <td class="px-5 py-4"><p :class="['text-sm font-bold', release.timing_state === 'overdue' || release.timing_state === 'attention' ? 'text-rose-700' : release.timing_state === 'soon' || release.timing_state === 'today' ? 'text-amber-700' : 'text-slate-800']">{{ timingLabel(release) }}</p><p class="mt-1 text-xs text-slate-500">{{ release.release_method_label }}</p></td>
-                                    <td class="px-5 py-4 text-right"><a :href="release.action_url" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
+                                    <td class="px-5 py-4 text-right"><a :href="queueState.link(release.action_url)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`Open ${release.title}`">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p><div class="flex gap-2"><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadReleases(pagination.current_page - 1)">Previous</button><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadReleases(pagination.current_page + 1)">Next</button></div></footer>
+                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p><div class="flex gap-2"><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" @click="loadReleases(pagination.current_page - 1)">Previous</button><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" @click="loadReleases(pagination.current_page + 1)">Next</button></div></footer>
                 </section>
             </div>
         </section>

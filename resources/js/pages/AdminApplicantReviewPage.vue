@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import ApplicantReviewIdentityCard from '../components/ApplicantReviewIdentityCard.vue';
@@ -346,6 +347,7 @@ async function updateApplicant(verificationStatus) {
         return;
     }
 
+    if (!await confirmOutcome({ record: applicant.value.name, outcome: verificationStatus, consequence: 'This saves the profile verification decision. It does not award a scholarship.', danger: verificationStatus === 'rejected' }, () => !!applicant.value && !isSaving.value && profileEvidenceReady.value)) return;
     isSaving.value = true;
     decisionError.value = '';
 
@@ -377,6 +379,7 @@ async function updatePhotoReview(action, reason = '') {
         return;
     }
 
+    if (!await confirmOutcome({ record: `${applicant.value.name} / Applicant photo`, outcome: action === 'approve' ? 'Photo accepted' : 'Replacement requested' }, () => !!applicant.value && !isReviewingPhoto.value)) return;
     isReviewingPhoto.value = true;
     photoReviewError.value = '';
 

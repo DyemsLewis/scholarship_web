@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
+import { confirmOutcome, afterConfirmation } from './helpers/acceptedOutcome.js';
+import { profileVerificationLabel } from '../../resources/js/support/applicantProfileLabels.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, ref } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -17,7 +20,7 @@ function harness(name, exposed, payload, pathname = '/admin/workspaces/reviews/a
         patch: async (...args) => { writes.push(args); return { data: payload }; },
         post: async (...args) => { writes.push(args); return { data: payload }; },
     } };
-    const deps = { ref, computed, useAdminResource, reviewErrorMessage, reviewRequirementItems, onMounted() {}, window, URLSearchParams,
+    const deps = { staffQueueReturn, confirmOutcome, profileVerificationLabel, reviewStatusLabel, ref, computed, useAdminResource, reviewErrorMessage, reviewRequirementItems, onMounted() {}, window, URLSearchParams,
         applicantProfileDetails: () => [], profileEducationSummary: () => '', evidenceRows, evidenceReviewDate };
     return { ...new Function(...Object.keys(deps), `${script}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes, gets };
 }
@@ -108,7 +111,7 @@ for (const [name, payload, path] of [
         const state = harness(name, 'loadRecord, saveDecision, notes, saving, errorMessage', payload, path);
         await state.loadRecord(); state.notes.value = 'Unsaved review explanation';
         const pending = deferred(); state.window.axios.patch = (...args) => { state.writes.push(args); return pending.promise; };
-        const request = state.saveDecision(); await state.saveDecision(); await state.loadRecord();
+        const request = state.saveDecision(); await afterConfirmation(); await state.saveDecision(); await state.loadRecord();
         assert.equal(state.writes.length, 1); assert.equal(state.gets.length, 1);
         assert.equal(state.saving.value, true);
         pending.reject({ response: { data: { message: 'Invalid', errors: { note: ['Specific review feedback'] } } } }); await request;
@@ -144,7 +147,7 @@ test('photo reviews cannot overlap a profile decision and do not erase unsaved f
     await state.loadRecord(); state.notes.value = 'Draft profile note';
     await state.reviewPhoto('request_replacement'); assert.equal(state.writes.length, 0);
     const pending = deferred(); state.window.axios.patch = (...args) => { state.writes.push(args); return pending.promise; };
-    const request = state.reviewPhoto('approve'); await state.saveDecision(); await state.reviewPhoto('approve');
+    const request = state.reviewPhoto('approve'); await afterConfirmation(); await state.saveDecision(); await state.reviewPhoto('approve');
     assert.equal(state.writes.length, 1);
     pending.resolve({ data: { applicant: { ...applicant, gwa: 91 }, photo_review_status: 'approved', reason: null } }); await request;
     assert.equal(state.applicant.value.profile_photo_review_status, 'approved');
@@ -158,7 +161,7 @@ test('a profile save in progress also blocks photo review', async () => {
     const state = harness('ApplicantReviewRecordPage', 'loadRecord, saveDecision, reviewPhoto', { applicant: structuredClone(applicant) });
     await state.loadRecord(); const pending = deferred();
     state.window.axios.patch = (...args) => { state.writes.push(args); return pending.promise; };
-    const request = state.saveDecision(); await state.reviewPhoto('approve'); assert.equal(state.writes.length, 1);
+    const request = state.saveDecision(); await afterConfirmation(); await state.reviewPhoto('approve'); assert.equal(state.writes.length, 1);
     pending.resolve({ data: { applicant: { ...applicant, applicant_verification_status: 'approved' } } }); await request;
 });
 

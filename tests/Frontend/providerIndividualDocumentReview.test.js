@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
+import { confirmOutcome } from './helpers/acceptedOutcome.js';
+import { reviewStatusLabel } from '../../resources/js/support/adminReviewPresentation.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, ref } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -22,7 +25,7 @@ function harness(name, props, exposed) {
         get: async (...args) => { gets.push(args); return { data: { provider: structuredClone(provider) } }; },
         patch: async (...args) => { writes.push(args); return { data: { provider: structuredClone(provider), message: 'Saved' } }; },
     } };
-    const deps = { computed, ref, useAdminResource, reviewErrorMessage, window, onMounted() {},
+    const deps = { staffQueueReturn, confirmOutcome, reviewStatusLabel, computed, ref, useAdminResource, reviewErrorMessage, window, onMounted() {},
         defineProps: () => props, defineEmits: () => (...args) => events.push(args), watch() {}, useId: () => 'test',
         useModalAccessibility: () => ({ handleKeydown() {} }) };
     const script = parse(read(name)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');

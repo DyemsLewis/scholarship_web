@@ -2,6 +2,8 @@
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import ProviderActionDialog from '../../../components/ProviderActionDialog.vue';
 
 const queueByPath = {
@@ -25,15 +27,17 @@ const nextTask = ref(null);
 const roles = ref([]);
 const accounts = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const selectedRole = ref('');
+const queueState = createStaffQueueState(window, ['search','role']);
+const search = ref(queueState.get('search') ?? '');
+const selectedRole = ref(queueState.get('role') ?? '');
 const updatingId = ref(null);
 const confirmation = ref(null);
 const confirmationError = ref('');
 let searchTimer = null;
 let requestVersion = 0;
+let requestedPage = 1;
 
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : '0 accounts');
 
@@ -86,18 +90,19 @@ function cancelStatusChange() {
 }
 
 async function loadAccounts(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
     try {
-        const response = await window.axios.get('/provider/workspaces/team/data', {
-            params: {
-                queue: activeQueue,
-                search: search.value.trim() || undefined,
-                role: selectedRole.value || undefined,
-                page,
-            },
-        });
+        const params = {
+            queue: activeQueue,
+            search: search.value.trim() || undefined,
+            role: selectedRole.value || undefined,
+            page,
+        };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/team/data', { params: query }), params, () => version === requestVersion);
         if (version !== requestVersion) return;
         workspace.value = response.data.workspace;
         summary.value = response.data.summary ?? summary.value;
@@ -114,12 +119,18 @@ async function loadAccounts(page = 1) {
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadAccounts(1), 300);
+}, { flush: 'sync' });
+watch(selectedRole, () => loadAccounts(1), { flush: 'sync' });
+onMounted(() => loadAccounts(queueState.page));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
 });
-watch(selectedRole, () => loadAccounts(1));
-onMounted(() => loadAccounts());
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
 <template>
@@ -136,7 +147,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                 </header>
 
                 <section v-if="activeQueue === 'attention' && nextTask" class="mt-4 border border-amber-300 border-l-4 border-l-amber-500 bg-amber-50 px-5 py-4 shadow-sm">
-                    <div class="flex items-center gap-4"><span class="grid h-10 w-10 shrink-0 place-items-center bg-amber-200 text-slate-950"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span><div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">Next account task</p><h2 class="mt-1 text-base font-bold text-slate-950">{{ nextTask.title }}</h2><p class="mt-1 text-sm text-slate-600">{{ nextTask.detail }}</p></div><a v-if="nextTask.action_url" :href="nextTask.action_url" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800">{{ nextTask.action_label }}<i class="fa-solid fa-arrow-right text-[9px] text-amber-300" aria-hidden="true"></i></a></div>
+                    <div class="flex items-center gap-4"><span class="grid h-10 w-10 shrink-0 place-items-center bg-amber-200 text-slate-950"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span><div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">Next account task</p><h2 class="mt-1 text-base font-bold text-slate-950">{{ nextTask.title }}</h2><p class="mt-1 text-sm text-slate-600">{{ nextTask.detail }}</p></div><a v-if="nextTask.action_url" :href="queueState.link(nextTask.action_url)" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800">{{ nextTask.action_label }}<i class="fa-solid fa-arrow-right text-[9px] text-amber-300" aria-hidden="true"></i></a></div>
                 </section>
 
                 <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Team accounts">
@@ -145,8 +156,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         <label class="w-72"><span class="sr-only">Filter by role</span><select v-model="selectedRole" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-slate-950"><option value="">All roles</option><option v-for="role in roles" :key="role.value" :value="role.value">{{ role.label }}</option></select></label>
                     </div>
 
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                    <div v-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading team accounts...</p></div>
+
+                    <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadAccounts(requestedPage)" />
+                    <div v-else-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading team accounts...</p></div>
                     <div v-else-if="!accounts.length && !errorMessage" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-users" aria-hidden="true"></i></span><p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-xs text-slate-500">Use the sidebar to review another account state.</p></div>
 
                     <div v-else-if="accounts.length" class="staff-table-viewport">
@@ -160,13 +172,13 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                     <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(account.work_state)]">{{ account.work_label }}</span><WorkspaceTextSummary  class="mt-2 text-xs text-slate-500" :text="account.detail" label="details" /></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-800">{{ accessLabel(account) }}</p><p class="mt-1 text-xs text-slate-500">{{ account.permission_count }} responsibility area{{ Number(account.permission_count) === 1 ? '' : 's' }}</p><p v-if="!account.can_manage" class="mt-1 text-xs font-semibold text-slate-500"><i class="fa-solid fa-lock mr-1" aria-hidden="true"></i>{{ account.protected_reason }}</p></td>
                                     <td class="px-5 py-4 text-sm font-semibold text-slate-600">{{ account.created_at }}</td>
-                                    <td class="px-5 py-4"><div class="flex justify-end gap-2"><a v-if="account.action_url" :href="account.action_url" class="grid h-9 w-9 place-items-center bg-slate-950 text-white hover:bg-slate-800" aria-label="Edit staff account"><i class="fa-solid fa-pen text-xs" aria-hidden="true"></i></a><button v-if="account.can_manage && !account.is_current_account" type="button" :disabled="updatingId === account.id" :class="['grid h-9 w-9 place-items-center border disabled:opacity-40', account.account_status === 'suspended' ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50' : 'border-rose-300 text-rose-700 hover:bg-rose-50']" :aria-label="account.account_status === 'suspended' ? 'Reactivate staff account' : 'Suspend staff account'" @click="requestStatusChange(account)"><i :class="['fa-solid text-xs', updatingId === account.id ? 'fa-circle-notch animate-spin' : account.account_status === 'suspended' ? 'fa-play' : 'fa-pause']" aria-hidden="true"></i></button><span v-if="!account.action_url" class="grid h-9 w-9 place-items-center border border-slate-200 text-slate-300" title="Protected account"><i class="fa-solid fa-lock text-xs" aria-hidden="true"></i></span></div></td>
+                                    <td class="px-5 py-4"><div class="flex justify-end gap-2"><a v-if="account.action_url" :href="queueState.link(account.action_url)" class="staff-row-action staff-row-action--primary h-9 w-9" :aria-label="`Edit staff account for ${account.name}`" title="Edit staff account"><i class="fa-solid fa-pen text-xs" aria-hidden="true"></i></a><button v-if="account.can_manage && !account.is_current_account" type="button" :disabled="updatingId === account.id" :class="['grid h-9 w-9 place-items-center border disabled:opacity-40', account.account_status === 'suspended' ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50' : 'border-rose-300 text-rose-700 hover:bg-rose-50']" :aria-label="account.account_status === 'suspended' ? 'Reactivate staff account' : 'Suspend staff account'" @click="requestStatusChange(account)"><i :class="['fa-solid text-xs', updatingId === account.id ? 'fa-circle-notch animate-spin' : account.account_status === 'suspended' ? 'fa-play' : 'fa-pause']" aria-hidden="true"></i></button><span v-if="!account.action_url" class="grid h-9 w-9 place-items-center border border-slate-200 text-slate-300" title="Protected account"><i class="fa-solid fa-lock text-xs" aria-hidden="true"></i></span></div></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p><div class="flex gap-2"><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadAccounts(pagination.current_page - 1)">Previous</button><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadAccounts(pagination.current_page + 1)">Next</button></div></footer>
+                    <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p><div class="flex gap-2"><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" @click="loadAccounts(pagination.current_page - 1)">Previous</button><button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" @click="loadAccounts(pagination.current_page + 1)">Next</button></div></footer>
                 </section>
             </div>
         </section>

@@ -49,10 +49,10 @@ const requirements = computed(() => content.value?.requirements ?? {});
 const process = computed(() => content.value?.process ?? {});
 const provider = computed(() => activeView.value === 'provider' ? content.value : {});
 const providerLocation = computed(() => provider.value?.location ?? {});
-const scholarshipImage = computed(() => identity.value?.provider?.logo_url);
+const scholarshipImage = computed(() => identity.value?.logo_url || '/uploads/scholarship-default.jpg');
 const scholarshipVisual = computed(() => {
     const subject = `${identity.value?.title ?? ''} ${identity.value?.category ?? ''}`.toLowerCase();
-    const chosenCover = identity.value?.image_url;
+    const chosenCover = identity.value?.cover_image_url || identity.value?.image_url;
 
     if (/(stem|science|technology|engineering)/.test(subject)) {
         return {
@@ -435,6 +435,7 @@ onMounted(loadScholarship);
                                         <img
                                             v-if="scholarshipImage && !imageFailed"
                                             :src="scholarshipImage"
+                                            data-scholarship-logo
                                             :alt="`${identity.title} program mark`"
                                             class="h-full w-full object-contain"
                                             @error="imageFailed = true"

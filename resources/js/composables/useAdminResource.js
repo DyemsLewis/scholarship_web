@@ -8,6 +8,7 @@ export function useAdminResource(fetchResource, { initialData = null, failureMes
     let version = 0;
     let controller = null;
     let disposed = false;
+    let lastArgs = [];
 
     // Invalidate immediately when filters change, before a debounced replacement starts.
     function invalidate() {
@@ -23,6 +24,7 @@ export function useAdminResource(fetchResource, { initialData = null, failureMes
     async function load(...args) {
         if (disposed) return null;
         invalidate();
+        lastArgs = args;
         const requestVersion = version;
         const requestController = new AbortController();
         controller = requestController;
@@ -45,6 +47,11 @@ export function useAdminResource(fetchResource, { initialData = null, failureMes
         }
     }
 
+    function retry() {
+        if (!errorMessage.value || isLoading.value) return null;
+        return load(...lastArgs);
+    }
+
     function dispose() {
         disposed = true;
         invalidate();
@@ -53,5 +60,5 @@ export function useAdminResource(fetchResource, { initialData = null, failureMes
 
     if (getCurrentScope()) onScopeDispose(dispose);
 
-    return { data, isLoading, hasLoaded, errorMessage, load, invalidate, dispose };
+    return { data, isLoading, hasLoaded, errorMessage, load, retry, invalidate, dispose };
 }

@@ -1,4 +1,6 @@
 <script setup>
+import { staffQueueLink, staffQueueReturn } from '../../../support/staffQueueState.js';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, reactive, ref } from 'vue';
 import { formatServiceDateTime, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
@@ -16,6 +18,7 @@ const canRequestCancellation = computed(() => purchase.value?.status === 'paid'
     && purchase.value?.cancellation_status !== 'requested');
 
 async function confirmCompletion() {
+    if (!await confirmOutcome({ record: 'Service delivery', outcome: 'Completion accepted', consequence: 'You are accepting the delivered service as complete.', confirmLabel: 'Confirm completion' }, () => !isSaving.value && purchase.value?.fulfillment_status === 'provider_review')) return;
     await runAction(() => window.axios.post(`/provider/billing/${purchaseId}/confirm`, {
         rating: completion.rating || null,
         feedback: completion.feedback.trim() || null,
@@ -23,6 +26,7 @@ async function confirmCompletion() {
 }
 
 async function requestRevision() {
+    if (!await confirmOutcome({ record: 'Service delivery', outcome: 'Revision requested', consequence: 'The service will return for further work with your explanation.' }, () => !isSaving.value && ['provider_review', 'completed'].includes(purchase.value?.fulfillment_status) && revisionReason.value.trim().length >= 10)) return;
     const saved = await runAction(() => window.axios.post(`/provider/billing/${purchaseId}/reopen`, {
         reason: revisionReason.value.trim(),
     }), 'Revision requested.');
@@ -40,6 +44,9 @@ async function requestCancellation() {
 function readable(value) {
     return labelFromKey(value || 'Not recorded');
 }
+function serviceRecordLink(href) {
+    return staffQueueLink(href, staffQueueReturn(window, 'providerBilling'), window.location.origin);
+}
 </script>
 
 <template>
@@ -47,7 +54,7 @@ function readable(value) {
         <section class="mt-4 border border-slate-200 bg-white shadow-sm">
             <header class="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4">
                 <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i></span><div><h2 class="text-base font-bold text-slate-950">Closeout</h2><p class="mt-1 text-xs text-slate-500">Accept delivery, request a revision, or review closure.</p></div></div>
-                <a :href="`/provider/billing/${purchaseId}/history`" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:border-slate-950">View history <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
+                <a :href="serviceRecordLink(`/provider/billing/${purchaseId}/history`)" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:border-slate-950">View history <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
             </header>
 
             <div v-if="purchase.fulfillment_status === 'provider_review'" class="divide-y divide-slate-200">

@@ -165,6 +165,68 @@ class ApplicantDashboardOverviewTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_application_progress_and_suggested_scholarship_use_program_logos_not_covers(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $provider->providerProfile()->update(['logo_path' => 'uploads/providers/provider-logo.png']);
+        $applicant = $this->completeApplicant();
+        $applied = $this->publishedScholarship($provider, 'Applied scholarship');
+        $applied->update([
+            'image_path' => 'uploads/scholarships/applied-logo.png',
+            'cover_image_source' => 'system',
+            'cover_image_key' => 'science-project',
+        ]);
+        $suggested = $this->publishedScholarship($provider, 'Suggested scholarship');
+        $suggested->update([
+            'image_path' => 'uploads/scholarships/suggested-logo.png',
+            'cover_image_source' => 'system',
+            'cover_image_key' => 'science-project',
+        ]);
+        ScholarshipApplication::create([
+            'scholarship_id' => $applied->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $payload = $this->actingAs($applicant)
+            ->getJson('/dashboard/overview-data')
+            ->assertOk()
+            ->assertJsonPath('dashboard.applications.0.image_url', $applied->logoUrl())
+            ->assertJsonPath('dashboard.recommendation.image_url', $suggested->logoUrl())
+            ->json('dashboard');
+
+        $this->assertNotSame($applied->coverImageUrl(), $payload['applications'][0]['image_url']);
+        $this->assertNotSame($suggested->coverImageUrl(), $payload['recommendation']['image_url']);
+    }
+
+    public function test_dashboard_uses_default_logo_when_program_logo_is_missing(): void
+    {
+        $provider = User::factory()->create(['role' => 'provider']);
+        $applicant = $this->completeApplicant();
+        $applied = $this->publishedScholarship($provider, 'Applied without logo');
+        $suggested = $this->publishedScholarship($provider, 'Suggested without logo');
+        foreach ([$applied, $suggested] as $program) {
+            $program->update([
+                'image_path' => null,
+                'cover_image_source' => 'system',
+                'cover_image_key' => 'science-project',
+            ]);
+        }
+        ScholarshipApplication::create([
+            'scholarship_id' => $applied->id,
+            'applicant_id' => $applicant->id,
+            'status' => 'submitted',
+            'submitted_at' => now(),
+        ]);
+
+        $this->actingAs($applicant)
+            ->getJson('/dashboard/overview-data')
+            ->assertOk()
+            ->assertJsonPath('dashboard.applications.0.image_url', asset('uploads/scholarship-default.jpg'))
+            ->assertJsonPath('dashboard.recommendation.image_url', asset('uploads/scholarship-default.jpg'));
+    }
+
     private function completeApplicant(): User
     {
         $applicant = User::factory()->verifiedProfile()->create();

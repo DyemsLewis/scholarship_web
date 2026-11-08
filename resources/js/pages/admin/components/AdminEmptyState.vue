@@ -12,11 +12,12 @@ defineProps({
         type: String,
         default: 'fa-solid fa-check',
     },
+    compact: { type: Boolean, default: false },
 });
 </script>
 
 <template>
-    <div class="flex min-h-72 flex-col items-center justify-center px-6 py-12 text-center">
+    <div class="flex flex-col items-center justify-center px-6 text-center" :class="compact ? 'py-10' : 'min-h-72 py-12'">
         <span class="mx-auto grid h-11 w-11 place-items-center rounded-sm bg-slate-100 text-slate-500">
             <i :class="icon" aria-hidden="true"></i>
         </span>

@@ -1,16 +1,18 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 import AccountDirectoryTable from './AccountDirectoryTable.vue';
 
-const search = ref(new URLSearchParams(window.location.search).get('search') ?? '');
-const requestedRole = new URLSearchParams(window.location.search).get('role');
+const queueState = createStaffQueueState(window, ['search','role']);
+const search = ref(queueState.get('search') ?? '');
+const requestedRole = queueState.get('role');
 const role = ref(['applicant', 'provider'].includes(requestedRole) ? requestedRole : 'all');
 const resource = useAdminResource(async ({ signal }, params) => {
-    const response = await window.axios.get('/admin/workspaces/accounts/data', { params, signal });
+    const response = await queueState.load((query) => window.axios.get('/admin/workspaces/accounts/data', { params: query, signal }), params, () => !signal.aborted);
     return response.data;
 }, { failureMessage: 'The account directory could not be loaded.' });
 const { isLoading: loading, errorMessage, hasLoaded } = resource;
@@ -41,7 +43,7 @@ watch([search, role], () => {
 }, { flush: 'sync' });
 onBeforeUnmount(() => clearTimeout(searchTimer));
 
-onMounted(loadAccounts);
+onMounted(() => loadAccounts(queueState.page));
 </script>
 
 <template>
@@ -64,7 +66,7 @@ onMounted(loadAccounts);
             <div class="flex items-center gap-3 px-5 py-3.5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-amber-100 text-amber-800"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span><div><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Need attention</dt><dd class="mt-0.5 text-xl font-black text-slate-950">{{ stats.attention_total }}</dd></div></div>
         </dl>
 
-        <AdminTableFrame title="Accounts" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : resultLabel" :loading="loading" :error="errorMessage" loading-message="Loading accounts..." icon="fa-solid fa-address-book" class="mt-4" @retry="loadAccounts(1)">
+        <AdminTableFrame title="Accounts" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : resultLabel" :loading="loading" :error="errorMessage" loading-message="Loading accounts..." icon="fa-solid fa-address-book" class="mt-4" @retry="resource.retry">
             <template #filters>
                 <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_14rem]">
                     <label class="relative">
@@ -80,7 +82,7 @@ onMounted(loadAccounts);
                 </div>
             </template>
 
-            <AccountDirectoryTable :accounts="accounts" />
+            <AccountDirectoryTable :accounts="accounts" :record-link="queueState.link" />
 
             <template v-if="pagination.last_page > 1" #footer>
                 <div class="flex items-center justify-between text-sm text-slate-600">

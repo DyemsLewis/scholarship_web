@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { computed, ref, watch } from 'vue';
 import FilePreviewModal from '../FilePreviewModal.vue';
 import MonitoringCaseHistoryModal from '../MonitoringCaseHistoryModal.vue';
@@ -132,6 +133,7 @@ async function saveManualGrade(requirement, index) {
         return;
     }
 
+    if (!await confirmOutcome({ record: requirement.title || props.record.title || 'Academic check-in', outcome: `Reported result: ${form.grade}`, consequence: 'This saves the result you entered from your academic record. The provider still needs to review it.' }, () => !savingGradeKey.value && form.grade !== '' && form.grade !== null)) return;
     savingGradeKey.value = key;
     const isLegacy = props.record.record_type === 'academic_record';
     const endpoint = isLegacy

@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { ref, watch } from 'vue';
 import { usePageScrollLock } from '../../composables/usePageScrollLock';
 import { showPortalToast } from '../../support/portalToast';
@@ -42,6 +43,7 @@ async function submit() {
         return;
     }
 
+    if (!await confirmOutcome({ record: 'Scholarship support decision', outcome: form.value.response_type, consequence: 'Your response will be sent to the provider. Acknowledging the decision does not mean agreeing with it.' }, () => props.open && !!props.outcome && !isSaving.value && form.value.confirmed)) return;
     isSaving.value = true;
     const data = new FormData();
     data.append('response_type', form.value.response_type);

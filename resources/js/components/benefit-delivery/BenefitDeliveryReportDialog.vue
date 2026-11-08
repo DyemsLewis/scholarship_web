@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useModalAccessibility } from '../../composables/useModalAccessibility';
 import { useConcernMutation } from '../../composables/useConcernMutation.js';
@@ -40,6 +41,12 @@ function chooseFiles(event) {
 }
 async function submit() {
     if (!valid.value) return;
+    if (!creating.value && !await confirmOutcome({
+        record: `${current.value.program.title} / ${current.value.benefit?.title || current.value.subject}`,
+        outcome: choices.value.find(([value]) => value === kind.value)?.[1] || kind.value,
+        consequence: props.provider ? 'Your response will be recorded. Only the applicant can confirm receipt or accept the clarification.'
+            : ['receipt_confirmed', 'clarification_accepted'].includes(kind.value) ? 'This response will close your report. Confirm receipt only if you actually received the benefit.' : 'Your response will be sent to the provider and kept in this report.',
+    }, () => props.open && valid.value && !creating.value)) return;
     const body = new FormData();
     body.append('request_key', requestKey.value); body.append('confirmed', '1'); body.append('details', details.value.trim());
     if (creating.value) {

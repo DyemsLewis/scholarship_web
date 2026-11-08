@@ -158,18 +158,20 @@
         border-radius: 0.1875rem;
     }
 
-    .provider-page button:not([class*='rounded-full']),
+    :where(
+        .provider-page,
+        .admin-page,
+        body:has(> #app:is([data-page^='provider'], [data-page^='admin'])) :is([role='dialog'], [role='alertdialog'])
+    ) :is(button, a[class*='bg-'], a[class*='border']):not([class*='rounded-full']) {
+        border-radius: 0.3125rem;
+    }
+
     .provider-page input,
     .provider-page select,
     .provider-page textarea,
-    .provider-page a[class*='bg-']:not([class*='rounded-full']),
-    .provider-page a[class*='border']:not([class*='rounded-full']),
-    .admin-page button:not([class*='rounded-full']),
     .admin-page input,
     .admin-page select,
-    .admin-page textarea,
-    .admin-page a[class*='bg-']:not([class*='rounded-full']),
-    .admin-page a[class*='border']:not([class*='rounded-full']) {
+    .admin-page textarea {
         border-radius: 0.1875rem;
     }
 
@@ -512,8 +514,20 @@
         scrollbar-color: #94a3b8 transparent;
     }
 
+    .staff-table-viewport--compact {
+        min-height: 0;
+    }
+
     .staff-table-viewport > table {
         width: 100%;
+    }
+
+    .staff-row-action {
+        @apply inline-flex shrink-0 items-center justify-center gap-2 border border-slate-300 bg-white font-bold text-slate-700 transition-colors hover:border-slate-950 hover:bg-slate-950 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700 disabled:opacity-40;
+    }
+
+    .staff-row-action--primary {
+        @apply border-slate-950 bg-slate-950 text-white hover:bg-slate-800;
     }
 
     .portal-data-table {

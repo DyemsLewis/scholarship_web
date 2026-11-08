@@ -1,4 +1,6 @@
 <script setup>
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
@@ -46,6 +48,12 @@ async function loadRecord() {
 
 async function saveDecision() {
     if (!canSave.value) return;
+    if (!await confirmOutcome({
+        record: provider.value.name,
+        outcome: reviewStatusLabel(decision.value, 'providers'),
+        consequence: 'This records the organization verification decision and updates its access to provider workflows. Program publication remains a separate review.',
+        danger: decision.value === 'rejected',
+    }, () => canSave.value)) return;
     saving.value = true;
     errorMessage.value = '';
     successMessage.value = '';
@@ -85,11 +93,12 @@ function documentState(document) {
 }
 
 onMounted(loadRecord);
+const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/reviews/providers');
 </script>
 
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
-        <a href="/admin/workspaces/reviews/providers" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Provider queue</a>
+        <a :href="backToQueue" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Provider queue</a>
         <AdminWorkspaceHeader eyebrow="Provider verification" title="Organization record" description="Confirm the organization and its submitted proof." icon="fa-solid fa-building-shield" />
         <section v-if="loading || loadError" class="admin-panel mt-4 overflow-hidden"><AdminLoadState :loading="loading" :error="loadError" loading-message="Loading provider record..." error-title="Organization record unavailable" @retry="loadRecord" /></section>
 
@@ -114,7 +123,7 @@ onMounted(loadRecord);
             <section class="admin-panel mt-4 overflow-hidden">
                 <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Step 1</p><h2 class="mt-0.5 font-black text-slate-950">Review submitted proof</h2><p class="mt-0.5 text-sm text-slate-500">Inspect each file and record its own outcome.</p></div></div><p class="shrink-0 text-sm font-semibold text-slate-600">{{ documentSummary.accepted }} of {{ documentSummary.total }} accepted</p></header>
                 <p v-if="provider.verification_status === 'approved' && documentSummary.awaiting_review" class="border-b border-slate-200 px-6 py-3 text-xs leading-5 text-slate-600">Existing account approval is unchanged. Historical file approvals need individual reviews before another final account verification.</p>
-                <div v-if="provider.verification_documents?.length" class="staff-table-viewport">
+                <div v-if="provider.verification_documents?.length" class="staff-table-viewport staff-table-viewport--compact">
                     <table class="portal-data-table table-fixed min-w-[52rem]">
                         <colgroup><col><col class="w-48"><col class="w-44"><col class="w-36"></colgroup>
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -136,7 +145,7 @@ onMounted(loadRecord);
                                     <span v-else>Not individually reviewed</span>
                                 </td>
                                 <td class="px-6 py-4 text-right">
-                                    <button type="button" :disabled="saving || loading" data-review-provider-document class="inline-flex h-10 items-center gap-2 whitespace-nowrap border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:bg-slate-950 hover:text-white disabled:opacity-40" :aria-label="`Review ${document.original_name}`" @click="openDocument(document)"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>Review</button>
+                                    <button type="button" :disabled="saving || loading" data-review-provider-document class="staff-row-action h-10 whitespace-nowrap px-3 text-xs" :aria-label="`Review ${document.original_name}`" @click="openDocument(document)" title="Review document"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>Review</button>
                                 </td>
                             </tr>
                         </tbody>

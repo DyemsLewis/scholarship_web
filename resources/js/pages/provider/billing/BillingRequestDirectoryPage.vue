@@ -2,6 +2,8 @@
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import { labelFromKey } from '../../../support/display';
 
 const queueByPath = {
@@ -55,16 +57,19 @@ const pageCopy = copy[activeQueue];
 const isLoading = ref(true);
 const syncingId = ref(null);
 const errorMessage = ref('');
+const paymentError = ref('');
 const workspace = ref(null);
 const summary = ref({ requests: 0, needs_action: 0, active: 0, waiting: 0, completed: 0, total: 0 });
 const entries = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
+const queueState = createStaffQueueState(window, ['search']);
+const search = ref(queueState.get('search') ?? '');
 let searchTimer = null;
 let requestVersion = 0;
+let requestedPage = 1;
 
 const isRequestQueue = computed(() => activeQueue === 'requests');
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : '0 records');
 const exportUrl = computed(() => `/provider/workspaces/billing/export?${new URLSearchParams({
@@ -93,14 +98,16 @@ function statusClass(entry) {
 }
 
 async function loadEntries(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
+    paymentError.value = '';
 
     try {
-        const response = await window.axios.get('/provider/workspaces/billing/data', {
-            params: { queue: activeQueue, search: search.value.trim() || undefined, page },
-        });
+        const params = { queue: activeQueue, search: search.value.trim() || undefined, page };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/billing/data', { params: query }), params, () => version === requestVersion);
         if (version !== requestVersion) return;
         workspace.value = response.data.workspace;
         summary.value = response.data.summary ?? summary.value;
@@ -115,25 +122,33 @@ async function loadEntries(page = 1) {
 }
 
 async function refreshPayment(entry) {
+    if (isLoading.value || errorMessage.value || syncingId.value !== null) return;
+    const version = requestVersion;
     syncingId.value = entry.id;
-    errorMessage.value = '';
+    paymentError.value = '';
 
     try {
         await window.axios.post('/provider/billing/sync', { reference: entry.reference_number });
-        await loadEntries(pagination.value.current_page);
+        if (version === requestVersion) await loadEntries(pagination.value.current_page);
     } catch (error) {
-        errorMessage.value = error.response?.data?.message || 'The payment status could not be refreshed.';
+        if (version === requestVersion) paymentError.value = error.response?.data?.message || 'The payment status could not be refreshed.';
     } finally {
         syncingId.value = null;
     }
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadEntries(1), 300);
+}, { flush: 'sync' });
+onMounted(() => loadEntries(queueState.page));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
 });
-onMounted(() => loadEntries());
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
 <template>
@@ -165,8 +180,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         </div>
                     </div>
 
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                    <div v-if="isLoading" class="px-6 py-14 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading service records...</p></div>
+                    <div v-if="paymentError" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ paymentError }}</div>
+                    <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadEntries(requestedPage)" />
+                    <div v-else-if="isLoading" class="px-6 py-14 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading service records...</p></div>
                     <div v-else-if="!entries.length && !errorMessage" class="min-h-96 px-6 py-14 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p>
@@ -210,11 +226,11 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                     </td>
                                     <td class="px-5 py-4 text-right">
                                         <div class="inline-flex items-center gap-2">
-                                            <button v-if="entry.can_refresh_payment" type="button" :disabled="syncingId === entry.id" class="grid h-10 w-10 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 disabled:opacity-40" title="Refresh payment" @click="refreshPayment(entry)">
+                                            <button v-if="entry.can_refresh_payment" type="button" :disabled="syncingId === entry.id" class="staff-row-action h-10 w-10" title="Refresh payment" @click="refreshPayment(entry)" :aria-label="`Refresh payment for ${entry.plan_name}`">
                                                 <i :class="['fa-solid fa-rotate', syncingId === entry.id ? 'fa-spin' : '']" aria-hidden="true"></i>
                                                 <span class="sr-only">Refresh payment</span>
                                             </button>
-                                            <a :href="entry.action_url" :target="entry.action_url?.startsWith('http') ? '_blank' : undefined" :rel="entry.action_url?.startsWith('http') ? 'noopener' : undefined" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">
+                                            <a :href="queueState.link(entry.action_url)" :target="queueState.link(entry.action_url)?.startsWith('http') ? '_blank' : undefined" :rel="queueState.link(entry.action_url)?.startsWith('http') ? 'noopener' : undefined" class="staff-row-action staff-row-action--primary h-10 px-4 text-xs" :aria-label="`${entry.action_label} for ${entry.plan_name}`">
                                                 {{ entry.action_label }}
                                                 <i class="fa-solid fa-arrow-right text-[9px] text-amber-300" aria-hidden="true"></i>
                                             </a>
@@ -225,9 +241,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         </table>
                     </div>
                     <footer v-if="pagination.last_page > 1" class="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-                        <button type="button" :disabled="pagination.current_page <= 1 || isLoading" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" @click="loadEntries(pagination.current_page - 1)">Previous</button>
+                        <button type="button" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" @click="loadEntries(pagination.current_page - 1)">Previous</button>
                         <span class="px-2 text-xs font-semibold text-slate-500">Page {{ pagination.current_page }} of {{ pagination.last_page }}</span>
-                        <button type="button" :disabled="pagination.current_page >= pagination.last_page || isLoading" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" @click="loadEntries(pagination.current_page + 1)">Next</button>
+                        <button type="button" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" @click="loadEntries(pagination.current_page + 1)">Next</button>
                     </footer>
                 </section>
             </div>

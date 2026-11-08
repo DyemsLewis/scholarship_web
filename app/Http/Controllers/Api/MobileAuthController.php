@@ -1117,6 +1117,8 @@ class MobileAuthController extends Controller
         return [
             'id' => $scholarship->id,
             'image_path' => $scholarship->image_path,
+            'logo_url' => $scholarship->logoUrl(),
+            'cover_image_url' => $scholarship->coverImageUrl(),
             'image_url' => $this->scholarshipImageUrl($scholarship),
             'title' => $scholarship->title,
             'category' => $scholarship->category,
@@ -1204,7 +1206,7 @@ class MobileAuthController extends Controller
 
     private function scholarshipImageUrl(Scholarship $scholarship): string
     {
-        return $scholarship->coverImageUrl();
+        return $scholarship->logoUrl();
     }
 
     private function mapUrl(Scholarship $scholarship): ?string

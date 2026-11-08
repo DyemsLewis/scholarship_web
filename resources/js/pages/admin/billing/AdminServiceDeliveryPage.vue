@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, ref, watch } from 'vue';
 import { adminServiceDateInput, adminServiceTargetDateError, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
@@ -34,6 +35,10 @@ async function saveDelivery() {
         errorMessage.value = 'Add a provider message explaining what to send or review.';
         return;
     }
+    if (workflow.value.fulfillment_status !== purchase.value.fulfillment_status && !await confirmOutcome({
+        record: 'Service delivery', outcome: workflow.value.fulfillment_status,
+        consequence: 'The delivery status and updates will be saved. Provider acceptance remains a separate action.',
+    }, () => canEdit.value && !isSaving.value)) return;
     await runAction(
         (config) => window.axios.patch(`/admin/billing/${purchaseId}/fulfillment`, {
             ...workflow.value,

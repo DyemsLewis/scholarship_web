@@ -1992,7 +1992,7 @@ trait HandlesProviderProgramManagement
 
     private function scholarshipImageUrl(Scholarship $scholarship): string
     {
-        return $scholarship->coverImageUrl();
+        return $scholarship->logoUrl();
     }
 
     private function ensureProviderCanPost(Request $request): void

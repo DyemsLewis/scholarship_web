@@ -102,6 +102,7 @@ final class AccountManagerDashboardQuery
             'title' => $user->name,
             'subtitle' => Str::headline($user->role).' account',
             'image_url' => $this->avatarUrl($user, $payload),
+            'image_fit' => $user->isProvider() ? 'contain' : 'cover',
             'status' => ['label' => $status, 'tone' => $tone],
             'meta' => [
                 $user->email,

@@ -6,6 +6,7 @@ import ApplicantProfileRecord from '../../../components/profile/ApplicantProfile
 import { applicantProfileDetails } from '../../../support/applicantProfileDetails';
 import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import EligibilityReviewPanel from './components/EligibilityReviewPanel.vue';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
@@ -159,6 +160,11 @@ function openDocumentReview(document) {
 }
 
 async function saveDocumentReview() {
+    if (!selectedDocument.value || actionBusy.value) return;
+    if (!await confirmOutcome({ record: `${applicant.value.name} - ${selectedDocument.value.original_name || selectedDocument.value.document_name}`,
+        outcome: documentForm.value.status, danger: documentForm.value.status !== 'accepted',
+        consequence: 'This saves the application document review. It does not select the applicant for a scholarship.' },
+    () => Boolean(selectedDocument.value) && !actionBusy.value)) return;
     actionBusy.value = true;
     errorMessage.value = '';
     try {
@@ -173,6 +179,8 @@ async function saveDocumentReview() {
 }
 
 async function verifyAcademicRecord() {
+    if (!await confirmOutcome({ record: applicant.value.name, outcome: 'Verify academic result',
+        consequence: 'The entered academic scale and result will be recorded as reviewed.' }, () => !actionBusy.value)) return;
     actionBusy.value = true;
     errorMessage.value = '';
     try {
@@ -186,6 +194,8 @@ async function verifyAcademicRecord() {
 }
 
 async function reviewPhoto(action) {
+    if (!await confirmOutcome({ record: applicant.value.name, outcome: action === 'approve' ? 'Accept applicant photo' : 'Request photo replacement',
+        danger: action !== 'approve', consequence: 'This saves the photo-review outcome and any replacement request.' }, () => !actionBusy.value)) return;
     actionBusy.value = true;
     errorMessage.value = '';
     try {
@@ -235,6 +245,11 @@ async function resolveCorrection() {
 }
 
 async function recordResult() {
+    if (!canEditReview.value || actionBusy.value) return;
+    if (!await confirmOutcome({ record: `${applicant.value.name} - ${scholarship.value.title}`, outcome: decisionForm.value.decision,
+        danger: decisionForm.value.decision === 'reject', consequence: decisionForm.value.decision === 'reject'
+            ? 'This closes the application at pre-screening.' : 'This records the screening outcome and moves the applicant to the configured next stage.' },
+    () => canEditReview.value && !actionBusy.value)) return;
     actionBusy.value = true;
     errorMessage.value = '';
     try {

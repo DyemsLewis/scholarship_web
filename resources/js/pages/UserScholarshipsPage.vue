@@ -525,8 +525,8 @@ function scholarshipSnapshot(scholarship) {
     ];
 }
 
-function scholarshipImage(scholarship) {
-    return scholarship?.image_url || '/uploads/scholarship-default.jpg';
+function scholarshipLogo(scholarship) {
+    return scholarship?.logo_url || '/uploads/scholarship-default.jpg';
 }
 
 function handleScholarshipImageError(event) {
@@ -1088,7 +1088,8 @@ onBeforeUnmount(() => {
 
                                     <div class="relative z-10 mt-3 flex min-w-0 items-center gap-3">
                                         <img
-                                            :src="scholarshipImage(scholarship)"
+                                            :src="scholarshipLogo(scholarship)"
+                                            data-scholarship-logo
                                             :alt="scholarship.title"
                                             class="h-13 w-13 shrink-0 rounded-md bg-white object-contain p-1.5 shadow-sm ring-1 ring-white/20"
                                             @error="handleScholarshipImageError"
@@ -1245,7 +1246,8 @@ onBeforeUnmount(() => {
                                 </p>
                                 <div class="mt-3 flex min-w-0 items-center gap-3">
                                     <img
-                                        :src="scholarshipImage(previewScholarship)"
+                                        :src="scholarshipLogo(previewScholarship)"
+                                        data-scholarship-logo
                                         :alt="previewScholarship.title"
                                         class="h-14 w-14 shrink-0 rounded-md bg-white object-contain p-1.5 shadow-sm"
                                         @error="handleScholarshipImageError"
@@ -1545,7 +1547,8 @@ onBeforeUnmount(() => {
                                 @click="toggleComparisonSelection(scholarship.id)"
                             >
                                 <img
-                                    :src="scholarshipImage(scholarship)"
+                                    :src="scholarshipLogo(scholarship)"
+                                    data-scholarship-logo
                                     :alt="scholarship.title"
                                     class="h-12 w-12 shrink-0 rounded-md bg-white object-contain p-1.5 ring-1 ring-slate-200"
                                     @error="handleScholarshipImageError"
@@ -1594,7 +1597,8 @@ onBeforeUnmount(() => {
                                 >
                                     <div class="flex items-center gap-3">
                                         <img
-                                            :src="scholarshipImage(scholarship)"
+                                            :src="scholarshipLogo(scholarship)"
+                                            data-scholarship-logo
                                             :alt="scholarship.title"
                                             class="h-11 w-11 shrink-0 rounded-md bg-white object-contain p-1 ring-1 ring-slate-200"
                                             @error="handleScholarshipImageError"

@@ -26,7 +26,8 @@ test('delivery review recommendations cannot masquerade as applicant penalties o
 });
 test('new review access stays in the relevant workspace with photos and one review panel', () => {
     const queue = read('components/case-reviews/RecipientCaseReviewPanel.vue');
-    assert.ok(queue.includes('staff-table-viewport')); assert.ok(queue.includes('photo_url')); assert.ok(queue.includes('default-applicant-avatar.jpg'));
+    assert.ok(queue.includes('staff-table-viewport'));
+    assert.match(queue, /<StaffTableIdentity :src="row.applicant.photo_url"/);
     for (const file of ['pages/UserApplicationOutcomePage.vue', 'pages/provider/recipients/RecipientRecordPage.vue', 'components/monitoring-detail/MonitoringBenefits.vue']) {
         assert.equal((read(file).match(/<RecipientCaseReviewPanel /g) || []).length, 1, file);
     }

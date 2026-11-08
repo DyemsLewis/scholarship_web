@@ -73,6 +73,7 @@ final class BillingOfficerDashboardQuery
             'title' => $request['plan_name'],
             'subtitle' => $request['provider'],
             'image_url' => $request['provider_logo_url'],
+            'image_fit' => 'contain',
             'status' => [
                 'label' => $request['meeting_requested'] ? 'Meeting requested' : $request['state_label'],
                 'tone' => $attention || $request['meeting_requested'] ? 'attention' : 'neutral',

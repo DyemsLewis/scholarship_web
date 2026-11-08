@@ -1,7 +1,9 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import ProviderApplicantPhoto from '../../../components/ProviderApplicantPhoto.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/support/needs-response': 'needs_action',
@@ -40,29 +42,32 @@ const errorMessage = ref('');
 const programs = ref([]);
 const reports = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const selectedProgram = ref('');
+const queueState = createStaffQueueState(window, ['search','program_id']);
+const search = ref(queueState.get('search') ?? '');
+const selectedProgram = ref(queueState.get('program_id') ?? '');
 let searchTimer = null;
 let requestVersion = 0;
+let requestedPage = 1;
 
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : '0 cases');
 
 async function loadCases(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/provider/workspaces/support/data', {
-            params: {
-                queue: activeQueue,
-                search: search.value.trim() || undefined,
-                program_id: selectedProgram.value || undefined,
-                page,
-            },
-        });
+        const params = {
+            queue: activeQueue,
+            search: search.value.trim() || undefined,
+            program_id: selectedProgram.value || undefined,
+            page,
+        };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/support/data', { params: query }), params, () => version === requestVersion);
         if (version !== requestVersion) return;
         programs.value = response.data.programs ?? [];
         reports.value = response.data.reports ?? [];
@@ -76,12 +81,18 @@ async function loadCases(page = 1) {
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadCases(1), 300);
+}, { flush: 'sync' });
+watch(selectedProgram, () => loadCases(1), { flush: 'sync' });
+onMounted(() => loadCases(queueState.page));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
 });
-watch(selectedProgram, () => loadCases(1));
-onMounted(() => loadCases());
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
 <template>
@@ -100,8 +111,6 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     </div>
                 </header>
 
-                <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-
                 <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Support cases">
                     <div class="flex items-center gap-3 border-b border-slate-200 p-4">
                         <label class="relative min-w-0 flex-1">
@@ -119,7 +128,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         <p class="w-28 shrink-0 text-right text-xs font-semibold text-slate-500">{{ resultRange }}</p>
                     </div>
 
-                    <div v-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading support cases...</p></div>
+                    <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadCases(requestedPage)" />
+                    <div v-else-if="isLoading" class="px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading support cases...</p></div>
                     <div v-else-if="!reports.length && !errorMessage" class="px-6 py-16 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-bold text-slate-800">{{ pageCopy.empty }}</p>
@@ -146,22 +156,22 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                     </td>
                                     <td class="px-5 py-4">
                                         <div class="flex min-w-0 items-center gap-3">
-                                            <ProviderApplicantPhoto :src="report.applicant?.profile_photo_url" :name="report.applicant?.name || 'Provider team'" />
+                                            <StaffTableIdentity :src="report.applicant?.profile_photo_url" :kind="report.applicant ? 'applicant' : 'provider'" class="h-10 w-10" />
                                             <div class="min-w-0"><p class="service-text text-sm font-bold text-slate-900">{{ report.applicant?.name || 'Provider team' }}</p><p class="mt-1 service-text text-xs text-slate-500">{{ report.applicant?.email }}</p></div>
                                         </div>
                                     </td>
                                     <td class="px-5 py-4"><p class="service-text text-sm font-semibold text-slate-800">{{ report.program?.title || 'General platform issue' }}</p></td>
                                     <td class="px-5 py-4 text-xs font-semibold leading-5 text-slate-600">{{ report.created_at }}</td>
-                                    <td class="px-5 py-4 text-right"><a :href="report.action_url" class="inline-grid h-9 w-9 place-items-center bg-slate-950 text-white hover:bg-slate-800" :aria-label="`Open ${report.subject}`"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                                    <td class="px-5 py-4 text-right"><a :href="queueState.link(report.action_url)" class="staff-row-action staff-row-action--primary h-9 w-9" :aria-label="`Open ${report.subject}`" title="Open case"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
                     <footer v-if="pagination.last_page > 1" class="flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-                        <button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadCases(pagination.current_page - 1)">Previous</button>
+                        <button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" @click="loadCases(pagination.current_page - 1)">Previous</button>
                         <span class="px-2 text-xs font-semibold text-slate-500">Page {{ pagination.current_page }} of {{ pagination.last_page }}</span>
-                        <button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadCases(pagination.current_page + 1)">Next</button>
+                        <button type="button" class="h-9 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" @click="loadCases(pagination.current_page + 1)">Next</button>
                     </footer>
                 </section>
             </div>

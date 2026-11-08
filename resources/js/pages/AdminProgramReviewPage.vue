@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
@@ -495,6 +496,7 @@ async function updateReview() {
         return;
     }
 
+    if (!await confirmOutcome({ record: scholarship.value.title, outcome: reviewStatus.value, consequence: reviewStatus.value === 'published' ? 'This publishes the program to applicants.' : 'This saves the publication review and your feedback.', danger: reviewStatus.value === 'rejected' }, () => !!scholarship.value && !isSaving.value)) return;
     isSaving.value = true;
     decisionError.value = '';
 

@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -17,13 +18,20 @@ watch(() => props.open, (isOpen) => {
     nextTick(() => reasonInput.value?.focus());
 });
 
-function submit() {
+async function submit() {
     const value = reason.value.trim();
     if (value.length < 10 || props.busy) return;
+    if (!await confirmOutcome({
+        record: props.decision.stage_label || 'Latest application decision',
+        outcome: 'Decision reopened',
+        consequence: 'The application will return to this stage. The original result and your reason remain in history, and the applicant will be notified.',
+        confirmLabel: 'Reopen decision', danger: true,
+    }, () => props.open && !props.busy && reason.value.trim() === value)) return;
     emit('confirm', value);
 }
 
 function handleKeydown(event) {
+    if (event.defaultPrevented) return;
     if (props.open && event.key === 'Escape' && !props.busy) emit('cancel');
 }
 

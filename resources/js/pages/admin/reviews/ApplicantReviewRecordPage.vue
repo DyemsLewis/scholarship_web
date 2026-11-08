@@ -1,4 +1,6 @@
 <script setup>
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
@@ -69,6 +71,12 @@ async function loadRecord({ preserveDraft = false } = {}) {
 
 async function saveDecision() {
     if (!canSave.value) return;
+    if (!await confirmOutcome({
+        record: applicant.value.name,
+        outcome: profileVerificationLabel(decision.value),
+        consequence: 'This saves the final profile verification result. Approval allows the applicant to proceed with eligible applications; it does not award a scholarship.',
+        danger: decision.value === 'rejected',
+    }, () => canSave.value)) return;
     saving.value = true; errorMessage.value = ''; successMessage.value = '';
     try {
         const response = await window.axios.patch(`/admin/users/${applicantId}/profile-verification`, {
@@ -119,6 +127,13 @@ async function reviewPhoto(action) {
     if (!ready.value || !canReviewEvidence.value || busy.value || !['approve', 'request_replacement'].includes(action)) return;
     if (action === 'approve' && !applicant.value.profile_photo_url) return;
     if (action === 'request_replacement' && !photoReason.value.trim()) return;
+    if (!await confirmOutcome({
+        record: `${applicant.value.name} / Applicant photo`,
+        outcome: action === 'approve' ? 'Photo accepted' : 'Replacement requested',
+        consequence: 'This updates the photo review only. The final profile verification is recorded separately.',
+        danger: action === 'request_replacement',
+    }, () => ready.value && canReviewEvidence.value && !busy.value
+        && (action === 'approve' ? !!applicant.value.profile_photo_url : !!photoReason.value.trim()))) return;
     photoSaving.value = true; photoError.value = ''; successMessage.value = '';
     try {
         const response = await window.axios.patch(`/admin/applicants/${applicantId}/profile-photo-review`, { action, reason: action === 'request_replacement' ? photoReason.value.trim() : null }, { portalToast: false });
@@ -142,11 +157,12 @@ function documentLabel(type) {
     return String(type).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 onMounted(loadRecord);
+const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/reviews/applicants');
 </script>
 
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
-        <a href="/admin/workspaces/reviews/applicants" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs"></i>Applicant queue</a>
+        <a :href="backToQueue" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs"></i>Back to review queue</a>
         <AdminWorkspaceHeader eyebrow="Applicant verification" title="Applicant profile record" description="Compare identity, school, household, and residence details with supporting evidence." icon="fa-solid fa-user-check" />
         <section v-if="loading || loadError" class="admin-panel mt-4"><AdminLoadState :loading="loading" :error="loadError" loading-message="Loading applicant record..." @retry="loadRecord" /></section>
         <template v-else-if="applicant">
@@ -167,7 +183,7 @@ onMounted(loadRecord);
 
             <section id="supporting-evidence" class="admin-panel mt-4 scroll-mt-5 overflow-hidden">
                 <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Step 1 · Check the evidence</p><h2 class="mt-0.5 font-black text-slate-950">Supporting evidence</h2><p class="mt-0.5 text-sm text-slate-500">Check each saved claim against its file. OCR results are not verified values.</p></div></div><div class="shrink-0 text-right"><p class="text-sm font-black text-slate-950">{{ applicant.evidence_review?.accepted_count ?? 0 }} of {{ applicant.evidence_review?.required_count ?? 0 }} accepted</p><p class="mt-1 text-xs text-slate-500">Required documents</p></div></header>
-                <div v-if="reviewRows.length" class="staff-table-viewport"><table class="portal-data-table table-fixed min-w-[56rem]">
+                <div v-if="reviewRows.length" class="staff-table-viewport staff-table-viewport--compact"><table class="portal-data-table table-fixed min-w-[56rem]">
                     <colgroup><col><col class="w-64"><col class="w-44"></colgroup>
                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><tr><th class="px-6 py-3">Evidence</th><th class="px-4 py-3">Document decision</th><th class="px-6 py-3 text-right">Action</th></tr></thead>
                     <tbody class="divide-y divide-slate-200"><tr v-for="row in reviewRows" :key="row.type">

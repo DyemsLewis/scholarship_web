@@ -1,6 +1,9 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/reviews/assigned': 'mine',
@@ -40,12 +43,15 @@ const programs = ref([]);
 const applications = ref([]);
 const nextReview = ref(null);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const selectedProgram = ref(new URLSearchParams(window.location.search).get('program_id') ?? '');
+const queueState = createStaffQueueState(window, ['search','program_id']);
+const search = ref(queueState.get('search') ?? '');
+const selectedProgram = ref(queueState.get('program_id') ?? '');
 const isLoading = ref(true);
 const claimingId = ref(null);
 const errorMessage = ref('');
+const claimError = ref('');
 let requestVersion = 0;
+let requestedPage = 1;
 let searchTimer = null;
 
 const queues = computed(() => [
@@ -54,7 +60,7 @@ const queues = computed(() => [
     { key: 'returned', label: 'Returned', count: summary.value.returned, href: '/provider/workspaces/reviews/returned' },
     { key: 'history', label: 'History', count: summary.value.history, href: '/provider/workspaces/reviews/history' },
 ]);
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : '0 applications');
 
@@ -70,23 +76,25 @@ function statusClass(state) {
 }
 
 function reviewUrl(application) {
-    return `${application.detail_url}?return_to=${encodeURIComponent(path)}`;
+    return queueState.link(application.detail_url);
 }
 
 async function loadApplications(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
+    claimError.value = '';
 
     try {
-        const response = await window.axios.get('/provider/workspaces/reviews/data', {
-            params: {
-                queue: activeQueue,
-                search: search.value.trim() || undefined,
-                program_id: selectedProgram.value || undefined,
-                page,
-            },
-        });
+        const params = {
+            queue: activeQueue,
+            search: search.value.trim() || undefined,
+            program_id: selectedProgram.value || undefined,
+            page,
+        };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/reviews/data', { params: query }), params, () => version === requestVersion);
 
         if (version !== requestVersion) return;
 
@@ -105,14 +113,15 @@ async function loadApplications(page = 1) {
 }
 
 async function claimAndOpen(application) {
+    if (isLoading.value || errorMessage.value || claimingId.value !== null) return;
     claimingId.value = application.id;
-    errorMessage.value = '';
+    claimError.value = '';
 
     try {
         await window.axios.patch(`/provider/applications/${application.id}/review-claim`);
         window.location.href = reviewUrl(application);
     } catch (error) {
-        errorMessage.value = error.response?.data?.errors?.application?.[0]
+        claimError.value = error.response?.data?.errors?.application?.[0]
             || error.response?.data?.message
             || 'This application could not be claimed.';
         claimingId.value = null;
@@ -120,12 +129,18 @@ async function claimAndOpen(application) {
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadApplications(1), 300);
+}, { flush: 'sync' });
+watch(selectedProgram, () => loadApplications(1), { flush: 'sync' });
+onMounted(() => loadApplications(queueState.page));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
 });
-watch(selectedProgram, () => loadApplications(1));
-onMounted(() => loadApplications());
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
 <template>
@@ -168,7 +183,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     </a>
                 </nav>
 
-                <section v-if="activeQueue === 'mine' && nextReview" class="mt-4 border border-slate-200 border-l-4 border-l-amber-400 bg-white px-5 py-4 shadow-sm" aria-labelledby="next-review-title">
+                <section v-if="activeQueue === 'mine' && nextReview && !isLoading && !errorMessage" class="mt-4 border border-slate-200 border-l-4 border-l-amber-400 bg-white px-5 py-4 shadow-sm" aria-labelledby="next-review-title">
                     <div class="flex items-center gap-4">
                         <div class="grid h-10 w-10 shrink-0 place-items-center bg-amber-100 text-amber-700"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></div>
                         <div class="min-w-0 flex-1">
@@ -198,22 +213,26 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         </label>
                     </header>
 
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                    <div v-if="claimError" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ claimError }}</div>
 
-                    <div class="staff-table-viewport">
-                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-40"><col class="w-36"><col class="w-32"><col class="w-36"></colgroup>
-                            <caption class="sr-only">Applications in {{ pageCopy.title }}</caption>
+                    <div class="staff-table-viewport" :aria-busy="isLoading">
+                        <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadApplications(requestedPage)" />
+                        <table v-else class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-40"><col class="w-36"><col class="w-32"><col class="w-36"></colgroup>
+                            <caption class="sr-only">Applications in {{ pageCopy.title }}. The saved match is advisory, not an eligibility decision.</caption>
                             <thead class="bg-slate-50">
                                 <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
                                     <th class="px-5 py-3">Applicant</th>
                                     <th class="px-5 py-3">Evidence</th>
-                                    <th class="px-5 py-3">Eligibility</th>
+                                    <th class="px-5 py-3">
+                                        Saved match
+                                        <span class="mt-0.5 block normal-case tracking-normal">Advisory only</span>
+                                    </th>
                                     <th class="px-5 py-3">Queue</th>
                                     <th class="px-5 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
-                                <tr v-if="isLoading && !applications.length"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applications...</p></td></tr>
+                                <tr v-if="isLoading"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applications...</p></td></tr>
                                 <tr v-else-if="!applications.length && !errorMessage">
                                     <td colspan="5" class="px-5 py-12 text-center">
                                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-circle-check text-sm" aria-hidden="true"></i></span>
@@ -221,11 +240,10 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                         <p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram ? 'Clear the filters to check the full queue.' : 'New records will appear here automatically.' }}</p>
                                     </td>
                                 </tr>
-                                <tr v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
+                                <tr v-else v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4">
                                         <div class="flex min-w-0 items-center gap-3">
-                                            <img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover">
-                                            <span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+                                            <StaffTableIdentity :src="application.applicant.profile_photo_url" class="h-11 w-11" />
                                             <div class="min-w-0">
                                                 <p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p>
                                                 <p class="mt-1 application-text text-xs text-slate-500">{{ application.program.title }}</p>
@@ -238,7 +256,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                         <p class="mt-1.5 text-xs text-slate-500">{{ application.evidence.detail }}</p>
                                     </td>
                                     <td class="px-5 py-4">
-                                        <p class="text-sm font-semibold text-slate-800">{{ application.eligibility_score === null ? 'Check required' : `${application.eligibility_score}% match` }}</p>
+                                        <p class="text-sm font-semibold text-slate-800">{{ application.eligibility_score == null ? 'Not calculated' : `${application.eligibility_score}%` }}</p>
                                         <p class="mt-1 text-xs text-slate-500">{{ application.applicant.verification_label }}</p>
                                     </td>
                                     <td class="px-5 py-4">
@@ -246,10 +264,10 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                         <p class="mt-1 text-xs text-slate-500">{{ activeQueue === 'history' ? (application.reviewed_at || 'Reviewed') : `${application.waiting_days} day${application.waiting_days === 1 ? '' : 's'} waiting` }}</p>
                                     </td>
                                     <td class="px-5 py-4 text-right">
-                                        <button v-if="application.assignment.state === 'unassigned' && activeQueue !== 'history'" type="button" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="claimingId === application.id" @click="claimAndOpen(application)">
+                                        <button v-if="application.assignment.state === 'unassigned' && activeQueue !== 'history'" type="button" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :disabled="claimingId !== null" @click="claimAndOpen(application)" :aria-label="`${claimingId === application.id ? 'Claiming...' : 'Claim'} review for ${application.applicant.name}`">
                                             <i :class="['fa-solid text-[9px]', claimingId === application.id ? 'fa-spinner fa-spin' : 'fa-user-plus']" aria-hidden="true"></i>{{ claimingId === application.id ? 'Claiming...' : 'Claim' }}
                                         </button>
-                                        <a v-else :href="reviewUrl(application)" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
+                                        <a v-else :href="reviewUrl(application)" class="staff-row-action h-9 px-3 text-xs" :aria-label="`Open review for ${application.applicant.name}`">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
                                     </td>
                                 </tr>
                             </tbody>
@@ -259,8 +277,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
                         <p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p>
                         <div class="flex gap-2">
-                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadApplications(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button>
-                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadApplications(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button>
+                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" @click="loadApplications(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button>
+                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" @click="loadApplications(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button>
                         </div>
                     </footer>
                 </section>

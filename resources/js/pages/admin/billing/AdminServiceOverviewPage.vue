@@ -1,4 +1,5 @@
 <script setup>
+import { staffQueueLink, staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed } from 'vue';
 import { formatAdminServiceDateTime, formatAdminServiceMoney, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
@@ -8,6 +9,9 @@ const milestoneProgress = computed(() => {
     const milestones = purchase.value?.milestones ?? [];
     return `${milestones.filter((item) => item.completed).length} of ${milestones.length}`;
 });
+function serviceRecordLink(href) {
+    return staffQueueLink(href, staffQueueReturn(window, 'adminBilling'), window.location.origin);
+}
 </script>
 
 <template>
@@ -22,7 +26,7 @@ const milestoneProgress = computed(() => {
         <section class="admin-panel mt-4 overflow-hidden">
             <header class="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4">
                 <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><h2 class="text-lg font-black text-slate-950">Request brief</h2><p class="mt-0.5 text-sm text-slate-500">What was purchased and what the provider expects.</p></div></div>
-                <a :href="`/admin/workspaces/billing/requests/${purchaseId}/delivery`" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white">Open delivery plan <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                <a :href="serviceRecordLink(`/admin/workspaces/billing/requests/${purchaseId}/delivery`)" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white">Open delivery plan <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
             </header>
 
             <dl class="grid grid-cols-4 divide-x divide-slate-200 border-b border-slate-200 bg-slate-50">

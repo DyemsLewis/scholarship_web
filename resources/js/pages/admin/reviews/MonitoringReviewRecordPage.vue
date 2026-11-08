@@ -1,4 +1,5 @@
 <script setup>
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminDialog from '../components/AdminDialog.vue';
@@ -7,6 +8,7 @@ import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 import AdminLoadState from '../components/AdminLoadState.vue';
 import { useAdminResource } from '../../../composables/useAdminResource';
 import { reviewErrorMessage } from '../../../support/adminReviewPresentation';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 
 const applicationId = (window.portalPathname?.() ?? window.location.pathname).match(/monitoring\/(\d+)/)?.[1];
 const caseId = new URLSearchParams(window.location.search).get('case');
@@ -42,6 +44,9 @@ async function loadRecord() {
 
 async function saveReview() {
     if (saving.value || loading.value || errorMessage.value || !record.value || !canSaveReview.value) return;
+    if (!await confirmOutcome({ record: record.value.applicant?.name || record.value.recipient_name || 'Recipient monitoring record',
+        outcome: outcome.value, consequence: 'This records the platform oversight review. It does not change the provider support decision.' },
+    () => !saving.value && !loading.value && !errorMessage.value && Boolean(record.value) && canSaveReview.value)) return;
     saving.value = true;
     reviewError.value = '';
     successMessage.value = '';
@@ -79,11 +84,12 @@ function closeReview() {
 }
 
 onMounted(loadRecord);
+const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/reviews/monitoring');
 </script>
 
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
-        <a href="/admin/workspaces/reviews/monitoring" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Monitoring queue</a>
+        <a :href="backToQueue" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Monitoring queue</a>
         <AdminWorkspaceHeader eyebrow="Monitoring oversight" title="Check-in review" description="Confirm the exception and provider response for this check-in." icon="fa-solid fa-chart-line">
             <template v-if="record && !loading && !errorMessage" #actions><button type="button" :disabled="saving" class="inline-flex items-center gap-2 bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50" @click="openReview"><i class="fa-solid fa-clipboard-check text-xs text-amber-300" aria-hidden="true"></i>Record review</button></template>
         </AdminWorkspaceHeader>
@@ -115,12 +121,12 @@ onMounted(loadRecord);
 
             <section class="admin-panel mt-4 overflow-hidden">
                 <header class="flex items-center justify-between border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Requirement progress</h2><p class="mt-0.5 text-sm text-slate-500">Only records tied to this check-in are shown.</p></div></div><span class="text-sm font-bold text-slate-700">{{ requirementProgress }}</span></header>
-                <div v-if="record.requirements?.length" class="staff-table-viewport"><table class="portal-data-table table-fixed min-w-[48rem]">
+                <div v-if="record.requirements?.length" class="staff-table-viewport staff-table-viewport--compact"><table class="portal-data-table table-fixed min-w-[48rem]">
                     <colgroup><col><col class="w-44"><col class="w-28"></colgroup>
                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><tr><th class="border-b border-slate-200 px-6 py-3">Requirement</th><th class="border-b border-slate-200 px-4 py-3">Status</th><th class="border-b border-slate-200 px-6 py-3 text-right">Evidence</th></tr></thead>
-                    <tbody class="divide-y divide-slate-200"><tr v-for="item in record.requirements" :key="item.id"><td class="px-6 py-4 text-sm font-bold text-slate-950">{{ item.title }}<span v-if="item.file?.name" class="review-text mt-1 block text-xs font-normal text-slate-500" data-file-name>{{ item.file.name }}</span></td><td class="px-4 py-4"><span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', requirementClass(item.status)]">{{ item.status_label }}</span></td><td class="px-6 py-4 text-right"><a v-if="item.file" :href="item.file.view_url" data-file-preview="true" :data-file-name="item.file.name || item.title" class="inline-grid h-10 w-10 place-items-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Preview ${item.file.name || item.title}`" title="Preview evidence"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><span v-else class="text-sm text-slate-400">No file</span></td></tr></tbody>
+                    <tbody class="divide-y divide-slate-200"><tr v-for="item in record.requirements" :key="item.id"><td class="px-6 py-4 text-sm font-bold text-slate-950">{{ item.title }}<span v-if="item.file?.name" class="review-text mt-1 block text-xs font-normal text-slate-500" data-file-name>{{ item.file.name }}</span></td><td class="px-4 py-4"><span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', requirementClass(item.status)]">{{ item.status_label }}</span></td><td class="px-6 py-4 text-right"><a v-if="item.file" :href="item.file.view_url" data-file-preview="true" :data-file-name="item.file.name || item.title" class="staff-row-action h-10 w-10" :aria-label="`Preview ${item.file.name || item.title}`" title="Preview evidence"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><span v-else class="text-sm text-slate-400">No file</span></td></tr></tbody>
                 </table></div>
-                <AdminEmptyState v-else title="No requirements recorded" description="This check-in does not contain a requirement checklist." icon="fa-solid fa-list-check" />
+                <AdminEmptyState v-else compact title="No requirements recorded" description="This check-in does not contain a requirement checklist." icon="fa-solid fa-list-check" />
             </section>
 
             <details v-if="record.exception_context || record.timeline?.length || record.last_review" class="admin-panel mt-4 overflow-hidden">

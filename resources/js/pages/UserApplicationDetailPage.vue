@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, nextTick, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
@@ -985,6 +986,7 @@ async function submitRecipientAgreement(response) {
         return;
     }
 
+    if (!await confirmOutcome({ record: application.value.scholarship?.title || 'Recipient agreement', outcome: response === 'accepted' ? 'Agreement accepted' : 'Agreement declined', consequence: response === 'accepted' ? 'You agree to the responsibilities and conditions shown.' : 'You will not proceed under this agreement. Your explanation will be sent to the provider.', danger: response === 'declined' }, () => !!application.value && !isSubmittingAgreement.value)) return;
     isSubmittingAgreement.value = true;
 
     try {

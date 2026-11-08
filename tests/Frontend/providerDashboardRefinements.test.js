@@ -67,6 +67,18 @@ test('dashboard section empty and loading states retain distinct, useful feedbac
     assert.doesNotMatch(loading, /No assigned work needs attention/);
 });
 
+test('organization logo rows fit the entire mark while applicant photos retain their crop', async () => {
+    const item = { id: 1, title: 'Application support', subtitle: 'Education organization', image_url: '/organization-logo.png',
+        image_fit: 'contain', status: { label: 'Confirmed' }, meta: [], action: { label: 'Open', url: '/admin/workspaces/finance' } };
+    const logo = await render(Items, { items: [item] });
+    assert.match(logo, /alt="Education organization logo"/);
+    assert.match(logo, /object-contain p-1/);
+    assert.doesNotMatch(logo, /object-cover/);
+    const photo = await render(Items, { items: [{ ...item, image_fit: undefined, image_url: '/applicant-photo.png' }] });
+    assert.match(photo, /object-cover/);
+    assert.doesNotMatch(photo, /object-contain/);
+});
+
 test('all twelve active provider dashboards opt into refinements without opting admin into provider styles', () => {
     const pages = readdirSync(new URL('pages/provider/', root), { recursive: true })
         .filter((file) => file.endsWith('DashboardPage.vue'));
@@ -95,7 +107,7 @@ test('manager and program summaries share components without changing their data
         assert.doesNotMatch(value, /truncate|w-\[6%\]/);
     }
     const manager = source('pages/provider/ProviderManagerDashboardPage.vue');
-    assert.match(manager, /v-if="program.logo_url" :src="program.logo_url"/);
+    assert.match(manager, /<StaffTableIdentity kind="program" :src="program.logo_url"/);
     assert.match(manager, /staff-table-viewport/);
     assert.match(manager, /<col class="w-20">/);
     assert.match(manager, /recentPrograms = computed\(\(\) => scholarships.value.slice\(0, 5\)\)/);

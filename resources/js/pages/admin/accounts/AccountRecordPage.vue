@@ -1,4 +1,5 @@
 <script setup>
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
@@ -119,11 +120,12 @@ async function updateStatus() {
 }
 
 onMounted(loadAccount);
+const backToQueue = staffQueueReturn(window, 'accounts', '/admin/workspaces/accounts/directory');
 </script>
 
 <template>
     <AdminWorkspacePage workspace="account_manager">
-        <a href="/admin/workspaces/accounts" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to accounts</a>
+        <a :href="backToQueue" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to accounts</a>
 
         <AdminWorkspaceHeader
             eyebrow="Account access"

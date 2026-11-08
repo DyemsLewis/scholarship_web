@@ -1,4 +1,5 @@
 <script setup>
+import { staffQueueLink, staffQueueReturn } from '../../../../support/staffQueueState.js';
 import { computed } from 'vue';
 import { formatServiceDateTime } from '../../../../composables/useProviderServiceWorkspace.js';
 import { labelFromKey } from '../../../../support/display';
@@ -51,6 +52,10 @@ function dueClass(status) {
     if (['due_today', 'due_soon'].includes(status)) return 'text-amber-700';
     return 'text-slate-500';
 }
+const originatingQueue = staffQueueReturn(window, 'providerBilling');
+function serviceRecordLink(href) {
+    return staffQueueLink(href, staffQueueReturn(window, 'providerBilling'), window.location.origin);
+}
 </script>
 
 <template>
@@ -58,7 +63,7 @@ function dueClass(status) {
         <ProviderSidebar />
         <section class="student-page" aria-labelledby="service-record-title">
             <div class="provider-service-workspace mx-auto max-w-[94rem]">
-                <a :href="directoryUrl" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
+                <a :href="originatingQueue || directoryUrl" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to services
                 </a>
@@ -87,12 +92,12 @@ function dueClass(status) {
                         <span class="text-slate-600">{{ purchase.current_action }}</span>
                         <span v-if="purchase.action_due_label" :class="['ml-auto text-xs font-bold', dueClass(purchase.action_due_status)]">{{ purchase.action_due_label }}</span>
                         <span :class="['text-xs font-semibold text-slate-500', { 'ml-auto': !purchase.action_due_label }]">{{ purchase.current_action_owner === 'provider' ? 'Your team' : 'Platform support' }}</span>
-                        <a v-if="purchase.current_action_owner === 'provider' && purchase.current_action_url" :href="purchase.current_action_url" class="inline-flex items-center gap-2 text-xs font-bold text-slate-950 underline decoration-amber-400 decoration-2 underline-offset-4">Open task<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
+                        <a v-if="purchase.current_action_owner === 'provider' && purchase.current_action_url" :href="serviceRecordLink(purchase.current_action_url)" class="inline-flex items-center gap-2 text-xs font-bold text-slate-950 underline decoration-amber-400 decoration-2 underline-offset-4">Open task<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
                     </div>
                 </header>
 
                 <nav v-if="purchase" class="mt-4 grid grid-cols-5 border border-slate-200 bg-white shadow-sm" aria-label="Service workspace sections">
-                    <a v-for="section in sections" :key="section.key" :href="section.href" :aria-current="activeSection === section.key ? 'page' : undefined" :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']">
+                    <a v-for="section in sections" :key="section.key" :href="serviceRecordLink(section.href)" :aria-current="activeSection === section.key ? 'page' : undefined" :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']">
                         <i :class="section.icon" aria-hidden="true"></i>
                         {{ section.label }}
                         <span v-if="section.attention" class="h-2 w-2 bg-amber-400" title="Decision needed"></span>

@@ -1,6 +1,8 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
@@ -41,12 +43,13 @@ const configs = {
     },
 };
 const config = configs[queueKey] ?? configs.providers;
-const query = new URLSearchParams(window.location.search);
+const identityKind = ({ providers: 'provider', programs: 'program', 'selection-activities': 'program' })[queueKey] ?? 'applicant';
+const queueState = createStaffQueueState(window, ['search','status']);
 const allowedStatuses = config.statuses.map(([value]) => value);
-const search = ref(query.get('search') ?? '');
-const status = ref(allowedStatuses.includes(query.get('status')) ? query.get('status') : config.statuses[0][0]);
+const search = ref(queueState.get('search') ?? '');
+const status = ref(allowedStatuses.includes(queueState.get('status')) ? queueState.get('status') : config.statuses[0][0]);
 const resource = useAdminResource(async ({ signal }, params) => {
-    const response = await window.axios.get(config.endpoint, { params, signal });
+    const response = await queueState.load((query) => window.axios.get(config.endpoint, { params: query, signal }), params, () => !signal.aborted);
     return response.data;
 }, { failureMessage: 'This review queue could not be loaded.' });
 const { isLoading: loading, errorMessage } = resource;
@@ -76,13 +79,13 @@ watch([search, status], () => {
     searchTimer = setTimeout(() => loadItems(1), 250);
 }, { flush: 'sync' });
 onBeforeUnmount(() => clearTimeout(searchTimer));
-onMounted(loadItems);
+onMounted(() => loadItems(queueState.page));
 </script>
 
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
         <AdminWorkspaceHeader :eyebrow="config.eyebrow" :title="config.title" :description="config.description" :icon="config.icon" />
-        <AdminTableFrame :title="config.title" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : resultLabel" :icon="config.icon" :loading="loading" :error="errorMessage" loading-message="Loading review queue..." class="mt-4" @retry="loadItems(1)">
+        <AdminTableFrame :title="config.title" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : resultLabel" :icon="config.icon" :loading="loading" :error="errorMessage" loading-message="Loading review queue..." class="mt-4" @retry="resource.retry">
             <template #filters>
                 <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_14rem]">
                     <label class="relative"><span class="sr-only">Search queue</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" :placeholder="config.search" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
@@ -97,14 +100,14 @@ onMounted(loadItems);
                     <tr v-for="item in items" :key="item.id ?? item.application_id" class="hover:bg-slate-50/70">
                         <td class="px-5 py-3.5">
                             <div class="flex min-w-0 items-center gap-3">
-                                <span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i :class="config.icon" aria-hidden="true"></i><img v-if="item.logo_url || item.image_url || item.photo_url" :src="item.logo_url || item.image_url || item.photo_url" :alt="item.logo_url ? `${item.name || 'Provider'} logo` : `${item.name || item.title || 'Record'} image`" :class="['absolute inset-0 h-full w-full bg-white', item.logo_url ? 'object-contain p-1' : 'object-cover']" @error="$event.currentTarget.remove()"></span>
+                                <StaffTableIdentity :kind="identityKind" :src="identityKind === 'applicant' ? item.photo_url : item.logo_url" :icon="identityKind === 'program' ? config.icon : ''" class="h-10 w-10" />
                                 <span class="min-w-0"><strong class="review-text block text-sm text-slate-950">{{ item.name || item.title || item.recipient }}</strong><span class="review-text mt-0.5 block text-xs text-slate-500">{{ item.email || item.provider || item.program }}</span></span>
                             </div>
                         </td>
                         <td class="px-4 py-3.5"><p class="review-text text-sm font-semibold text-slate-700">{{ item.legal_name || item.category || item.school || item.release || item.stage_label || item.cycle_title || item.provider || 'Record details' }}</p><p class="review-text mt-0.5 text-xs text-slate-500">{{ item.education || item.deadline || item.scheduled_at || item.schedule || item.due_on || item.updated_at || ' ' }}</p></td>
                         <td class="px-4 py-3.5"><span :class="['inline-flex px-2 py-1 text-xs font-bold uppercase tracking-wide', reviewStatusClass(reviewQueueStatus(item, queueKey))]">{{ statusLabel(reviewQueueStatus(item, queueKey)) }}</span><p v-if="item.status && item.oversight_status && item.status !== item.oversight_status" class="mt-1 text-xs text-slate-500">{{ queueKey === 'benefits' ? 'Release' : 'Session' }}: {{ reviewStatusLabel(item.status) }}</p><p v-if="item.primary_flag" class="review-text mt-1 text-xs font-semibold text-amber-800">{{ item.primary_flag }}</p></td>
-                        <td class="review-text px-4 py-3.5 text-sm text-slate-600"><template v-if="queueKey === 'providers'">{{ item.proof_count }} proofs</template><template v-else-if="queueKey === 'programs'">{{ item.application_count }} applications</template><template v-else-if="queueKey === 'applicants'">{{ item.evidence_count }} files</template><template v-else-if="queueKey === 'selection-activities'">{{ item.active_assignments_count }} applicants · {{ item.current_evidence_count }} files</template><template v-else-if="queueKey === 'benefits'"><a v-if="item.receipt_url" :href="item.receipt_url" data-file-preview="true" :data-file-name="item.receipt_name || `${item.release || 'Benefit release'} receipt`" class="inline-grid h-10 w-10 place-items-center border border-slate-300 text-slate-700 hover:bg-slate-950 hover:text-white" :aria-label="`Preview receipt for ${item.recipient}`" title="Preview receipt"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><span v-else>No receipt</span></template><template v-else-if="queueKey === 'monitoring'"><strong class="block text-sm text-slate-800">{{ item.next_action_owner }}</strong><span class="mt-0.5 block text-xs text-slate-500">{{ item.next_action_label || item.case_status_label }}</span><span v-if="item.wait_label" class="mt-1 block text-xs font-bold text-amber-800">{{ item.wait_label }}</span></template><template v-else>{{ item.submission_count }} submissions · {{ item.release_count }} releases</template></td>
-                        <td class="px-5 py-3.5 text-right"><a v-if="item.review_url || item.recipient_url" :href="item.review_url || item.recipient_url" class="inline-grid h-10 w-10 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`${queueKey === 'benefits' ? 'Open recipient profile for' : 'Open'} ${item.name || item.title || item.recipient}`" :title="queueKey === 'benefits' ? 'Open recipient profile' : 'Open record'"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                        <td class="review-text px-4 py-3.5 text-sm text-slate-600"><template v-if="queueKey === 'providers'">{{ item.proof_count }} proofs</template><template v-else-if="queueKey === 'programs'">{{ item.application_count }} applications</template><template v-else-if="queueKey === 'applicants'">{{ item.evidence_count }} files</template><template v-else-if="queueKey === 'selection-activities'">{{ item.active_assignments_count }} applicants · {{ item.current_evidence_count }} files</template><template v-else-if="queueKey === 'benefits'"><a v-if="item.receipt_url" :href="item.receipt_url" data-file-preview="true" :data-file-name="item.receipt_name || `${item.release || 'Benefit release'} receipt`" class="staff-row-action h-10 w-10" :aria-label="`Preview receipt for ${item.recipient}`" title="Preview receipt"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><span v-else>No receipt</span></template><template v-else-if="queueKey === 'monitoring'"><strong class="block text-sm text-slate-800">{{ item.next_action_owner }}</strong><span class="mt-0.5 block text-xs text-slate-500">{{ item.next_action_label || item.case_status_label }}</span><span v-if="item.wait_label" class="mt-1 block text-xs font-bold text-amber-800">{{ item.wait_label }}</span></template><template v-else>{{ item.submission_count }} submissions · {{ item.release_count }} releases</template></td>
+                        <td class="px-5 py-3.5 text-right"><a v-if="item.review_url || item.recipient_url" :href="queueState.link(item.review_url || item.recipient_url)" class="staff-row-action h-10 w-10" :aria-label="`${queueKey === 'benefits' ? 'Open recipient profile for' : 'Open'} ${item.name || item.title || item.recipient}`" :title="queueKey === 'benefits' ? 'Open recipient profile' : 'Open record'"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                     </tr>
                 </tbody>
             </table>

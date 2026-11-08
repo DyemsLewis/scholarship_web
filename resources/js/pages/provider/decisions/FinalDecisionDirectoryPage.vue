@@ -1,6 +1,9 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/decisions/pending': 'pending',
@@ -34,11 +37,13 @@ const summary = ref({ pending: 0, waitlist: 0, recorded: 0 });
 const programs = ref([]);
 const applications = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const selectedProgram = ref(new URLSearchParams(window.location.search).get('program_id') ?? '');
+const queueState = createStaffQueueState(window, ['search','program_id'], { path: `/provider/workspaces/decisions/${activeQueue}` });
+const search = ref(queueState.get('search') ?? '');
+const selectedProgram = ref(queueState.get('program_id') ?? '');
 const isLoading = ref(true);
 const errorMessage = ref('');
 let requestVersion = 0;
+let requestedPage = 1;
 let searchTimer = null;
 
 const queues = computed(() => [
@@ -46,14 +51,13 @@ const queues = computed(() => [
     { key: 'waitlist', label: 'Waitlist', count: summary.value.waitlist, href: '/provider/workspaces/decisions/waitlist' },
     { key: 'recorded', label: 'History', count: summary.value.recorded, href: '/provider/workspaces/decisions/recorded' },
 ]);
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : '0 applicants');
 const selectedProgramSummary = computed(() => programs.value.find((program) => Number(program.id) === Number(selectedProgram.value)) ?? null);
 
 function recordUrl(application) {
-    const returnTo = `${path}${window.location.search}`;
-    return `${application.detail_url}?return_to=${encodeURIComponent(returnTo)}`;
+    return queueState.link(application.detail_url);
 }
 
 function decisionClass(state) {
@@ -66,19 +70,20 @@ function decisionClass(state) {
 }
 
 async function loadApplications(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/provider/workspaces/decisions/data', {
-            params: {
-                queue: activeQueue,
-                search: search.value.trim() || undefined,
-                program_id: selectedProgram.value || undefined,
-                page,
-            },
-        });
+        const params = {
+            queue: activeQueue,
+            search: search.value.trim() || undefined,
+            program_id: selectedProgram.value || undefined,
+            page,
+        };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/decisions/data', { params: query }), params, () => version === requestVersion);
 
         if (version !== requestVersion) return;
         workspace.value = response.data.workspace;
@@ -95,12 +100,18 @@ async function loadApplications(page = 1) {
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadApplications(1), 300);
+}, { flush: 'sync' });
+watch(selectedProgram, () => loadApplications(1), { flush: 'sync' });
+onMounted(() => loadApplications(queueState.page));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
 });
-watch(selectedProgram, () => loadApplications(1));
-onMounted(() => loadApplications());
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
 <template>
@@ -166,8 +177,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         </label>
                     </div>
 
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                    <div v-if="isLoading" class="px-6 py-16 text-center">
+
+                    <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadApplications(requestedPage)" />
+                    <div v-else-if="isLoading" class="px-6 py-16 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-semibold text-slate-500">Loading final decisions...</p>
                     </div>
@@ -192,15 +204,14 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                 <tr v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4">
                                         <div class="flex items-center gap-3">
-                                            <img v-if="application.applicant.profile_photo_url" :src="application.applicant.profile_photo_url" :alt="`${application.applicant.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover">
-                                            <span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+                                            <StaffTableIdentity :src="application.applicant.profile_photo_url" class="h-11 w-11" />
                                             <div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.program.title }}</p></div>
                                         </div>
                                     </td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage_status }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education || 'Verified applicant record' }}</p></td>
                                     <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span><p class="mt-2 text-xs text-slate-500">{{ application.decision.reason || application.decision.recorded_at || `${application.waiting_days} days waiting` }}</p></td>
                                     <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.capacity.label }}</p><p class="mt-1 text-xs text-slate-500">{{ application.capacity.remaining === null ? 'Selection is not capped' : `${application.capacity.remaining} remaining` }}</p></td>
-                                    <td class="px-5 py-4 text-right"><a :href="recordUrl(application)" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800">{{ application.decision.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
+                                    <td class="px-5 py-4 text-right"><a :href="recordUrl(application)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`${application.decision.action_label} for ${application.applicant.name}`">{{ application.decision.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -209,8 +220,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
                         <p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p>
                         <div class="flex gap-2">
-                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadApplications(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button>
-                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadApplications(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button>
+                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" @click="loadApplications(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button>
+                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" @click="loadApplications(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button>
                         </div>
                     </footer>
                 </section>

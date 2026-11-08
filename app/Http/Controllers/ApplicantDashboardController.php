@@ -3339,7 +3339,9 @@ class ApplicantDashboardController extends Controller
         return [
             'id' => $scholarship->id,
             'image_path' => $scholarship->image_path,
-            'image_url' => $this->scholarshipImageUrl($scholarship),
+            'logo_url' => $scholarship->logoUrl(),
+            'cover_image_url' => $scholarship->coverImageUrl(),
+            'image_url' => $this->scholarshipLogoUrl($scholarship),
             'title' => $scholarship->title,
             'category' => $scholarship->category,
             'program_cycle' => $scholarship->program_cycle,
@@ -3454,9 +3456,9 @@ class ApplicantDashboardController extends Controller
         ];
     }
 
-    private function scholarshipImageUrl(Scholarship $scholarship): string
+    private function scholarshipLogoUrl(Scholarship $scholarship): string
     {
-        return $scholarship->coverImageUrl();
+        return $scholarship->logoUrl();
     }
 
     private function mapUrl(Scholarship $scholarship): ?string
@@ -3646,7 +3648,7 @@ class ApplicantDashboardController extends Controller
         return [
             'title' => $event?->title ?: "{$scholarship->title} exam",
             'assessment_type' => 'qualifying_exam',
-            'image_url' => $this->scholarshipImageUrl($scholarship),
+            'image_url' => $this->scholarshipLogoUrl($scholarship),
             'description' => 'The scholarship provider conducts and grades this exam outside the portal.',
             'delivery_mode' => $event?->mode ?? 'provider_managed',
             'venue' => $event?->venue ?: $event?->location_address,

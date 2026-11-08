@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
@@ -92,6 +93,7 @@ async function loadRecord() {
 
 async function submitReview() {
     if (isSaving.value) return;
+    if (!await confirmOutcome({ record: 'Recipient monitoring oversight', outcome: reviewForm.value.outcome || reviewForm.value.oversight_status || 'Oversight review recorded', consequence: 'This records the platform review. A provider support decision remains separate.' }, () => !isSaving.value && !!record.value)) return;
     isSaving.value = true;
     reviewError.value = '';
     try {

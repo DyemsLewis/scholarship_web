@@ -1,3 +1,5 @@
+import { labelFromKey } from './display.js';
+
 const genericBriefingText = 'The provider will explain any final recipient commitments after the applicant is accepted.';
 
 export const recipientCommitmentLabels = {
@@ -7,8 +9,52 @@ export const recipientCommitmentLabels = {
     service: 'Service or community commitment',
     activities: 'Program activity or orientation',
     reporting: 'Progress or utilization reporting',
+    reporting_and_participation: 'Reporting and participation',
     custom: 'Other recipient commitment',
 };
+
+const agreementReviewFields = [
+    ['commitment_type', 'Commitment type'],
+    ['responsibilities', 'Recipient responsibilities'],
+    ['required_evidence', 'Required evidence'],
+    ['release_conditions', 'Release conditions'],
+    ['duration', 'Duration'],
+    ['noncompliance_consequence', 'If requirements are not met'],
+    ['exit_or_exception_process', 'Exceptions or withdrawal'],
+];
+
+function reviewText(value) {
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    if (Array.isArray(value)) return value.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean).join('\n');
+    return '';
+}
+
+export function recipientAgreementReviewRows(scholarship) {
+    let saved = scholarship?.recipient_agreement;
+    // Older records may contain plain text or a serialized agreement object.
+    for (let depth = 0; depth < 2 && typeof saved === 'string'; depth++) {
+        const text = saved.trim();
+        if (!text) { saved = null; break; }
+        const encoded = text.startsWith('{') || text.startsWith('[') || (text.startsWith('"') && text.endsWith('"'));
+        if (!encoded) return [{ key: 'responsibilities', label: 'Recipient responsibilities', value: text }];
+        try { saved = JSON.parse(text); }
+        catch { return [{ key: 'unreadable', label: 'Agreement details need clarification', value: 'The saved agreement could not be read. Ask the provider to resubmit the terms.', issue: true }]; }
+    }
+    if (saved == null || (typeof saved === 'object' && !Array.isArray(saved) && !Object.keys(saved).length)) {
+        const legacy = recipientCommitmentText(scholarship);
+        return legacy ? [{ key: 'responsibilities', label: 'Recipient responsibilities', value: legacy }] : [];
+    }
+    if (typeof saved !== 'object' || Array.isArray(saved)) {
+        return [{ key: 'unreadable', label: 'Agreement details need clarification', value: 'The saved agreement has an unsupported format. Ask the provider to resubmit the terms.', issue: true }];
+    }
+    const rows = agreementReviewFields.map(([key, label]) => {
+        const value = reviewText(saved[key]);
+        return { key, label, value: key === 'commitment_type' && value
+            ? recipientCommitmentLabels[value] || labelFromKey(value).replace(/-/g, ' ') : value };
+    }).filter(row => row.value);
+    return rows.length ? rows : [{ key: 'unreadable', label: 'Agreement details need clarification', value: 'No recognizable recipient terms were provided. Ask the provider to clarify the agreement.', issue: true }];
+}
 
 function hasText(value) {
     return String(value ?? '').trim() !== '';

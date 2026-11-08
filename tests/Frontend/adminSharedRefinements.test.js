@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
+import { confirmOutcome, afterConfirmation } from './helpers/acceptedOutcome.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, createSSRApp, effectScope, h, reactive, ref } from 'vue';
 import { renderToString } from '@vue/server-renderer';
@@ -21,6 +23,7 @@ const compile = (path, imports = {}) => {
 const loadStateUrl = compile('pages/admin/components/AdminLoadState.vue');
 const { default: LoadState } = await import(loadStateUrl);
 const { default: TableFrame } = await import(compile('pages/admin/components/AdminTableFrame.vue', { './AdminLoadState.vue': loadStateUrl }));
+const { default: EmptyState } = await import(compile('pages/admin/components/AdminEmptyState.vue'));
 const modalStub = `data:text/javascript,${encodeURIComponent('export function useModalAccessibility() { return { handleKeydown() {} }; }')}`;
 const confirmationUrl = compile('components/ConfirmationDialog.vue', { '../composables/useModalAccessibility': modalStub });
 const { default: Dialog } = await import(compile('pages/admin/components/AdminDialog.vue', { '../../../composables/useModalAccessibility': modalStub, '../../../components/ConfirmationDialog.vue': confirmationUrl }));
@@ -135,7 +138,40 @@ test('table frames hide empty claims and actions on failed loads but preserve th
     const ready = await render(TableFrame, { title: 'Review queue' }, slots);
     assert.match(ready, /No records in this queue/);
     assert.match(ready, />Next</);
-    assert.match(css, /\.staff-table-viewport\s*\{[^}]*min-height: 24rem/);
+    assert.doesNotMatch(ready, /staff-table-viewport--compact/);
+    assert.match(css, /\.staff-table-viewport\s*\{[^}]*min-height: 24rem;[^}]*overflow-x: auto/);
+});
+
+test('embedded admin tables can opt out of the queue height without changing the table slot', async () => {
+    const html = await render(TableFrame, { title: 'Recent exports', compact: true }, {
+        default: () => h('table', [h('tbody', [h('tr', [h('td', 'Export')])])]),
+    });
+    assert.match(html, /class="staff-table-viewport [^"]*staff-table-viewport--compact"/);
+    assert.match(html, /<table><tbody><tr><td>Export/);
+    assert.match(css, /\.staff-table-viewport--compact\s*\{\s*min-height: 0;/);
+    assert.match(await render(EmptyState, { title: 'No records' }), /min-h-72/);
+    assert.doesNotMatch(await render(EmptyState, { title: 'No proof', compact: true }), /min-h-72/);
+});
+
+test('proof and record tables opt into compact sizing while primary queues retain their height', () => {
+    for (const [path, count] of [
+        ['admin/billing/AdminServiceFilesPage.vue', 1],
+        ['admin/reviews/ApplicantReviewRecordPage.vue', 1],
+        ['admin/reviews/MonitoringReviewRecordPage.vue', 1],
+        ['admin/reviews/ProviderReviewRecordPage.vue', 1],
+        ['admin/reviews/SelectionActivityRecordPage.vue', 2],
+        ['provider/billing/BillingServiceFilesPage.vue', 1],
+        ['provider/organization/OrganizationProfileReadinessPage.vue', 1],
+        ['provider/organization/OrganizationVerificationPage.vue', 1],
+        ['provider/selection/SelectionSessionRecordPage.vue', 2],
+        ['provider/ProviderManagerDashboardPage.vue', 1],
+    ]) {
+        assert.equal(read(`pages/${path}`).match(/class="staff-table-viewport staff-table-viewport--compact"/g)?.length, count, path);
+    }
+    assert.match(read('pages/admin/records/RecordsExportsPage.vue'), /<AdminTableFrame compact title="Recent exports"/);
+    for (const path of ['admin/reviews/ReviewQueuePage.vue', 'provider/programs/ProgramDirectoryPage.vue', 'provider/reviews/ApplicationReviewDirectoryPage.vue']) {
+        assert.doesNotMatch(read(`pages/${path}`), /staff-table-viewport--compact|<AdminTableFrame compact/);
+    }
 });
 
 test('shared dialogs retain labelled form semantics and disable controls during save', async () => {
@@ -167,7 +203,7 @@ function harness(path, exposed) {
         post: async (...args) => { writes.push(args); return { data: {} }; },
         patch: async (...args) => { writes.push(args); return { data: { user: { first_name: 'Saved' } } }; },
     } };
-    const deps = { ref, reactive, computed, useAdminResource, reviewErrorMessage, watch() {}, onMounted() {}, onBeforeUnmount() {}, window, URLSearchParams, limitPhoneNumber: (value) => value, showPortalToast() {} };
+    const deps = { staffQueueReturn, confirmOutcome, ref, reactive, computed, useAdminResource, reviewErrorMessage, watch() {}, onMounted() {}, onBeforeUnmount() {}, window, URLSearchParams, limitPhoneNumber: (value) => value, showPortalToast() {} };
     return { ...new Function(...Object.keys(deps), `${script}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes };
 }
 
@@ -207,7 +243,7 @@ test('monitoring save errors stay inside the dialog, preserve notes and do not d
     state.record.value = { id: 14 }; state.notes.value = 'Please clarify the submitted evidence.'; state.outcome.value = 'follow_up_required'; state.reviewOpen.value = true;
     const pending = deferred();
     state.window.axios.post = (...args) => { state.writes.push(args); return pending.promise; };
-    const saving = state.saveReview(); state.closeReview(); await state.saveReview();
+    const saving = state.saveReview(); await afterConfirmation(); state.closeReview(); await state.saveReview();
     assert.equal(state.reviewOpen.value, true);
     assert.equal(state.writes.length, 1);
     pending.reject({ response: { data: { message: 'The review could not be saved.' } } }); await saving;
@@ -219,7 +255,7 @@ test('monitoring save errors stay inside the dialog, preserve notes and do not d
 
 test('review queues use shared latest-request and load-state protection without changing the API', () => {
     const source = read('pages/admin/reviews/ReviewQueuePage.vue');
-    for (const value of ['useAdminResource', 'resource.invalidate()', "{ flush: 'sync' }", 'onBeforeUnmount(() => clearTimeout(searchTimer))', ':loading="loading" :error="errorMessage"', '@retry="loadItems(1)"', 'params, signal', 'loading || pagination.current_page']) assert.ok(source.includes(value), value);
+    for (const value of ['useAdminResource', 'resource.invalidate()', "{ flush: 'sync' }", 'onBeforeUnmount(() => clearTimeout(searchTimer))', ':loading="loading" :error="errorMessage"', '@retry="resource.retry"', 'params: query, signal', 'loading || pagination.current_page']) assert.ok(source.includes(value), value);
     assert.doesNotMatch(source, /\.axios\.(post|patch|put|delete)\(/);
     for (const endpoint of ['providers', 'programs', 'applicants', 'selection-activities', 'benefits', 'monitoring']) assert.ok(source.includes(`/admin/workspaces/reviews/${endpoint}/data`));
 });

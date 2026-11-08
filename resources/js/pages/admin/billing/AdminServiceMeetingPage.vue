@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, ref, watch } from 'vue';
 import { formatAdminServiceDateTime, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
@@ -26,6 +27,7 @@ async function decideMeeting(status) {
         try { valid = ['http:', 'https:'].includes(new URL(joinUrl.value.trim()).protocol); } catch {}
         if (!valid) { errorMessage.value = 'Enter a valid HTTP or HTTPS meeting link.'; return; }
     }
+    if (!await confirmOutcome({ record: 'Service meeting', outcome: status, consequence: 'This meeting decision will be saved and shared with the provider.', danger: status === 'declined' }, () => canReview.value && !isSaving.value)) return;
     await runAction(
         (config) => window.axios.patch(`/admin/billing/${purchaseId}/meeting`, {
             meeting_status: status,

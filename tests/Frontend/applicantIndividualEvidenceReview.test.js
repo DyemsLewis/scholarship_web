@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
+import { confirmOutcome, afterConfirmation } from './helpers/acceptedOutcome.js';
+import { profileVerificationLabel } from '../../resources/js/support/applicantProfileLabels.js';
 import { readFileSync } from 'node:fs';
 import { computed, ref } from 'vue';
 import { parse } from '@vue/compiler-sfc';
@@ -87,7 +90,7 @@ test('validation and connection errors retain the note and allow a deliberate re
 
 test('overlapping clicks and resets cannot replace a decision in flight', async () => {
     const state = decisionHarness(); const pending = deferred(); state.request(() => pending.promise);
-    state.outcome.value = 'approved'; state.compared.value = true; const request = state.save();
+    state.outcome.value = 'approved'; state.compared.value = true; const request = state.save(); await afterConfirmation();
     await state.save(); state.reset(); assert.equal(state.outcome.value, 'approved'); assert.equal(state.writes.length, 1);
     pending.resolve({ data: { document: { id: 8 } } }); await request; assert.equal(state.saving.value, false);
 });
@@ -103,7 +106,7 @@ function pageHarness(payload) {
     const source = readFileSync(new URL('../../resources/js/pages/admin/reviews/ApplicantReviewRecordPage.vue', import.meta.url), 'utf8');
     const script = parse(source).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
     const window = { location: { pathname: '/admin/workspaces/reviews/applicants/39' }, axios: { get: async () => ({ data: { applicant: payload } }) } };
-    const deps = { ref, computed, useAdminResource, reviewErrorMessage, evidenceRows, evidenceReviewDate, onMounted() {}, window, applicantProfileDetails: () => [], profileEducationSummary: () => '' };
+    const deps = { staffQueueReturn, confirmOutcome, profileVerificationLabel, ref, computed, useAdminResource, reviewErrorMessage, evidenceRows, evidenceReviewDate, onMounted() {}, window, applicantProfileDetails: () => [], profileEducationSummary: () => '' };
     return new Function(...Object.keys(deps), `${script}\nreturn { loadRecord, applicant, canSave, notes, decision, evidenceSaved, selectedDocumentId, saveDecision, reloadEvidence, recordStale, window };`)(...Object.values(deps));
 }
 

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
 const returnTo = new URLSearchParams(window.location.search).get('return_to');
@@ -70,6 +71,11 @@ async function loadRecord() {
 }
 
 async function recordResult() {
+    if (!canRecordResult.value || actionBusy.value) return;
+    if (!await confirmOutcome({ record: `${applicant.value.name} - ${scholarship.value.title}`,
+        outcome: `${stageLabel.value}: ${resultForm.value.result}`, danger: resultForm.value.result === 'not_passed',
+        consequence: resultForm.value.result === 'passed' ? 'The applicant will continue to the next stage.' : 'This will close the application as not passed.' },
+    () => canRecordResult.value && !actionBusy.value)) return;
     actionBusy.value = true;
     errorMessage.value = '';
     successMessage.value = '';

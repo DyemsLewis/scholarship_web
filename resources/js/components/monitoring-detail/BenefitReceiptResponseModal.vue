@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { ref, watch } from 'vue';
 import { usePageScrollLock } from '../../composables/usePageScrollLock';
 import { showPortalToast } from '../../support/portalToast';
@@ -45,6 +46,12 @@ async function submit() {
         return;
     }
 
+    if (!await confirmOutcome({
+        record: props.release.title || 'Benefit release',
+        outcome: form.value.response_type === 'confirmed' ? 'Received as listed' : 'Benefit issue reported',
+        consequence: form.value.response_type === 'confirmed' ? 'Confirm only if you actually received this benefit. Your response and receipt date will be recorded.' : 'The provider will receive your issue report. This does not confirm that you received the benefit.',
+        confirmLabel: 'Save response',
+    }, () => props.open && !!props.release && !isSaving.value && form.value.acknowledged)) return;
     isSaving.value = true;
     const data = new FormData();
     data.append('response_type', form.value.response_type);

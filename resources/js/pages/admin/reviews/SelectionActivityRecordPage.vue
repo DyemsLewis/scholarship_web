@@ -1,4 +1,6 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { onMounted, ref } from 'vue';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
@@ -42,11 +44,12 @@ async function loadSession() {
 }
 
 onMounted(loadSession);
+const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/reviews/selection-activities');
 </script>
 
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
-        <a href="/admin/workspaces/reviews/selection-activities" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
+        <a :href="backToQueue" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
             <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Selection activities
         </a>
 
@@ -108,12 +111,12 @@ onMounted(loadSession);
                     </div>
                 </section>
 
-                <section class="admin-panel mt-4 min-h-[18rem] overflow-hidden">
+                <section class="admin-panel mt-4 overflow-hidden">
                     <header class="flex items-center justify-between border-b border-slate-200 px-6 py-4">
                         <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Recorded proof</h2><p class="mt-0.5 text-sm text-slate-500">Current files only.</p></div></div>
                         <span class="text-sm font-bold text-slate-600">{{ session.evidence.length }} files</span>
                     </header>
-                    <div v-if="session.evidence.length" class="staff-table-viewport"><table class="portal-data-table table-fixed min-w-[56rem]">
+                    <div v-if="session.evidence.length" class="staff-table-viewport staff-table-viewport--compact"><table class="portal-data-table table-fixed min-w-[56rem]">
                         <colgroup><col><col class="w-40"><col class="w-48"><col class="w-28"></colgroup>
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">File</th><th class="border-b border-slate-200 px-4 py-3">Scope</th><th class="border-b border-slate-200 px-4 py-3">Recorded</th><th class="border-b border-slate-200 px-5 py-3 text-right">Preview</th></tr></thead>
                         <tbody class="divide-y divide-slate-200">
@@ -121,29 +124,29 @@ onMounted(loadSession);
                                 <td class="px-5 py-4"><strong class="review-text block text-sm text-slate-950" data-file-name>{{ file.name }}</strong><span class="mt-0.5 block text-xs text-slate-500">{{ file.category }} · {{ file.size }}</span></td>
                                 <td class="px-4 py-4 text-sm font-semibold text-slate-700">{{ file.scope_label }}</td>
                                 <td class="px-4 py-4"><p class="text-sm text-slate-700">{{ file.uploaded_at }}</p><p class="mt-0.5 text-xs text-slate-500">{{ file.uploaded_by || 'Provider team' }}</p></td>
-                                <td class="px-5 py-4 text-right"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.name" class="inline-grid h-10 w-10 place-items-center border border-slate-300 text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" title="Preview proof" :aria-label="`Preview ${file.name}`"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a></td>
+                                <td class="px-5 py-4 text-right"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.name" class="staff-row-action h-10 w-10" title="Preview proof" :aria-label="`Preview ${file.name}`"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a></td>
                             </tr>
                         </tbody>
                     </table></div>
-                    <AdminEmptyState v-else title="No proof recorded" :description="session.proof_required ? 'The provider still needs to add required session proof.' : 'This session does not currently include a proof file.'" icon="fa-solid fa-file-shield" />
+                    <AdminEmptyState v-else compact title="No proof recorded" :description="session.proof_required ? 'The provider still needs to add required session proof.' : 'This session does not currently include a proof file.'" icon="fa-solid fa-file-shield" />
                 </section>
             </template>
 
-            <section v-else-if="activeSection === 'applicants'" class="admin-panel mt-4 min-h-[24rem] overflow-hidden">
+            <section v-else-if="activeSection === 'applicants'" class="admin-panel mt-4 overflow-hidden">
                 <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-users" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Assigned applicants</h2><p class="mt-0.5 text-sm text-slate-500">Acknowledgment and attendance only.</p></div></header>
-                <div v-if="session.participants.length" class="staff-table-viewport"><table class="portal-data-table table-fixed min-w-[56rem]">
+                <div v-if="session.participants.length" class="staff-table-viewport staff-table-viewport--compact"><table class="portal-data-table table-fixed min-w-[56rem]">
                     <colgroup><col><col class="w-52"><col class="w-44"><col class="w-28"></colgroup>
                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Applicant</th><th class="border-b border-slate-200 px-4 py-3">Assignment</th><th class="border-b border-slate-200 px-4 py-3">Attendance</th><th class="border-b border-slate-200 px-5 py-3">Proof</th></tr></thead>
                     <tbody class="divide-y divide-slate-200">
                         <tr v-for="applicant in session.participants" :key="applicant.assignment_id">
-                            <td class="px-5 py-4"><div class="flex items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-user" aria-hidden="true"></i><img v-if="applicant.photo_url" :src="applicant.photo_url" :alt="`${applicant.name} profile`" class="absolute inset-0 h-full w-full object-cover" @error="$event.currentTarget.remove()"></span><strong class="text-sm text-slate-950">{{ applicant.name }}</strong></div></td>
+                            <td class="px-5 py-4"><div class="flex items-center gap-3"><StaffTableIdentity :src="applicant.photo_url" class="h-10 w-10" /><strong class="text-sm text-slate-950">{{ applicant.name }}</strong></div></td>
                             <td class="px-4 py-4"><span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(applicant.assignment_status)]">{{ applicant.assignment_status_label }}</span><p class="mt-1 text-xs text-slate-500">{{ applicant.acknowledged_at ? `Confirmed ${applicant.acknowledged_at}` : 'Not yet confirmed' }}</p></td>
                             <td class="px-4 py-4"><span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(applicant.attendance_status)]">{{ applicant.attendance_label }}</span><p v-if="applicant.attendance_recorded_at" class="mt-1 text-xs text-slate-500">{{ applicant.attendance_recorded_at }}</p></td>
                             <td class="px-5 py-4 text-sm font-semibold text-slate-700">{{ applicant.proof_count }} file{{ applicant.proof_count === 1 ? '' : 's' }}</td>
                         </tr>
                     </tbody>
                 </table></div>
-                <AdminEmptyState v-else title="No assigned applicants" description="The provider has not assigned an applicant to this session." icon="fa-solid fa-users" />
+                <AdminEmptyState v-else compact title="No assigned applicants" description="The provider has not assigned an applicant to this session." icon="fa-solid fa-users" />
             </section>
 
             <section v-else class="admin-panel mt-4 min-h-[24rem] overflow-hidden">

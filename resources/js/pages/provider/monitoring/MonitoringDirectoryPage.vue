@@ -2,6 +2,8 @@
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/monitoring/review': 'review',
@@ -24,12 +26,14 @@ const summary = ref({ review: 0, followup: 0, awaiting: 0, history: 0 });
 const programs = ref([]);
 const checkIns = ref([]);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const selectedProgram = ref(new URLSearchParams(window.location.search).get('program_id') ?? '');
+const queueState = createStaffQueueState(window, ['search','program_id']);
+const search = ref(queueState.get('search') ?? '');
+const selectedProgram = ref(queueState.get('program_id') ?? '');
 const isLoading = ref(true);
 const errorMessage = ref('');
 let searchTimer = null;
 let requestVersion = 0;
+let requestedPage = 1;
 
 const queues = computed(() => [
     { key: 'review', label: 'Needs review', count: summary.value.review, href: '/provider/workspaces/monitoring/review' },
@@ -37,7 +41,7 @@ const queues = computed(() => [
     { key: 'awaiting', label: 'Awaiting uploads', count: summary.value.awaiting, href: '/provider/workspaces/monitoring/awaiting' },
     { key: 'history', label: 'History', count: summary.value.history, href: '/provider/workspaces/monitoring/history' },
 ]);
-const resultRange = computed(() => pagination.value.total
+const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
     ? `${pagination.value.from}-${pagination.value.to} of ${pagination.value.total}`
     : '0 check-ins');
 
@@ -74,18 +78,19 @@ function workloadLabel(checkIn) {
 }
 
 async function loadCheckIns(page = 1) {
+    window.clearTimeout(searchTimer);
+    requestedPage = page;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
     try {
-        const response = await window.axios.get('/provider/workspaces/monitoring/data', {
-            params: {
-                queue: activeQueue,
-                search: search.value.trim() || undefined,
-                program_id: selectedProgram.value || undefined,
-                page,
-            },
-        });
+        const params = {
+            queue: activeQueue,
+            search: search.value.trim() || undefined,
+            program_id: selectedProgram.value || undefined,
+            page,
+        };
+        const response = await queueState.load((query) => window.axios.get('/provider/workspaces/monitoring/data', { params: query }), params, () => version === requestVersion);
         if (version !== requestVersion) return;
         workspace.value = response.data.workspace;
         summary.value = response.data.summary ?? summary.value;
@@ -101,12 +106,18 @@ async function loadCheckIns(page = 1) {
 }
 
 watch(search, () => {
+    requestVersion++;
+    isLoading.value = true;
+    errorMessage.value = '';
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => loadCheckIns(1), 300);
+}, { flush: 'sync' });
+watch(selectedProgram, () => loadCheckIns(1), { flush: 'sync' });
+onMounted(() => loadCheckIns(queueState.page));
+onBeforeUnmount(() => {
+    requestVersion++;
+    window.clearTimeout(searchTimer);
 });
-watch(selectedProgram, () => loadCheckIns(1));
-onMounted(() => loadCheckIns());
-onBeforeUnmount(() => window.clearTimeout(searchTimer));
 </script>
 
 <template>
@@ -156,8 +167,9 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                         </label>
                     </div>
 
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                    <div v-if="isLoading" class="px-6 py-16 text-center">
+
+                    <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadCheckIns(requestedPage)" />
+                    <div v-else-if="isLoading" class="px-6 py-16 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
                         <p class="mt-3 text-sm font-semibold text-slate-500">Loading monitoring check-ins...</p>
                     </div>
@@ -198,7 +210,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                                         <p :class="['text-sm font-bold', checkIn.timing_state === 'overdue' ? 'text-rose-700' : ['due_soon', 'grace_period'].includes(checkIn.timing_state) ? 'text-amber-700' : 'text-slate-800']">{{ deadlineLabel(checkIn) }}</p>
                                     </td>
                                     <td class="px-5 py-4 text-right">
-                                        <a :href="checkIn.action_url" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
+                                        <a :href="queueState.link(checkIn.action_url)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`Open ${checkIn.title}`">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a>
                                     </td>
                                 </tr>
                             </tbody>
@@ -208,8 +220,8 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                     <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3">
                         <p class="text-xs font-semibold text-slate-500">{{ resultRange }}</p>
                         <div class="flex gap-2">
-                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading" @click="loadCheckIns(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button>
-                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading" @click="loadCheckIns(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button>
+                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)" @click="loadCheckIns(pagination.current_page - 1)"><i class="fa-solid fa-arrow-left text-[9px]" aria-hidden="true"></i>Previous</button>
+                            <button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 disabled:opacity-40" :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)" @click="loadCheckIns(pagination.current_page + 1)">Next<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></button>
                         </div>
                     </footer>
                 </section>

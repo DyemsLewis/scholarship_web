@@ -14,6 +14,26 @@ class ApplicantMonitoringDetailContractTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_every_monitoring_section_uses_the_program_logo_not_its_cover(): void
+    {
+        [, $applicant, $program, $application] = $this->selectedRecipient();
+        foreach (['uploads/scholarships/monitoring-logo.png', null] as $logo) {
+            $program->update([
+                'image_path' => $logo,
+                'cover_image_key' => 'science-project',
+                'cover_image_source' => 'system',
+            ]);
+            foreach (['overview', 'check-ins', 'benefits', 'history'] as $view) {
+                $this->actingAs($applicant)
+                    ->getJson(route('dashboard.monitoring.show.data', $application).'?view='.$view)
+                    ->assertOk()
+                    ->assertJsonPath('detail.identity.program.image_url', $program->logoUrl())
+                    ->assertJsonPath('detail.identity.program.logo_url', $program->logoUrl())
+                    ->assertJsonPath('detail.identity.program.cover_image_url', $program->coverImageUrl());
+            }
+        }
+    }
+
     public function test_monitoring_contract_returns_a_focused_overview_and_one_next_action(): void
     {
         [, $applicant, $scholarship, $application, $plan] = $this->selectedRecipient();

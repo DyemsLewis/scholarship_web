@@ -14,6 +14,7 @@ defineProps({
         type: String,
         default: 'fa-solid fa-table-list',
     },
+    compact: { type: Boolean, default: false },
     loading: { type: Boolean, default: false },
     error: { type: String, default: '' },
     loadingMessage: { type: String, default: 'Loading records...' },
@@ -42,7 +43,7 @@ defineEmits(['retry']);
             <slot name="filters"></slot>
         </div>
 
-        <div class="staff-table-viewport w-full min-w-0">
+        <div class="staff-table-viewport w-full min-w-0" :class="{ 'staff-table-viewport--compact': compact }">
             <AdminLoadState :loading="loading" :error="error" :loading-message="loadingMessage" @retry="$emit('retry')" />
             <slot v-if="!loading && !error"></slot>
         </div>

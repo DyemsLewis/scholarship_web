@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { confirmOutcome } from './helpers/acceptedOutcome.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, reactive, ref, watch } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -26,7 +27,7 @@ function workspace(section = 'delivery') {
 }
 function harness(name, exposed, context = workspace()) {
     const source = parse(page(name)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
-    const deps = { computed, reactive, ref, watch: (source, callback) => watch(source, callback, { flush: 'sync' }),
+    const deps = { confirmOutcome, computed, reactive, ref, watch: (source, callback) => watch(source, callback, { flush: 'sync' }),
         useAdminServiceWorkspace: () => context.service, adminServiceDateInput, adminServiceTargetDateError,
         window: context.window, URL, FormData };
     return { ...new Function(...Object.keys(deps), `${source}\nreturn { ${exposed} };`)(...Object.values(deps)), ...context };
@@ -173,7 +174,7 @@ test('all record subpages provide retry, and shell errors focus without replacin
 
 test('billing queue latest-request and retry states preserve the current queue and export remains explicit', () => {
     const source = page('BillingRequestDirectoryPage');
-    for (const value of ["{ flush: 'sync' }", ':loading="loading"', ':error="errorMessage"', '@retry="loadItems(1)"', 'table-fixed min-w-[56rem]', 'No matching requests', ':href="exportUrl"']) assert.ok(source.includes(value), value);
+    for (const value of ["{ flush: 'sync' }", ':loading="loading"', ':error="errorMessage"', '@retry="resource.retry"', 'table-fixed min-w-[56rem]', 'No matching requests', ':href="exportUrl"']) assert.ok(source.includes(value), value);
     assert.doesNotMatch(source, /window\.open|\.axios\.(post|patch|delete)/);
     assert.match(page('BillingOverviewPage'), /@retry="loadDashboard"/);
 });

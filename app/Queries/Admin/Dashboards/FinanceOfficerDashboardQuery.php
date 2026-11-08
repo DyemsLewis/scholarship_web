@@ -71,6 +71,7 @@ final class FinanceOfficerDashboardQuery
             'title' => $payment['service'],
             'subtitle' => $payment['provider'],
             'image_url' => $payment['provider_logo_url'],
+            'image_fit' => 'contain',
             'status' => ['label' => ucfirst($payment['status']), 'tone' => 'attention'],
             'meta' => [
                 $payment['reference_number'],
@@ -88,6 +89,7 @@ final class FinanceOfficerDashboardQuery
             'title' => $payment['service'],
             'subtitle' => $payment['provider'],
             'image_url' => $payment['provider_logo_url'],
+            'image_fit' => 'contain',
             'status' => ['label' => 'Confirmed', 'tone' => 'positive'],
             'meta' => [
                 $this->money($payment['amount'], $payment['currency']),

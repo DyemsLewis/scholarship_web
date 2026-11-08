@@ -1,4 +1,5 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -157,7 +158,7 @@ onBeforeUnmount(() => {
                         <div v-else class="monitoring-candidate-list divide-y divide-slate-200" role="group" aria-label="Eligible recipient selection">
                             <label v-for="candidate in candidates" :key="candidate.application_id" :class="['grid grid-cols-[1rem_2.75rem_minmax(0,1fr)_minmax(14rem,1fr)] items-center gap-4 px-6 py-4', candidate.eligible ? 'cursor-pointer hover:bg-slate-50' : 'bg-slate-50']">
                                 <input v-model="selectedRecipients" type="checkbox" :value="candidate.application_id" :disabled="!candidate.eligible" class="h-4 w-4 shrink-0">
-                                <img v-if="candidate.profile_photo_url" :src="candidate.profile_photo_url" :alt="`${candidate.name} profile`" class="h-11 w-11 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-11 w-11 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+                                <StaffTableIdentity :src="candidate.profile_photo_url" class="h-11 w-11" />
                                 <span class="min-w-0 flex-1"><span class="block monitoring-text text-sm font-bold text-slate-950">{{ candidate.name }}</span><span class="mt-1 block monitoring-text text-xs text-slate-500">{{ candidate.email }}</span></span>
                                 <span class="min-w-0 text-right"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', candidate.eligible ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800']">{{ candidate.eligibility_label }}</span><span class="mt-2 block text-xs leading-5 text-slate-500">{{ candidate.eligibility_reason }}</span></span>
                             </label>

@@ -126,13 +126,13 @@ onMounted(loadData);
                 </div>
             </section>
 
-            <AdminTableFrame title="Recent exports" description="Latest export requests. Browser download completion cannot be verified." icon="fa-solid fa-clock-rotate-left" class="mt-4">
+            <AdminTableFrame compact title="Recent exports" description="Latest export requests. Browser download completion cannot be verified." icon="fa-solid fa-clock-rotate-left" class="mt-4">
                     <table v-if="recentExports.length" class="portal-data-table admin-ledger-table">
                         <colgroup><col style="width: 29%"><col style="width: 25%"><col style="width: 18%"><col style="width: 18%"><col style="width: 10%"></colgroup>
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Dataset</th><th class="border-b border-slate-200 px-4 py-3">Requested by</th><th class="border-b border-slate-200 px-4 py-3">Source</th><th class="border-b border-slate-200 px-4 py-3">Recorded</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
-                        <tbody class="divide-y divide-slate-200"><tr v-for="item in recentExports" :key="item.id" class="hover:bg-slate-50/70"><td class="px-5 py-3.5"><p class="text-sm font-bold text-slate-950">{{ item.description }}</p><p class="mt-0.5 text-xs text-slate-500">{{ item.action_label }}</p></td><td class="px-4 py-3.5 text-sm font-semibold text-slate-800">{{ item.actor_name }}</td><td class="px-4 py-3.5 font-mono text-xs text-slate-600">{{ item.ip_address || 'Not recorded' }}</td><td class="px-4 py-3.5 text-sm text-slate-600">{{ item.created_at }}</td><td class="px-5 py-3.5 text-right"><a :href="item.record_url" class="inline-grid h-10 w-10 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" aria-label="Open export activity" title="Open record"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td></tr></tbody>
+                        <tbody class="divide-y divide-slate-200"><tr v-for="item in recentExports" :key="item.id" class="hover:bg-slate-50/70"><td class="px-5 py-3.5"><p class="text-sm font-bold text-slate-950">{{ item.description }}</p><p class="mt-0.5 text-xs text-slate-500">{{ item.action_label }}</p></td><td class="px-4 py-3.5 text-sm font-semibold text-slate-800">{{ item.actor_name }}</td><td class="px-4 py-3.5 font-mono text-xs text-slate-600">{{ item.ip_address || 'Not recorded' }}</td><td class="px-4 py-3.5 text-sm text-slate-600">{{ item.created_at }}</td><td class="px-5 py-3.5 text-right"><a :href="item.record_url" class="staff-row-action h-10 w-10" aria-label="Open export activity" title="Open record"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td></tr></tbody>
                     </table>
-                    <AdminEmptyState v-else title="No exports recorded" description="Requested exports will appear here." icon="fa-solid fa-file-export" />
+                    <AdminEmptyState v-else compact title="No exports recorded" description="Requested exports will appear here." icon="fa-solid fa-file-export" />
             </AdminTableFrame>
         </template>
     </AdminWorkspacePage>

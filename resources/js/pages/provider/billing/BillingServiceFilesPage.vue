@@ -66,12 +66,12 @@ async function uploadFile(event) {
                 </label>
             </header>
 
-            <div v-if="!files.length" class="min-h-96 px-6 py-14 text-center">
+            <div v-if="!files.length" class="px-6 py-14 text-center">
                 <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></span>
                 <p class="mt-3 text-sm font-bold text-slate-800">No files have been shared.</p>
                 <p class="mt-1 text-xs text-slate-500">Supporting files and platform deliverables will appear together here.</p>
             </div>
-            <div v-else class="staff-table-viewport">
+            <div v-else class="staff-table-viewport staff-table-viewport--compact">
                 <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
                     <colgroup><col><col class="w-52"><col class="w-44"><col class="w-36"></colgroup>
                     <thead class="bg-slate-50 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
@@ -82,7 +82,7 @@ async function uploadFile(event) {
                             <td class="px-5 py-4"><p class="service-text text-sm font-bold text-slate-950">{{ file.original_name }}</p><p class="mt-1 text-xs text-slate-500">{{ formatServiceFileSize(file.size) }}</p></td>
                             <td class="px-5 py-4"><p class="text-sm font-semibold text-slate-800">{{ fileType(file) }}</p><p class="mt-1 text-xs text-slate-500">{{ file.uploaded_by }}</p></td>
                             <td class="px-5 py-4 text-sm text-slate-600">{{ formatServiceDateTime(file.created_at) }}</td>
-                            <td class="px-5 py-4 text-right"><div class="inline-flex gap-2"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.original_name" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-700 hover:border-slate-950" title="Preview file"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i><span class="sr-only">Preview file</span></a><a :href="file.download_url" class="grid h-9 w-9 place-items-center bg-slate-950 text-white hover:bg-slate-800" title="Download file"><i class="fa-solid fa-download text-xs" aria-hidden="true"></i><span class="sr-only">Download file</span></a></div></td>
+                            <td class="px-5 py-4 text-right"><div class="inline-flex gap-2"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.original_name" class="staff-row-action h-9 w-9" title="Preview file" :aria-label="`Preview ${file.original_name}`"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i><span class="sr-only">Preview file</span></a><a :href="file.download_url" class="staff-row-action staff-row-action--primary h-9 w-9" title="Download file" :aria-label="`Download ${file.original_name}`"><i class="fa-solid fa-download text-xs" aria-hidden="true"></i><span class="sr-only">Download file</span></a></div></td>
                         </tr>
                     </tbody>
                 </table>

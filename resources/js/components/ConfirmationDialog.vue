@@ -6,6 +6,7 @@ defineOptions({ inheritAttrs: false });
 
 const props = defineProps({
     open: { type: Boolean, default: false },
+    layer: { type: Number, default: 3000 },
     title: { type: String, default: 'Confirm action' },
     message: { type: String, default: 'Please confirm that you want to continue.' },
     confirmLabel: { type: String, default: 'Confirm' },
@@ -58,6 +59,7 @@ watch(() => props.busy, (busy) => {
         <div
             v-if="open"
             class="fixed inset-0 z-[3000] flex items-center justify-center bg-slate-950/55 p-4"
+            :style="{ zIndex: layer }"
             role="presentation"
             @click.self="cancel"
         >

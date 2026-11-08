@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, ref, watch } from 'vue';
 import { formatFileSize } from '../support/display';
 import ZoomableImagePreview from './ZoomableImagePreview.vue';
@@ -56,7 +57,7 @@ function requestClose() {
     }
 }
 
-function submitReview() {
+async function submitReview() {
     const note = reviewNotes.value.trim();
 
     if (requiresNote.value && !note) {
@@ -64,6 +65,7 @@ function submitReview() {
         return;
     }
 
+    if (!await confirmOutcome({ record: props.document?.original_name || props.context || 'Submitted document', outcome: statusOptions.find((item) => item.value === status.value)?.label || status.value, danger: ['rejected', 'needs_replacement'].includes(status.value) }, () => !!props.document && !props.saving && !props.readOnly && (!requiresNote.value || !!reviewNotes.value.trim()))) return;
     emit('save', {
         document: props.document,
         status: status.value,

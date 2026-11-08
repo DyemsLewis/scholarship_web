@@ -1,22 +1,23 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
-const query = new URLSearchParams(window.location.search);
-const search = ref(query.get('search') ?? '');
+const queueState = createStaffQueueState(window, ['search','category','actor_role','period','action']);
+const search = ref(queueState.get('search') ?? '');
 const categoryOptions = ['all', 'security', 'accounts', 'reviews', 'operations', 'exports'];
 const actorRoleOptions = ['all', 'admin', 'provider', 'applicant', 'system'];
 const periodOptions = ['today', 'week', 'month', 'all'];
-const category = ref(categoryOptions.includes(query.get('category')) ? query.get('category') : 'all');
-const actorRole = ref(actorRoleOptions.includes(query.get('actor_role')) ? query.get('actor_role') : 'all');
-const period = ref(periodOptions.includes(query.get('period')) ? query.get('period') : 'month');
-const legacyAction = query.get('action') || '';
+const category = ref(categoryOptions.includes(queueState.get('category')) ? queueState.get('category') : 'all');
+const actorRole = ref(actorRoleOptions.includes(queueState.get('actor_role')) ? queueState.get('actor_role') : 'all');
+const period = ref(periodOptions.includes(queueState.get('period')) ? queueState.get('period') : 'month');
+const legacyAction = queueState.get('action') || '';
 const resource = useAdminResource(async ({ signal }, params) => {
-    const response = await window.axios.get('/admin/workspaces/records/activity/data', { params, signal });
+    const response = await queueState.load((query) => window.axios.get('/admin/workspaces/records/activity/data', { params: query, signal }), params, () => !signal.aborted);
     return response.data;
 }, { failureMessage: 'Activity records could not be loaded.' });
 const { isLoading: loading, errorMessage } = resource;
@@ -59,7 +60,7 @@ watch([category, actorRole, period], () => {
     loadActivity(1);
 }, { flush: 'sync' });
 onBeforeUnmount(() => clearTimeout(searchTimer));
-onMounted(loadActivity);
+onMounted(() => loadActivity(queueState.page));
 </script>
 
 <template>
@@ -82,7 +83,7 @@ onMounted(loadActivity);
             </dl>
         </section>
 
-        <AdminTableFrame title="Audit trail" :description="resultLabel" icon="fa-solid fa-clock-rotate-left" class="mt-4" :loading="loading" :error="errorMessage" @retry="loadActivity">
+        <AdminTableFrame title="Audit trail" :description="resultLabel" icon="fa-solid fa-clock-rotate-left" class="mt-4" :loading="loading" :error="errorMessage" @retry="resource.retry">
             <template #filters>
                 <div class="grid grid-cols-[minmax(0,1fr)_11rem_10rem_10rem] gap-3">
                     <label class="relative block"><span class="sr-only">Search activity records</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" placeholder="Search actor, action, description, or IP" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
@@ -102,7 +103,7 @@ onMounted(loadActivity);
                         <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', categoryClass(item.category)]">{{ categoryLabel(item.category) }}</span></td>
                         <td class="px-4 py-3.5 font-mono text-xs font-semibold text-slate-600">{{ item.ip_address || 'Not recorded' }}</td>
                         <td class="px-4 py-3.5 text-sm text-slate-600">{{ item.created_at }}</td>
-                        <td class="px-5 py-3.5 text-right"><a :href="item.record_url" class="inline-grid h-10 w-10 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open ${item.action_label}`" title="Open record"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                        <td class="px-5 py-3.5 text-right"><a :href="item.record_url" class="staff-row-action h-10 w-10" :aria-label="`Open ${item.action_label}`" title="Open record"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                     </tr>
                 </tbody>
             </table>

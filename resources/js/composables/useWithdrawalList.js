@@ -9,7 +9,9 @@ export function useWithdrawalList({ endpoint, params = () => ({}), fetcher }) {
     const error = ref('');
     const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
     let version = 0;
+    let requestedPage = 1;
     async function load(page = 1) {
+        requestedPage = page;
         const requestVersion = ++version;
         loading.value = true; error.value = ''; canRequest.value = false;
         try {
@@ -31,5 +33,8 @@ export function useWithdrawalList({ endpoint, params = () => ({}), fetcher }) {
         } finally { if (requestVersion === version) loading.value = false; }
     }
     function invalidate() { version++; }
-    return { rows, programs, canRequest, loading, error, pagination, load, invalidate };
+    function retry() {
+        if (error.value && !loading.value) return load(requestedPage);
+    }
+    return { rows, programs, canRequest, loading, error, pagination, load, retry, invalidate };
 }

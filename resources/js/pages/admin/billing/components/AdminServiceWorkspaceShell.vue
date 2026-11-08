@@ -1,4 +1,5 @@
 <script setup>
+import { staffQueueLink, staffQueueReturn } from '../../../../support/staffQueueState.js';
 import { computed, nextTick, ref, watch } from 'vue';
 import { formatAdminServiceDateTime } from '../../../../composables/useAdminServiceWorkspace.js';
 import AdminWorkspaceHeader from '../../components/AdminWorkspaceHeader.vue';
@@ -60,11 +61,15 @@ function dueClass(status) {
     if (['due_today', 'due_soon'].includes(status)) return 'text-amber-700';
     return 'text-slate-500';
 }
+const originatingQueue = staffQueueReturn(window, 'adminBilling');
+function serviceRecordLink(href) {
+    return staffQueueLink(href, staffQueueReturn(window, 'adminBilling'), window.location.origin);
+}
 </script>
 
 <template>
     <AdminWorkspacePage workspace="billing_officer" class="admin-billing-workspace">
-        <a :href="queueUrl" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
+        <a :href="originatingQueue || queueUrl" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
             <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
             Back to queue
         </a>
@@ -93,11 +98,11 @@ function dueClass(status) {
             <span class="font-black text-slate-950">Next:</span>
             <span class="text-slate-600">{{ purchase.current_action }}</span>
             <span v-if="purchase.action_due_label" :class="['ml-auto text-xs font-bold', dueClass(purchase.action_due_status)]">{{ purchase.action_due_label }}</span>
-            <a v-if="purchase.current_action_owner === 'platform' && purchase.current_action_url" :href="purchase.current_action_url" class="text-xs font-black text-slate-950 underline decoration-amber-400 decoration-2 underline-offset-4">Open task</a>
+            <a v-if="purchase.current_action_owner === 'platform' && purchase.current_action_url" :href="serviceRecordLink(purchase.current_action_url)" class="text-xs font-black text-slate-950 underline decoration-amber-400 decoration-2 underline-offset-4">Open task</a>
         </div>
 
         <nav v-if="recordReady" class="mt-4 grid grid-cols-6 border border-slate-200 bg-white shadow-sm" aria-label="Service delivery sections">
-            <a v-for="item in sections" :key="item.key" :href="item.href" :aria-current="activeSection === item.key ? 'page' : undefined" :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === item.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']">
+            <a v-for="item in sections" :key="item.key" :href="serviceRecordLink(item.href)" :aria-current="activeSection === item.key ? 'page' : undefined" :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === item.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']">
                 <i :class="item.icon" aria-hidden="true"></i>{{ item.label }}
                 <span v-if="item.attention" class="h-2 w-2 bg-amber-400" title="Decision needed"></span>
             </a>

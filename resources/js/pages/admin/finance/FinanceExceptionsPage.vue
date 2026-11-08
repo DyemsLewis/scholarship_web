@@ -1,17 +1,19 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 import { labelFromKey } from '../../../support/display';
 
-const query = new URLSearchParams(window.location.search);
-const search = ref(query.get('search') ?? '');
-const status = ref(['pending', 'failed'].includes(query.get('status')) ? query.get('status') : 'all');
+const queueState = createStaffQueueState(window, ['search','status']);
+const search = ref(queueState.get('search') ?? '');
+const status = ref(['pending', 'failed'].includes(queueState.get('status')) ? queueState.get('status') : 'all');
 const resource = useAdminResource(async ({ signal }, params) => {
-    const response = await window.axios.get('/admin/workspaces/finance/exceptions/data', { params, signal });
+    const response = await queueState.load((query) => window.axios.get('/admin/workspaces/finance/exceptions/data', { params: query, signal }), params, () => !signal.aborted);
     return response.data;
 }, { failureMessage: 'Payment exceptions could not be loaded.' });
 const { isLoading: loading, errorMessage } = resource;
@@ -48,7 +50,7 @@ watch(status, () => {
     loadExceptions(1);
 }, { flush: 'sync' });
 onBeforeUnmount(() => clearTimeout(searchTimer));
-onMounted(loadExceptions);
+onMounted(() => loadExceptions(queueState.page));
 </script>
 
 <template>
@@ -60,7 +62,7 @@ onMounted(loadExceptions);
             icon="fa-solid fa-triangle-exclamation"
         />
 
-        <AdminTableFrame title="Exception records" :description="resultLabel" icon="fa-solid fa-triangle-exclamation" class="mt-4" :loading="loading" :error="errorMessage" @retry="loadExceptions">
+        <AdminTableFrame title="Exception records" :description="resultLabel" icon="fa-solid fa-triangle-exclamation" class="mt-4" :loading="loading" :error="errorMessage" @retry="resource.retry">
             <template #filters>
                 <div class="grid grid-cols-[minmax(24rem,1fr)_14rem] gap-3">
                     <label class="relative block"><span class="sr-only">Search payment exceptions</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" placeholder="Search provider, service, or reference" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
@@ -74,7 +76,7 @@ onMounted(loadExceptions);
                 <tbody class="divide-y divide-slate-200 bg-white">
                     <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
                         <td class="px-5 py-3.5 font-mono text-xs font-bold text-slate-900">{{ item.reference_number }}</td>
-                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-building-columns" aria-hidden="true"></i><img v-if="item.provider_logo_url" :src="item.provider_logo_url" :alt="`${item.provider} logo`" class="absolute inset-0 h-full w-full bg-white object-contain p-1" @error="$event.currentTarget.remove()"></span><span class="min-w-0"><span class="block break-words text-sm font-bold text-slate-900">{{ item.provider }}</span><span class="mt-0.5 block break-words text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
+                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0"><span class="block break-words text-sm font-bold text-slate-900">{{ item.provider }}</span><span class="mt-0.5 block break-words text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
                         <td class="px-4 py-3.5 text-sm font-semibold text-slate-700">{{ item.service }}</td>
                         <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(item.status)]">{{ labelFromKey(item.status) }}</span><p v-if="item.reason" class="mt-1 max-w-md text-xs leading-5 text-slate-500">{{ item.reason }}</p></td>
                         <td class="px-4 py-3.5 text-sm font-black text-slate-950">{{ money(item.amount, item.currency) }}</td>

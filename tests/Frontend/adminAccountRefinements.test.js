@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, createSSRApp, reactive, ref } from 'vue';
 import { renderToString } from '@vue/server-renderer';
@@ -39,7 +40,7 @@ function harness(path, exposed, options = {}) {
             post: async (...args) => { writes.push(args); return { data: { user: { id: 2, role: 'admin' } } }; },
         },
     };
-    const deps = {
+    const deps = { staffQueueReturn,
         computed, reactive, ref, useAdminResource, normalizeWorkspaceDashboard,
         nextTick: async () => {}, onMounted: (callback) => mounted.push(callback), onBeforeUnmount() {},
         watch: (...args) => watchers.push(args), window, document: { getElementById: () => ({ dataset: { area: options.area ?? 'team' } }) },
@@ -174,7 +175,7 @@ test('account record actions require a loaded record and failed loads remain ret
 test('account queues invalidate before debouncing and retain protected pagination and distinct error states', () => {
     for (const page of ['AccountDirectoryPage', 'AccountAttentionPage']) {
         const value = read(`pages/admin/accounts/${page}.vue`);
-        for (const token of ['useAdminResource', 'resource.invalidate()', "{ flush: 'sync' }", 'onBeforeUnmount(() => clearTimeout(searchTimer))', ':loading="loading" :error="errorMessage"', '@retry="loadAccounts(1)"', 'loading || pagination.current_page', 'params, signal']) assert.ok(value.includes(token), `${page}: ${token}`);
+        for (const token of ['useAdminResource', 'resource.invalidate()', "{ flush: 'sync' }", 'onBeforeUnmount(() => clearTimeout(searchTimer))', ':loading="loading" :error="errorMessage"', '@retry="resource.retry"', 'loading || pagination.current_page', 'params: query, signal']) assert.ok(value.includes(token), `${page}: ${token}`);
         assert.doesNotMatch(value, /\.axios\.(post|patch|delete|put)\(/);
     }
 });
@@ -213,7 +214,10 @@ test('account tables retain complete escaped identities, photos/logos, and expli
         return `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;
     };
     const child = compile('pages/admin/components/AdminEmptyState.vue');
-    const Table = (await import(compile('pages/admin/accounts/AccountDirectoryTable.vue', { '../components/AdminEmptyState.vue': child }))).default;
+    const Table = (await import(compile('pages/admin/accounts/AccountDirectoryTable.vue', {
+        '../components/AdminEmptyState.vue': child,
+        '../../../components/StaffTableIdentity.vue': compile('components/StaffTableIdentity.vue'),
+    }))).default;
     const email = `${'very.long.account.'.repeat(8)}@example.test`;
     const html = await renderToString(createSSRApp(Table, { accounts: [{ id: 39, name: 'Mira <script>name</script>', email, role: 'applicant', avatar_url: '/private-photo', email_verified: true, account_status: 'active' }, { id: 11, name: 'Provider', role: 'provider', avatar_url: '/logo.png', email_verified: false, account_status: 'active' }] }));
     for (const token of [email, '&lt;script&gt;', 'src="/private-photo"', 'src="/logo.png"', 'object-contain p-1', 'Email verified', 'Email unverified', 'table-fixed', '<colgroup>', 'scope="col"', 'href="/admin/workspaces/accounts/39"']) assert.ok(html.includes(token), token);

@@ -1,4 +1,5 @@
 <script setup>
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
@@ -115,6 +116,7 @@ onMounted(async () => {
         clearCheckoutResult();
     }
 });
+const backToServices = staffQueueReturn(window, 'providerBilling', '/provider/workspaces/billing/services');
 </script>
 
 <template>
@@ -123,7 +125,7 @@ onMounted(async () => {
 
         <section class="student-page" aria-labelledby="review-title">
             <div class="provider-service-workspace mx-auto max-w-[94rem]">
-                <a href="/provider/workspaces/billing/services" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
+                <a :href="backToServices" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to services
                 </a>

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { createStaffQueueState, staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
+import { confirmOutcome, afterConfirmation } from './helpers/acceptedOutcome.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, ref } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -18,7 +20,7 @@ function harness(name, exposed, pathname = '/admin/workspaces/support/cases/1', 
         get: async (...args) => { gets.push(args); return { data: { report: structuredClone(casePayload), items: [], categories: [] } }; },
         patch: async (...args) => { writes.push(args); return { data: { support_case: { ...casePayload, admin_status: 'resolved', admin_response: 'A saved platform response.', state: 'waiting' }, message: 'Platform response recorded.' } }; },
     } };
-    const deps = { ref, computed, useAdminResource, normalizeWorkspaceDashboard, window, URLSearchParams,
+    const deps = { createStaffQueueState, staffQueueReturn, confirmOutcome, ref, computed, useAdminResource, normalizeWorkspaceDashboard, window, URLSearchParams,
         onMounted() {}, onBeforeUnmount: (callback) => unmounts.push(callback), watch: (...args) => watchers.push(args),
         setTimeout: (callback) => { timers.set(++nextTimer, callback); return nextTimer; }, clearTimeout: (id) => timers.delete(id) };
     return { ...new Function(...Object.keys(deps), `${script}\nreturn { ${exposed} };`)(...Object.values(deps)), window, gets, writes, watchers, unmounts, timers };
@@ -89,7 +91,7 @@ test('queue load errors stay distinct from empty records and expose retry', asyn
     state.window.axios.get = async () => { throw new Error('Offline'); };
     await state.loadCases(); assert.equal(state.errorMessage.value, 'This support queue could not be loaded.');
     const source = read('SupportCaseDirectoryPage');
-    for (const value of [':loading="loading"', ':error="errorMessage"', '@retry="loadCases(1)"']) assert.ok(source.includes(value), value);
+    for (const value of [':loading="loading"', ':error="errorMessage"', '@retry="resource.retry"']) assert.ok(source.includes(value), value);
 });
 
 test('unloaded and failed records cannot resolve or reopen a case; retry recovers', async () => {
@@ -119,7 +121,7 @@ test('save failures keep the draft, prefer specific feedback and guard duplicate
     const state = harness('SupportCaseRecordPage', 'loadCase, updateStatus, responseText, saving, actionError, report');
     await state.loadCase(); state.responseText.value = 'The school record was checked.';
     const pending = deferred(); state.window.axios.patch = (...args) => { state.writes.push(args); return pending.promise; };
-    const request = state.updateStatus('resolved'); await state.updateStatus('resolved'); await state.loadCase();
+    const request = state.updateStatus('resolved'); await afterConfirmation(); await state.updateStatus('resolved'); await state.loadCase();
     assert.equal(state.writes.length, 1); assert.equal(state.gets.length, 1); assert.equal(state.saving.value, true);
     pending.reject({ response: { data: { message: 'Generic summary', errors: { admin_response: ['Specific response feedback'] } } } }); await request;
     assert.equal(state.responseText.value, 'The school record was checked.');

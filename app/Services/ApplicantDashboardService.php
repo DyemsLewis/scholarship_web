@@ -567,7 +567,7 @@ class ApplicantDashboardService
                     'provider' => $application->scholarship?->provider?->provider_name
                         ?? $application->scholarship?->provider?->name
                         ?? 'Scholarship provider',
-                    'image_url' => $this->scholarshipImageUrl($application->scholarship),
+                    'image_url' => $this->scholarshipLogoUrl($application->scholarship),
                     'status_label' => $statusLabel,
                     'status_tone' => $action
                         ? 'attention'
@@ -725,7 +725,7 @@ class ApplicantDashboardService
             'provider' => $scholarship->provider?->provider_name
                 ?? $scholarship->provider?->name
                 ?? 'Scholarship provider',
-            'image_url' => $this->scholarshipImageUrl($scholarship),
+            'image_url' => $this->scholarshipLogoUrl($scholarship),
             'match_score' => (int) ($recommendation['match']['score'] ?? 0),
             'match_label' => $recommendation['match']['label'] ?? 'Profile match',
             'benefit_summary' => $scholarship->benefitSummary(),
@@ -890,8 +890,8 @@ class ApplicantDashboardService
         };
     }
 
-    private function scholarshipImageUrl(?Scholarship $scholarship): string
+    private function scholarshipLogoUrl(?Scholarship $scholarship): string
     {
-        return $scholarship?->coverImageUrl() ?? asset('images/filipino-students-group-study.jpg');
+        return $scholarship?->logoUrl() ?? asset('uploads/scholarship-default.jpg');
     }
 }

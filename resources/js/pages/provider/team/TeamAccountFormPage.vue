@@ -1,4 +1,5 @@
 <script setup>
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { labelFromKey } from '../../../support/display';
@@ -186,7 +187,7 @@ async function saveAccount() {
         await (isEditMode.value
             ? window.axios.patch(`/provider/team/accounts/${accountId}`, payload)
             : window.axios.post('/provider/team/accounts', payload));
-        window.location.href = isEditMode.value ? '/provider/workspaces/team/active' : '/provider/workspaces/team';
+        window.location.href = staffQueueReturn(window, 'team') ?? (isEditMode.value ? '/provider/workspaces/team/active' : '/provider/workspaces/team');
     } catch (error) {
         errors.value = error.response?.data?.errors ?? {};
         errorMessage.value = error.response?.data?.message || 'The team account could not be saved.';
@@ -201,6 +202,7 @@ async function saveAccount() {
 }
 
 onMounted(loadAccount);
+const backToQueue = staffQueueReturn(window, 'team', '/provider/workspaces/team');
 </script>
 
 <template>
@@ -209,7 +211,7 @@ onMounted(loadAccount);
 
         <section class="student-page" aria-labelledby="team-account-title">
             <div class="provider-settings-workspace mx-auto w-full max-w-[94rem]">
-                <a href="/provider/workspaces/team" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to team access</a>
+                <a :href="backToQueue" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to team access</a>
 
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i :class="['fa-solid', isEditMode ? 'fa-user-pen' : 'fa-user-plus']" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Team access</p><h1 id="team-account-title" class="settings-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ isEditMode ? 'Edit team member' : 'Add team member' }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">{{ isEditMode ? 'Update this account without changing unrelated staff access.' : 'Create a separate login with one clear role and appropriate program access.' }}</p></div></div><span class="border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-700">Step {{ step }} of 3</span></div>

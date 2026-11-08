@@ -1,4 +1,5 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 
 defineProps({
@@ -18,6 +19,7 @@ defineProps({
         type: String,
         default: 'No matching accounts',
     },
+    recordLink: { type: Function, default: (href) => href },
 });
 
 function roleLabel(role) {
@@ -72,10 +74,7 @@ function issueClass(account) {
             <tr v-for="account in accounts" :key="account.id" class="hover:bg-slate-50/70">
                 <td class="px-5 py-3.5">
                     <div class="flex min-w-0 items-center gap-3">
-                        <span class="relative grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-600">
-                            <i :class="roleIcon(account.role)" aria-hidden="true"></i>
-                            <img v-if="account.avatar_url" :src="account.avatar_url" :alt="account.role === 'provider' ? `${account.name} logo` : `${account.name} profile photo`" :class="['absolute inset-0 h-full w-full bg-white', account.role === 'provider' ? 'object-contain p-1' : 'object-cover']" @error="$event.currentTarget.remove()">
-                        </span>
+                        <StaffTableIdentity :kind="account.role" :src="account.avatar_url" :icon="roleIcon(account.role)" class="h-10 w-10" />
                         <span class="min-w-0">
                             <span class="block break-words text-sm font-bold text-slate-950">{{ account.name }}</span>
                             <span class="mt-0.5 block text-xs text-slate-500 [overflow-wrap:anywhere]">{{ account.email }}</span>
@@ -99,7 +98,7 @@ function issueClass(account) {
                 </td>
                 <td class="px-4 py-3.5 text-sm text-slate-600">{{ account.created_at }}</td>
                 <td class="px-5 py-3.5 text-right">
-                    <a :href="`/admin/workspaces/accounts/${account.id}`" class="inline-grid h-9 w-9 place-items-center border border-slate-300 bg-white text-slate-700 transition hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open ${account.name}`" title="Open account">
+                    <a :href="recordLink(`/admin/workspaces/accounts/${account.id}`)" class="staff-row-action h-9 w-9" :aria-label="`Open ${account.name}`" title="Open account">
                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                     </a>
                 </td>

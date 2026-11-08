@@ -1,4 +1,5 @@
 <script setup>
+import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import RecipientAgreementSummary from '../RecipientAgreementSummary.vue';
 
 const props = defineProps({
@@ -30,6 +31,17 @@ const emit = defineEmits([
     'update:termsAccepted',
     'update:note',
 ]);
+
+async function respond(outcome) {
+    const valid = () => props.open && props.agreement?.can_respond && !props.processing
+        && (outcome === 'accepted' ? props.termsAccepted : props.note.trim().length >= 5);
+    if (!await confirmOutcome({
+        record: 'Recipient agreement', outcome: outcome === 'accepted' ? 'Agreement accepted' : 'Agreement declined',
+        consequence: outcome === 'accepted' ? 'You agree to the responsibilities and conditions shown. The provider can continue with your recipient support.' : 'You will not proceed under this agreement. Your explanation will be sent to the provider.',
+        confirmLabel: outcome === 'accepted' ? 'Accept agreement' : 'Decline agreement', danger: outcome === 'declined',
+    }, valid)) return;
+    emit('respond', outcome);
+}
 </script>
 
 <template>
@@ -103,10 +115,10 @@ const emit = defineEmits([
                         Close
                     </button>
                     <template v-if="agreement.can_respond">
-                        <button type="button" :disabled="processing" class="rounded-md border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50" @click="emit('respond', 'declined')">
+                        <button type="button" :disabled="processing || note.trim().length < 5" class="rounded-md border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50" @click="respond('declined')">
                             Decline agreement
                         </button>
-                        <button type="button" :disabled="processing" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50" @click="emit('respond', 'accepted')">
+                        <button type="button" :disabled="processing || !termsAccepted" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50" @click="respond('accepted')">
                             {{ processing ? 'Saving...' : 'Accept agreement' }}
                         </button>
                     </template>

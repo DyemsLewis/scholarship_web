@@ -1,6 +1,9 @@
 <script setup>
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
+import { createStaffQueueState } from '../../../support/staffQueueState.js';
 
 const filterFromPath = {
     '/provider/programs/drafts': 'drafts',
@@ -42,13 +45,18 @@ const programs = ref([]);
 const summary = ref({ total: 0, needs_action: 0, under_review: 0, published: 0, active: 0, draft: 0, not_set: 0 });
 const context = ref({ organization_name: '', access_scope: 'all' });
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
-const search = ref('');
-const sort = ref('updated');
+const queueState = createStaffQueueState(window, ['search','sort']);
+const search = ref(queueState.get('search') ?? '');
+const savedSort = queueState.get('sort');
+const sort = ref(['updated', 'deadline', 'title'].includes(savedSort) ? savedSort : 'updated');
 const isLoading = ref(true);
 const errorMessage = ref('');
 let requestVersion = 0;
+let requestedParams;
 
 const rangeLabel = computed(() => {
+    if (isLoading.value) return 'Updating results...';
+    if (errorMessage.value) return 'Results unavailable';
     if (!pagination.value.total) {
         return '0 programs';
     }
@@ -72,6 +80,13 @@ function applicationLabel(program) {
     return limit === null ? `${received} received` : `${received} of ${limit}`;
 }
 
+function programActionLabel(program) {
+    if (!isMonitoringDirectory) return 'Open';
+    const plan = program.monitoring;
+    if (plan.status === 'active') return plan.can_publish_check_in ? 'Schedule' : 'Open plan';
+    return plan.can_edit_plan ? 'Set up' : 'View plan';
+}
+
 function deadlineNote(deadline) {
     if (deadline.days_remaining === null) return '';
     if (deadline.state === 'passed') return 'Application period ended';
@@ -79,21 +94,20 @@ function deadlineNote(deadline) {
     return `${deadline.days_remaining} days remaining`;
 }
 
-async function loadPrograms(page = 1) {
+async function loadPrograms(page = 1, params = {
+    filter: activeFilter,
+    workspace: isMonitoringDirectory ? 'monitoring' : 'programs',
+    search: search.value.trim() || undefined,
+    sort: sort.value,
+    page,
+}) {
+    requestedParams = params;
     const version = ++requestVersion;
     isLoading.value = true;
     errorMessage.value = '';
 
     try {
-        const response = await window.axios.get('/provider/programs/data', {
-            params: {
-                filter: activeFilter,
-                workspace: isMonitoringDirectory ? 'monitoring' : 'programs',
-                search: search.value.trim() || undefined,
-                sort: sort.value,
-                page,
-            },
-        });
+        const response = await queueState.load((query) => window.axios.get('/provider/programs/data', { params: query }), params, () => version === requestVersion);
 
         if (version !== requestVersion) return;
 
@@ -122,7 +136,11 @@ function clearSearch() {
     loadPrograms(1);
 }
 
-onMounted(() => loadPrograms());
+function retryPrograms() {
+    if (errorMessage.value && !isLoading.value) return loadPrograms(requestedParams.page, requestedParams);
+}
+
+onMounted(() => loadPrograms(queueState.page));
 </script>
 
 <template>
@@ -206,12 +224,9 @@ onMounted(() => loadPrograms());
                         </button>
                     </form>
 
-                    <div v-if="errorMessage" class="m-5 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">
-                        {{ errorMessage }}
-                    </div>
-
-                    <div class="staff-table-viewport">
-                        <table class="program-directory-table w-full min-w-[56rem] table-fixed border-collapse text-left">
+                    <div class="staff-table-viewport" :aria-busy="isLoading">
+                        <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="retryPrograms" />
+                        <table v-else class="program-directory-table w-full min-w-[56rem] table-fixed border-collapse text-left">
                             <colgroup><col><col class="w-32"><col class="w-32"><col class="w-36"><col class="w-[7.5rem]"><col class="w-36"></colgroup>
                             <caption class="sr-only">Programs in the selected lifecycle section</caption>
                             <thead class="bg-slate-50">
@@ -225,7 +240,7 @@ onMounted(() => loadPrograms());
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
-                                <tr v-if="isLoading && !programs.length">
+                                <tr v-if="isLoading">
                                     <td colspan="6" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500" aria-hidden="true"><i class="fa-solid fa-circle-notch animate-spin text-sm"></i></span><p class="mt-2 text-sm font-semibold text-slate-500">Loading programs...</p></td>
                                 </tr>
                                 <tr v-else-if="!programs.length && !errorMessage">
@@ -235,12 +250,12 @@ onMounted(() => loadPrograms());
                                         <p class="mt-1 text-sm text-slate-500">Try another search or open a different program section.</p>
                                     </td>
                                 </tr>
-                                <tr v-for="program in programs" :key="program.id" class="align-middle hover:bg-slate-50/70">
+                                <tr v-else v-for="program in programs" :key="program.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4">
                                         <div class="flex min-w-0 items-center gap-3">
-                                            <img :src="program.logo_url" :alt="`${program.title} logo`" class="h-11 w-11 shrink-0 border border-slate-200 bg-white object-contain p-1" @error="$event.currentTarget.src = '/uploads/scholarship-default.jpg'">
+                                            <StaffTableIdentity kind="program" :src="program.logo_url" class="h-11 w-11" />
                                             <div class="min-w-0">
-                                                <a :href="isMonitoringDirectory ? program.monitoring.plan_url : program.record_url" class="program-text block text-sm font-semibold text-slate-950 hover:text-amber-700">{{ program.title }}</a>
+                                                <a :href="isMonitoringDirectory ? program.monitoring.plan_url : queueState.link(program.record_url)" class="program-text block text-sm font-semibold text-slate-950 hover:text-amber-700">{{ program.title }}</a>
                                                 <p class="program-text mt-1 text-xs text-slate-600">
                                                     {{ program.category || 'Uncategorized' }}<template v-if="program.cycle"> · {{ program.cycle }}</template>
                                                 </p>
@@ -263,12 +278,8 @@ onMounted(() => loadPrograms());
                                     </td>
                                     <td class="px-5 py-4 text-sm text-slate-600">{{ program.updated_display || 'Not available' }}</td>
                                     <td class="px-4 py-4 text-right">
-                                        <a :href="isMonitoringDirectory ? program.monitoring.plan_url : program.record_url" class="program-action inline-flex h-10 items-center gap-2 bg-slate-950 px-3 text-sm font-bold text-white hover:bg-slate-800" :aria-label="`${isMonitoringDirectory ? 'Open monitoring plan for' : 'View'} ${program.title}`">
-                                            {{ isMonitoringDirectory
-                                                ? (program.monitoring.status === 'active'
-                                                    ? (program.monitoring.can_publish_check_in ? 'Schedule' : 'Open plan')
-                                                    : (program.monitoring.can_edit_plan ? 'Set up' : 'View plan'))
-                                                : 'View' }}
+                                        <a :href="isMonitoringDirectory ? program.monitoring.plan_url : queueState.link(program.record_url)" class="staff-row-action staff-row-action--primary program-action h-10 px-3 text-sm" :aria-label="`${programActionLabel(program)}: ${program.title}`">
+                                            {{ programActionLabel(program) }}
                                             <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                                         </a>
                                     </td>
@@ -278,12 +289,12 @@ onMounted(() => loadPrograms());
                     </div>
 
                     <footer class="program-form-footer flex items-center justify-between border-t border-slate-200 px-5 py-3">
-                        <p class="text-xs font-semibold text-slate-500">Showing {{ rangeLabel }}</p>
+                        <p class="text-xs font-semibold text-slate-500">{{ isLoading || errorMessage ? rangeLabel : `Showing ${rangeLabel}` }}</p>
                         <div class="flex items-center gap-2">
                             <button
                                 type="button"
                                 class="h-9 border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                                :disabled="pagination.current_page <= 1 || isLoading"
+                                :disabled="pagination.current_page <= 1 || isLoading || Boolean(errorMessage)"
                                 @click="loadPrograms(pagination.current_page - 1)"
                             >
                                 Previous
@@ -292,7 +303,7 @@ onMounted(() => loadPrograms());
                             <button
                                 type="button"
                                 class="h-9 border border-slate-300 px-3 text-xs font-bold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                                :disabled="pagination.current_page >= pagination.last_page || isLoading"
+                                :disabled="pagination.current_page >= pagination.last_page || isLoading || Boolean(errorMessage)"
                                 @click="loadPrograms(pagination.current_page + 1)"
                             >
                                 Next
