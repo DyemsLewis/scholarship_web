@@ -162,7 +162,7 @@ async function saveManualGrade(requirement, index) {
 <template>
     <FilePreviewModal
         :file="previewFile"
-        :title="previewFile?.original_name || 'Monitoring record'"
+        :title="previewFile?.original_name || 'Check-in document'"
         :context="programTitle"
         @close="previewFile = null"
     />
@@ -180,7 +180,7 @@ async function saveManualGrade(requirement, index) {
         @close="adjustmentRequirement = null"
         @saved="emit('refresh')"
     />
-    <input ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" @change="uploadRecord">
+    <input v-if="!record.handoff" ref="fileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" @change="uploadRecord">
 
     <div data-monitoring-check-in-record class="mt-4 space-y-4">
         <a :href="record.return_href" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
@@ -197,7 +197,7 @@ async function saveManualGrade(requirement, index) {
                             <span :class="['px-2 py-1 text-[10px] font-bold uppercase', stateClass(record.state)]">{{ record.state_label }}</span>
                         </div>
                         <h3 class="mt-2 font-display text-xl font-bold text-slate-950 sm:text-2xl">{{ record.title }}</h3>
-                        <p class="mt-1 text-sm text-slate-500">{{ record.period_label || 'Monitoring period' }}</p>
+                        <p class="mt-1 text-sm text-slate-500">{{ record.period_label || 'Check-in period' }}</p>
                     </div>
                     <button
                         v-if="record.monitoring_case?.history?.length || record.monitoring_case?.exception_context"
@@ -214,8 +214,9 @@ async function saveManualGrade(requirement, index) {
 
             <dl class="grid grid-cols-2 border-t border-slate-200 bg-slate-50 sm:grid-cols-3">
                 <div class="col-span-2 px-4 py-2.5 sm:col-span-1 sm:px-5 sm:py-3">
-                    <dt class="student-detail-label">Deadline</dt>
-                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ record.effective_due_label || record.due_label || 'Not scheduled' }}</dd>
+                    <dt class="student-detail-label">{{ record.handoff ? 'Appointment' : 'Deadline' }}</dt>
+                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ record.handoff?.scheduled_label || record.effective_due_label || record.due_label || 'Not scheduled' }}</dd>
+                    <dd v-if="record.handoff" class="mt-1 break-words text-sm text-slate-600">{{ record.handoff.location }}</dd>
                 </div>
                 <div class="border-t border-slate-200 px-4 py-2.5 sm:border-l sm:border-t-0 sm:px-5 sm:py-3">
                     <dt class="student-detail-label">Requirements</dt>
@@ -230,8 +231,8 @@ async function saveManualGrade(requirement, index) {
 
         <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
             <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
-                <h3 class="text-base font-bold text-slate-950">Complete one item at a time</h3>
-                <p class="mt-1 text-sm text-slate-500">Open an item to view its record, feedback, or available action.</p>
+                <h3 class="text-base font-bold text-slate-950">{{ record.handoff ? 'What to bring' : 'Complete one item at a time' }}</h3>
+                <p class="mt-1 text-sm text-slate-500">{{ record.handoff ? 'Bring the listed documents in person. The provider checks them and records your results here. If you cannot attend, contact the provider.' : 'Open an item to view its record, feedback, or available action.' }}</p>
             </header>
 
             <div class="divide-y divide-slate-200">
@@ -315,7 +316,7 @@ async function saveManualGrade(requirement, index) {
                         </form>
 
                         <div class="mt-4 flex flex-wrap items-center gap-3">
-                            <button v-if="requirement.can_request_adjustment" type="button" class="border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="adjustmentRequirement = requirement">Request more time or an exception</button>
+                            <button v-if="requirement.can_request_adjustment" type="button" class="border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="adjustmentRequirement = requirement">{{ record.handoff ? 'Request an exception' : 'Request more time or an exception' }}</button>
                             <p v-if="requirement.requires_original_verification" class="text-xs font-semibold text-amber-800"><i class="fa-solid fa-circle-info mr-1" aria-hidden="true"></i>Keep the original for provider verification.</p>
                         </div>
                     </div>

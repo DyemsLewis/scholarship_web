@@ -55,7 +55,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertOk()
             ->assertJsonPath('manager_overview.summary.programs', 1)
             ->assertJsonPath('manager_overview.summary.applications', 1)
-            ->assertJsonPath('manager_overview.priority_action.title', 'Recipient onboarding')
+            ->assertJsonPath('manager_overview.priority_action.title', 'Agreement responses')
             ->assertJsonPath('manager_overview.priority_action.count', 1)
             ->assertJsonPath('manager_overview.priority_action.href', '/provider/workspaces/recipients/agreements');
 
@@ -79,6 +79,48 @@ class ProviderRoleWorkspaceTest extends TestCase
         $this->actingAs($manager)
             ->get('/provider/workspaces/programs')
             ->assertRedirect('/provider/programs');
+    }
+
+    public function test_manager_dashboard_counts_match_their_destination_queues(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $otherOwner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Dashboard queue program', 'published');
+        $program->update(['selection_stages' => ['screening', 'exam', 'formal_application', 'decision']]);
+        $outside = $this->program($otherOwner, 'Outside queue program', 'published');
+        $reviewer = User::factory()->create(['role' => 'provider', 'parent_account_id' => $owner->id]);
+        $this->application($program, $this->applicant('Assigned', 'Screening'), 'screening', $reviewer->id, now());
+        $this->application($program, $this->applicant('Unassigned', 'Screening'), 'screening', null, now());
+        $this->application($outside, $this->applicant('Outside', 'Screening'), 'screening', null, now());
+
+        $exam = $this->application($program, $this->applicant('Exam', 'Candidate'), 'screening', null, now());
+        $workflow = app(ApplicationWorkflowService::class);
+        $workflow->recordStageResult($workflow->start($exam), 'screening', 'passed', $owner);
+        $this->application($program, $this->applicant('Formal', 'Candidate'), 'formal_application', null, now());
+        $this->application($program, $this->applicant('Pending', 'Decision'), 'decision', null, now());
+        $this->application($program, $this->applicant('Waitlisted', 'Decision'), 'decision', null, now())
+            ->update(['final_outcome' => 'waitlisted', 'status' => 'waitlisted']);
+        $recipient = $this->selectedRecipient($program, $this->applicant('Due', 'Distribution'), 'accepted');
+        $release = $this->benefitRelease($program, $owner, 'Due distribution', now()->subDay());
+        $this->benefitReleaseRecord($release, $recipient, 'scheduled');
+
+        $overview = $this->actingAs($owner)->getJson('/provider/dashboard/data')->assertOk()->json('manager_overview');
+        $items = collect($overview['attention_workspaces'])->keyBy('key');
+        foreach ([
+            'reviews' => ['reviews/all', 'reviews/data?queue=all', 2],
+            'selection-scheduling' => ['selection/unassigned', 'selection/sessions/data?queue=unassigned', 1],
+            'selection-results' => ['selection/results', 'selection/sessions/data?queue=results', 1],
+            'decisions' => ['decisions/pending', 'decisions/data?queue=pending', 1],
+            'releases-record' => ['releases/record', 'releases/data?queue=record', 1],
+        ] as $key => [$page, $data, $expected]) {
+            $this->assertSame('/provider/workspaces/'.$page, $items[$key]['href']);
+            $this->assertSame($expected, $items[$key]['count']);
+            $this->get($items[$key]['href'])->assertOk();
+            $this->getJson('/provider/workspaces/'.$data)->assertOk()->assertJsonPath('pagination.total', $expected);
+        }
+        $this->assertSame($items->sum('count'), $overview['summary']['attention']);
+        $this->actingAs($otherOwner)->getJson('/provider/workspaces/reviews/data?queue=all')
+            ->assertOk()->assertJsonPath('pagination.total', 1);
     }
 
     public function test_full_access_manager_legacy_urls_resolve_to_focused_workspaces_and_records(): void
@@ -292,6 +334,9 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('workspace.title', 'Reviewer dashboard')
             ->assertJsonPath('metrics.0.value', 1)
             ->assertJsonPath('sections.0.items.0.id', $application->id)
+            ->assertJsonPath('sections.0.items.0.status.label', 'Assigned to you')
+            ->assertJsonPath('sections.0.items.0.hint', null)
+            ->assertJsonMissingPath('sections.0.items.0.meta')
             ->assertJsonCount(4, 'metrics')
             ->assertJsonCount(2, 'sections');
 
@@ -482,6 +527,14 @@ class ProviderRoleWorkspaceTest extends TestCase
             'reviewed_by' => $reviewer->id,
             'reviewed_at' => now()->subDay(),
         ]);
+
+        $this->actingAs($reviewer)
+            ->getJson('/provider/workspaces/reviews/dashboard/data')
+            ->assertOk()
+            ->assertJsonPath('sections.0.items.0.id', $returned->id)
+            ->assertJsonPath('sections.0.items.0.status.label', 'Returned update')
+            ->assertJsonPath('sections.0.items.0.hint', '2 days waiting')
+            ->assertJsonPath('sections.1.items.0.hint', $reviewed->reviewed_at->format('M d, Y'));
 
         $this->actingAs($reviewer)
             ->getJson('/provider/workspaces/reviews/data?queue=returned')
@@ -1231,6 +1284,15 @@ class ProviderRoleWorkspaceTest extends TestCase
             'review_status' => 'pending',
         ]);
 
+        $this->assertDatabaseCount('recipient_monitoring_cases', 0);
+        $dashboard = $this->actingAs($officer)->getJson('/provider/workspaces/monitoring/dashboard/data')->assertOk();
+        $this->assertSame([1, 1, 1, 1], array_column($dashboard->json('metrics'), 'value'));
+        $items = collect($this->actingAs($owner)->getJson('/provider/dashboard/data')->assertOk()
+            ->json('manager_overview.attention_workspaces'))->keyBy('key');
+        $this->assertSame(2, $items['monitoring-review']['count']);
+        $this->assertSame(1, $items['monitoring-followup']['count']);
+        $this->assertDatabaseCount('recipient_monitoring_cases', 0);
+
         $this->actingAs($officer)
             ->getJson('/provider/workspaces/monitoring/data')
             ->assertOk()
@@ -1244,6 +1306,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertJsonPath('next_task.work_state', 'review')
             ->assertJsonPath('check_ins.0.id', $reviewCycle->id)
             ->assertJsonPath('check_ins.0.counts.pending_reviews', 1)
+            ->assertJsonPath('check_ins.0.workload_label', '1 to review')
             ->assertJsonPath('check_ins.0.action_url', "/provider/workspaces/monitoring/check-ins/{$reviewCycle->id}")
             ->assertJsonCount(1, 'check_ins');
 
@@ -1252,6 +1315,7 @@ class ProviderRoleWorkspaceTest extends TestCase
             ->assertOk()
             ->assertJsonPath('check_ins.0.id', $followupCycle->id)
             ->assertJsonPath('check_ins.0.counts.open_interventions', 1)
+            ->assertJsonPath('check_ins.0.workload_label', '1 active')
             ->assertJsonCount(1, 'check_ins');
 
         $this->actingAs($officer)

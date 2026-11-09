@@ -12,7 +12,7 @@ const rule = (selector) => {
     return match[1];
 };
 
-test('detail labels use readable text without enlarging or rearranging page sections', () => {
+test('provider and scholarship detail labels use the same readable text style', () => {
     assert.match(rule('.student-detail-label'), /text-xs font-semibold leading-5 text-slate-600/);
     assert.doesNotMatch(rule('.student-detail-label'), /text-\[(9|10)px\]|text-slate-400|uppercase/);
     const provider = read('js/pages/UserProvidersPage.vue');
@@ -21,7 +21,6 @@ test('detail labels use readable text without enlarging or rearranging page sect
     assert.match(scholarship, /class="student-detail-label">\{\{ fact.label \}\}/);
     assert.doesNotMatch(provider + scholarship, /<dt class="[^"]*text-slate-400/);
     assert.match(provider, /lg:min-h-\[390px\]/);
-    assert.match(scholarship, /lg:min-h-\[390px\]/);
 });
 
 test('status badges share readable type, borders, corners and existing semantic colors', () => {

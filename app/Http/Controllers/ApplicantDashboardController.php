@@ -2561,7 +2561,7 @@ class ApplicantDashboardController extends Controller
                 'after:'.$cycle->due_at->format('Y-m-d'),
                 'before_or_equal:'.$cycle->due_at->copy()->addDays(60)->format('Y-m-d'),
             ],
-            'supporting_record' => ['nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png'],
+            'supporting_record' => $cycle->isInPerson() ? ['prohibited'] : ['nullable', 'file', 'max:5120', 'mimes:pdf,jpg,jpeg,png'],
             'confirmation' => ['accepted'],
         ]);
         if ($validated['request_type'] === 'extension' && ! $requirement->requires_file) {
@@ -3918,13 +3918,13 @@ class ApplicantDashboardController extends Controller
             || in_array($application->status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'], true);
         if (! $isSelected || $application->student_response_status !== 'accepted') {
             throw ValidationException::withMessages([
-                'adjustment_request' => 'Monitoring requests are available only to confirmed recipients.',
+                'adjustment_request' => 'Check-in requests are available only to confirmed recipients.',
             ]);
         }
 
         if (! $cycle->allow_exception_requests) {
             throw ValidationException::withMessages([
-                'adjustment_request' => 'This monitoring plan does not accept online extension or exception requests.',
+                'adjustment_request' => 'This scholarship does not accept online extension or exception requests for check-ins.',
             ]);
         }
 
@@ -3969,6 +3969,12 @@ class ApplicantDashboardController extends Controller
         abort_unless($cycle->scholarship_id === $application->scholarship_id, 404);
         abort_unless(! $requirement || $requirement->recipient_monitoring_cycle_id === $cycle->id, 404);
 
+        if ($cycle->isInPerson()) {
+            throw ValidationException::withMessages([
+                $requirement ? 'supporting_record' : 'grade_record' => 'Bring the documents to the scheduled check-in. Online submissions are not accepted for this appointment.',
+            ]);
+        }
+
         if ($requirement && ! $requirement->requires_file) {
             throw ValidationException::withMessages([
                 'supporting_record' => 'This requirement is recorded by the provider and does not accept an applicant upload.',
@@ -3981,7 +3987,7 @@ class ApplicantDashboardController extends Controller
 
         if (! $isSelected) {
             throw ValidationException::withMessages([
-                'grade_record' => 'Academic monitoring is available only to selected recipients.',
+                'grade_record' => 'Academic check-ins are available only to selected recipients.',
             ]);
         }
 
@@ -3993,7 +3999,7 @@ class ApplicantDashboardController extends Controller
 
         if ($application->status === 'benefits_terminated') {
             throw ValidationException::withMessages([
-                'grade_record' => 'Online monitoring submissions are closed for this recipient record. Contact the provider for assistance.',
+                'grade_record' => 'Online check-in submissions are closed for this support record. Contact the provider for assistance.',
             ]);
         }
 
@@ -4024,7 +4030,7 @@ class ApplicantDashboardController extends Controller
             || (! $correctionRequested && $cycle->opens_at && $cycle->opens_at->isAfter(now()->startOfDay()))
             || (! $correctionRequested && $effectiveDueAt && $effectiveDueAt->isBefore(now()->startOfDay()))) {
             throw ValidationException::withMessages([
-                'grade_record' => 'This academic monitoring period is not currently accepting submissions.',
+                'grade_record' => 'This academic check-in is not currently accepting submissions.',
             ]);
         }
     }
@@ -4101,7 +4107,7 @@ class ApplicantDashboardController extends Controller
                     'correction_requested' => $correctionRequested,
                     'locked_reason' => $agreementAccepted
                         ? (! $benefitsActive
-                            ? 'Monitoring is closed for this recipient record.'
+                            ? 'Check-ins are closed for this support record.'
                             : ($isPastDue
                                 ? 'The submission deadline has passed.'
                                 : ($isNotOpenYet ? 'This period is not open yet.' : null)))
@@ -4209,7 +4215,7 @@ class ApplicantDashboardController extends Controller
                     $effectiveDueAt->copy()->addDays($cycle->grace_period_days),
                 );
             $correctionRequested = $submission?->review_status === 'needs_correction';
-            $canSubmit = $requirement->requires_file
+            $canSubmit = ! $cycle->isInPerson() && $requirement->requires_file
                 && $agreementAccepted
                 && $benefitsActive
                 && $cycle->status === 'open'
@@ -4222,6 +4228,7 @@ class ApplicantDashboardController extends Controller
                 $submission !== null => 'submitted',
                 $latestAdjustment?->status === 'pending' => 'request_pending',
                 $approvedExtension !== null => 'extension_approved',
+                $cycle->isInPerson() => $requirement->requires_original_verification ? 'bring_document' : 'awaiting_provider',
                 ! $requirement->requires_file => 'provider_recorded',
                 $isNotOpenYet => 'upcoming',
                 $isWithinGracePeriod && $cycle->allow_exception_requests => 'grace_period',
@@ -4256,6 +4263,8 @@ class ApplicantDashboardController extends Controller
                     'submitted' => 'Waiting for review',
                     'request_pending' => 'Request pending',
                     'extension_approved' => 'Extension approved',
+                    'bring_document' => 'Bring to check-in',
+                    'awaiting_provider' => 'Provider will record',
                     'provider_recorded' => 'Provider records this',
                     'upcoming' => 'Opens later',
                     'grace_period' => 'Request window open',
@@ -4275,15 +4284,17 @@ class ApplicantDashboardController extends Controller
                 'effective_due_label' => $effectiveDueAt?->format('M d, Y'),
                 'locked_reason' => $agreementAccepted
                     ? (! $benefitsActive
-                        ? 'Monitoring is closed for this recipient record.'
+                        ? 'Check-ins are closed for this support record.'
                         : (! $requirement->requires_file
-                            ? 'The provider records this item.'
+                            ? ($cycle->isInPerson() && $requirement->requires_original_verification
+                                ? 'Bring this document to the appointment for the provider to check.'
+                                : 'The provider records this item.')
                             : ($isRequirementPastDue
                                 ? ($isWithinGracePeriod && $cycle->allow_exception_requests
                                     ? 'The deadline passed. You can request an extension or exception.'
                                     : 'The submission deadline has passed.')
                                 : ($isNotOpenYet ? 'This check-in is not open yet.' : null))))
-                    : 'Accept the recipient agreement before submitting a record.',
+                    : 'Accept the recipient agreement before completing this requirement.',
                 'adjustment_request' => $latestAdjustment
                     ? $this->applicantMonitoringAdjustmentPayload($latestAdjustment)
                     : null,
@@ -4311,6 +4322,7 @@ class ApplicantDashboardController extends Controller
             'opens_label' => $cycle->opens_at?->format('M d, Y'),
             'due_at' => $cycle->due_at?->format('Y-m-d'),
             'due_label' => $cycle->due_at?->format('M d, Y'),
+            'handoff' => $cycle->handoffDetails(),
             'instructions' => $cycle->instructions,
             'monitoring_plan_version' => $cycle->monitoring_plan_version,
             'allow_exception_requests' => $cycle->allow_exception_requests,
@@ -4324,7 +4336,7 @@ class ApplicantDashboardController extends Controller
             'status' => match ($monitoringCasePayload['due_status']) {
                 'upcoming' => 'upcoming',
                 'grace_period' => 'grace_period',
-                'overdue' => 'closed',
+                'overdue' => $cycle->isInPerson() ? 'open' : 'closed',
                 'closed' => in_array($cycle->status, ['closed', 'cancelled'], true)
                     ? $cycle->status
                     : 'closed',

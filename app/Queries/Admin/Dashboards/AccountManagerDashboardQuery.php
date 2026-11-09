@@ -104,10 +104,7 @@ final class AccountManagerDashboardQuery
             'image_url' => $this->avatarUrl($user, $payload),
             'image_fit' => $user->isProvider() ? 'contain' : 'cover',
             'status' => ['label' => $status, 'tone' => $tone],
-            'meta' => [
-                $user->email,
-                $user->created_at ? 'Created '.$user->created_at->format('M d, Y') : 'Creation date unavailable',
-            ],
+            'hint' => $user->email,
             'action' => [
                 'label' => 'Open account',
                 'url' => '/admin/workspaces/accounts/'.$user->id,

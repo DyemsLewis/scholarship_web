@@ -16,7 +16,6 @@ const criterion = (key, status, extra = {}) => ({ key, label: key === 'academic'
 const render = (criteria, overrides = {}) => renderToString(createSSRApp(Panel, {
     content: { criteria, profile: { complete: true, verified: true } },
     verdict: { eyebrow: 'Profile comparison', title: 'Review the program rules', description: 'Comparison guidance.' },
-    visual: { image: '/images/filipino-senior-high.jpg', alt: 'Students in the Philippines', caption: 'Compare the published requirements.' },
     applicationHref: '/dashboard/scholarships/1/application',
     ...overrides,
 }));
@@ -32,16 +31,17 @@ test('eligibility values format machine labels without damaging currency, acrony
     assert.equal(eligibilityValue('Your education level is senior_high_school.'), 'Your education level is Senior High School.');
 });
 
-test('required and preferred criteria are separate and required issues come before matches', () => {
-    const original = [criterion('education_level', 'pass'), criterion('income', 'fail'), criterion('course', 'fail', { rule_mode: 'preferred' }), criterion('school_type', 'info', { requirement: null })];
+test('blocking rules, unconfirmed checks and optional differences come before matched criteria', () => {
+    const original = [criterion('education_level', 'pass'), criterion('income', 'fail'), criterion('course', 'fail', { rule_mode: 'preferred' }), criterion('academic', 'missing'), criterion('school_type', 'info', { requirement: null })];
     const groups = scholarshipEligibilityGroups(scholarshipEligibilityRows(original));
-    assert.deepEqual(groups.map((group) => group.id), ['required', 'preferred']);
-    assert.deepEqual(groups[0].rows.map((row) => row.key), ['income', 'education_level']);
-    assert.equal(groups[1].rows[0].result.label, 'Preference not matched');
+    assert.deepEqual(groups.map((group) => group.id), ['blocking', 'review', 'preferred', 'matched']);
+    assert.deepEqual(groups.map((group) => group.rows.map((row) => row.key)), [['income'], ['academic'], ['course'], ['education_level']]);
+    assert.equal(groups[2].rows[0].result.label, 'Preference not matched');
+    assert.equal(groups[3].collapsed, true);
     assert.equal(original[0].key, 'education_level');
     assert.equal('result' in original[0], false);
     const legacy = scholarshipEligibilityGroups(scholarshipEligibilityRows([criterion('income', 'fail', { rule_mode: 'optional', is_blocking: false })]));
-    assert.equal(legacy[0].id, 'required');
+    assert.equal(legacy[0].id, 'blocking');
     assert.equal(legacy[0].rows[0].result.state, 'blocked');
 });
 
@@ -63,8 +63,10 @@ test('comparison rows retain zero values, including legacy camel-case profile va
 test('the checklist distinguishes required failures, preferences, missing values and provider review', async () => {
     const html = await render([criterion('income', 'fail'), criterion('course', 'fail', { rule_mode: 'preferred' }), criterion('school_type', 'missing'), criterion('academic', 'info', { comparison_mode: 'manual_review' })]);
     for (const label of ['Required rule not met', 'Preference not matched', 'Profile information needed', 'Needs review']) assert.ok(html.includes(label));
-    assert.match(html, /data-eligibility-group="required"/);
+    assert.match(html, /data-eligibility-group="blocking"/);
+    assert.match(html, /data-eligibility-group="review"/);
     assert.match(html, /data-eligibility-group="preferred"/);
+    assert.match(html, /Program preference/);
     assert.match(html, /Only correct your profile if the saved information is inaccurate/);
     assert.match(html, /href="\/dashboard\/profile\?section=household"/);
     assert.match(html, /href="\/dashboard\/profile\?section=verification"/);
@@ -73,9 +75,10 @@ test('the checklist distinguishes required failures, preferences, missing values
 
 test('matched explanations start collapsed while attention explanations remain visible', async () => {
     const html = await render([criterion('education_level', 'pass'), criterion('income', 'fail')]);
+    assert.match(html, /<details[^>]+data-eligibility-group="matched"(?![^>]*open)/);
     assert.match(html, /<details[^>]+data-eligibility-explanation(?![^>]*open)/);
     assert.match(html, /<div[^>]+data-eligibility-explanation/);
-    assert.match(source, /md:grid-cols-\[minmax\(0,1.4fr\)_minmax\(0,1fr\)_12rem\]/);
+    assert.match(source, /md:grid-cols-\[minmax\(0,1.4fr\)_minmax\(0,1fr\)_11rem\]/);
     assert.match(source, /data-eligibility-result/);
 });
 
@@ -84,7 +87,6 @@ test('unrestricted criteria remain available without being counted as successful
     assert.match(html, /<details[^>]+data-unrestricted-criteria(?![^>]*open)/);
     assert.match(html, /They are not counted as profile matches/);
     assert.match(html, /<dt[^>]*>Matched<\/dt><dd[^>]*>1<\/dd>/);
-    assert.match(html, /<dt[^>]*>Unrestricted<\/dt><dd[^>]*>1<\/dd>/);
     assert.equal((html.match(/data-eligibility-criterion=/g) ?? []).length, 1);
 });
 
@@ -102,8 +104,8 @@ test('profile verification stays a separate gate and no application action is in
 test('general provider previews show published rules without a live applicant comparison or profile links', async () => {
     const html = await render([criterion('education_level', 'missing')], { preview: true, previewScenario: 'general' });
     assert.match(html, /Who this scholarship is for/);
-    assert.match(html, /Not compared/);
-    assert.doesNotMatch(html, /data-eligibility-summary|href="\/dashboard\/profile|>Profile information needed</);
+    assert.match(html, /data-eligibility-group="required"/);
+    assert.doesNotMatch(html, /data-eligibility-summary|data-eligibility-result|href="\/dashboard\/profile|>Profile information needed</);
 });
 
 test('illustrative eligibility samples are explicitly labeled and never provide profile-edit actions', async () => {
@@ -120,7 +122,7 @@ test('written conditions keep their full statement and files link to the applica
     assert.match(html, /Remain enrolled/);
     assert.match(html, /Bring an original residency certificate/);
     assert.match(html, /Checked by the provider/);
-    assert.match(html, /View application files and process/);
+    assert.match(html, /See how to apply/);
     assert.equal((html.match(/data-eligibility-criterion=/g) ?? []).length, 0);
 });
 

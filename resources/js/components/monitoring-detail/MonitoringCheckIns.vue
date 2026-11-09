@@ -56,7 +56,7 @@ function stateClass(state) {
                                 <h4 class="font-bold text-slate-950">{{ record.title }}</h4>
                                 <span :class="['px-2 py-1 text-[10px] font-bold uppercase', stateClass(record.state)]">{{ record.state_label }}</span>
                             </div>
-                            <p class="mt-1 text-sm text-slate-500">{{ record.period_label || record.record_type_label }}<span v-if="record.due_label"> · Due {{ record.due_label }}</span></p>
+                            <p class="mt-1 text-sm text-slate-500">{{ record.period_label || record.record_type_label }}<span v-if="record.handoff"> · {{ record.handoff.scheduled_label }}</span><span v-else-if="record.due_label"> · Due {{ record.due_label }}</span></p>
                             <p class="mt-1 text-xs font-semibold text-slate-600">{{ record.progress_label }}</p>
                         </div>
                     </div>
@@ -83,7 +83,7 @@ function stateClass(state) {
                         <span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span>
                         <div class="min-w-0">
                             <div class="flex flex-wrap items-center gap-2"><h4 class="font-bold text-slate-950">{{ record.title }}</h4><span :class="['px-2 py-1 text-[10px] font-bold uppercase', stateClass(record.state)]">{{ record.state_label }}</span></div>
-                            <p class="mt-1 text-sm text-slate-500">{{ record.period_label || record.record_type_label }}<span v-if="record.due_label"> · Due {{ record.due_label }}</span></p>
+                            <p class="mt-1 text-sm text-slate-500">{{ record.period_label || record.record_type_label }}<span v-if="record.handoff"> · {{ record.handoff.scheduled_label }}</span><span v-else-if="record.due_label"> · Due {{ record.due_label }}</span></p>
                             <p class="mt-1 text-xs font-semibold text-slate-600">{{ record.progress_label }}</p>
                         </div>
                     </div>

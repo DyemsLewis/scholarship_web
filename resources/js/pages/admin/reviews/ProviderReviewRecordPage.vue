@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
@@ -130,11 +131,11 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
                             <tr><th class="px-6 py-3">Document</th><th class="px-4 py-3">Review status</th><th class="px-4 py-3">Last reviewed</th><th class="px-6 py-3 text-right">Action</th></tr>
                         </thead>
                         <tbody class="divide-y divide-slate-200">
-                            <tr v-for="document in provider.verification_documents" :key="document.id">
+                            <tr v-for="document in provider.verification_documents" :key="document.id" class="align-middle">
                                 <td class="px-6 py-4">
                                     <p class="text-sm font-bold text-slate-950">{{ labelFromKey(document.document_type) }}</p>
                                     <p class="review-text mt-0.5 text-xs text-slate-500" data-file-name>{{ document.original_name }}</p>
-                                    <p v-if="document.review_notes" class="review-text mt-2 text-xs text-slate-600">{{ document.review_notes }}</p>
+                                    <WorkspaceTextSummary v-if="document.review_notes" disclosure-only class="review-text mt-0.5 text-xs text-slate-600" :text="document.review_notes" label="review note" />
                                 </td>
                                 <td class="px-4 py-4">
                                     <span :class="['inline-flex px-2.5 py-1.5 text-xs font-bold', documentState(document).class]">{{ documentState(document).label }}</span>

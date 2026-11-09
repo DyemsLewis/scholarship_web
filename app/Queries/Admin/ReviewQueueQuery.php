@@ -555,6 +555,7 @@ class ReviewQueueQuery
         return match ($action) {
             'accept_agreement' => 'Accept agreement',
             'submit_requirements' => 'Submit records',
+            'attend_handoff' => 'Attend the document handoff',
             'record_requirement' => 'Record provider item',
             'decide_adjustment' => 'Decide request',
             'review_requirements' => 'Review records',
@@ -667,16 +668,16 @@ class ReviewQueueQuery
     {
         $flags = [];
         if ($record->receiptResponse?->status === 'open') {
-            $flags[] = 'Recipient reported an unresolved release issue.';
+            $flags[] = 'Open recipient report';
         }
         if (in_array($record->status, ['missed', 'withheld'], true)) {
-            $flags[] = $record->status === 'withheld' ? 'Benefit was withheld.' : 'Recipient missed the release.';
+            $flags[] = $record->status === 'withheld' ? 'Benefit withheld' : 'Release missed';
         }
         if ($record->status === 'released' && blank($record->receipt_path)) {
-            $flags[] = 'No receipt file was uploaded.';
+            $flags[] = 'Receipt missing';
         }
         if (in_array($record->status, ['scheduled', 'prepared'], true) && $record->release?->release_at?->isPast()) {
-            $flags[] = 'Release date passed without a completed result.';
+            $flags[] = 'Release overdue';
         }
 
         return $flags;

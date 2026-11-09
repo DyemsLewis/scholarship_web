@@ -116,7 +116,7 @@ test('support history uses a focused timeline and preserves applicant outcome re
 
     assert.match(page, /<MonitoringHistory/);
     assert.match(history, /data-monitoring-history/);
-    assert.match(history, /Monitoring timeline/);
+    assert.match(history, /Support timeline/);
     assert.match(history, /Review the latest support outcome/);
     assert.match(record, /data-support-outcome-record/);
     assert.match(record, /Decision summary/);

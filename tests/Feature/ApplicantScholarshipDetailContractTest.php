@@ -104,6 +104,20 @@ class ApplicantScholarshipDetailContractTest extends TestCase
         $this->assertDecisionState($applicant, $scholarship, 'full', false);
     }
 
+    public function test_the_overview_distinguishes_application_intake_from_planned_award_places(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship(['application_limit' => 25, 'slots_available' => 4, 'award_amount' => 2500.50]);
+
+        $this->actingAs($applicant)
+            ->getJson(route('dashboard.scholarships.show.data', $scholarship))
+            ->assertOk()
+            ->assertJsonPath('detail.snapshot.2.label', 'Application intake')
+            ->assertJsonPath('detail.snapshot.2.value', '25 applications remaining')
+            ->assertJsonPath('detail.snapshot.2.note', '4 award places planned.')
+            ->assertJsonPath('detail.snapshot.0.value', 'Cash grant - PHP 2,500.50 | One-time');
+    }
+
     public function test_past_deadline_produces_the_closed_state(): void
     {
         $applicant = $this->completeApplicant();

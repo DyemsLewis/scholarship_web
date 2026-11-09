@@ -5,13 +5,17 @@ namespace App\Queries\Provider\Dashboards;
 use App\Domain\Shared\Dashboard\RoleDashboardPayload;
 use App\Models\RecipientBenefitRelease;
 use App\Models\User;
+use App\Queries\Provider\BenefitReleaseWorkspaceQueues;
 use App\Queries\Provider\ProviderWorkspaceScope;
 use App\Services\BenefitDeliveryReportService;
 use App\Services\RecipientAgreementCaseAccess;
 
 final class BenefitReleaseOfficerDashboardQuery
 {
-    public function __construct(private readonly ProviderWorkspaceScope $scope) {}
+    public function __construct(
+        private readonly ProviderWorkspaceScope $scope,
+        private readonly BenefitReleaseWorkspaceQueues $queues,
+    ) {}
 
     /** @return array<string, mixed> */
     public function get(User $officer): array
@@ -20,17 +24,17 @@ final class BenefitReleaseOfficerDashboardQuery
         $deliveryReportCount = app(RecipientAgreementCaseAccess::class)->visibleTo($officer)
             ->where('case_type', 'benefit_delivery')->whereIn('status', BenefitDeliveryReportService::OPEN)->count();
         $programIds = $this->scope->programs($officer)->pluck('id');
-        $items = RecipientBenefitRelease::query()
-            ->whereIn('scholarship_id', $programIds)
-            ->with(['scholarship', 'records.receiptResponse'])
-            ->orderBy('release_at')
-            ->orderBy('id')
+        $items = $this->queues->releases($programIds)
             ->get()
             ->map(fn (RecipientBenefitRelease $release): array => $this->item($release));
         $counts = collect(['issues', 'record', 'upcoming', 'history'])
             ->mapWithKeys(fn (string $state): array => [$state => $items->where('work_state', $state)->count()]);
+        $focusQueue = $counts['issues'] > 0 || $counts['record'] === 0 ? 'issues' : 'record';
+        $focusAction = $focusQueue === 'issues'
+            ? ['label' => 'Open reported issues', 'url' => '/provider/workspaces/releases/issues']
+            : ['label' => 'Record distributions', 'url' => '/provider/workspaces/releases/record'];
         $priorities = $items
-            ->whereIn('work_state', ['issues', 'record'])
+            ->where('work_state', $focusQueue)
             ->sortBy(fn (array $item): string => sprintf('%02d-%s-%010d', $item['priority'], $item['release_sort'], $item['id']))
             ->take(5)
             ->values();
@@ -66,10 +70,12 @@ final class BenefitReleaseOfficerDashboardQuery
                 [
                     'key' => 'release-priorities',
                     'eyebrow' => 'Current focus',
-                    'title' => 'Issues and due distributions',
-                    'description' => 'Recipient concerns appear before distributions that still need a result.',
+                    'title' => $focusQueue === 'issues' ? 'Reported distribution issues' : 'Distributions due to record',
+                    'description' => $focusQueue === 'issues'
+                        ? 'Distributions with open recipient reports.'
+                        : 'Due distributions that still need a recipient outcome.',
                     'empty_message' => 'No benefit release currently needs action.',
-                    'action' => ['label' => 'Open reported issues', 'url' => '/provider/workspaces/releases/issues'],
+                    'action' => $focusAction,
                     'items' => $priorities,
                 ],
                 [
@@ -88,16 +94,13 @@ final class BenefitReleaseOfficerDashboardQuery
     /** @return array<string, mixed> */
     private function item(RecipientBenefitRelease $release): array
     {
-        $openIssues = $release->records->filter(fn ($record) => $record->receiptResponse?->status === 'open')->count();
-        $pending = $release->records->whereIn('status', ['scheduled', 'prepared'])->count();
-        $released = $release->records->where('status', 'released')->count();
-        $isDue = $release->release_at?->isPast() ?? false;
+        ['state' => $state, 'issues' => $openIssues, 'pending' => $pending] = $this->queues->classify($release);
 
-        [$state, $label, $detail, $priority] = match (true) {
-            $openIssues > 0 => ['issues', 'Recipient issue', $openIssues.' issue'.($openIssues === 1 ? '' : 's').' waiting for resolution', 0],
-            $pending > 0 && $isDue => ['record', 'Record distribution', $pending.' recipient result'.($pending === 1 ? '' : 's').' pending', 1],
-            $pending > 0 => ['upcoming', 'Scheduled', $pending.' recipient'.($pending === 1 ? '' : 's').' scheduled', 2],
-            default => ['history', 'Distribution closed', $released.' release'.($released === 1 ? '' : 's').' recorded', 3],
+        [$label, $detail, $priority] = match ($state) {
+            'issues' => ['Recipient issue', $openIssues.' open issue'.($openIssues === 1 ? '' : 's'), 0],
+            'record' => ['Record distribution', $pending.' result'.($pending === 1 ? '' : 's').' to record', 1],
+            'upcoming' => ['Scheduled', $release->release_at?->format('M d, Y h:i A') ?: 'Release date not set', 2],
+            default => ['Distribution closed', $release->release_at?->format('M d, Y'), 3],
         };
 
         return [
@@ -109,10 +112,7 @@ final class BenefitReleaseOfficerDashboardQuery
             'priority' => $priority,
             'release_sort' => $release->release_at?->format('Y-m-d H:i:s') ?: '9999-12-31 23:59:59',
             'status' => ['label' => $label, 'tone' => in_array($state, ['issues', 'record'], true) ? 'attention' : ($state === 'history' ? 'positive' : 'neutral')],
-            'meta' => [
-                $detail,
-                $release->release_at ? $release->release_at->format('M d, Y h:i A') : 'Release date not set',
-            ],
+            'hint' => $detail,
             'action' => [
                 'label' => $state === 'issues' ? 'Resolve issues' : ($state === 'history' ? 'View record' : 'Open release'),
                 'url' => route('provider.workspaces.releases.distributions.show', $release, false),

@@ -339,6 +339,45 @@ class ApplicationStageOperationsApiTest extends TestCase
         $this->assertSame('exam', $application->fresh()->workflow_stage);
     }
 
+    public function test_next_step_explains_schedule_and_attendance_blockers(): void
+    {
+        [$owner, $officer, $program] = $this->programContext();
+        $reviewer = $this->providerStaff($owner, 'verify_applications');
+        $application = $this->applicationAtExam($program);
+        $recordUrl = "/provider/applications/{$application->id}";
+        $this->actingAs($reviewer)->getJson("$recordUrl/data?workspace=review")->assertOk()
+            ->assertJsonPath('application.provider_next_step.owner', 'Selection officer')
+            ->assertJsonPath('application.provider_next_step.action', null);
+        $this->actingAs($owner)->getJson("$recordUrl/data?workspace=review")->assertOk()
+            ->assertJsonPath('application.provider_next_step.action.url', "$recordUrl?workspace=selection");
+        $this->actingAs($officer)->getJson("$recordUrl/stage-readiness")->assertOk()
+            ->assertJsonPath('readiness.next_step.title', 'Schedule the exam')
+            ->assertJsonPath('readiness.next_step.action.url', "/provider/workspaces/selection/unassigned?program_id={$program->id}&stage_key=exam&application_id={$application->id}&create_session=1");
+
+        $session = $this->createSession($officer, $program);
+        $sessionUrl = "/provider/scholarships/{$program->id}/stage-sessions/{$session->id}";
+        $this->getJson($sessionUrl)->assertOk()
+            ->assertJsonPath('session.next_step.action.section', 'roster');
+        $this->postJson("$sessionUrl/assignments", ['application_ids' => [$application->id]])->assertCreated();
+        $this->getJson("$recordUrl/stage-readiness")->assertOk()
+            ->assertJsonPath('readiness.next_step.title', 'Publish the session');
+        $this->postJson("$sessionUrl/publish")->assertOk();
+        $this->getJson($sessionUrl)->assertOk()
+            ->assertJsonPath('session.completion.blocked_by', 'not_started')
+            ->assertJsonPath('session.next_step.state', 'waiting');
+        $this->postJson("$sessionUrl/complete")->assertUnprocessable()->assertJsonValidationErrors('session');
+
+        $this->travelTo($session->starts_at->copy()->addMinutes(5));
+        $this->getJson($sessionUrl)->assertOk()
+            ->assertJsonPath('session.completion.can_complete', false)
+            ->assertJsonPath('session.completion.blocked_by', 'attendance')
+            ->assertJsonPath('session.next_step.action.section', 'roster');
+        $this->postJson("$sessionUrl/complete")->assertUnprocessable()->assertJsonValidationErrors('attendance');
+        $this->getJson("$recordUrl/stage-readiness")->assertOk()
+            ->assertJsonPath('readiness.next_step.title', 'Record attendance')
+            ->assertJsonPath('readiness.next_step.action.url', "/provider/workspaces/selection/sessions/{$session->id}?section=roster");
+    }
+
     public function test_attendance_and_proof_are_required_before_completion_but_do_not_record_an_outcome(): void
     {
         [, $officer, $program] = $this->programContext();
@@ -375,6 +414,10 @@ class ApplicationStageOperationsApiTest extends TestCase
             ->postJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}/complete")
             ->assertUnprocessable()
             ->assertJsonValidationErrors('evidence');
+        $this->getJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}")
+            ->assertOk()
+            ->assertJsonPath('session.completion.blocked_by', 'proof')
+            ->assertJsonPath('session.next_step.action.section', 'proof');
 
         $this->actingAs($officer)
             ->post(
@@ -392,6 +435,9 @@ class ApplicationStageOperationsApiTest extends TestCase
             ->postJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}/complete")
             ->assertOk()
             ->assertJsonPath('session.status', 'completed');
+        $this->getJson("/provider/scholarships/{$program->id}/stage-sessions/{$session->id}")
+            ->assertOk()
+            ->assertJsonPath('session.next_step.action.url', "/provider/workspaces/selection/results?program_id={$program->id}&stage_key=exam");
 
         $this->actingAs($officer)
             ->getJson("/provider/applications/{$application->id}/stage-readiness")
@@ -409,14 +455,42 @@ class ApplicationStageOperationsApiTest extends TestCase
         $this->assertNull($progress->result);
         $this->assertNull($progress->outcome_key);
 
+        $session->evidence()->update(['is_current' => false]);
+        $this->getJson("/provider/applications/{$application->id}/stage-readiness")
+            ->assertOk()->assertJsonPath('readiness.can_record_result', false);
+        $this->patchJson("/provider/applications/{$application->id}/stages/exam/result", ['result' => 'passed'])
+            ->assertUnprocessable()->assertJsonValidationErrors('result');
+        $session->evidence()->update(['is_current' => true]);
+
         $this->actingAs($officer)
             ->patchJson("/provider/applications/{$application->id}/stages/exam/result", [
                 'result' => 'passed',
                 'notes' => 'Attendance and proof reviewed.',
             ])
-            ->assertOk();
+            ->assertOk()
+            ->assertJsonPath('application.provider_next_step.title', 'Continue to formal application');
 
         $this->assertSame('formal_application', $application->fresh()->workflow_stage);
+
+        $nextSession = $this->createSession($officer, $program, [
+            'stage_key' => 'formal_application', 'proof_required' => false,
+        ]);
+        $laterAssignment = $this->postJson("/provider/scholarships/{$program->id}/stage-sessions/{$nextSession->id}/assignments", [
+            'application_ids' => [$application->id],
+        ])->assertCreated()->json('assignment_ids.0');
+        $reference = $this->getJson("/provider/applications/{$application->id}/data?workspace=selection")
+            ->assertOk()->assertJsonPath('application.decision_reopen.can_reopen', true)
+            ->json('application.decision_reopen.decision_reference');
+        $this->travel(61)->seconds();
+        $this->patchJson("/provider/applications/{$application->id}/decision/reopen", [
+            'reason' => 'The exam was scored against the wrong answer key.',
+            'decision_reference' => $reference,
+        ])->assertOk()->assertJsonPath('application.workflow.current_stage', 'exam');
+        $this->assertDatabaseHas('application_stage_assignments', ['id' => $laterAssignment, 'status' => 'cancelled']);
+        $this->assertDatabaseHas('application_stage_assignments', ['id' => $assignmentId, 'status' => 'assigned']);
+        $this->getJson("/provider/applications/{$application->id}/stage-readiness")
+            ->assertOk()->assertJsonPath('readiness.can_record_result', true)
+            ->assertJsonPath('readiness.proof_count', 1);
     }
 
     public function test_replacing_proof_preserves_versions_and_cross_provider_access_is_denied(): void

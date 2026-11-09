@@ -8,29 +8,25 @@ use App\Models\ApplicationStageSession;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Queries\Provider\ProviderWorkspaceScope;
-use Illuminate\Database\Eloquent\Builder;
+use App\Queries\Provider\SelectionWorkspaceQueues;
 use Illuminate\Support\Str;
 
 final class SelectionOfficerDashboardQuery
 {
-    public function __construct(private readonly ProviderWorkspaceScope $scope) {}
+    public function __construct(
+        private readonly ProviderWorkspaceScope $scope,
+        private readonly SelectionWorkspaceQueues $queues,
+    ) {}
 
     /** @return array<string, mixed> */
     public function get(User $officer): array
     {
         $context = $this->scope->context($officer);
-        $programIds = $this->scope->programs($officer)->pluck('id');
-        $sessions = ApplicationStageSession::query()->whereIn('scholarship_id', $programIds);
-        $activeSessions = (clone $sessions)->whereIn('status', ['draft', 'scheduled', 'ongoing']);
-        $historySessions = (clone $sessions)->whereIn('status', ['completed', 'cancelled']);
-        $applications = $this->applicationBase($officer);
-        $unassigned = $this->unassignedApplications(clone $applications);
-        $results = $this->resultApplications(clone $applications);
+        ['active' => $activeSessions, 'history' => $historySessions, 'unassigned' => $unassigned, 'results' => $results] =
+            $this->queues->forProgramIds($this->queues->programs($officer)->pluck('id'));
 
         $prioritySessions = (clone $activeSessions)
             ->with('scholarship')
-            ->withCount(['assignments as active_assignments_count' => fn (Builder $query) => $query
-                ->whereIn('status', ['assigned', 'acknowledged'])])
             ->orderByRaw("CASE status WHEN 'ongoing' THEN 0 WHEN 'scheduled' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END")
             ->orderBy('starts_at')
             ->orderBy('id')
@@ -45,7 +41,8 @@ final class SelectionOfficerDashboardQuery
             ->limit(5)
             ->get()
             ->map(fn (ScholarshipApplication $application): array => $this->applicationItem($application, 'result'));
-        $unassignedItems = (clone $unassigned)
+        $showResults = $resultItems->isNotEmpty();
+        $candidateItems = $showResults ? $resultItems : (clone $unassigned)
             ->with(['applicant.studentProfile', 'scholarship', 'stageProgresses'])
             ->orderBy('submitted_at')
             ->orderBy('id')
@@ -115,58 +112,19 @@ final class SelectionOfficerDashboardQuery
                 [
                     'key' => 'candidate-actions',
                     'eyebrow' => 'Candidate work',
-                    'title' => 'Applicants needing action',
-                    'description' => 'Review formal applications and completed session results.',
+                    'title' => $showResults ? 'Applicants ready for review' : 'Applicants who need a session',
+                    'description' => $showResults
+                        ? 'Review formal applications and completed session results.'
+                        : 'Assign exam or interview applicants to a session.',
                     'empty_message' => 'No applicant activity needs action.',
                     'action' => [
-                        'label' => 'Open results',
-                        'url' => '/provider/workspaces/selection/results',
+                        'label' => $showResults ? 'Open results' : 'Open scheduling queue',
+                        'url' => $showResults ? '/provider/workspaces/selection/results' : '/provider/workspaces/selection/unassigned',
                     ],
-                    'items' => $resultItems->concat($unassignedItems)->unique('id')->take(5)->values(),
+                    'items' => $candidateItems,
                 ],
             ],
         );
-    }
-
-    private function applicationBase(User $officer): Builder
-    {
-        return $this->scope->applications($officer)
-            ->whereIn('workflow_stage', ApplicationStageCatalog::SESSION_STAGES)
-            ->whereNotIn('application_state', ['closed', 'withdrawn']);
-    }
-
-    private function unassignedApplications(Builder $query): Builder
-    {
-        return $query
-            ->whereIn('workflow_stage', [ApplicationStageCatalog::EXAM, ApplicationStageCatalog::INTERVIEW])
-            ->whereHas('stageProgresses', fn (Builder $progress) => $progress
-                ->where('status', 'current')
-                ->whereColumn('stage_key', 'scholarship_applications.workflow_stage')
-                ->where(fn (Builder $status) => $status
-                    ->whereNull('operational_status')
-                    ->orWhereIn('operational_status', ['not_started', 'waiting_for_schedule'])));
-    }
-
-    private function resultApplications(Builder $query): Builder
-    {
-        return $query->where(fn (Builder $ready) => $ready
-            ->whereHas('stageProgresses', fn (Builder $progress) => $progress
-                ->where('status', 'current')
-                ->where('operational_status', 'ready_for_review')
-                ->whereColumn('stage_key', 'scholarship_applications.workflow_stage'))
-            ->orWhereHas('schedules', fn (Builder $schedule) => $schedule
-                ->where('status', 'completed')
-                ->whereColumn('type', 'scholarship_applications.workflow_stage'))
-            ->orWhere(fn (Builder $formal) => $formal
-                ->where('workflow_stage', ApplicationStageCatalog::FORMAL_APPLICATION)
-                ->whereDoesntHave('stageAssignments', fn (Builder $assignment) => $assignment
-                    ->whereIn('status', ['assigned', 'acknowledged'])
-                    ->whereHas('session', fn (Builder $session) => $session
-                        ->where('stage_key', ApplicationStageCatalog::FORMAL_APPLICATION)
-                        ->where('status', '!=', 'cancelled')))
-                ->whereDoesntHave('schedules', fn (Builder $schedule) => $schedule
-                    ->where('type', ApplicationStageCatalog::FORMAL_APPLICATION)
-                    ->where('status', '!=', 'cancelled'))));
     }
 
     /** @return array<string, mixed> */
@@ -182,10 +140,7 @@ final class SelectionOfficerDashboardQuery
                 'label' => Str::headline($session->status),
                 'tone' => $session->status === 'ongoing' ? 'attention' : 'neutral',
             ],
-            'meta' => [
-                Str::headline($session->stage_key).' · '.$date,
-                ((int) ($session->active_assignments_count ?? 0)).' assigned applicant'.((int) ($session->active_assignments_count ?? 0) === 1 ? '' : 's'),
-            ],
+            'hint' => Str::headline($session->stage_key).' / '.$date,
             'action' => [
                 'label' => $session->status === 'draft' ? 'Continue setup' : 'Open session',
                 'url' => $session->status === 'draft'
@@ -215,12 +170,7 @@ final class SelectionOfficerDashboardQuery
                     : 'Needs session',
                 'tone' => 'attention',
             ],
-            'meta' => [
-                $stage,
-                $kind === 'result'
-                    ? ($isFormalApplication ? 'Review the formal application record' : 'Participation is ready for review')
-                    : 'No active session assignment',
-            ],
+            'hint' => $stage,
             'action' => [
                 'label' => $kind === 'result'
                     ? ($isFormalApplication ? 'Review formal application' : 'Review result')

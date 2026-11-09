@@ -7,7 +7,6 @@ use App\Queries\Provider\Dashboards\ApplicationReviewerDashboardQuery;
 use App\Queries\Provider\Dashboards\BenefitReleaseOfficerDashboardQuery;
 use App\Queries\Provider\Dashboards\BillingStaffDashboardQuery;
 use App\Queries\Provider\Dashboards\DecisionOfficerDashboardQuery;
-use App\Queries\Provider\Dashboards\MonitoringOfficerDashboardQuery;
 use App\Queries\Provider\Dashboards\OrganizationProfileManagerDashboardQuery;
 use App\Queries\Provider\Dashboards\RecipientOfficerDashboardQuery;
 use App\Queries\Provider\Dashboards\SelectionOfficerDashboardQuery;
@@ -34,11 +33,6 @@ class RoleDashboardController extends Controller
     }
 
     public function recipients(Request $request, RecipientOfficerDashboardQuery $query): JsonResponse
-    {
-        return response()->json($query->get($request->user()));
-    }
-
-    public function monitoring(Request $request, MonitoringOfficerDashboardQuery $query): JsonResponse
     {
         return response()->json($query->get($request->user()));
     }

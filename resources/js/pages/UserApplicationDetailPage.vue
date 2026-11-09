@@ -1,12 +1,15 @@
 <script setup>
 import { confirmOutcome } from '../support/outcomeConfirmation.js';
-import { computed, nextTick, onMounted, ref } from 'vue';
+import { scheduleAcknowledgementPrompt } from '../support/applicationConfirmations.js';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import RecipientAgreementSummary from '../components/RecipientAgreementSummary.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey as formatKeyLabel } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 import { progressStateLabel } from '../support/selectionPlan';
@@ -15,6 +18,7 @@ const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
 const isLoading = ref(true);
 const isUploading = ref(false);
+const { confirmation, requestConfirmation, confirmConfirmation, cancelConfirmation } = useConfirmationDialog();
 const errorMessage = ref('');
 const user = ref(null);
 const application = ref(null);
@@ -208,7 +212,7 @@ const applicantNextDescription = computed(() => {
     }
 
     if (recipientMonitoring.value.pending_count > 0) {
-        return 'Open Monitoring and submit the checklist records requested by the provider.';
+        return 'Open Scholarship Support for the check-in instructions and required documents.';
     }
 
     if (filesNeedingAction.value.length) {
@@ -224,7 +228,7 @@ const applicantNextDescription = computed(() => {
 
     if (applicationIsClosed.value) {
         return recipientMonitoring.value.eligible
-            ? 'Use Monitoring for ongoing requirements and benefit releases.'
+            ? 'Use Scholarship Support for ongoing requirements and benefit releases.'
             : (application.value?.outcome_notes || 'The provider has recorded the final result for this application.');
     }
 
@@ -283,7 +287,7 @@ const nextActionButton = computed(() => {
     }
 
     if (recipientMonitoring.value.pending_count > 0) {
-        return { label: 'Open monitoring checklist', href: `/dashboard/monitoring/${application.value.id}` };
+        return { label: 'View check-in requirements', href: `/dashboard/monitoring/${application.value.id}` };
     }
 
     if (filesNeedingAction.value.length) {
@@ -295,7 +299,7 @@ const nextActionButton = computed(() => {
     }
 
     if (applicationIsClosed.value && recipientMonitoring.value.eligible) {
-        return { label: 'View monitoring', href: `/dashboard/monitoring/${application.value.id}` };
+        return { label: 'Open Scholarship Support', href: `/dashboard/monitoring/${application.value.id}` };
     }
 
     if (applicationIsClosed.value) {
@@ -822,22 +826,27 @@ async function loadApplication() {
 }
 
 async function acknowledgeCurrentActivity() {
-    if (!application.value || !currentSchedule.value?.requires_applicant_acknowledgment) {
-        return;
-    }
+    const record = application.value;
+    const activity = currentSchedule.value;
+    const canAcknowledge = () => record && application.value === record && currentSchedule.value === activity
+        && activity?.requires_applicant_acknowledgment && !activity.applicant_acknowledged && !isAcknowledgingActivity.value;
+    if (confirmation.open || !canAcknowledge()) return;
+
+    const confirmed = await requestConfirmation(scheduleAcknowledgementPrompt(activity));
+    if (!confirmed || !canAcknowledge()) return;
 
     isAcknowledgingActivity.value = true;
 
     try {
         const response = await window.axios.patch(
-            `/dashboard/applications/${application.value.id}/stage-activities/${currentSchedule.value.id}/acknowledge`,
+            `/dashboard/applications/${record.id}/stage-activities/${activity.id}/acknowledge`,
         );
-        const index = application.value.selection_activities.findIndex(
+        const index = record.selection_activities.findIndex(
             (activity) => activity.id === response.data.activity.id,
         );
 
         if (index >= 0) {
-            application.value.selection_activities[index] = response.data.activity;
+            record.selection_activities[index] = response.data.activity;
         }
 
         showPortalToast({
@@ -896,9 +905,17 @@ async function uploadDocument() {
 }
 
 async function deleteDocument(document) {
-    if (!application.value) {
-        return;
-    }
+    const canRemove = () => !isUploading.value && application.value?.documents?.includes(document);
+    if (confirmation.open || !canRemove()) return;
+
+    const confirmed = await requestConfirmation({
+        title: 'Remove file from this application?',
+        message: `"${document.original_name || document.document_name}" will be removed from this application. If this file is required, upload a replacement.`,
+        confirmLabel: 'Remove file',
+        cancelLabel: 'Keep file',
+        tone: 'danger',
+    });
+    if (!confirmed || !canRemove()) return;
 
     isUploading.value = true;
     errorMessage.value = '';
@@ -1012,12 +1029,19 @@ async function submitRecipientAgreement(response) {
 }
 
 onMounted(loadApplication);
+onBeforeUnmount(cancelConfirmation);
 </script>
 
 <template>
     <main class="student-shell">
         <ApplicantSidebar />
 
+        <ConfirmationDialog
+            data-document-removal-confirmation
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
         <FilePreviewModal
             :file="previewDocument"
             :title="previewDocument?.document_name || previewDocument?.original_name || 'Application document'"

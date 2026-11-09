@@ -5,6 +5,24 @@ export const DASHBOARD_LIMITS = Object.freeze({
 });
 
 const allowedTones = new Set(['neutral', 'attention', 'positive']);
+const providerQueueSections = {
+    programs: ['drafts', 'review', 'published', 'closed'],
+    'workspaces/reviews': ['all', 'assigned', 'unassigned', 'returned', 'history'],
+    'workspaces/selection': ['active', 'unassigned', 'results', 'history'],
+    'workspaces/decisions': ['pending', 'waitlist', 'recorded'],
+    'workspaces/recipients': ['agreements', 'active', 'declined', 'closed'],
+    'workspaces/monitoring': ['review', 'follow-ups', 'awaiting', 'history'],
+    'workspaces/releases': ['issues', 'record', 'upcoming', 'history'],
+    'workspaces/support': ['needs-response', 'waiting', 'platform', 'resolved'],
+    'workspaces/billing': ['requests', 'action', 'active', 'waiting', 'completed'],
+    'workspaces/team': ['setup', 'active', 'suspended'],
+};
+const providerQueuePaths = new Set(['/provider/programs', ...Object.entries(providerQueueSections)
+    .flatMap(([workspace, queues]) => queues.map((queue) => `/provider/${workspace}/${queue}`))]);
+
+export function providerDashboardQueueLink(url) {
+    return providerQueuePaths.has(url) ? `${url}?page=1` : url;
+}
 
 const dashboardIcons = [
     [['attention', 'needs', 'priority', 'issue', 'returned', 'setup'], 'fa-solid fa-triangle-exclamation'],
@@ -35,7 +53,7 @@ function normalizeAction(action) {
 
     return {
         label,
-        url,
+        url: providerDashboardQueueLink(url),
         icon: cleanText(action?.icon, 'fa-solid fa-arrow-right'),
     };
 }
@@ -70,7 +88,7 @@ export function normalizeWorkspaceDashboard(payload = {}) {
             value: metric?.value ?? 0,
             detail: cleanText(metric?.detail),
             tone: allowedTones.has(metric?.tone) ? metric.tone : 'neutral',
-            url: cleanText(metric?.url) || null,
+            url: providerDashboardQueueLink(cleanText(metric?.url)) || null,
             icon: cleanText(metric?.icon) || dashboardIcon(metric?.key, 'fa-solid fa-chart-simple'),
         })),
         sections: sections.slice(0, DASHBOARD_LIMITS.sections).map((section, index) => ({

@@ -62,7 +62,7 @@ async function submit() {
     data.append('explanation', form.value.explanation);
     data.append('confirmation', '1');
     if (form.value.request_type === 'extension') data.append('requested_due_at', form.value.requested_due_at);
-    if (form.value.supporting_record) data.append('supporting_record', form.value.supporting_record);
+    if (!props.record?.handoff && form.value.supporting_record) data.append('supporting_record', form.value.supporting_record);
 
     try {
         const response = await window.axios.post(
@@ -149,7 +149,7 @@ async function submit() {
                         <textarea v-model="form.explanation" required minlength="10" maxlength="2000" rows="4" placeholder="Explain what happened and how it affects this requirement." class="w-full resize-y border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6"></textarea>
                     </label>
 
-                    <label class="block">
+                    <label v-if="!record?.handoff" class="block">
                         <span class="mb-1.5 block text-xs font-bold text-slate-700">Supporting record <span class="font-normal text-slate-400">(optional)</span></span>
                         <input type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 file:mr-3 file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-bold" @change="form.supporting_record = $event.target.files?.[0] ?? null">
                     </label>

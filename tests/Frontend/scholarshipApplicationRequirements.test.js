@@ -23,8 +23,7 @@ const requirements = () => ({
     questions: [{ id: 'reason', prompt: 'Why are you applying?', required: true }, { id: 'other', prompt: 'Other information', required: false }],
     manage_files_href: '/dashboard/documents', upload_policy: { extensions: ['pdf', 'jpg'], max_size_mb: 5 },
 });
-const decision = { state: 'eligible', title: 'Start with pre-screening', action: { kind: 'link', href: '/dashboard/applications/start/4', label: 'Start pre-screening' } };
-const render = (props = {}) => renderToString(createSSRApp(Panel, { requirements: requirements(), preparation: { can_start_application: true }, decision, scholarshipId: 4, ...props }));
+const render = (props = {}) => renderToString(createSSRApp(Panel, { requirements: requirements(), scholarshipId: 4, ...props }));
 const context = { scholarship_id: 4, scholarship_title: 'Learning Grant', return_section: 'application', return_href: '/dashboard/scholarships/4/application' };
 
 test('required, optional and after-qualification files have distinct groups and only required files have readiness badges', async () => {
@@ -52,23 +51,11 @@ test('questions are a read-only preview and file guidance remains collapsed', as
     assert.doesNotMatch(html, /<input|<textarea|<form/);
 });
 
-test('missing files do not disable a server-allowed start or skip the selected-scholarship route', async () => {
+test('the checklist links to documents with a return context but does not repeat the start action', async () => {
     const html = await render();
-    assert.match(html, /href="\/dashboard\/applications\/start\/4"/);
-    assert.match(html, /Opening the form keeps this scholarship selected/);
+    assert.doesNotMatch(html, /href="\/dashboard\/applications\/start\/|data-scholarship-primary-action/);
     assert.match(html, /provider-specific documents/);
     assert.match(html, /href="\/dashboard\/documents\?preparing_scholarship=4&amp;return_section=application"/);
-});
-
-test('profile gates and unavailable intakes cannot enable a stale start action', async () => {
-    const html = await render({ preparation: { can_start_application: false }, decision: { ...decision, title: 'Verify your profile' } });
-    assert.doesNotMatch(html, /href="\/dashboard\/applications\/start/);
-    assert.match(html, /Verify your profile/);
-    const profile = await render({ preparation: { can_start_application: false }, decision: { title: 'Verify your profile', action: { kind: 'link', label: 'View supporting evidence', href: '/dashboard/profile?section=verification' } } });
-    assert.match(profile, /section=verification&amp;preparing_scholarship=4&amp;return_section=application/);
-    const full = await render({ preparation: { can_start_application: false }, decision: { title: 'Intake full', action: { kind: 'save', label: 'Save scholarship' } } });
-    assert.match(full, /Save scholarship/);
-    assert.doesNotMatch(full, /href="\/dashboard\/applications\/start/);
 });
 
 test('no-file programs do not show zero-percent progress or invent initial requirements', async () => {
@@ -86,14 +73,12 @@ test('provider previews never show applicant file availability or live applicant
     assert.match(html, /Read-only preview/);
     assert.equal((html.match(/Required file<\/span>/g) ?? []).length, 2);
     assert.doesNotMatch(html, /1 of 2 saved|Saved file<\/span>|href="\/dashboard\/|preparing_scholarship/);
-    assert.match(html, /Applicant actions are disabled/);
 });
 
-test('existing applications explain that library changes do not replace submitted attachments', async () => {
-    const html = await render({ preparation: { has_applied: true, can_start_application: false }, decision: { action: { kind: 'link', label: 'View application', href: '/dashboard/applications/7' } } });
-    assert.match(html, /Library changes do not replace files already submitted/);
-    assert.match(html, /href="\/dashboard\/applications\/7"/);
-    assert.doesNotMatch(html, /href="\/dashboard\/applications\/start/);
+test('existing applications show published requirements, not personal library readiness or a duplicate action', async () => {
+    const html = await render({ preparation: { has_applied: true } });
+    assert.match(html, /published requirements, not your submitted attachments/);
+    assert.doesNotMatch(html, /Saved file|Upload needed|My Documents|data-provider-questions|href="\/dashboard\//);
 });
 
 test('return context accepts canonical positive IDs and known sections, never arbitrary redirect URLs', () => {

@@ -1,0 +1,14 @@
+{
+  "roles": [
+    "marilag"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\provider-part-3-program-workspaces.png",
+    "storage\\qa\\provider-part-3-filtered-queue.png"
+  ],
+  "verified_application_ids": [],
+  "passed": true
+}

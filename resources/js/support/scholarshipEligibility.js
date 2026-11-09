@@ -9,7 +9,6 @@ const profileSections = {
 };
 const valueTypes = { education_level: 'educationLevel', completed_qualification: 'completedQualification', school_type: 'schoolType', current_scholarship_support: 'currentScholarship' };
 const attentionStatuses = new Set(['fail', 'missing', 'review', 'preferred', 'unknown']);
-const priority = { fail: 0, missing: 1, review: 2, unknown: 3, preferred: 4, pass: 5 };
 
 export function eligibilityValue(value, key = '', fallback = 'Not provided') {
     if (Array.isArray(value)) return value.map((item) => eligibilityValue(item, key, '')).filter(Boolean).join(', ') || fallback;
@@ -39,10 +38,20 @@ export function scholarshipEligibilityRows(criteria = []) {
     });
 }
 
-export function scholarshipEligibilityGroups(rows) {
-    const sortRows = (items) => [...items].sort((left, right) => (priority[left.result.status] ?? 3) - (priority[right.result.status] ?? 3));
+export function scholarshipEligibilityGroups(rows, publishedOnly = false) {
+    const restricted = rows.filter((row) => row.result.status !== 'info');
+    const preferred = (row) => row.rule_mode === 'preferred';
+    if (publishedOnly) {
+        return [
+            { id: 'required', label: 'Required criteria', description: 'These rules must be met to apply.', rows: restricted.filter((row) => !preferred(row)) },
+            { id: 'preferred', label: 'Provider preferences', description: 'These do not block an application.', rows: restricted.filter(preferred) },
+        ].filter((group) => group.rows.length);
+    }
+
     return [
-        { id: 'required', label: 'Required criteria', description: 'These rules must be met to apply.', rows: sortRows(rows.filter((row) => row.result.status !== 'info' && row.rule_mode !== 'preferred')) },
-        { id: 'preferred', label: 'Provider preferences', description: 'Differences here do not block an application.', rows: sortRows(rows.filter((row) => row.result.status !== 'info' && row.rule_mode === 'preferred')) },
+        { id: 'blocking', label: 'Required rules not met', description: 'These differences block a new application.', rows: restricted.filter((row) => row.result.status === 'fail') },
+        { id: 'review', label: 'Checks not confirmed', description: 'Missing information or a check the provider needs to review. These are not confirmed failures.', rows: restricted.filter((row) => !preferred(row) && ['missing', 'review', 'unknown'].includes(row.result.status)) },
+        { id: 'preferred', label: 'Preferences to review', description: 'Differences here do not block an application.', rows: restricted.filter((row) => preferred(row) && row.result.status !== 'pass') },
+        { id: 'matched', label: 'Matched criteria', description: 'Matches are based on the saved profile and do not guarantee selection.', collapsed: true, rows: restricted.filter((row) => row.result.status === 'pass') },
     ].filter((group) => group.rows.length);
 }

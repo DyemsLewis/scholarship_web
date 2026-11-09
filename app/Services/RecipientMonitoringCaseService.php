@@ -314,30 +314,31 @@ final class RecipientMonitoringCaseService
     public function sync(
         RecipientMonitoringCycle $cycle,
         ScholarshipApplication $application,
+        bool $persist = true,
     ): RecipientMonitoringCase {
-        $case = RecipientMonitoringCase::query()->firstOrCreate(
-            [
-                'recipient_monitoring_cycle_id' => $cycle->id,
-                'scholarship_application_id' => $application->id,
-            ],
-            [
-                'applicant_id' => $application->applicant_id,
-                'status' => $this->initialStatus($cycle, $application),
-                'opened_at' => $cycle->published_at ?? now(),
-            ],
-        );
+        $identity = [
+            'recipient_monitoring_cycle_id' => $cycle->id,
+            'scholarship_application_id' => $application->id,
+        ];
+        $defaults = [
+            'applicant_id' => $application->applicant_id,
+            'status' => $this->initialStatus($cycle, $application),
+            'opened_at' => $cycle->published_at ?? now(),
+        ];
+        $case = $persist
+            ? RecipientMonitoringCase::query()->firstOrCreate($identity, $defaults)
+            : ($cycle->relationLoaded('cases')
+                ? $cycle->cases->firstWhere('scholarship_application_id', $application->id)
+                    ?? new RecipientMonitoringCase($identity + $defaults)
+                : RecipientMonitoringCase::query()->firstOrNew($identity, $defaults));
         $cycle->loadMissing('requirements');
         $today = CarbonImmutable::today();
-        $submissions = $application->monitoringSubmissions()
-            ->where('recipient_monitoring_cycle_id', $cycle->id)
-            ->get();
-        $adjustments = $application->monitoringAdjustmentRequests()
-            ->where('recipient_monitoring_cycle_id', $cycle->id)
-            ->get();
-        $openInterventions = $application->monitoringInterventions()
-            ->where('recipient_monitoring_cycle_id', $cycle->id)
-            ->where('status', 'open')
-            ->get();
+        $cycleRecords = fn (string $relation): Collection => ! $persist && $application->relationLoaded($relation)
+            ? $application->{$relation}->where('recipient_monitoring_cycle_id', $cycle->id)
+            : $application->{$relation}()->where('recipient_monitoring_cycle_id', $cycle->id)->get();
+        $submissions = $cycleRecords('monitoringSubmissions');
+        $adjustments = $cycleRecords('monitoringAdjustmentRequests');
+        $openInterventions = $cycleRecords('monitoringInterventions')->where('status', 'open');
         $approvedDueAt = $adjustments
             ->where('request_type', 'extension')
             ->where('status', 'approved')
@@ -446,6 +447,10 @@ final class RecipientMonitoringCaseService
         }
 
         $case->forceFill($attributes);
+        if (! $persist) {
+            return $case;
+        }
+
         if ($case->isDirty()) {
             $case->save();
         }
@@ -676,7 +681,7 @@ final class RecipientMonitoringCaseService
             || in_array($cycle->status, ['closed', 'cancelled'], true)) {
             return 'closed';
         }
-        if ($cycle->opens_at?->isAfter($today)) {
+        if ($cycle->opens_at?->isAfter($today) || $cycle->handoff_at?->isFuture()) {
             return 'upcoming';
         }
         if ($today->lessThanOrEqualTo($effectiveDueAt)) {
@@ -717,8 +722,10 @@ final class RecipientMonitoringCaseService
             RecipientSupportCatalog::CASE_READY_TO_CLOSE => ['provider', 'close_check_in'],
             RecipientSupportCatalog::CASE_WAIVED => [null, null],
             default => match (true) {
+                $dueStatus === 'upcoming' && $cycle->isInPerson() => ['applicant', 'attend_handoff'],
                 $dueStatus === 'upcoming' => [null, 'wait_for_opening'],
                 $dueStatus === 'overdue' => ['provider', 'resolve_overdue'],
+                $cycle->isInPerson() && $missingProviderCount > 0 => ['provider', 'record_requirement'],
                 $dueStatus === 'grace_period' && $cycle->allow_exception_requests => ['applicant', 'request_adjustment'],
                 $missingApplicantCount > 0 => ['applicant', 'submit_requirements'],
                 $missingProviderCount > 0 => ['provider', 'record_requirement'],
@@ -754,6 +761,7 @@ final class RecipientMonitoringCaseService
         return match ($action) {
             'accept_agreement' => 'Accept the recipient agreement',
             'submit_requirements' => 'Submit the remaining records',
+            'attend_handoff' => 'Bring your documents to the scheduled check-in',
             'record_requirement' => 'Record the provider-confirmed item',
             'decide_adjustment' => 'Review the recipient request',
             'review_requirements' => 'Review submitted records',

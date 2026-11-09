@@ -214,7 +214,7 @@ async function saveManualGrade(requirement) {
 <template>
     <FilePreviewModal
         :file="previewFile"
-        :title="previewFile?.original_name || 'Monitoring record'"
+        :title="previewFile?.original_name || 'Check-in document'"
         :context="programTitle"
         @close="previewFile = null"
     />
@@ -331,7 +331,7 @@ async function saveManualGrade(requirement) {
                 <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-4 py-4 sm:px-5">
                     <div class="flex min-w-0 items-start gap-3">
                         <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span>
-                        <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Monitoring request</p><h2 class="mt-1 text-xl font-bold">Request an adjustment</h2><p class="mt-1 text-sm text-slate-500">{{ adjustmentTarget.requirement.title }}</p></div>
+                        <div><p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Check-in request</p><h2 class="mt-1 text-xl font-bold">Request an adjustment</h2><p class="mt-1 text-sm text-slate-500">{{ adjustmentTarget.requirement.title }}</p></div>
                     </div>
                     <button type="button" :disabled="isRequestingAdjustment" class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-200 text-slate-500" aria-label="Close request" @click="closeAdjustment"><i class="fa-solid fa-xmark"></i></button>
                 </header>

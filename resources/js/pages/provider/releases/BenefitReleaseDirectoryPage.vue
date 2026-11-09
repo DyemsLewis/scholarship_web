@@ -3,7 +3,8 @@ import WorkspaceTextSummary from '../../../components/workspace-dashboard/Worksp
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
-import { createStaffQueueState } from '../../../support/staffQueueState.js';
+import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
+import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/releases/issues': 'issues',
@@ -62,6 +63,7 @@ function timingLabel(release) {
 function progressLabel(release) {
     if (activeQueue === 'issues') return `${release.counts.open_issues} issue${release.counts.open_issues === 1 ? '' : 's'} open`;
     if (activeQueue === 'record') return `${release.counts.pending} of ${release.counts.recipients} to record`;
+    if (activeQueue === 'upcoming') return `${release.counts.pending} scheduled`;
     return `${release.counts.released} of ${release.counts.recipients} released`;
 }
 
@@ -117,12 +119,13 @@ onBeforeUnmount(() => {
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="release-directory-title" class="monitoring-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><WorkspaceTextSummary class="mt-1 text-sm leading-6 text-slate-600" :text="pageCopy.description" label="details" /></div></div>
-                        <div class="flex items-center gap-4"><div v-if="workspace" class="border-r border-slate-200 pr-5 text-right"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Release scope</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div><a href="/provider/workspaces/releases/schedule" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-plus text-amber-300" aria-hidden="true"></i>Schedule release</a></div>
+                        <div class="flex items-center gap-4"><div v-if="workspace" class="border-r border-slate-200 pr-5 text-right"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Program access</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div><a :href="providerProgramQueueLink('/provider/workspaces/releases/schedule', selectedProgram)" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-plus text-amber-300" aria-hidden="true"></i>Schedule release</a></div>
                     </div>
+                    <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>
 
                 <nav class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Benefit release queues">
-                    <a v-for="queue in queues" :key="queue.key" :href="queue.href" :aria-current="activeQueue === queue.key ? 'page' : undefined" :class="['flex min-h-16 items-center justify-between border-r border-slate-200 px-5 last:border-r-0', activeQueue === queue.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']"><span class="text-sm font-bold">{{ queue.label }}</span><span :class="['min-w-7 px-2 py-1 text-center text-xs font-bold', activeQueue === queue.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-700']">{{ queue.count }}</span></a>
+                    <a v-for="queue in queues" :key="queue.key" :href="providerProgramQueueLink(queue.href, selectedProgram)" :aria-current="activeQueue === queue.key ? 'page' : undefined" :class="['flex min-h-16 items-center justify-between border-r border-slate-200 px-5 last:border-r-0', activeQueue === queue.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']"><span class="text-sm font-bold">{{ queue.label }}</span><span :class="['min-w-7 px-2 py-1 text-center text-xs font-bold', activeQueue === queue.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-700']">{{ queue.count }}</span></a>
                 </nav>
 
                 <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Benefit releases">
@@ -142,9 +145,9 @@ onBeforeUnmount(() => {
                             <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600"><th class="px-5 py-3">Distribution</th><th class="px-5 py-3">Current work</th><th class="px-5 py-3">Recipients</th><th class="px-5 py-3">Schedule</th><th class="px-5 py-3 text-right">Action</th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="release in releases" :key="release.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><p class="monitoring-text text-sm font-bold text-slate-950">{{ release.title }}</p><p class="mt-1 monitoring-text text-xs text-slate-500">{{ release.program.title }}</p><p class="mt-1 monitoring-text text-xs font-semibold text-slate-500">{{ release.amount_label || release.benefit_description }}</p></td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', stateClass(release.work_state)]">{{ release.work_label }}</span><p class="monitoring-text mt-2 text-xs text-slate-500">{{ release.detail }}</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ progressLabel(release) }}</p><p class="mt-1 text-xs text-slate-500">{{ release.counts.proof }} proof file{{ release.counts.proof === 1 ? '' : 's' }}</p></td>
+                                    <td class="px-5 py-4"><p class="monitoring-text text-sm font-bold text-slate-950">{{ release.title }}</p><p class="mt-1 monitoring-text text-xs text-slate-500">{{ release.program.title }}<template v-if="release.amount_label"> &middot; {{ release.amount_label }}</template></p></td>
+                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', stateClass(release.work_state)]">{{ release.work_label }}</span></td>
+                                    <td class="px-5 py-4 text-sm font-bold text-slate-900">{{ progressLabel(release) }}</td>
                                     <td class="px-5 py-4"><p :class="['text-sm font-bold', release.timing_state === 'overdue' || release.timing_state === 'attention' ? 'text-rose-700' : release.timing_state === 'soon' || release.timing_state === 'today' ? 'text-amber-700' : 'text-slate-800']">{{ timingLabel(release) }}</p><p class="mt-1 text-xs text-slate-500">{{ release.release_method_label }}</p></td>
                                     <td class="px-5 py-4 text-right"><a :href="queueState.link(release.action_url)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`Open ${release.title}`">Open <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                 </tr>

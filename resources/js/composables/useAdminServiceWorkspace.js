@@ -42,12 +42,6 @@ export function adminServiceTargetDateError(value, saved, today = adminServiceDa
         ? 'Keep the saved overdue date or choose today or a future target date.' : '';
 }
 
-export function formatAdminServiceFileSize(bytes) {
-    if (!bytes) return '0 KB';
-    if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
 export function useAdminServiceWorkspace(section) {
     const purchaseId = adminServicePurchaseId();
     const purchase = ref(null);

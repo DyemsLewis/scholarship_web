@@ -72,8 +72,8 @@ function defaultCheckIn() {
         title: '',
         period_label: '',
         school_year: '',
-        opens_at: localDate(),
-        due_at: '',
+        handoff_at: '',
+        handoff_location: '',
         instructions: '',
     };
 }
@@ -241,8 +241,6 @@ function openCheckInEditor() {
     checkInForm.value = {
         ...defaultCheckIn(),
         school_year: scholarship.value?.program_cycle || '',
-        opens_at: savedPlan.value?.starts_on && savedPlan.value.starts_on > localDate()
-            ? savedPlan.value.starts_on : localDate(),
     };
     checkInEditor.value = true;
 }
@@ -371,9 +369,9 @@ onMounted(loadPlan);
                     <p v-if="requirementError" class="col-span-2 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ requirementError }}</p>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Type</span><select v-model="requirementEditor.type" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm" @change="changeRequirementType"><option v-for="type in requirementTypes" :key="type.value" :value="type.value">{{ type.label }}</option></select></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Title</span><input v-model="requirementEditor.title" required maxlength="120" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
-                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">What should the recipient submit?</span><textarea v-model="requirementEditor.evidence_description" :required="requirementEditor.requires_file" rows="3" maxlength="1000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm"></textarea></label>
+                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">What should the recipient bring?</span><textarea v-model="requirementEditor.evidence_description" :required="requirementEditor.requires_file" rows="3" maxlength="1000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm"></textarea></label>
                     <template v-if="requirementEditor.type === 'academic_progress'"><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Minimum grade</span><input v-model.number="requirementEditor.minimum_grade" required type="number" step="0.01" class="h-11 w-full border border-slate-300 px-3 text-sm"></label><label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Scale</span><select v-model="requirementEditor.grading_scale" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option value="percentage">Percentage</option><option value="grade_point">Grade point</option></select></label></template>
-                    <div class="col-span-2 flex gap-6 border border-slate-200 bg-slate-50 p-4"><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_file" type="checkbox"> File required</label><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_original_verification" type="checkbox"> Original may be checked</label></div>
+                    <div class="col-span-2 flex gap-6 border border-slate-200 bg-slate-50 p-4"><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_file" type="checkbox"> Bring a document</label><label class="flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="requirementEditor.requires_original_verification" type="checkbox"> Check the original</label></div>
                 </div>
                 <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="closeRequirementEditor">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white"><i class="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true"></i>Save requirement</button></footer>
             </form>
@@ -382,19 +380,19 @@ onMounted(loadPlan);
         <div v-if="checkInEditor" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" @click.self="closeCheckInEditor">
             <form ref="checkInDialog" class="provider-monitoring-workspace monitoring-dialog w-full max-w-2xl border border-slate-300 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="check-in-editor-title" tabindex="-1" @keydown="handleCheckInKeydown" @submit.prevent="publishCheckIn">
                 <header class="flex items-start justify-between border-b border-slate-200 px-6 py-5">
-                    <div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Recipient monitoring</p><h2 id="check-in-editor-title" class="mt-1 text-xl font-bold text-slate-950">Schedule a check-in</h2><p class="mt-1 text-sm text-slate-500">Publish one period to all active recipients in this program.</p></div>
+                    <div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Document handoff</p><h2 id="check-in-editor-title" class="mt-1 text-xl font-bold text-slate-950">Schedule an in-person check-in</h2><p class="mt-1 text-sm text-slate-500">All active recipients will see when and where to bring their documents.</p></div>
                     <button type="button" :disabled="isPublishingCheckIn" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 disabled:opacity-50" aria-label="Close" @click="closeCheckInEditor"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 </header>
                 <div class="monitoring-dialog-body grid grid-cols-2 gap-5 p-6">
                     <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Check-in title</span><input v-model="checkInForm.title" required maxlength="120" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester progress check"></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Academic period <span class="font-normal text-slate-600">(optional)</span></span><input v-model="checkInForm.period_label" maxlength="80" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester"></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">School year <span class="font-normal text-slate-600">(optional)</span></span><input v-model="checkInForm.school_year" maxlength="30" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="2026-2027"></label>
-                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Opens</span><input v-model="checkInForm.opens_at" required type="date" :min="savedPlan?.starts_on && savedPlan.starts_on > localDate() ? savedPlan.starts_on : localDate()" :max="savedPlan?.ends_on || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
-                    <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Due date</span><input v-model="checkInForm.due_at" required type="date" :min="checkInForm.opens_at || localDate()" :max="savedPlan?.ends_on || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
-                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Period instructions <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="checkInForm.instructions" rows="3" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm" placeholder="Only add instructions specific to this check-in."></textarea></label>
+                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Date and time (Philippine time)</span><input v-model="checkInForm.handoff_at" required type="datetime-local" :min="(savedPlan?.starts_on && savedPlan.starts_on > localDate() ? savedPlan.starts_on : localDate()) + 'T00:00'" :max="savedPlan?.ends_on ? savedPlan.ends_on + 'T23:59' : undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
+                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Venue and address</span><input v-model="checkInForm.handoff_location" required maxlength="255" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="Office or room, building, and street address"></label>
+                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Arrival instructions <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="checkInForm.instructions" rows="3" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm" placeholder="For example: check in at the reception desk."></textarea></label>
                 </div>
                 <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
-                    <p class="text-xs text-slate-500">The active plan requirements will be included automatically.</p>
+                    <p class="text-xs text-slate-500">Plan requirements are included. Recipients cannot upload files for this check-in.</p>
                     <div class="flex shrink-0 gap-2"><button type="button" :disabled="isPublishingCheckIn" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-50" @click="closeCheckInEditor">Cancel</button><button type="submit" :disabled="isPublishingCheckIn" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50"><i :class="['fa-solid text-[10px]', isPublishingCheckIn ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>{{ isPublishingCheckIn ? 'Publishing...' : 'Publish check-in' }}</button></div>
                 </footer>
             </form>

@@ -58,6 +58,14 @@ test('long notes use native keyboard-accessible disclosure and retain the entire
     assert.doesNotMatch(summary, /axios|fetch\(|window\.location/);
 });
 
+test('verification notes can be disclosed without putting a preview in the table row', async () => {
+    const text = 'Bring the original registration.';
+    const html = await render({ text, label: 'review note', disclosureOnly: true });
+    assert.match(html, /<details[^>]*>.*<summary[^>]*>.*Read review note.*<\/summary>.*Bring the original registration\.<\/p>.*<\/details>/s);
+    assert.doesNotMatch(html, /line-clamp-2|<details[^>]*\bopen\b/);
+    assert.doesNotMatch(await render({ text: ' ', disclosureOnly: true }), /<details/);
+});
+
 test('all application directories reserve action columns while keeping photos and original queues', () => {
     const records = [
         ['reviews/ApplicationReviewDirectoryPage.vue', '/provider/workspaces/reviews/data'],

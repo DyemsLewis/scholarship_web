@@ -78,12 +78,9 @@ final class BillingOfficerDashboardQuery
                 'label' => $request['meeting_requested'] ? 'Meeting requested' : $request['state_label'],
                 'tone' => $attention || $request['meeting_requested'] ? 'attention' : 'neutral',
             ],
-            'meta' => [
-                $request['reference_number'],
-                $progress['total'] > 0
-                    ? $progress['complete'].' of '.$progress['total'].' milestones complete'
-                    : ($request['paid_at'] ? 'Paid '.$request['paid_at'] : 'Payment date unavailable'),
-            ],
+            'hint' => $request['action_due_label'] ?? ($progress['total'] > 0
+                ? $progress['complete'].' of '.$progress['total'].' milestones'
+                : null),
             'action' => ['label' => 'Open request', 'url' => $request['action_url']],
         ];
     }

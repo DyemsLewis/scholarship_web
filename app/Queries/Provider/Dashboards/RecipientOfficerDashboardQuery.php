@@ -38,7 +38,7 @@ final class RecipientOfficerDashboardQuery
                 'image_url' => filled($request->application->applicant->studentProfile?->profile_photo_path)
                     ? route('provider.applications.profile-photo.view', $request->application, false) : null,
                 'status' => ['label' => 'Withdrawal requested', 'tone' => 'attention'],
-                'meta' => ['Requested '.$request->requested_at->format('M d, Y'), 'Support remains active'],
+                'hint' => 'Support remains active',
                 'action' => ['label' => 'Review request', 'url' => route('provider.workspaces.recipients.withdrawals.show', $request, false)],
             ]);
 
@@ -175,6 +175,7 @@ final class RecipientOfficerDashboardQuery
         $referenceAt = $application->student_responded_at ?? $application->outcome_at ?? $application->created_at;
         $declined = $status === 'declined';
         $accepted = $status === 'accepted';
+        $waitingDays = ($declined || $accepted) ? 0 : $this->waitingDays($referenceAt);
 
         return [
             'id' => (int) $application->id,
@@ -187,12 +188,9 @@ final class RecipientOfficerDashboardQuery
                 'label' => $declined ? 'Agreement declined' : ($accepted ? 'Accepted' : 'Awaiting response'),
                 'tone' => $accepted ? 'positive' : 'attention',
             ],
-            'meta' => [
-                $declined
-                    ? 'Response received '.($referenceAt?->format('M d, Y') ?: 'recently')
-                    : $this->waitingDays($referenceAt).' day'.($this->waitingDays($referenceAt) === 1 ? '' : 's').' waiting',
-                $accepted ? 'Ready for support management' : 'Recipient terms issued',
-            ],
+            'hint' => $declined
+                ? $application->student_responded_at?->format('M d, Y')
+                : ($waitingDays > 0 ? $waitingDays.' day'.($waitingDays === 1 ? '' : 's').' waiting' : null),
             'action' => [
                 'label' => $accepted ? 'Manage support' : 'Open agreement',
                 'url' => route('provider.applications.show', [

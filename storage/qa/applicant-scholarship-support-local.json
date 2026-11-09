@@ -1,0 +1,13 @@
+{
+  "roles": [
+    "learner.support.decision"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\applicant-scholarship-support.png"
+  ],
+  "verified_application_ids": [],
+  "passed": true
+}

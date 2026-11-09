@@ -7,7 +7,6 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Queries\Provider\ProviderWorkspaceScope;
-use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 
 final class DecisionOfficerDashboardQuery
@@ -176,7 +175,6 @@ final class DecisionOfficerDashboardQuery
         string $returnTo,
     ): array {
         $profile = $application->applicant?->studentProfile;
-        $referenceAt = $application->waitlisted_at ?? $application->submitted_at ?? $application->created_at;
 
         return [
             'id' => (int) $application->id,
@@ -189,10 +187,7 @@ final class DecisionOfficerDashboardQuery
                 'label' => $statusLabel,
                 'tone' => $tone,
             ],
-            'meta' => [
-                $application->waitlist_position ? 'Waitlist position '.$application->waitlist_position : 'All configured stages complete',
-                $this->waitingDays($referenceAt).' day'.($this->waitingDays($referenceAt) === 1 ? '' : 's').' waiting',
-            ],
+            'hint' => $application->waitlist_position ? 'Waitlist position '.$application->waitlist_position : null,
             'action' => [
                 'label' => 'Open record',
                 'url' => route('provider.applications.show', [
@@ -210,15 +205,6 @@ final class DecisionOfficerDashboardQuery
         }
 
         return max(0, (int) $program->slots_available - (int) ($program->awarded_slots_count ?? 0));
-    }
-
-    private function waitingDays(mixed $date): int
-    {
-        if (! $date) {
-            return 0;
-        }
-
-        return max(0, (int) CarbonImmutable::parse($date)->startOfDay()->diffInDays(CarbonImmutable::today()));
     }
 
     /** @param array<string, mixed> $context */

@@ -120,8 +120,8 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
                         <colgroup><col><col class="w-40"><col class="w-48"><col class="w-28"></colgroup>
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">File</th><th class="border-b border-slate-200 px-4 py-3">Scope</th><th class="border-b border-slate-200 px-4 py-3">Recorded</th><th class="border-b border-slate-200 px-5 py-3 text-right">Preview</th></tr></thead>
                         <tbody class="divide-y divide-slate-200">
-                            <tr v-for="file in session.evidence" :key="file.id">
-                                <td class="px-5 py-4"><strong class="review-text block text-sm text-slate-950" data-file-name>{{ file.name }}</strong><span class="mt-0.5 block text-xs text-slate-500">{{ file.category }} · {{ file.size }}</span></td>
+                            <tr v-for="file in session.evidence" :key="file.id" class="align-middle">
+                                <td class="px-5 py-4"><strong class="review-text block text-sm text-slate-950" data-file-name>{{ file.name }}</strong><span v-if="file.category" class="mt-0.5 block text-xs text-slate-500">{{ file.category }}</span></td>
                                 <td class="px-4 py-4 text-sm font-semibold text-slate-700">{{ file.scope_label }}</td>
                                 <td class="px-4 py-4"><p class="text-sm text-slate-700">{{ file.uploaded_at }}</p><p class="mt-0.5 text-xs text-slate-500">{{ file.uploaded_by || 'Provider team' }}</p></td>
                                 <td class="px-5 py-4 text-right"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.name" class="staff-row-action h-10 w-10" title="Preview proof" :aria-label="`Preview ${file.name}`"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a></td>
@@ -138,9 +138,9 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
                     <colgroup><col><col class="w-52"><col class="w-44"><col class="w-28"></colgroup>
                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Applicant</th><th class="border-b border-slate-200 px-4 py-3">Assignment</th><th class="border-b border-slate-200 px-4 py-3">Attendance</th><th class="border-b border-slate-200 px-5 py-3">Proof</th></tr></thead>
                     <tbody class="divide-y divide-slate-200">
-                        <tr v-for="applicant in session.participants" :key="applicant.assignment_id">
+                        <tr v-for="applicant in session.participants" :key="applicant.assignment_id" class="align-middle">
                             <td class="px-5 py-4"><div class="flex items-center gap-3"><StaffTableIdentity :src="applicant.photo_url" class="h-10 w-10" /><strong class="text-sm text-slate-950">{{ applicant.name }}</strong></div></td>
-                            <td class="px-4 py-4"><span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(applicant.assignment_status)]">{{ applicant.assignment_status_label }}</span><p class="mt-1 text-xs text-slate-500">{{ applicant.acknowledged_at ? `Confirmed ${applicant.acknowledged_at}` : 'Not yet confirmed' }}</p></td>
+                            <td class="px-4 py-4"><span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(applicant.assignment_status)]">{{ applicant.assignment_status_label }}</span><p v-if="applicant.acknowledged_at" class="mt-0.5 text-xs text-slate-500">{{ applicant.acknowledged_at }}</p></td>
                             <td class="px-4 py-4"><span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(applicant.attendance_status)]">{{ applicant.attendance_label }}</span><p v-if="applicant.attendance_recorded_at" class="mt-1 text-xs text-slate-500">{{ applicant.attendance_recorded_at }}</p></td>
                             <td class="px-5 py-4 text-sm font-semibold text-slate-700">{{ applicant.proof_count }} file{{ applicant.proof_count === 1 ? '' : 's' }}</td>
                         </tr>

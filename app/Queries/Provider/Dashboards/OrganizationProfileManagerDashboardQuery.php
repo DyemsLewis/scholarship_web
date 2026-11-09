@@ -57,10 +57,9 @@ final class OrganizationProfileManagerDashboardQuery
             $priorities->prepend([
                 'id' => 'verification-rejected',
                 'title' => 'Replace rejected verification proof',
-                'subtitle' => $profile->verification_notes ?: 'Administrator changes are required.',
+                'subtitle' => 'Organization verification',
                 'image_url' => null,
                 'status' => ['label' => 'Changes requested', 'tone' => 'attention'],
-                'meta' => ['Open the legal verification page', 'Upload corrected organization evidence'],
                 'action' => ['label' => 'Review proof', 'url' => '/provider/workspaces/organization-profile/verification'],
             ]);
         }
@@ -82,10 +81,7 @@ final class OrganizationProfileManagerDashboardQuery
                         ? 'positive'
                         : ($document->status === 'rejected' ? 'attention' : 'neutral'),
                 ],
-                'meta' => [
-                    $document->uploaded_at ? 'Uploaded '.$document->uploaded_at->format('M d, Y') : 'Upload date unavailable',
-                    $document->review_notes ?: 'Organization verification evidence',
-                ],
+                'hint' => $document->uploaded_at ? 'Uploaded '.$document->uploaded_at->format('M d, Y') : null,
                 'action' => ['label' => 'Open verification', 'url' => '/provider/workspaces/organization-profile/verification'],
             ]);
 
@@ -159,10 +155,7 @@ final class OrganizationProfileManagerDashboardQuery
             'subtitle' => $missing->count().' required detail'.($missing->count() === 1 ? '' : 's').' missing',
             'image_url' => null,
             'status' => ['label' => 'Incomplete', 'tone' => 'attention'],
-            'meta' => [
-                'Add '.$missing->take(2)->implode(' and '),
-                $area['complete'].' of '.$area['total'].' complete',
-            ],
+            'hint' => 'Add '.$missing->take(2)->implode(' and '),
             'action' => ['label' => 'Complete area', 'url' => $area['url']],
         ];
     }

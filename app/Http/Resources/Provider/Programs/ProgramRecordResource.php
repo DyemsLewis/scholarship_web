@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Provider\Programs;
 
 use App\Domain\Provider\Programs\ProgramLifecycle;
+use App\Queries\Provider\Programs\ProgramWorkspaceLinks;
 use App\Support\EducationEligibilityPolicy;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -13,6 +14,9 @@ class ProgramRecordResource extends JsonResource
     public function toArray(Request $request): array
     {
         $lifecycle = app(ProgramLifecycle::class);
+        $actor = $request->user();
+        $canManage = $actor->hasPortalPermission('manage_programs');
+        $workspaces = app(ProgramWorkspaceLinks::class)->forProgram($actor, $this->resource);
         $stages = collect($this->selection_stages ?? [])
             ->map(function ($stage): ?string {
                 $value = is_array($stage)
@@ -53,8 +57,13 @@ class ProgramRecordResource extends JsonResource
                 'benefit_count' => $this->benefits->count(),
             ],
             'selection_stages' => $stages,
+            'workspace_links' => $workspaces['links'],
             'actions' => [
-                'edit_url' => $this->status === 'pending_review'
+                'directory_url' => $canManage ? route('provider.programs', [], false) : null,
+                'preview_url' => $canManage ? route('provider.previews.programs.show', $this->resource, false) : null,
+                'preview_data_url' => $canManage ? route('provider.previews.programs.data', $this->resource, false) : null,
+                'monitoring_plan_url' => $workspaces['monitoring_plan_url'],
+                'edit_url' => ! $canManage || $this->status === 'pending_review'
                     ? null
                     : route('provider.programs.edit.step', [
                         'scholarship' => $this->id,

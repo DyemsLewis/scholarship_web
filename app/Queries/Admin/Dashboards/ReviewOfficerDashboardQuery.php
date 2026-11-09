@@ -81,7 +81,6 @@ final class ReviewOfficerDashboardQuery
                 'label' => $count > 0 ? $count.' open' : 'Clear',
                 'tone' => $count > 0 ? 'attention' : 'positive',
             ],
-            'meta' => [$count > 0 ? 'Records are waiting for review' : 'No record is waiting'],
             'action' => ['label' => 'Open queue', 'url' => $url, 'icon' => 'fa-solid fa-arrow-right'],
         ];
     }

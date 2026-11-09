@@ -56,14 +56,14 @@ function hideBrokenImage(event) {
             <div class="mx-auto w-full max-w-[90rem]">
                 <a href="/dashboard/monitoring" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                    Back to monitoring
+                    Back to Scholarship Support
                 </a>
 
                 <header data-monitoring-detail-header class="mt-4 overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm">
                     <div class="grid lg:min-h-[10rem] lg:grid-cols-[minmax(0,1.45fr)_minmax(19rem,0.55fr)]">
                         <div class="flex flex-col justify-center px-4 py-4 sm:px-6 sm:py-5">
                             <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Recipient monitoring</p>
+                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Scholarship Support</p>
                                 <span :class="['student-badge', statusClass]">
                                     {{ detail.status.label }}
                                 </span>
@@ -125,7 +125,7 @@ function hideBrokenImage(event) {
 
                 <MonitoringDecisionBanner v-if="detail.view === 'overview'" class="mt-4" :decision="detail.decision" />
 
-                <ApplicantRecordTabs :items="detail.navigation" label="Monitoring record" layout="grid" data-monitoring-detail-navigation />
+                <ApplicantRecordTabs :items="detail.navigation" label="Support record sections" layout="grid" data-monitoring-detail-navigation />
 
                 <section v-if="detail.view !== 'overview' && !hasSelectedRecord" class="relative mt-4 overflow-hidden rounded-md border border-slate-300 bg-white px-4 py-3 shadow-sm sm:px-5" data-record-section-intro>
                     <span class="absolute inset-y-0 left-0 w-1 bg-amber-400" aria-hidden="true"></span>

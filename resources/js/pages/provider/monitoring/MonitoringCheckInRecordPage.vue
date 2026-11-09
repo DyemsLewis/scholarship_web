@@ -26,7 +26,7 @@ const actionMode = ref('');
 const confirmation = ref(null);
 const reviewForm = ref({ decision: 'met', notes: '' });
 const adjustmentForm = ref({ decision: 'approved', decision_notes: '', approved_due_at: '' });
-const providerResultForm = ref({ decision: 'met', notes: '' });
+const providerResultForm = ref({ decision: 'met', notes: '', verified_grade: null, document_checked: false });
 const followUpForm = ref({ type: 'reminder', summary: '', action_required: '', follow_up_on: '' });
 const completionForm = ref({ completion_notes: '' });
 const completionTarget = ref(null);
@@ -55,7 +55,7 @@ function requirementState(requirement) {
     if (requirement.interventions?.some((item) => item.status === 'open')) return 'followup';
     if (requirement.submission && !requirement.submission.reviewed_at) return 'review';
     if (['not_met', 'needs_correction'].includes(requirement.submission?.review_status)) return 'followup';
-    if (!requirement.requires_file && !requirement.submission) return 'record';
+    if (!requirement.requires_file && !requirement.submission) return cycle.value?.handoff && !cycle.value.handoff_started ? 'waiting' : 'record';
     if (requirement.requires_file && !requirement.submission) return 'waiting';
     return 'complete';
 }
@@ -76,7 +76,15 @@ function recipientState(recipient) {
 }
 
 function recipientStatusLabel(recipient) {
+    if (recipient.monitoring_case?.next_action?.key === 'attend_handoff') return 'Handoff scheduled';
     return recipient.monitoring_case?.status_label ?? stateLabel(recipientState(recipient));
+}
+
+function canRecordResult(requirement) {
+    return !requirement.requires_file && (!cycle.value?.handoff
+        || (cycle.value.handoff_started && !isTerminalCase(selectedRecipient.value)
+            && selectedRecipient.value?.agreement_status === 'accepted'
+            && selectedRecipient.value?.benefits_active));
 }
 
 function primaryRequirement(recipient) {
@@ -212,7 +220,7 @@ function selectRequirement(requirement) {
     actionMode.value = state === 'request' ? 'adjustment' : state === 'review' ? 'review' : state === 'record' ? 'record' : '';
     reviewForm.value = { decision: 'met', notes: '' };
     adjustmentForm.value = { decision: 'approved', decision_notes: '', approved_due_at: requirement.adjustment_request?.requested_due_at ?? '' };
-    providerResultForm.value = { decision: 'met', notes: '' };
+    providerResultForm.value = { decision: 'met', notes: '', verified_grade: null, document_checked: false };
     followUpForm.value = { type: 'reminder', summary: '', action_required: '', follow_up_on: '' };
 }
 
@@ -231,6 +239,7 @@ async function loadRecord() {
     try {
         const response = await window.axios.get(`/provider/workspaces/monitoring/check-ins/${cycleId}/data`);
         program.value = response.data.program;
+        if (!cycle.value && response.data.cycle?.handoff && !response.data.cycle.handoff_started) recipientFilter.value = 'all';
         cycle.value = response.data.cycle;
         const first = recipients.value.find((recipient) => recipientState(recipient) !== 'complete') ?? recipients.value[0];
         if (first) selectRecipient(first);
@@ -274,7 +283,10 @@ async function confirmAction() {
     } else if (type === 'adjustment') {
         await runAction(() => window.axios.patch(`/provider/monitoring-adjustment-requests/${requirement.adjustment_request.id}/decision`, adjustmentForm.value), 'The recipient request could not be decided.');
     } else if (type === 'record') {
-        await runAction(() => window.axios.post(`/provider/monitoring-requirements/${requirement.id}/applications/${recipient.application_id}/record`, providerResultForm.value), 'The provider result could not be saved.');
+        const payload = providerResultForm.value.decision === 'excused'
+            ? { decision: 'excused', notes: providerResultForm.value.notes }
+            : providerResultForm.value;
+        await runAction(() => window.axios.post(`/provider/monitoring-requirements/${requirement.id}/applications/${recipient.application_id}/record`, payload), 'The provider result could not be saved.');
     } else if (type === 'followup') {
         await runAction(() => window.axios.post(`/provider/monitoring-requirements/${requirement.id}/applications/${recipient.application_id}/interventions`, followUpForm.value), 'The follow-up could not be created.');
     } else if (type === 'complete') {
@@ -323,12 +335,12 @@ onMounted(loadRecord);
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <div class="flex items-center justify-between gap-8 border-b border-slate-200 px-6 py-5">
                             <div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">{{ program.title }}</p><h2 class="mt-1 monitoring-text text-xl font-bold text-slate-950">{{ cycle.title }}</h2><p class="mt-1 text-sm text-slate-500">{{ [cycle.academic_period, cycle.school_year].filter(Boolean).join(' · ') || cycle.period_type }}</p></div>
-                            <div class="text-right"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Deadline</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.due_label || 'Not set' }}</p></div>
+                            <div class="min-w-0 max-w-sm text-right"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">{{ cycle.handoff ? 'In-person appointment' : 'Deadline' }}</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.handoff?.scheduled_label || cycle.due_label || 'Not set' }}</p><p v-if="cycle.handoff" class="mt-1 monitoring-text text-sm text-slate-600">{{ cycle.handoff.location }}</p></div>
                         </div>
                         <dl class="grid grid-cols-4 bg-slate-50">
                             <div class="border-r border-slate-200 px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Recipients</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ recipients.length }}</dd></div>
                             <div class="border-r border-slate-200 px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Requirements</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ reviewedRequirements }} of {{ totalRequirements }} reviewed</dd></div>
-                            <div class="border-r border-slate-200 px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Files received</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ receivedFiles }} of {{ cycle.item_expected_count }}</dd></div>
+                            <div class="border-r border-slate-200 px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">{{ cycle.handoff ? 'Handoff' : 'Files received' }}</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.handoff ? (cycle.status === 'closed' ? 'Closed' : cycle.handoff_started ? 'In-person review' : 'Scheduled') : `${receivedFiles} of ${cycle.item_expected_count}` }}</dd></div>
                             <div class="px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Open follow-ups</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.open_intervention_count }}</dd></div>
                         </dl>
                     </section>
@@ -392,16 +404,25 @@ onMounted(loadRecord);
 
                                             <form v-else-if="actionMode === 'review' && requirement.submission" class="mt-5" @submit.prevent="requestConfirmation('review', 'Save submission review', 'The recipient will be notified of this review result.')"><div class="grid grid-cols-3 gap-4"><label class="text-sm font-semibold text-slate-700">Result<select v-model="reviewForm.decision" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="met">Requirement met</option><option value="not_met">Requirement not met</option><option value="needs_correction">Request replacement</option><option value="excused">Approve exception</option></select></label><label class="col-span-2 text-sm font-semibold text-slate-700">Review note<textarea v-model="reviewForm.notes" :required="reviewForm.decision !== 'met'" rows="2" class="mt-2 w-full border border-slate-300 px-3 py-2 font-normal"></textarea></label></div><button type="submit" class="mt-4 h-10 bg-slate-950 px-4 text-xs font-bold text-white">Save review</button></form>
 
-                                            <form v-else-if="actionMode === 'record' && !requirement.requires_file" class="mt-5" @submit.prevent="requestConfirmation('record', 'Record provider result', 'This result becomes part of the recipient monitoring record.')"><div class="grid grid-cols-3 gap-4"><label class="text-sm font-semibold text-slate-700">Result<select v-model="providerResultForm.decision" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="met">Requirement met</option><option value="not_met">Requirement not met</option><option value="excused">Excused</option></select></label><label class="col-span-2 text-sm font-semibold text-slate-700">Note<textarea v-model="providerResultForm.notes" :required="providerResultForm.decision !== 'met'" rows="2" class="mt-2 w-full border border-slate-300 px-3 py-2 font-normal"></textarea></label></div><button type="submit" class="mt-4 h-10 bg-slate-950 px-4 text-xs font-bold text-white">Record result</button></form>
+                                            <form v-else-if="actionMode === 'record' && canRecordResult(requirement)" class="mt-5" @submit.prevent="requestConfirmation('record', 'Record provider result', 'This result becomes part of the recipient monitoring record.')">
+                                                <div class="grid grid-cols-3 gap-4">
+                                                    <label class="text-sm font-semibold text-slate-700">Result<select v-model="providerResultForm.decision" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="met">Requirement met</option><option value="not_met">Requirement not met</option><option value="excused">Excused</option></select></label>
+                                                    <label v-if="cycle.handoff && requirement.type === 'academic_progress' && providerResultForm.decision !== 'excused'" class="text-sm font-semibold text-slate-700">{{ requirement.grading_scale === 'grade_point' ? 'Verified grade point' : 'Verified percentage' }}<input v-model.number="providerResultForm.verified_grade" type="number" step="0.01" :min="requirement.grading_scale === 'grade_point' ? 1 : 0" :max="requirement.grading_scale === 'grade_point' ? 5 : 100" :required="providerResultForm.decision === 'met'" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal"></label>
+                                                    <label :class="['text-sm font-semibold text-slate-700', cycle.handoff ? 'col-span-3' : 'col-span-2']">Note<textarea v-model="providerResultForm.notes" :required="providerResultForm.decision !== 'met'" rows="2" class="mt-2 w-full border border-slate-300 px-3 py-2 font-normal"></textarea></label>
+                                                </div>
+                                                <label v-if="cycle.handoff && requirement.requires_original_verification && providerResultForm.decision !== 'excused' && (providerResultForm.decision === 'met' || (providerResultForm.verified_grade !== null && providerResultForm.verified_grade !== ''))" class="mt-3 flex items-center gap-2 text-sm font-semibold text-slate-700"><input v-model="providerResultForm.document_checked" type="checkbox" required> I checked the document presented in person.</label>
+                                                <button type="submit" class="mt-4 h-10 bg-slate-950 px-4 text-xs font-bold text-white">Record result</button>
+                                            </form>
 
                                             <form v-else-if="actionMode === 'followup'" class="mt-5" @submit.prevent="requestConfirmation('followup', 'Create recipient follow-up', 'This action and instruction will be shared with the recipient.')"><div class="grid grid-cols-3 gap-4"><label class="text-sm font-semibold text-slate-700">Follow-up type<select v-model="followUpForm.type" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="reminder">Reminder</option><option value="consultation">Consultation</option><option value="support_plan">Support plan</option><option value="warning">Formal warning</option></select></label><label class="text-sm font-semibold text-slate-700">Follow-up date <span class="font-normal text-slate-600">(optional)</span><input v-model="followUpForm.follow_up_on" type="date" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal"></label><label class="text-sm font-semibold text-slate-700">Summary<input v-model="followUpForm.summary" required minlength="5" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal"></label><label class="col-span-3 text-sm font-semibold text-slate-700">Recipient action <span class="font-normal text-slate-600">(optional)</span><textarea v-model="followUpForm.action_required" rows="2" class="mt-2 w-full border border-slate-300 px-3 py-2 font-normal"></textarea></label></div><button type="submit" class="mt-4 h-10 bg-slate-950 px-4 text-xs font-bold text-white">Send follow-up</button></form>
 
                                             <form v-else-if="actionMode === 'complete' && completionTarget" class="mt-5" @submit.prevent="requestConfirmation('complete', 'Complete follow-up', 'The recipient will see that this follow-up is closed.')"><label class="text-sm font-semibold text-slate-700">Completion note <span class="font-normal text-slate-600">(optional)</span><textarea v-model="completionForm.completion_notes" rows="2" class="mt-2 w-full border border-slate-300 px-3 py-2 font-normal"></textarea></label><button type="submit" class="mt-4 h-10 bg-slate-950 px-4 text-xs font-bold text-white">Complete follow-up</button></form>
 
-                                            <div v-else-if="requirementState(requirement) === 'waiting'" class="mt-5 border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">No provider action is required until the recipient submits this record.</div>
+                                            <div v-else-if="requirementState(requirement) === 'waiting'" class="mt-5 border border-slate-200 bg-white px-4 py-4 text-sm text-slate-600">{{ cycle.handoff ? 'Record the result once the appointment starts and you have checked the documents.' : 'No provider action is required until the recipient submits this record.' }}</div>
                                             <div v-else-if="!actionMode" class="mt-5 flex items-center justify-between border border-slate-200 bg-white px-4 py-3"><p class="text-sm text-slate-600">{{ requirementState(requirement) === 'complete' ? 'This requirement is complete.' : 'Add a follow-up if the recipient needs guidance.' }}</p><button v-if="requirementState(requirement) !== 'complete'" type="button" class="border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700" @click="actionMode = 'followup'">Add follow-up</button></div>
 
                                             <button v-if="['not_met', 'needs_correction'].includes(requirement.submission?.review_status) && actionMode !== 'followup'" type="button" class="mt-4 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="actionMode = 'followup'">Add recipient follow-up</button>
+                                            <button v-if="cycle.handoff && requirement.submission?.review_status === 'not_met' && actionMode !== 'record' && canRecordResult(requirement)" type="button" class="mt-4 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="actionMode = 'record'">Record updated result</button>
                                         </div>
                                     </article>
                                 </div>

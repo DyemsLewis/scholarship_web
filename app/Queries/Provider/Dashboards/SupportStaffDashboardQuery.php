@@ -123,12 +123,7 @@ final class SupportStaffDashboardQuery
                 'label' => $state === 'needs_action' ? 'Response needed' : 'With platform support',
                 'tone' => $state === 'needs_action' ? 'attention' : 'neutral',
             ],
-            'meta' => [
-                $state === 'needs_action'
-                    ? ($report->applicant?->name ?: 'Applicant concern')
-                    : 'Submitted by '.($report->applicant?->name ?: 'provider staff'),
-                $report->created_at ? 'Opened '.$report->created_at->format('M d, Y') : 'Open date unavailable',
-            ],
+            'hint' => $report->applicant?->name ? 'From '.$report->applicant->name : null,
             'action' => [
                 'label' => $state === 'needs_action' ? 'Open case' : 'Track report',
                 'url' => '/provider/workspaces/support/cases/'.$report->id,

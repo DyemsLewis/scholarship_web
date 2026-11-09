@@ -1,13 +1,16 @@
 <script setup>
+import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
-import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { applicantProfileDetails } from '../../../support/applicantProfileDetails';
 import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
+import { decisionAwardLabel, finalDecisionConsequence } from '../../../support/providerDecisionConfirmation.js';
 import EligibilityReviewPanel from '../reviews/components/EligibilityReviewPanel.vue';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
@@ -28,9 +31,9 @@ const isLoading = ref(true);
 const actionBusy = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
-const confirmation = ref(null);
 const showReopenDialog = ref(false);
-const decisionForm = ref({ outcome: 'selected', decision_reason: '', notes: '', awarded_amount: '' });
+const reopenError = ref('');
+const decisionForm = ref({ outcome: '', decision_reason: '', notes: '', awarded_amount: '' });
 
 const applicant = computed(() => application.value?.applicant ?? {});
 const scholarship = computed(() => application.value?.scholarship ?? {});
@@ -50,6 +53,11 @@ const capacity = computed(() => {
     return { total, occupied, remaining: total === null ? null : Math.max(0, total - occupied) };
 });
 const slotsFull = computed(() => capacity.value.remaining === 0);
+const correctionPending = computed(() => ['requested', 'submitted'].includes(application.value?.correction_status));
+const canDecide = computed(() => (isPending.value || isWaitlisted.value) && !workflow.value.is_closed && !correctionPending.value);
+const canSubmitOutcome = computed(() => canDecide.value && !actionBusy.value && Boolean(decisionForm.value.outcome)
+    && !(slotsFull.value && decisionForm.value.outcome === 'selected')
+    && !(decisionForm.value.outcome === 'not_selected' && !decisionForm.value.decision_reason));
 const acceptedDocuments = computed(() => application.value?.documents?.filter((document) => document.status === 'accepted').length ?? 0);
 const requiredDocuments = computed(() => readiness.value.required ?? application.value?.document_checklist?.length ?? 0);
 const applicantProfileRecord = computed(() => ({
@@ -70,7 +78,9 @@ const outcomeLabel = computed(() => ({
     selected: 'Selected',
     waitlisted: 'Waitlisted',
     not_selected: 'Not selected',
-}[currentOutcome.value] ?? 'Decision required'));
+}[currentOutcome.value] ?? (workflow.value.is_closed
+    ? workflow.value.application_state_label || 'Closed'
+    : correctionPending.value ? 'Correction open' : isPending.value ? 'Decision required' : 'Not at final decision')));
 
 function labelize(value) {
     return value ? String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Not provided';
@@ -103,7 +113,7 @@ function firstError(error, fallback) {
 
 function resetForm() {
     decisionForm.value = {
-        outcome: isWaitlisted.value ? (slotsFull.value ? 'not_selected' : 'selected') : (slotsFull.value ? 'waitlisted' : 'selected'),
+        outcome: '',
         decision_reason: '',
         notes: '',
         awarded_amount: application.value?.awarded_amount ?? scholarship.value.award_amount ?? '',
@@ -128,44 +138,42 @@ async function loadApplication() {
     }
 }
 
-function askToRecordOutcome() {
-    const label = { selected: 'select this applicant', waitlisted: 'place this applicant on the waitlist', not_selected: 'record this applicant as not selected' }[decisionForm.value.outcome];
-    confirmation.value = {
-        type: 'outcome',
+async function askToRecordOutcome() {
+    if (!canSubmitOutcome.value) return;
+    const previousOutcome = currentOutcome.value;
+    const { outcome, decision_reason, notes, awarded_amount } = decisionForm.value;
+    const amount = awarded_amount === '' ? null : awarded_amount;
+    const rejectionReason = rejectionReasons.find((option) => option.value === decision_reason)?.label;
+    const promoting = previousOutcome === 'waitlisted' && outcome === 'selected';
+    if (!await confirmOutcome({
         title: 'Confirm final outcome',
-        message: `This will ${label} and notify the applicant.`,
-        confirmLabel: 'Record outcome',
-        tone: decisionForm.value.outcome === 'not_selected' ? 'danger' : 'warning',
-    };
+        record: applicant.value.name,
+        outcome: promoting ? 'Promote to selected' : outcome,
+        details: [
+            `Program: ${scholarship.value.title}`,
+            outcome === 'selected' ? `Award: ${decisionAwardLabel(amount ?? scholarship.value.award_amount)}` : '',
+            outcome === 'not_selected' ? `Reason: ${rejectionReason}` : '',
+        ],
+        consequence: finalDecisionConsequence(outcome),
+        confirmLabel: promoting ? 'Promote applicant' : 'Record final outcome',
+        danger: outcome === 'not_selected',
+    }, () => canSubmitOutcome.value && currentOutcome.value === previousOutcome)) return;
+
+    await recordOutcome({
+        outcome,
+        expected_outcome: previousOutcome,
+        decision_reason: outcome === 'not_selected' ? decision_reason : null,
+        notes: notes || null,
+        ...(outcome === 'selected' ? { awarded_amount: amount } : {}),
+    });
 }
 
-async function confirmAction() {
-    const action = confirmation.value?.type;
-    confirmation.value = null;
-    if (action === 'outcome') await recordOutcome();
-}
-
-async function recordOutcome() {
+async function recordOutcome(payload) {
     actionBusy.value = true;
     errorMessage.value = '';
     successMessage.value = '';
     try {
-        let response;
-        if (isWaitlisted.value && decisionForm.value.outcome === 'selected') {
-            response = await window.axios.patch(`/provider/applications/${applicationId}/waitlist`, {
-                action: 'promote',
-                note: decisionForm.value.notes || null,
-            });
-        } else {
-            response = await window.axios.patch(`/provider/applications/${applicationId}/final-outcome`, {
-                outcome: decisionForm.value.outcome,
-                decision_reason: decisionForm.value.outcome === 'not_selected' ? decisionForm.value.decision_reason : null,
-                notes: decisionForm.value.notes || null,
-                awarded_amount: decisionForm.value.outcome === 'selected' && decisionForm.value.awarded_amount !== ''
-                    ? decisionForm.value.awarded_amount
-                    : null,
-            });
-        }
+        const response = await window.axios.patch(`/provider/applications/${applicationId}/final-outcome`, payload);
         syncApplication(response.data.application);
         successMessage.value = response.data.message;
     } catch (error) {
@@ -175,17 +183,21 @@ async function recordOutcome() {
     }
 }
 
-async function reopenDecision(reason) {
+async function reopenDecision(payload) {
     actionBusy.value = true;
-    errorMessage.value = '';
+    reopenError.value = '';
     successMessage.value = '';
     try {
-        const response = await window.axios.patch(`/provider/applications/${applicationId}/decision/reopen`, { reason });
+        const response = await window.axios.patch(`/provider/applications/${applicationId}/decision/reopen`, payload);
+        if (decisionReopen.value.stage !== 'decision') {
+            window.location.assign(response.data.redirect_url);
+            return;
+        }
         syncApplication(response.data.application);
         showReopenDialog.value = false;
         successMessage.value = response.data.message;
     } catch (error) {
-        errorMessage.value = firstError(error, 'The decision could not be reopened.');
+        reopenError.value = firstError(error, 'The decision could not be reopened.');
     } finally {
         actionBusy.value = false;
     }
@@ -226,12 +238,13 @@ onMounted(loadApplication);
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Applicant decision record">
                         <div class="flex items-center gap-4 px-6 py-4">
-                            <img v-if="applicant.profile_photo_url" :src="applicant.profile_photo_url" :alt="`${applicant.name} profile`" class="h-14 w-14 shrink-0 border border-slate-200 object-cover">
-                            <span v-else class="grid h-14 w-14 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+                            <StaffTableIdentity :src="applicant.profile_photo_url" class="h-14 w-14" />
                             <div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Candidate</p><h2 class="mt-1 application-text text-xl font-bold text-slate-950">{{ applicant.name }}</h2><p class="mt-1 application-text text-sm text-slate-500">{{ scholarship.title }} · Submitted {{ application.submitted_at || 'date unavailable' }}</p></div>
                             <div class="border-l border-slate-200 pl-6 text-right"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Program capacity</p><p class="mt-1 text-sm font-bold text-slate-950">{{ capacity.total === null ? 'No slot limit' : `${capacity.occupied} of ${capacity.total} awarded` }}</p><p class="mt-1 text-xs text-slate-500">{{ capacity.remaining === null ? 'Selection is not capped' : `${capacity.remaining} slots remaining` }}</p></div>
                         </div>
                     </section>
+
+                    <ProviderNextStep :step="application.provider_next_step" />
 
                     <nav class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Final decision sections">
                         <button v-for="section in sections" :key="section.key" type="button" :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950']" @click="updateSection(section.key)"><i :class="[section.icon, activeSection === section.key ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>{{ section.label }}</button>
@@ -248,26 +261,30 @@ onMounted(loadApplication);
                                 <div class="px-4 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Award</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ application.awarded_amount ? `PHP ${Number(application.awarded_amount).toLocaleString()}` : 'Not recorded' }}</dd></div>
                             </dl>
                             <div v-if="application.outcome_notes" class="mt-5"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Decision note</p><p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ application.outcome_notes }}</p></div>
+                            <p v-if="decisionReopen.stage === 'decision' && decisionReopen.blocked_reason" class="mt-5 border-l-4 border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700">{{ decisionReopen.blocked_reason }}</p>
                         </div>
 
-                        <form v-else class="px-7 py-7" @submit.prevent="askToRecordOutcome">
+                        <form v-else-if="canDecide" class="px-7 py-7" @submit.prevent="askToRecordOutcome">
                             <div v-if="['required_mismatch', 'preferred_difference', 'manual_review', 'provisional'].includes(application.dss_explanation?.comparison?.state)" class="mb-5 flex items-start justify-between gap-6 border-l-4 border-amber-400 bg-amber-50 px-4 py-3">
                                 <div><p class="text-sm font-bold text-amber-950">{{ application.dss_explanation.comparison.label }}</p><p class="mt-1 text-xs leading-5 text-amber-900">{{ application.dss_explanation.comparison.interpretation }}</p></div>
                                 <button type="button" class="shrink-0 border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="activeSection = 'summary'">Review comparison</button>
                             </div>
-                            <div :class="['grid gap-3', isWaitlisted ? 'grid-cols-2' : 'grid-cols-3']">
-                                <label v-if="!isWaitlisted" :class="['cursor-pointer border px-4 py-4', decisionForm.outcome === 'selected' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700', slotsFull ? 'cursor-not-allowed opacity-40' : '']"><input v-model="decisionForm.outcome" class="sr-only" type="radio" value="selected" :disabled="slotsFull"><span class="text-sm font-bold">Selected</span><span class="mt-1 block text-xs opacity-70">Offer the scholarship award.</span></label>
-                                <label v-if="!isWaitlisted" :class="['cursor-pointer border px-4 py-4', decisionForm.outcome === 'waitlisted' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700']"><input v-model="decisionForm.outcome" class="sr-only" type="radio" value="waitlisted"><span class="text-sm font-bold">Waitlisted</span><span class="mt-1 block text-xs opacity-70">Keep as an eligible alternate.</span></label>
-                                <label :class="['cursor-pointer border px-4 py-4', decisionForm.outcome === 'not_selected' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700']"><input v-model="decisionForm.outcome" class="sr-only" type="radio" value="not_selected"><span class="text-sm font-bold">Not selected</span><span class="mt-1 block text-xs opacity-70">Close without an award.</span></label>
-                                <label v-if="isWaitlisted" :class="['cursor-pointer border px-4 py-4', decisionForm.outcome === 'selected' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 text-slate-700', slotsFull ? 'cursor-not-allowed opacity-40' : '']"><input v-model="decisionForm.outcome" class="sr-only" type="radio" value="selected" :disabled="slotsFull"><span class="text-sm font-bold">Promote to selected</span><span class="mt-1 block text-xs opacity-70">Use an available scholarship slot.</span></label>
-                            </div>
+                            <fieldset>
+                                <legend class="mb-3 text-sm font-bold text-slate-950">Choose an outcome</legend>
+                                <div :class="['grid gap-3', isWaitlisted ? 'grid-cols-2' : 'grid-cols-3']">
+                                    <label :class="['flex items-start gap-3 border px-4 py-4', slotsFull ? 'cursor-not-allowed opacity-50' : 'cursor-pointer', decisionForm.outcome === 'selected' ? 'border-slate-950 bg-slate-50' : 'border-slate-300']"><input v-model="decisionForm.outcome" class="mt-1" type="radio" name="final-outcome" value="selected" :disabled="slotsFull"><span><span class="block text-sm font-bold text-slate-950">{{ isWaitlisted ? 'Promote to selected' : 'Selected' }}</span><span class="mt-1 block text-xs text-slate-600">Offer the scholarship award.</span></span></label>
+                                    <label v-if="!isWaitlisted" :class="['flex cursor-pointer items-start gap-3 border px-4 py-4', decisionForm.outcome === 'waitlisted' ? 'border-slate-950 bg-slate-50' : 'border-slate-300']"><input v-model="decisionForm.outcome" class="mt-1" type="radio" name="final-outcome" value="waitlisted"><span><span class="block text-sm font-bold text-slate-950">Waitlisted</span><span class="mt-1 block text-xs text-slate-600">Keep in consideration without an award.</span></span></label>
+                                    <label :class="['flex cursor-pointer items-start gap-3 border px-4 py-4', decisionForm.outcome === 'not_selected' ? 'border-slate-950 bg-slate-50' : 'border-slate-300']"><input v-model="decisionForm.outcome" class="mt-1" type="radio" name="final-outcome" value="not_selected"><span><span class="block text-sm font-bold text-slate-950">Not selected</span><span class="mt-1 block text-xs text-slate-600">Close without an award.</span></span></label>
+                                </div>
+                            </fieldset>
 
                             <p v-if="slotsFull" class="mt-4 border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">All configured slots are currently occupied. Selection becomes available when capacity opens.</p>
                             <label v-if="decisionForm.outcome === 'not_selected'" class="mt-5 block w-full text-sm font-semibold text-slate-700">Decision reason<select v-model="decisionForm.decision_reason" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="" disabled>Select a reason</option><option v-for="reason in rejectionReasons" :key="reason.value" :value="reason.value">{{ reason.label }}</option></select></label>
-                            <label v-if="decisionForm.outcome === 'selected'" class="mt-5 block w-full text-sm font-semibold text-slate-700">Awarded amount <span class="font-normal text-slate-600">(optional)</span><div class="mt-2 flex"><span class="grid h-11 place-items-center border border-r-0 border-slate-300 bg-slate-50 px-3 text-sm font-bold text-slate-500">PHP</span><input v-model="decisionForm.awarded_amount" type="number" min="0" max="999999999.99" step="0.01" class="h-11 min-w-0 flex-1 border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></div></label>
-                            <label class="mt-5 block text-sm font-semibold text-slate-700">Decision note <span class="font-normal text-slate-600">(optional)</span><textarea v-model="decisionForm.notes" maxlength="2000" rows="4" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950" placeholder="Add information needed for the next team or applicant record."></textarea></label>
-                            <div class="mt-5 flex items-center gap-3"><button type="submit" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : isWaitlisted && decisionForm.outcome === 'selected' ? 'fa-arrow-up' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ actionBusy ? 'Saving...' : isWaitlisted && decisionForm.outcome === 'selected' ? 'Promote applicant' : 'Record outcome' }}</button></div>
+                            <label v-if="decisionForm.outcome === 'selected'" class="mt-5 block w-full text-sm font-semibold text-slate-700">Awarded amount <span class="font-normal text-slate-600">(optional)</span><div class="mt-2 flex"><span class="grid h-11 place-items-center border border-r-0 border-slate-300 bg-slate-50 px-3 text-sm font-bold text-slate-500">PHP</span><input v-model="decisionForm.awarded_amount" type="number" min="0" max="999999999.99" step="0.01" class="h-11 min-w-0 flex-1 border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></div><span class="mt-2 block text-xs font-normal text-slate-600">Leave blank to use the program's award terms.</span></label>
+                            <label v-if="decisionForm.outcome" class="mt-5 block text-sm font-semibold text-slate-700">Decision note <span class="font-normal text-slate-600">(optional, visible to the applicant)</span><textarea v-model="decisionForm.notes" maxlength="2000" rows="3" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950" placeholder="Add information that helps the applicant understand the outcome."></textarea></label>
+                            <div class="mt-5 flex items-center gap-3"><button type="submit" class="inline-flex h-11 items-center gap-2 rounded-[5px] bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="!canSubmitOutcome"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-clipboard-check']" aria-hidden="true"></i>{{ actionBusy ? 'Saving...' : 'Review outcome' }}</button></div>
                         </form>
+                        <p v-else class="px-7 py-7 text-sm text-slate-700">{{ correctionPending ? 'Resolve the open correction request before recording a final outcome.' : 'This application is not awaiting a final outcome.' }}</p>
                     </section>
 
                     <section v-else-if="activeSection === 'summary'" class="mt-4 border border-slate-200 bg-white shadow-sm">
@@ -325,15 +342,6 @@ onMounted(loadApplication);
             </div>
         </section>
 
-        <ConfirmationDialog
-            :open="Boolean(confirmation)"
-            :title="confirmation?.title"
-            :message="confirmation?.message"
-            :confirm-label="confirmation?.confirmLabel"
-            :tone="confirmation?.tone"
-            @confirm="confirmAction"
-            @cancel="confirmation = null"
-        />
-        <DecisionReopenDialog :open="showReopenDialog" :decision="decisionReopen" :busy="actionBusy" @confirm="reopenDecision" @cancel="showReopenDialog = false" />
+        <DecisionReopenDialog :open="showReopenDialog" :decision="decisionReopen" :record-name="applicant.name" :busy="actionBusy" :error="reopenError" @confirm="reopenDecision" @cancel="showReopenDialog = false; reopenError = ''" />
     </main>
 </template>

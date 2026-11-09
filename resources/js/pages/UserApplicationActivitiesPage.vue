@@ -1,10 +1,13 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
 import ApplicantApplicationShell from '../components/application-detail/ApplicantApplicationShell.vue';
 import ApplicationActivityRecord from '../components/application-detail/ApplicationActivityRecord.vue';
 import FormalApplicationHandoff from '../components/application-detail/FormalApplicationHandoff.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
+import { scheduleAcknowledgementPrompt } from '../support/applicationConfirmations.js';
 import { showPortalToast } from '../support/portalToast';
 
 const appElement = document.getElementById('app');
@@ -14,6 +17,7 @@ const isLoading = ref(true);
 const errorMessage = ref('');
 const acknowledgingId = ref(null);
 const mapPreview = ref(null);
+const { confirmation, requestConfirmation, confirmConfirmation, cancelConfirmation } = useConfirmationDialog();
 
 const activities = computed(() => detail.value?.content ?? {});
 const primaryActivity = computed(() => activities.value.active?.[0] ?? null);
@@ -84,11 +88,15 @@ function openHandoffMap(handoff) {
 }
 
 async function acknowledgeActivity(activity) {
-    if (!activity.acknowledge_endpoint || acknowledgingId.value !== null) {
-        return;
-    }
+    const canAcknowledge = () => !isLoading.value && acknowledgingId.value === null
+        && activity?.acknowledge_endpoint && activity.requires_applicant_acknowledgment
+        && !activity.applicant_acknowledged && activities.value.active?.includes(activity);
+    if (confirmation.open || !canAcknowledge()) return;
 
-    acknowledgingId.value = `${activity.source}-${activity.id}`;
+    const confirmed = await requestConfirmation(scheduleAcknowledgementPrompt(activity));
+    if (!confirmed || !canAcknowledge()) return;
+
+    acknowledgingId.value = activityKey(activity);
 
     try {
         const response = await window.axios.patch(activity.acknowledge_endpoint, {}, {
@@ -115,9 +123,12 @@ function activityKey(activity) {
 }
 
 onMounted(loadActivities);
+onBeforeUnmount(cancelConfirmation);
 </script>
 
 <template>
+    <ConfirmationDialog v-bind="confirmation" @confirm="confirmConfirmation" @cancel="cancelConfirmation" />
+
     <main v-if="isLoading" class="student-shell">
         <ApplicantSidebar />
         <section class="student-page">

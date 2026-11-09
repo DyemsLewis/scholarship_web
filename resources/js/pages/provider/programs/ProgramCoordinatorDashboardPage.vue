@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import WorkspaceDashboardHeader from '../../../components/workspace-dashboard/WorkspaceDashboardHeader.vue';
 import WorkspaceMetricStrip from '../../../components/workspace-dashboard/WorkspaceMetricStrip.vue';
+import { providerDashboardQueueLink } from '../../../support/workspaceDashboard.js';
 
 const context = ref({ organization_name: '', access_scope: 'all' });
 const summary = ref({ total: 0, needs_action: 0, under_review: 0, published: 0 });
@@ -19,11 +20,14 @@ const dashboardWorkspace = {
     icon: 'fa-solid fa-graduation-cap',
 };
 const metrics = computed(() => [
-    { key: 'programs', label: 'Programs', value: summary.value.total, detail: 'All records', icon: 'fa-solid fa-layer-group' },
-    { key: 'attention', label: 'Needs action', value: summary.value.needs_action, detail: 'Drafts or changes', icon: summary.value.needs_action ? 'fa-solid fa-bell' : 'fa-solid fa-check', tone: summary.value.needs_action ? 'attention' : 'neutral' },
-    { key: 'review', label: 'Under review', value: summary.value.under_review, detail: 'With administrators', icon: 'fa-solid fa-clock-rotate-left' },
-    { key: 'published', label: 'Published', value: summary.value.published, detail: 'Visible to applicants', icon: 'fa-solid fa-circle-check' },
-]);
+    { key: 'programs', label: 'Programs', value: summary.value.total, detail: 'All records', icon: 'fa-solid fa-layer-group', url: '/provider/programs' },
+    { key: 'attention', label: 'Needs action', value: summary.value.needs_action, detail: 'Drafts or changes', icon: summary.value.needs_action ? 'fa-solid fa-bell' : 'fa-solid fa-check', tone: summary.value.needs_action ? 'attention' : 'neutral', url: '/provider/programs/drafts' },
+    { key: 'review', label: 'Under review', value: summary.value.under_review, detail: 'With administrators', icon: 'fa-solid fa-clock-rotate-left', url: '/provider/programs/review' },
+    { key: 'published', label: 'Published', value: summary.value.published, detail: 'Visible to applicants', icon: 'fa-solid fa-circle-check', url: '/provider/programs/published' },
+].map((metric) => ({
+    ...metric,
+    url: providerDashboardQueueLink(metric.url),
+})));
 
 const focusMessage = computed(() => {
     if (summary.value.needs_action === 0) {

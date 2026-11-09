@@ -34,7 +34,15 @@ const exportUrl = computed(() => `/admin/workspaces/billing/export?${new URLSear
 }).toString()}`);
 
 function money(amount, currency = 'PHP') { return new Intl.NumberFormat('en-PH', { style: 'currency', currency }).format(Number(amount ?? 0) / 100); }
-function priorityClass(priority) { return ['urgent', 'high'].includes(priority) ? 'text-amber-800' : 'text-slate-600'; }
+function assignmentHint(item) {
+    const priority = ['urgent', 'high', 'low'].includes(item.priority) ? `${labelFromKey(item.priority)} priority` : null;
+    return [item.action_due_label, priority].filter(Boolean).join(' · ');
+}
+
+function stateClass(state) {
+    if (state === 'waiting') return 'bg-amber-100 text-amber-900';
+    return 'bg-slate-100 text-slate-700';
+}
 
 function loadItems(page = 1) {
     clearTimeout(searchTimer);
@@ -54,11 +62,11 @@ onMounted(() => loadItems(queueState.page));
             <table v-if="items.length" class="portal-data-table table-fixed min-w-[56rem]">
                 <colgroup><col><col class="w-56"><col class="w-40"><col class="w-40"><col class="w-36"><col class="w-20"></colgroup>
                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Service</th><th class="border-b border-slate-200 px-4 py-3">Provider</th><th class="border-b border-slate-200 px-4 py-3">Work state</th><th class="border-b border-slate-200 px-4 py-3">Assignment</th><th class="border-b border-slate-200 px-4 py-3">Paid</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
-                <tbody class="divide-y divide-slate-200 bg-white"><tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
-                    <td class="px-5 py-3.5"><p class="billing-text text-sm font-bold text-slate-950">{{ item.plan_name }}</p><p class="mt-1 text-xs text-slate-500">{{ item.reference_number }} · {{ money(item.amount, item.currency) }}</p></td>
-                    <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0"><span class="block billing-text text-sm font-semibold text-slate-800">{{ item.provider }}</span><span class="mt-0.5 block billing-text text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
-                    <td class="px-4 py-3.5"><p class="text-sm font-bold text-slate-800">{{ item.state_label }}</p><p v-if="item.meeting_requested" class="mt-1 text-xs font-bold text-amber-700"><i class="fa-solid fa-calendar-check mr-1" aria-hidden="true"></i>Meeting decision needed</p><p v-else-if="item.milestone_progress.total" class="mt-1 text-xs text-slate-500">{{ item.milestone_progress.complete }} of {{ item.milestone_progress.total }} milestones</p></td>
-                    <td class="px-4 py-3.5"><p class="text-sm font-semibold text-slate-700">{{ item.assigned_to || 'Unassigned' }}</p><p :class="['mt-0.5 text-xs font-bold', item.action_overdue ? 'text-rose-700' : priorityClass(item.priority)]">{{ item.action_due_label || `${labelFromKey(item.priority)} priority` }}</p></td>
+                <tbody class="divide-y divide-slate-200 bg-white"><tr v-for="item in items" :key="item.id" class="align-middle hover:bg-slate-50/70">
+                    <td class="px-5 py-3.5"><p class="billing-text text-sm font-bold text-slate-950">{{ item.plan_name }}</p><p class="mt-0.5 billing-text text-xs text-slate-500">{{ item.reference_number }} · {{ money(item.amount, item.currency) }}</p><p v-if="item.meeting_requested" class="mt-0.5 text-xs font-semibold text-amber-800"><i class="fa-solid fa-calendar-check mr-1" aria-hidden="true"></i>Meeting decision needed</p></td>
+                    <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0 billing-text text-sm font-semibold text-slate-800">{{ item.provider }}</span></div></td>
+                    <td class="px-4 py-3.5"><span :class="['inline-flex px-2 py-1 text-xs font-bold', stateClass(item.state)]">{{ item.state_label }}</span></td>
+                    <td class="px-4 py-3.5"><p class="billing-text text-sm font-semibold text-slate-700">{{ item.assigned_to || 'Unassigned' }}</p><p v-if="assignmentHint(item)" :class="['mt-0.5 text-xs font-semibold', item.action_overdue ? 'text-rose-700' : ['urgent', 'high'].includes(item.priority) ? 'text-amber-800' : 'text-slate-600']">{{ assignmentHint(item) }}</p></td>
                     <td class="px-4 py-3.5 text-sm text-slate-600">{{ item.paid_at }}</td>
                     <td class="px-5 py-3.5 text-right"><a :href="queueState.link(item.action_url)" class="staff-row-action h-10 w-10" :aria-label="`Open ${item.plan_name}`" title="Open request"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                 </tr></tbody>

@@ -9,6 +9,8 @@ use App\Models\RecipientMonitoringCycle;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Queries\Provider\BenefitReleaseWorkspaceQueues;
+use App\Queries\Provider\Dashboards\MonitoringOfficerDashboardQuery;
 use App\Support\CoverImageCatalog;
 use App\Support\RecipientAgreement;
 use Carbon\CarbonImmutable;
@@ -16,6 +18,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -603,12 +606,7 @@ trait HandlesProviderRoleWorkspaceData
             abort_unless($programs->contains('id', (int) $validated['program_id']), 403);
         }
 
-        $recipientBase = $this->providerApplicationsQuery($officer)
-            ->where(function (Builder $query): void {
-                $query
-                    ->where('final_outcome', 'selected')
-                    ->orWhereIn('status', [...self::AWARD_SLOT_STATUSES, 'benefits_terminated']);
-            });
+        $recipientBase = $this->recipientOfficerApplications($officer);
 
         if (! empty($validated['program_id'])) {
             $recipientBase->where('scholarship_id', (int) $validated['program_id']);
@@ -699,6 +697,13 @@ trait HandlesProviderRoleWorkspaceData
         ]);
     }
 
+    public function monitoringOfficerDashboardData(Request $request, MonitoringOfficerDashboardQuery $query): JsonResponse
+    {
+        $officer = $request->user();
+
+        return response()->json($query->get($officer, $this->providerMonitoringDashboardItems($officer)));
+    }
+
     public function monitoringOfficerWorkspaceData(Request $request): JsonResponse
     {
         $officer = $request->user();
@@ -726,32 +731,10 @@ trait HandlesProviderRoleWorkspaceData
             $programs = $programs->where('id', (int) $validated['program_id'])->values();
         }
 
-        $cycles = RecipientMonitoringCycle::query()
-            ->whereIn('scholarship_id', $programs->pluck('id'))
-            ->with([
-                'scholarship',
-                'creator',
-                'requirements',
-                'submissions.requirement',
-                'submissions.reviewer',
-                'submissions.reviews.reviewer',
-                'adjustmentRequests.decider',
-                'interventions.creator',
-            ])
-            ->orderBy('due_at')
-            ->orderBy('id')
-            ->get();
         $recipientApplications = $programs->mapWithKeys(fn (Scholarship $program): array => [
             $program->id => $this->selectedRecipientApplications($program),
         ]);
-        $items = $cycles->map(function (RecipientMonitoringCycle $cycle) use ($recipientApplications): array {
-            $payload = $this->recipientMonitoringCyclePayload(
-                $cycle,
-                $recipientApplications->get($cycle->scholarship_id, new EloquentCollection),
-            );
-
-            return $this->monitoringOfficerWorkspaceItem($cycle, $payload);
-        });
+        $items = $this->monitoringOfficerWorkspaceItems($programs->pluck('id'), $recipientApplications);
         $summary = [
             'review' => $items->where('work_state', 'review')->count(),
             'followup' => $items->where('work_state', 'followup')->count(),
@@ -879,19 +862,7 @@ trait HandlesProviderRoleWorkspaceData
         $programIds = ! empty($validated['program_id'])
             ? collect([(int) $validated['program_id']])
             : $programs->pluck('id');
-        $releases = RecipientBenefitRelease::query()
-            ->whereIn('scholarship_id', $programIds)
-            ->with([
-                'scholarship',
-                'creator',
-                'records.applicant.studentProfile',
-                'records.recorder',
-                'records.receiptResponse.resolver',
-            ])
-            ->orderBy('release_at')
-            ->orderBy('id')
-            ->get();
-        $items = $releases->map(fn (RecipientBenefitRelease $release): array => $this->benefitReleaseOfficerWorkspaceItem($release));
+        $items = $this->benefitReleaseOfficerWorkspaceItems($programIds);
         $summary = [
             'issues' => $items->where('work_state', 'issues')->count(),
             'record' => $items->where('work_state', 'record')->count(),
@@ -1670,6 +1641,14 @@ trait HandlesProviderRoleWorkspaceData
         ];
     }
 
+    private function recipientOfficerApplications(User $officer): Builder
+    {
+        return $this->providerApplicationsQuery($officer)
+            ->where(fn (Builder $query) => $query
+                ->where('final_outcome', 'selected')
+                ->orWhereIn('status', [...self::AWARD_SLOT_STATUSES, 'benefits_terminated']));
+    }
+
     private function applyRecipientOfficerQueueFilter(Builder $query, string $queue): void
     {
         $closed = static fn (Builder $query) => $query
@@ -1785,6 +1764,43 @@ trait HandlesProviderRoleWorkspaceData
         ];
     }
 
+    private function providerMonitoringDashboardItems(User $actor): Collection
+    {
+        $programs = $this->providerScholarshipsQuery($actor)->whereHas('monitoringCycles')->get();
+        $recipients = $programs->mapWithKeys(fn (Scholarship $program): array => [
+            $program->id => $this->selectedRecipientApplications($program),
+        ]);
+
+        return $this->monitoringOfficerWorkspaceItems($programs->pluck('id'), $recipients, persistCases: false);
+    }
+
+    private function monitoringOfficerWorkspaceItems(
+        Collection $programIds,
+        Collection $recipientApplications,
+        bool $persistCases = true,
+    ): Collection {
+        return RecipientMonitoringCycle::query()
+            ->whereIn('scholarship_id', $programIds)
+            ->with([
+                'scholarship', 'creator', 'requirements', 'submissions.requirement',
+                'submissions.reviewer', 'submissions.reviews.reviewer',
+                'adjustmentRequests.decider', 'interventions.creator',
+            ])
+            ->when(! $persistCases, fn (Builder $query) => $query->with('cases'))
+            ->orderBy('due_at')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (RecipientMonitoringCycle $cycle): array => $this->monitoringOfficerWorkspaceItem(
+                $cycle,
+                $this->recipientMonitoringCyclePayload(
+                    $cycle,
+                    $recipientApplications->get($cycle->scholarship_id, new EloquentCollection),
+                    includeCaseContext: $persistCases,
+                    persistCases: $persistCases,
+                ),
+            ));
+    }
+
     private function monitoringOfficerWorkspaceItem(
         RecipientMonitoringCycle $cycle,
         array $payload,
@@ -1804,6 +1820,7 @@ trait HandlesProviderRoleWorkspaceData
             ->only([
                 'accept_agreement',
                 'submit_requirements',
+                'attend_handoff',
                 'replace_record',
                 'complete_follow_up',
                 'request_adjustment',
@@ -1822,13 +1839,14 @@ trait HandlesProviderRoleWorkspaceData
         $pendingReviews = (int) ($payload['pending_review_count'] ?? 0);
         $actionNeeded = (int) ($payload['action_needed_count'] ?? 0);
         $openInterventions = (int) ($payload['open_intervention_count'] ?? 0);
-        [$state, $label, $detail, $actionLabel, $priority] = match (true) {
+        [$state, $label, $detail, $actionLabel, $priority, $workloadLabel] = match (true) {
             $pendingAdjustments > 0 => [
                 'review',
                 'Request review',
                 $pendingAdjustments.' extension or exception request'.($pendingAdjustments === 1 ? '' : 's').' waiting',
                 'Review requests',
                 0,
+                $pendingAdjustments.' '.Str::plural('request', $pendingAdjustments),
             ],
             $reviewRequirements > 0 => [
                 'review',
@@ -1836,6 +1854,7 @@ trait HandlesProviderRoleWorkspaceData
                 $reviewRequirements.' recipient record'.($reviewRequirements === 1 ? '' : 's').' waiting for review',
                 'Review items',
                 1,
+                $reviewRequirements.' to review',
             ],
             $providerRecords > 0 => [
                 'review',
@@ -1843,6 +1862,7 @@ trait HandlesProviderRoleWorkspaceData
                 $providerRecords.' recipient'.($providerRecords === 1 ? '' : 's').' need a provider-confirmed result',
                 'Record results',
                 1,
+                $providerRecords.' to record',
             ],
             $closeCases > 0 => [
                 'review',
@@ -1850,6 +1870,7 @@ trait HandlesProviderRoleWorkspaceData
                 $closeCases.' completed recipient check-in'.($closeCases === 1 ? '' : 's').' need an outcome',
                 'Close check-ins',
                 2,
+                $closeCases.' to close',
             ],
             $overdueCases > 0 => [
                 'followup',
@@ -1857,6 +1878,7 @@ trait HandlesProviderRoleWorkspaceData
                 $overdueCases.' overdue recipient check-in'.($overdueCases === 1 ? '' : 's').' need resolution',
                 'Resolve overdue work',
                 2,
+                $overdueCases.' overdue',
             ],
             $followUpCaseCount > 0 || $managedFollowUps > 0 => [
                 'followup',
@@ -1864,6 +1886,7 @@ trait HandlesProviderRoleWorkspaceData
                 $followUpCaseCount.' recipient follow-up'.($followUpCaseCount === 1 ? '' : 's').' active',
                 'Open follow-ups',
                 2,
+                ($followUpCaseCount ?: $managedFollowUps).' active',
             ],
             $actionNeeded > 0 => [
                 'followup',
@@ -1871,15 +1894,17 @@ trait HandlesProviderRoleWorkspaceData
                 $actionNeeded.' requirement'.($actionNeeded === 1 ? '' : 's').' need correction or intervention',
                 'Review recipients',
                 3,
+                $actionNeeded.' to correct',
             ],
             $completedCaseCount < $recipientCount => [
                 'awaiting',
-                $dueStatuses->get('grace_period', 0) > 0 ? 'Request window open' : 'Awaiting recipient',
+                $dueStatuses->get('grace_period', 0) > 0 ? 'Request window open' : ($cycle->isInPerson() ? 'Handoff scheduled' : 'Awaiting recipient'),
                 $recipientActionCount > 0
                     ? $recipientActionCount.' recipient'.($recipientActionCount === 1 ? '' : 's').' have the next step'
                     : 'No provider decision is required yet',
                 'Track check-in',
                 4,
+                $recipientActionCount > 0 ? $recipientActionCount.' awaiting action' : 'No action due',
             ],
             default => [
                 'history',
@@ -1887,6 +1912,7 @@ trait HandlesProviderRoleWorkspaceData
                 ((int) ($payload['reviewed_count'] ?? 0)).' item'.((int) ($payload['reviewed_count'] ?? 0) === 1 ? '' : 's').' reviewed',
                 'View history',
                 5,
+                $completedCaseCount.' closed',
             ],
         };
         $dueAt = $cycle->due_at?->startOfDay();
@@ -1917,11 +1943,13 @@ trait HandlesProviderRoleWorkspaceData
             ],
             'work_state' => $state,
             'work_label' => $label,
+            'workload_label' => $workloadLabel,
             'detail' => $detail,
             'priority' => $priority,
             'cycle_status' => $payload['status'] ?? $cycle->status,
             'due_at' => $cycle->due_at?->format('Y-m-d'),
             'due_label' => $cycle->due_at?->format('M d, Y'),
+            'handoff' => $cycle->handoffDetails(),
             'days_until_due' => $daysUntilDue,
             'timing_state' => $timingState,
             'recipient_count' => $recipientCount,
@@ -1946,39 +1974,42 @@ trait HandlesProviderRoleWorkspaceData
         ];
     }
 
-    private function benefitReleaseOfficerWorkspaceItem(RecipientBenefitRelease $release): array
+    private function benefitReleaseOfficerWorkspaceItems(Collection $programIds): Collection
     {
-        $payload = $this->recipientBenefitReleasePayload($release);
-        $openIssues = (int) ($payload['open_issue_count'] ?? 0);
-        $pending = (int) ($payload['pending_count'] ?? 0);
+        $queues = app(BenefitReleaseWorkspaceQueues::class);
+
+        return $queues->releases($programIds)
+            ->get()
+            ->map(fn (RecipientBenefitRelease $release): array => $this->benefitReleaseOfficerWorkspaceItem($release, $queues->classify($release)));
+    }
+
+    private function benefitReleaseOfficerWorkspaceItem(RecipientBenefitRelease $release, array $work): array
+    {
+        ['state' => $state, 'issues' => $openIssues, 'pending' => $pending] = $work;
+        $released = $release->records->where('status', 'released')->count();
         $releaseAt = $release->release_at ? CarbonImmutable::parse($release->release_at) : null;
-        $isDue = $releaseAt?->isPast() ?? false;
-        [$state, $label, $detail, $actionLabel, $priority] = match (true) {
-            $openIssues > 0 => [
-                'issues',
+        [$label, $detail, $actionLabel, $priority] = match ($state) {
+            'issues' => [
                 'Recipient issue',
                 $openIssues.' reported release issue'.($openIssues === 1 ? '' : 's').' waiting for resolution',
                 'Resolve issues',
                 0,
             ],
-            $pending > 0 && $isDue => [
-                'record',
+            'record' => [
                 'Record distribution',
                 $pending.' recipient result'.($pending === 1 ? '' : 's').' still need proof or a final status',
                 'Record results',
                 1,
             ],
-            $pending > 0 => [
-                'upcoming',
+            'upcoming' => [
                 'Scheduled',
                 $pending.' recipient'.($pending === 1 ? '' : 's').' scheduled for this distribution',
                 'Open schedule',
                 2,
             ],
             default => [
-                'history',
                 'Distribution closed',
-                ((int) ($payload['released_count'] ?? 0)).' release'.((int) ($payload['released_count'] ?? 0) === 1 ? '' : 's').' recorded',
+                $released.' '.Str::plural('release', $released).' recorded',
                 'View record',
                 3,
             ],
@@ -2015,18 +2046,19 @@ trait HandlesProviderRoleWorkspaceData
             'release_label' => $releaseAt?->format('M d, Y h:i A'),
             'days_until_release' => $daysUntilRelease,
             'timing_state' => $timingState,
-            'amount_label' => $payload['amount_label'] ?? null,
-            'release_method_label' => $payload['release_method_label'] ?? 'Release arrangement',
+            'amount_label' => $release->amount !== null ? 'PHP '.number_format((float) $release->amount, 2) : null,
+            'release_method_label' => $this->benefitReleaseMethodLabel($release),
             'location' => $release->location,
             'latitude' => $release->latitude,
             'longitude' => $release->longitude,
             'requires_original_verification' => $release->requires_original_verification,
             'counts' => [
-                'recipients' => (int) ($payload['recipient_count'] ?? 0),
+                'recipients' => $release->records->count(),
                 'pending' => $pending,
-                'released' => (int) ($payload['released_count'] ?? 0),
-                'exceptions' => (int) ($payload['exception_count'] ?? 0),
-                'confirmed' => (int) ($payload['confirmed_count'] ?? 0),
+                'released' => $released,
+                'exceptions' => $release->records->whereIn('status', ['missed', 'withheld'])->count(),
+                'confirmed' => $release->records->filter(fn ($record): bool => $record->receiptResponse?->status === 'confirmed'
+                    || $record->receiptResponse?->recipient_resolution_confirmed_at !== null)->count(),
                 'open_issues' => $openIssues,
                 'proof' => $release->records->whereNotNull('receipt_path')->count(),
             ],

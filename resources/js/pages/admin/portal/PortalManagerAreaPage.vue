@@ -90,7 +90,7 @@ function money(amount, currency = 'PHP') {
 
 function reviewNames(group) {
     const values = (group.items ?? []).map((item) => item.name || item.title || item.recipient || item.program || item.release).filter(Boolean);
-    return values.length ? values.join(' · ') : Number(group.count) > 0 ? 'Waiting records are not available in this preview.' : 'No waiting records';
+    return values.length ? values.join(' · ') : Number(group.count) > 0 ? 'Preview unavailable' : 'None';
 }
 
 const loadArea = () => resource.load();
@@ -128,7 +128,7 @@ onMounted(loadArea);
         <AdminTableFrame v-else-if="area === 'reviews'" title="Verification queues" description="Showing up to 3 examples per queue; counts include all waiting records." icon="fa-solid fa-clipboard-check" class="mt-4">
             <table v-if="reviewItems.length" class="portal-data-table portal-oversight-table"><colgroup><col style="width: 27%"><col style="width: 13%"><col style="width: 60%"></colgroup>
                 <thead><tr><th class="px-5">Queue</th><th>Waiting</th><th class="px-5">Recent examples</th></tr></thead>
-                <tbody><tr v-for="group in reviewItems" :key="group.key"><td class="px-5"><p class="font-bold text-slate-950">{{ group.label }}</p><p class="mt-1 text-xs text-slate-500">Managed by Review Officer</p></td><td><span :class="['inline-flex min-w-10 justify-center px-2.5 py-1 text-xs font-black', group.count ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600']">{{ group.count }}</span></td><td class="px-5 text-sm text-slate-600">{{ reviewNames(group) }}</td></tr></tbody>
+                <tbody><tr v-for="group in reviewItems" :key="group.key" class="align-middle"><td class="px-5 font-bold text-slate-950">{{ group.label }}</td><td><span :class="['inline-flex min-w-10 justify-center px-2.5 py-1 text-xs font-black', group.count ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600']">{{ group.count }}</span></td><td class="px-5 text-sm text-slate-600">{{ reviewNames(group) }}</td></tr></tbody>
             </table>
             <AdminEmptyState v-else title="No review queues found" description="There is no review workload to display." icon="fa-solid fa-clipboard-check" />
         </AdminTableFrame>
@@ -162,7 +162,7 @@ onMounted(loadArea);
             <AdminTableFrame title="Recent activity" :description="activityDescription" icon="fa-solid fa-clock-rotate-left" class="mt-4">
                     <table v-if="payload.activity?.items?.length" class="portal-data-table portal-oversight-table"><colgroup><col style="width: 39%"><col style="width: 26%"><col style="width: 16%"><col style="width: 19%"></colgroup>
                     <thead><tr><th class="px-5">Event</th><th>Actor</th><th>Category</th><th class="px-5">Recorded</th></tr></thead>
-                    <tbody><tr v-for="item in payload.activity.items" :key="item.id"><td class="px-5"><p class="break-words font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td><td><p class="text-sm font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ labelFromKey(item.actor_role) }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ labelFromKey(item.category) }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
+                    <tbody><tr v-for="item in payload.activity.items" :key="item.id" class="align-middle"><td class="px-5 font-bold text-slate-950">{{ item.description || item.action_label }}</td><td><p class="text-sm font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ labelFromKey(item.actor_role) }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ labelFromKey(item.category) }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
                 </table>
                 <AdminEmptyState v-else title="No recent activity" description="No audit events were recorded in this period." icon="fa-solid fa-clock-rotate-left" />
             </AdminTableFrame>

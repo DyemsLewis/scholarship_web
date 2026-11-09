@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import LocationPinField from '../../../components/LocationPinField.vue';
+import { providerProgramQueueLink } from '../../../support/staffQueueState.js';
 
 const programs = ref([]);
 const candidates = ref([]);
@@ -126,7 +127,7 @@ onBeforeUnmount(() => {
 
         <section class="student-page" aria-labelledby="schedule-release-title">
             <div class="provider-monitoring-workspace mx-auto max-w-[94rem]">
-                <a href="/provider/workspaces/releases/upcoming" class="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to releases</a>
+                <a :href="providerProgramQueueLink('/provider/workspaces/releases/upcoming', selectedProgram)" class="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to releases</a>
                 <div v-if="errorMessage" class="mb-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
 
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">

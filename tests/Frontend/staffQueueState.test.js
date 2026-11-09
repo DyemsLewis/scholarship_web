@@ -4,7 +4,8 @@ import test from 'node:test';
 import { parse } from '@vue/compiler-sfc';
 import { computed, ref } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
-import { createStaffQueueState, staffQueueLink, staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
+import { createStaffQueueState, providerProgramQueueLink, staffQueueLink, staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
+import { normalizeWorkspaceDashboard } from '../../resources/js/support/workspaceDashboard.js';
 
 const origin = 'https://portal.example.test';
 function browser(pathname, { search = '', id = 17, items = new Map(), axios = {} } = {}) {
@@ -30,6 +31,39 @@ test('queue state is scoped to the signed-in account and the exact queue in the 
     assert.equal(explicit.get('search'), null);
     assert.equal(explicit.get('sort'), 'deadline');
     assert.equal(explicit.page, 1);
+});
+
+test('provider dashboard queue totals open unfiltered page one, without changing intentional links', () => {
+    const pathname = '/provider/workspaces/reviews/all';
+    const dashboard = normalizeWorkspaceDashboard({
+        metrics: [{ label: 'Team queue', url: pathname }],
+        sections: [{ action: { label: 'Open current program', url: `${pathname}?program_id=4` } }],
+        primary_action: { label: 'Open record', url: '/provider/applications/7' },
+    });
+    const url = new URL(dashboard.metrics[0].url, origin);
+    const items = new Map([['scholarship:staff-queue:v1:17:'+pathname, JSON.stringify({ page: 3, search: 'old filter' })]]);
+    const state = createStaffQueueState(browser(url.pathname, { search: url.search, items }), ['search', 'program_id']);
+
+    assert.equal(url.search, '?page=1');
+    assert.equal(state.page, 1);
+    assert.equal(state.get('search'), null);
+    assert.equal(dashboard.sections[0].action.url, `${pathname}?program_id=4`);
+    assert.equal(dashboard.primary_action.url, '/provider/applications/7');
+});
+
+test('switching provider queue tabs keeps only the current program and resets pagination', () => {
+    const pathname = '/provider/workspaces/decisions/waitlist';
+    const items = new Map([[`scholarship:staff-queue:v1:17:${pathname}`, JSON.stringify({ page: 3, search: 'old search', program_id: '9' })]]);
+    const url = new URL(providerProgramQueueLink(pathname, '42'), origin);
+    const state = createStaffQueueState(browser(pathname, { search: url.search, items }), ['search', 'program_id']);
+    assert.equal(state.get('program_id'), '42');
+    assert.equal(state.get('search'), null);
+    assert.equal(state.page, 1);
+    assert.equal(providerProgramQueueLink(pathname, ''), `${pathname}?page=1`);
+
+    const record = new URL(staffQueueLink('/provider/programs/42', url.pathname + url.search), origin);
+    assert.equal(staffQueueReturn(browser(record.pathname, { search: record.search }), 'programWorkspaces'), url.pathname + url.search);
+    assert.equal(staffQueueReturn(browser(record.pathname, { search: '?return_to=//external.example.test' }), 'programWorkspaces'), null);
 });
 
 test('unavailable or corrupt session storage does not block an explicit queue link', async () => {

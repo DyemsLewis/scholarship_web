@@ -73,7 +73,7 @@ const supportPeriod = computed(() => {
                     <div class="min-w-0 flex-1">
                         <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Next check-in</p>
                         <h3 class="mt-1 text-sm font-bold text-slate-950">{{ content.next_check_in.title }}</h3>
-                        <p class="mt-1 text-xs text-slate-500">{{ content.next_check_in.period_label }}<span v-if="content.next_check_in.due_label"> · Due {{ content.next_check_in.due_label }}</span></p>
+                        <p class="mt-1 text-xs text-slate-500">{{ content.next_check_in.period_label }}<span v-if="content.next_check_in.handoff"> · {{ content.next_check_in.handoff.scheduled_label }}</span><span v-else-if="content.next_check_in.due_label"> · Due {{ content.next_check_in.due_label }}</span></p>
                     </div>
                     <a :href="content.next_check_in.href || checkInsHref" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
                         View check-in

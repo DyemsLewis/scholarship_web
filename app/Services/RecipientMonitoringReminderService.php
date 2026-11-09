@@ -110,7 +110,8 @@ final class RecipientMonitoringReminderService
         User $applicant,
         array &$counts,
     ): ?string {
-        if (! in_array($case->due_status, ['open', 'extended'], true) || ! $case->effective_due_at) {
+        $appointment = $case->next_action === 'attend_handoff' ? $case->cycle->handoffDetails() : null;
+        if ((! $appointment && ! in_array($case->due_status, ['open', 'extended'], true)) || ! $case->effective_due_at) {
             return null;
         }
 
@@ -131,11 +132,15 @@ final class RecipientMonitoringReminderService
         $dueLabel = $case->effective_due_at->format('M d, Y');
         $key = $this->key($case, "applicant:due:{$band}:{$case->effective_due_at->format('Y-m-d')}");
         $title = match ($band) {
-            'today' => 'Monitoring check-in due today',
-            'soon' => 'Monitoring check-in due soon',
-            default => 'Upcoming monitoring deadline',
+            'today' => 'Check-in due today',
+            'soon' => 'Check-in due soon',
+            default => 'Upcoming check-in deadline',
         };
         $message = "{$case->cycle->title} for {$program->title} is due {$dueLabel}. Open the check-in to complete your next step.";
+        if ($appointment) {
+            $title = $daysRemaining === 0 ? 'In-person check-in today' : 'Upcoming in-person check-in';
+            $message = "Bring your documents for {$program->title} on {$appointment['scheduled_label']} at {$appointment['location']}.";
+        }
         $counts['applicant'] += $this->createNotification(
             $applicant->id,
             'monitoring_due_reminder',
@@ -167,7 +172,7 @@ final class RecipientMonitoringReminderService
         $counts['applicant'] += $this->createNotification(
             $applicant->id,
             'monitoring_grace_reminder',
-            $phase === 'closing' ? 'Monitoring request window closes soon' : 'Monitoring request window open',
+            $phase === 'closing' ? 'Check-in request window closes soon' : 'Check-in request window open',
             "If you cannot complete {$case->cycle->title}, request an extension or exception by {$graceEndsAt->format('M d, Y')}.",
             route('dashboard.monitoring.show', $case->application, false),
             $key,
@@ -247,10 +252,10 @@ final class RecipientMonitoringReminderService
         $counts['applicant'] += $this->createNotification(
             $applicant->id,
             'monitoring_window_closed',
-            $case->next_action_role === 'applicant' ? 'Monitoring follow-up is overdue' : 'Monitoring request window closed',
+            $case->next_action_role === 'applicant' ? 'Check-in follow-up is overdue' : 'Check-in request window closed',
             $case->next_action_role === 'applicant'
                 ? "{$case->cycle->title} still needs your follow-up. Open the check-in for the current instructions."
-                : "The request window for {$case->cycle->title} has ended. The provider will record the monitoring outcome.",
+                : "The request window for {$case->cycle->title} has ended. The provider will record the check-in outcome.",
             route('dashboard.monitoring.show', $case->application, false),
             $applicantKey,
         );

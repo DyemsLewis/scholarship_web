@@ -11,6 +11,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Support\RecipientAgreement;
 use App\Support\ScholarshipSelectionPlan;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -328,6 +329,7 @@ class ApplicationWorkflowService
         User $actor,
         ?string $notes = null,
         ?string $decisionReason = null,
+        array $confirmed = [],
     ): ScholarshipApplication {
         if (! in_array($outcome, self::FINAL_OUTCOMES, true)) {
             throw ValidationException::withMessages([
@@ -337,7 +339,7 @@ class ApplicationWorkflowService
 
         $application = $this->initialize($application);
 
-        return DB::transaction(function () use ($application, $outcome, $actor, $notes, $decisionReason): ScholarshipApplication {
+        return DB::transaction(function () use ($application, $outcome, $actor, $notes, $decisionReason, $confirmed): ScholarshipApplication {
             // Lock the program first so concurrent final decisions cannot overfill its award slots
             // or receive the same waitlist position.
             $scholarship = Scholarship::query()
@@ -348,6 +350,12 @@ class ApplicationWorkflowService
                 ->with(['scholarship', 'stageProgresses'])
                 ->lockForUpdate()
                 ->findOrFail($application->id);
+
+            if (array_key_exists('expected_outcome', $confirmed) && $confirmed['expected_outcome'] !== $locked->final_outcome) {
+                throw ValidationException::withMessages([
+                    'outcome' => 'The outcome changed while this record was open. Reload it and review the current outcome before continuing.',
+                ]);
+            }
 
             if (in_array($locked->application_state, ['closed', 'withdrawn'], true)) {
                 throw ValidationException::withMessages([
@@ -405,6 +413,9 @@ class ApplicationWorkflowService
                     ->where('status', 'waitlisted')
                     ->max('waitlist_position') + 1))
                 : null;
+            if ($outcome === 'selected' && array_key_exists('awarded_amount', $confirmed)) {
+                $locked->awarded_amount = $confirmed['awarded_amount'];
+            }
             $agreementSnapshot = $outcome === 'selected'
                 ? RecipientAgreement::snapshot($scholarship, $locked)
                 : null;
@@ -425,7 +436,7 @@ class ApplicationWorkflowService
                 'workflow_stage' => $outcome === 'waitlisted' ? 'decision' : 'complete',
                 'final_outcome' => $outcome,
                 'decision_reason' => $reason,
-                'outcome_notes' => $notes ?: $locked->outcome_notes,
+                'outcome_notes' => $notes,
                 'outcome_at' => $outcome === 'waitlisted' ? null : $now,
                 'waitlisted_at' => $outcome === 'waitlisted' ? $now : null,
                 'waitlist_position' => $waitlistPosition,
@@ -698,10 +709,13 @@ class ApplicationWorkflowService
                 ->pluck('stage_key');
 
             if ($laterStages->isNotEmpty()
-                && $application->schedules()
+                && ($application->schedules()
                     ->whereIn('type', $laterStages->all())
                     ->where('status', 'completed')
-                    ->exists()) {
+                    ->exists() || $application->stageAssignments()
+                    ->whereIn('status', ['assigned', 'acknowledged'])
+                    ->whereHas('session', fn (Builder $query) => $query->whereIn('stage_key', $laterStages)->where('status', 'completed'))
+                    ->exists())) {
                 $blockedReason = 'A later selection activity is already complete, so this earlier result cannot be reopened.';
             }
         }
@@ -712,6 +726,10 @@ class ApplicationWorkflowService
             'stage_label' => $stage ? $this->stageLabel($stage) : null,
             'result' => $result,
             'result_label' => $result ? ucfirst(str_replace('_', ' ', $result)) : null,
+            'decision_reference' => $latestDecision ? hash('sha256', implode(':', [
+                $application->id, $latestDecision->id, $stage, $result,
+                $latestDecision->getRawOriginal('decided_at'), $application->statusHistories()->max('id'),
+            ])) : null,
             'required_permission' => $requiredPermission,
             'blocked_reason' => $blockedReason,
         ];
@@ -721,15 +739,23 @@ class ApplicationWorkflowService
         ScholarshipApplication $application,
         User $actor,
         string $reason,
+        ?string $expectedDecision = null,
     ): ScholarshipApplication {
         $application = $this->initialize($application);
 
-        return DB::transaction(function () use ($application, $actor, $reason): ScholarshipApplication {
+        return DB::transaction(function () use ($application, $actor, $reason, $expectedDecision): ScholarshipApplication {
             $locked = ScholarshipApplication::query()
                 ->with(['scholarship', 'stageProgresses'])
                 ->lockForUpdate()
                 ->findOrFail($application->id);
             $availability = $this->reopenDecisionAvailability($locked);
+
+            if ($expectedDecision !== null && $expectedDecision !== $availability['decision_reference']) {
+                throw ValidationException::withMessages([
+                    'reason' => 'The latest result changed. Reload this record before reopening a decision.',
+                ]);
+            }
+            abort_unless($availability['required_permission'] && $actor->hasPortalPermission($availability['required_permission']), 403);
 
             if (! $availability['available']) {
                 throw ValidationException::withMessages([
@@ -767,11 +793,19 @@ class ApplicationWorkflowService
                         'cancelled_at' => $now,
                         'updated_by' => $actor->id,
                     ]);
+                $locked->stageAssignments()
+                    ->whereIn('status', ['assigned', 'acknowledged'])
+                    ->whereHas('session', fn (Builder $query) => $query->whereIn('stage_key', $laterStages)
+                        ->whereIn('status', ['draft', 'scheduled', 'ongoing']))
+                    ->update(['status' => 'cancelled']);
             }
 
             $progress->update([
                 'status' => 'current',
-                'operational_status' => $this->initialOperationalStatusForStage($stage),
+                'operational_status' => ScholarshipSelectionPlan::isSchedulable($stage)
+                    && app(ApplicationStageResultGate::class)->activityComplete($locked, $stage)
+                    ? 'ready_for_review'
+                    : $this->initialOperationalStatusForStage($stage),
                 'result' => null,
                 'notes' => null,
                 'completed_at' => null,

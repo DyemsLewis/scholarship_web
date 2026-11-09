@@ -16,6 +16,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Services\ApplicationWorkflowService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -36,33 +37,27 @@ class RecipientMonitoringChecklistTest extends TestCase
         config()->set('services.academic_ocr.max_file_size_kb', 1024);
     }
 
-    public function test_check_in_cannot_open_before_its_monitoring_plan_even_when_the_due_date_is_valid(): void
+    public function test_check_in_requires_an_appointment_and_a_venue(): void
+    {
+        [$provider, , $scholarship] = $this->selectedRecipientWithPlan();
+        $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+            'title' => 'Future monitoring period',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ])->assertUnprocessable()->assertJsonValidationErrors(['handoff_at', 'handoff_location']);
+        $this->assertDatabaseCount('recipient_monitoring_cycles', 0);
+    }
+
+    public function test_check_in_appointment_must_be_future_and_within_the_monitoring_plan(): void
     {
         [$provider, , $scholarship, , $plan] = $this->selectedRecipientWithPlan();
         $plan->update(['starts_on' => now()->addWeek()->toDateString()]);
-        foreach ([now()->toDateString(), null] as $opensAt) {
+        foreach ([now()->subHour(), now()->addDay(), $plan->ends_on->copy()->addDay()] as $appointment) {
             $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'Future monitoring period', 'opens_at' => $opensAt,
-                'due_at' => now()->addMonth()->toDateString(),
-            ])->assertUnprocessable()->assertJsonValidationErrors('opens_at');
-        }
-        $this->assertDatabaseCount('recipient_monitoring_cycles', 0);
-        $this->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-            'title' => 'Future monitoring period', 'opens_at' => $plan->fresh()->starts_on->toDateString(),
-            'due_at' => now()->addMonth()->toDateString(),
-        ])->assertCreated();
-    }
-
-    public function test_check_in_due_date_cannot_precede_opening_or_exceed_the_plan_end(): void
-    {
-        [$provider, , $scholarship, , $plan] = $this->selectedRecipientWithPlan();
-        foreach ([
-            ['opens_at' => now()->addMonth()->toDateString(), 'due_at' => now()->addWeek()->toDateString()],
-            ['opens_at' => now()->toDateString(), 'due_at' => $plan->ends_on->addDay()->toDateString()],
-        ] as $dates) {
-            $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'Invalid monitoring period', ...$dates,
-            ])->assertUnprocessable()->assertJsonValidationErrors('due_at');
+                'title' => 'Invalid appointment',
+                'handoff_at' => $appointment->format('Y-m-d\TH:i'),
+                'handoff_location' => 'Learning Center, Room 2',
+            ])->assertUnprocessable()->assertJsonValidationErrors('handoff_at');
         }
         $this->assertDatabaseCount('recipient_monitoring_cycles', 0);
     }
@@ -70,15 +65,16 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_provider_publishes_active_plan_as_a_versioned_recipient_checklist(): void
     {
         [$provider, $applicant, $scholarship, $application, $plan] = $this->selectedRecipientWithPlan();
+        $appointment = now()->addDay()->setTime(9, 30);
 
         $response = $this->actingAs($provider)
             ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
                 'title' => 'First semester check-in',
                 'period_label' => 'First semester',
                 'school_year' => '2026-2027',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
-                'instructions' => 'Upload clear and current records.',
+                'handoff_at' => $appointment->format('Y-m-d\TH:i'),
+                'handoff_location' => 'Learning Center, Room 2',
+                'instructions' => 'Check in with the receptionist.',
             ])
             ->assertCreated()
             ->assertJsonPath('cycle.is_plan_check_in', true)
@@ -86,8 +82,11 @@ class RecipientMonitoringChecklistTest extends TestCase
             ->assertJsonPath('cycle.requirements.0.type', 'academic_progress')
             ->assertJsonPath('cycle.requirements.1.type', 'enrollment')
             ->assertJsonPath('cycle.requirements.2.type', 'program_participation')
-            ->assertJsonPath('cycle.item_expected_count', 2)
-            ->assertJsonPath('cycle.item_pending_count', 2);
+            ->assertJsonPath('cycle.handoff.location', 'Learning Center, Room 2')
+            ->assertJsonPath('cycle.handoff_started', false)
+            ->assertJsonPath('cycle.requirements.0.requires_file', false)
+            ->assertJsonPath('cycle.requirements.1.requires_original_verification', true)
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.key', 'attend_handoff');
 
         $cycleId = $response->json('cycle.id');
         $this->assertDatabaseHas('recipient_monitoring_cycles', [
@@ -107,23 +106,65 @@ class RecipientMonitoringChecklistTest extends TestCase
             ->getJson("/dashboard/applications/{$application->id}/data")
             ->assertOk()
             ->assertJsonPath('application.recipient_monitoring.check_ins.0.id', $cycleId)
-            ->assertJsonPath('application.recipient_monitoring.check_ins.0.required_count', 2)
-            ->assertJsonPath('application.recipient_monitoring.check_ins.0.pending_count', 2)
-            ->assertJsonPath('application.recipient_monitoring.check_ins.0.requirements.2.status', 'provider_recorded')
-            ->assertJsonPath('application.recipient_monitoring.pending_count', 2);
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.handoff.location', 'Learning Center, Room 2')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.pending_count', 0)
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.requirements.0.status', 'bring_document')
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.requirements.0.can_submit', false)
+            ->assertJsonPath('application.recipient_monitoring.check_ins.0.requirements.2.status', 'awaiting_provider');
+        $this->getJson("/dashboard/monitoring/{$application->id}/data?view=check-ins&record=check-in-{$cycleId}")
+            ->assertOk()
+            ->assertJsonPath('detail.content.selected.handoff.location', 'Learning Center, Room 2')
+            ->assertJsonPath('detail.content.selected.state', 'upcoming');
+
+        $requirementId = $response->json('cycle.requirements.0.id');
+        $requirementPath = "/dashboard/applications/{$application->id}/monitoring-requirements/{$requirementId}";
+        $legacyPath = "/dashboard/applications/{$application->id}/monitoring-cycles/{$cycleId}";
+        $recordPath = "/provider/monitoring-requirements/{$requirementId}/applications/{$application->id}/record";
+        $this->postJson($requirementPath.'/submission', [])->assertUnprocessable()->assertJsonValidationErrors('supporting_record');
+        $this->patchJson($requirementPath.'/manual-grade', ['grade' => 100])->assertUnprocessable()->assertJsonValidationErrors('supporting_record');
+        $this->postJson($legacyPath.'/grade-record', [])->assertUnprocessable()->assertJsonValidationErrors('grade_record');
+        $this->patchJson($legacyPath.'/manual-grade', ['grade' => 100])->assertUnprocessable()->assertJsonValidationErrors('grade_record');
+        $this->post($requirementPath.'/adjustment-request', [
+            'request_type' => 'exception', 'reason_category' => 'school_schedule',
+            'explanation' => 'My school schedule overlaps with the appointment.',
+            'supporting_record' => UploadedFile::fake()->create('grades.pdf', 20, 'application/pdf'),
+            'confirmation' => '1',
+        ], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('supporting_record');
+        $this->assertDatabaseCount('recipient_monitoring_submissions', 0);
+
+        $this->actingAs($provider)->postJson($recordPath, [
+            'decision' => 'met', 'verified_grade' => 92, 'document_checked' => true,
+        ])->assertUnprocessable();
+
+        $this->travelTo($appointment->copy()->addMinute());
+        $this->postJson($recordPath, ['decision' => 'met', 'verified_grade' => 92])
+            ->assertUnprocessable()->assertJsonValidationErrors('document_checked');
+        $this->postJson($recordPath, ['decision' => 'met', 'verified_grade' => 80, 'document_checked' => true])
+            ->assertUnprocessable()->assertJsonValidationErrors('verified_grade');
+        $this->postJson($recordPath, ['decision' => 'met', 'verified_grade' => 92, 'document_checked' => true])
+            ->assertCreated()
+            ->assertJsonPath('cycle.recipients.0.requirements.0.submission.grade_source', 'provider_verified');
+        $this->assertDatabaseHas('recipient_monitoring_submissions', [
+            'recipient_monitoring_cycle_requirement_id' => $requirementId,
+            'submission_source' => 'provider_record', 'path' => null, 'review_status' => 'met',
+        ]);
+        $submission = RecipientMonitoringSubmission::query()->firstOrFail();
+        $this->patchJson("/provider/monitoring-submissions/{$submission->id}/review", ['decision' => 'met'])
+            ->assertUnprocessable();
+        $this->actingAs($applicant)->patchJson($legacyPath.'/manual-grade', ['grade' => 100])
+            ->assertUnprocessable()->assertJsonValidationErrors('grade_record');
+        $this->travelBack();
     }
 
     public function test_recipient_uploads_each_checklist_item_independently_and_academic_item_uses_ocr(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $cycleId = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'period_label' => 'First semester',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
-            ])
-            ->assertCreated()
+        $cycleId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'period_label' => 'First semester',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ])
             ->json('cycle.id');
 
         $requirements = RecipientMonitoringCycleRequirement::query()
@@ -204,8 +245,8 @@ class RecipientMonitoringChecklistTest extends TestCase
         $cycleId = $this->actingAs($provider)
             ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
                 'title' => 'Locked checklist',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
+                'handoff_at' => now()->addMonth()->format('Y-m-d\TH:i'),
+                'handoff_location' => 'Learning Center, Room 2',
             ])
             ->assertCreated()
             ->json('cycle.id');
@@ -226,13 +267,11 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_provider_reviews_uploaded_items_and_recipient_can_replace_a_record_after_the_due_date(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $cycleId = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
-            ])
-            ->assertCreated()
+        $cycleId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ])
             ->json('cycle.id');
         $requirement = RecipientMonitoringCycleRequirement::query()
             ->where('recipient_monitoring_cycle_id', $cycleId)
@@ -287,13 +326,11 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_provider_records_non_file_requirements_with_an_audit_history(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $cycleId = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
-            ])
-            ->assertCreated()
+        $cycleId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ])
             ->json('cycle.id');
         $requirements = RecipientMonitoringCycleRequirement::query()
             ->where('recipient_monitoring_cycle_id', $cycleId)
@@ -341,13 +378,11 @@ class RecipientMonitoringChecklistTest extends TestCase
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
         $originalDue = now()->addDays(5);
         $approvedDue = now()->addDays(12);
-        $cycleId = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => $originalDue->toDateString(),
-            ])
-            ->assertCreated()
+        $cycleId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => $originalDue->toDateString(),
+        ])
             ->json('cycle.id');
         $requirement = RecipientMonitoringCycleRequirement::query()
             ->where('recipient_monitoring_cycle_id', $cycleId)
@@ -400,13 +435,11 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_approved_exception_completes_the_requirement_with_an_audit_record(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $cycleId = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addWeek()->toDateString(),
-            ])
-            ->assertCreated()
+        $cycleId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addWeek()->toDateString(),
+        ])
             ->json('cycle.id');
         $requirement = RecipientMonitoringCycleRequirement::query()
             ->where('recipient_monitoring_cycle_id', $cycleId)
@@ -442,13 +475,11 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_provider_intervention_is_shared_and_can_be_completed(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $cycleId = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
-            ])
-            ->assertCreated()
+        $cycleId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ])
             ->json('cycle.id');
         $requirement = RecipientMonitoringCycleRequirement::query()
             ->where('recipient_monitoring_cycle_id', $cycleId)
@@ -484,13 +515,11 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_monitoring_case_keeps_one_next_action_as_the_checklist_advances(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $response = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
-            ])
-            ->assertCreated()
+        $response = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ])
             ->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'awaiting_submission')
             ->assertJsonPath('cycle.recipients.0.monitoring_case.due_status', 'open')
             ->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.role', 'applicant')
@@ -567,13 +596,11 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_monitoring_case_distinguishes_the_request_window_from_overdue_work(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $cycleId = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addWeek()->toDateString(),
-            ])
-            ->assertCreated()
+        $cycleId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addWeek()->toDateString(),
+        ])
             ->json('cycle.id');
 
         RecipientMonitoringCycle::findOrFail($cycleId)->update([
@@ -621,13 +648,11 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_provider_closes_and_reopens_a_completed_check_in_with_an_event_history(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $response = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'First semester check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
-            ])
-            ->assertCreated();
+        $response = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'First semester check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ]);
         $cycleId = $response->json('cycle.id');
         $requirements = RecipientMonitoringCycleRequirement::query()
             ->where('recipient_monitoring_cycle_id', $cycleId)
@@ -718,13 +743,11 @@ class RecipientMonitoringChecklistTest extends TestCase
     public function test_provider_records_an_overdue_incomplete_outcome_or_a_reasoned_waiver(): void
     {
         [$provider, , $scholarship, $application] = $this->selectedRecipientWithPlan();
-        $response = $this->actingAs($provider)
-            ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
-                'title' => 'Overdue check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addWeek()->toDateString(),
-            ])
-            ->assertCreated();
+        $response = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'Overdue check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addWeek()->toDateString(),
+        ]);
         $cycleId = $response->json('cycle.id');
         RecipientMonitoringCycle::findOrFail($cycleId)->update([
             'due_at' => now()->subDays(8)->toDateString(),
@@ -751,13 +774,11 @@ class RecipientMonitoringChecklistTest extends TestCase
             ->assertJsonPath('cycle.recipients.0.monitoring_case.decision_reason', 'No required records were received after the grace period.');
 
         [$waiverProvider, , $waiverScholarship] = $this->selectedRecipientWithPlan();
-        $waiverResponse = $this->actingAs($waiverProvider)
-            ->postJson("/provider/scholarships/{$waiverScholarship->id}/monitoring-check-ins", [
-                'title' => 'Special circumstance check-in',
-                'opens_at' => now()->toDateString(),
-                'due_at' => now()->addMonth()->toDateString(),
-            ])
-            ->assertCreated();
+        $waiverResponse = $this->existingUploadCheckIn($waiverProvider, $waiverScholarship, [
+            'title' => 'Special circumstance check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addMonth()->toDateString(),
+        ]);
         $waiverCaseId = $waiverResponse->json('cycle.recipients.0.monitoring_case.id');
         $waiverRequirementId = $waiverResponse->json('cycle.requirements.0.id');
         $waiverApplicationId = $waiverResponse->json('cycle.recipients.0.application_id');
@@ -801,6 +822,38 @@ class RecipientMonitoringChecklistTest extends TestCase
             'scholarship_application_id' => $application->id,
             'outcome' => 'incomplete',
         ]);
+    }
+
+    private function existingUploadCheckIn(User $provider, Scholarship $scholarship, array $attributes): TestResponse
+    {
+        $plan = $scholarship->monitoringPlan()->with('requirements')->firstOrFail();
+        $cycle = $scholarship->monitoringCycles()->create([
+            ...$attributes,
+            'academic_period' => $attributes['period_label'] ?? null,
+            'period_type' => 'semester',
+            'recipient_monitoring_plan_id' => $plan->id,
+            'monitoring_plan_version' => $plan->version,
+            'grace_period_days' => $plan->grace_period_days,
+            'allow_exception_requests' => $plan->allow_exception_requests,
+            'created_by' => $provider->id,
+            'minimum_grade' => 85,
+            'grading_scale' => 'percentage',
+            'status' => 'open',
+            'published_at' => now(),
+        ]);
+        foreach ($plan->requirements as $requirement) {
+            $cycle->requirements()->create([
+                'source_requirement_id' => $requirement->id,
+                ...$requirement->only([
+                    'type', 'title', 'description', 'evidence_description', 'required', 'requires_file',
+                    'requires_original_verification', 'minimum_grade', 'grading_scale', 'sort_order',
+                ]),
+            ]);
+        }
+
+        return $this->actingAs($provider)
+            ->getJson("/provider/workspaces/monitoring/check-ins/{$cycle->id}/data")
+            ->assertOk();
     }
 
     private function selectedRecipientWithPlan(): array

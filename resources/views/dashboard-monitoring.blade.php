@@ -1,4 +1,4 @@
 @extends('layouts.app')
 
-@section('title', 'Recipient Monitoring')
+@section('title', 'Scholarship Support')
 @section('page', 'dashboardMonitoring')

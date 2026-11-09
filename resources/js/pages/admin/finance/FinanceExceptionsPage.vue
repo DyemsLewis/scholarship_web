@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
@@ -74,11 +75,11 @@ onMounted(() => loadExceptions(queueState.page));
                 <colgroup><col style="width: 17%"><col style="width: 25%"><col style="width: 17%"><col style="width: 17%"><col style="width: 12%"><col style="width: 12%"></colgroup>
                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Reference</th><th class="border-b border-slate-200 px-4 py-3">Provider</th><th class="border-b border-slate-200 px-4 py-3">Service</th><th class="border-b border-slate-200 px-4 py-3">Status</th><th class="border-b border-slate-200 px-4 py-3">Amount</th><th class="border-b border-slate-200 px-5 py-3">Recorded</th></tr></thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
-                    <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
-                        <td class="px-5 py-3.5 font-mono text-xs font-bold text-slate-900">{{ item.reference_number }}</td>
-                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0"><span class="block break-words text-sm font-bold text-slate-900">{{ item.provider }}</span><span class="mt-0.5 block break-words text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
+                    <tr v-for="item in items" :key="item.id" class="align-middle hover:bg-slate-50/70">
+                        <td class="px-5 py-3.5"><p class="break-words font-mono text-xs font-bold text-slate-900">{{ item.reference_number }}</p><WorkspaceTextSummary v-if="item.reason" disclosure-only class="mt-0.5 text-xs text-slate-600" :text="item.reason" label="reason" /></td>
+                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0"><span class="block break-words text-sm font-bold text-slate-900">{{ item.provider }}</span><span v-if="item.provider_email" class="mt-0.5 block text-xs text-slate-500 [overflow-wrap:anywhere]">{{ item.provider_email }}</span></span></div></td>
                         <td class="px-4 py-3.5 text-sm font-semibold text-slate-700">{{ item.service }}</td>
-                        <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(item.status)]">{{ labelFromKey(item.status) }}</span><p v-if="item.reason" class="mt-1 max-w-md text-xs leading-5 text-slate-500">{{ item.reason }}</p></td>
+                        <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', statusClass(item.status)]">{{ labelFromKey(item.status) }}</span></td>
                         <td class="px-4 py-3.5 text-sm font-black text-slate-950">{{ money(item.amount, item.currency) }}</td>
                         <td class="px-5 py-3.5 text-sm text-slate-600">{{ item.failed_at || item.created_at }}</td>
                     </tr>

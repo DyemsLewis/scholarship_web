@@ -157,7 +157,7 @@ onBeforeUnmount(() => {
                                     <td class="px-5 py-4">
                                         <div class="flex min-w-0 items-center gap-3">
                                             <StaffTableIdentity :src="report.applicant?.profile_photo_url" :kind="report.applicant ? 'applicant' : 'provider'" class="h-10 w-10" />
-                                            <div class="min-w-0"><p class="service-text text-sm font-bold text-slate-900">{{ report.applicant?.name || 'Provider team' }}</p><p class="mt-1 service-text text-xs text-slate-500">{{ report.applicant?.email }}</p></div>
+                                            <p class="min-w-0 service-text text-sm font-bold text-slate-900">{{ report.applicant?.name || 'Provider team' }}</p>
                                         </div>
                                     </td>
                                     <td class="px-5 py-4"><p class="service-text text-sm font-semibold text-slate-800">{{ report.program?.title || 'General platform issue' }}</p></td>

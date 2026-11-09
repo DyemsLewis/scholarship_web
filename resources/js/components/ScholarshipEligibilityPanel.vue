@@ -6,7 +6,6 @@ import { withPreparationContext } from '../support/scholarshipPreparationContext
 const props = defineProps({
     content: { type: Object, required: true },
     verdict: { type: Object, required: true },
-    visual: { type: Object, required: true },
     preview: { type: Boolean, default: false },
     previewScenario: { type: String, default: 'general' },
     applicationHref: { type: String, default: '' },
@@ -15,14 +14,10 @@ const props = defineProps({
 defineEmits(['navigate']);
 
 const rows = computed(() => scholarshipEligibilityRows(props.content.criteria ?? []));
-const groups = computed(() => scholarshipEligibilityGroups(rows.value));
-const openRows = computed(() => rows.value.filter((row) => row.result.status === 'info'));
-const counts = computed(() => ({
-    matched: rows.value.filter((row) => row.result.status === 'pass').length,
-    attention: rows.value.filter((row) => row.attention).length,
-    open: openRows.value.length,
-}));
 const generalPreview = computed(() => props.preview && props.previewScenario === 'general');
+const groups = computed(() => scholarshipEligibilityGroups(rows.value, generalPreview.value));
+const openRows = computed(() => rows.value.filter((row) => row.result.status === 'info'));
+const counts = computed(() => Object.fromEntries(groups.value.map((group) => [group.id, group.rows.length])));
 const profileAction = computed(() => props.content.profile?.complete
     ? { label: 'View verification', href: '/dashboard/profile?section=verification' }
     : { label: 'Complete profile', href: '/dashboard/profile' });
@@ -45,55 +40,52 @@ function actionLabel(row) {
 
 <template>
     <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-eligibility aria-labelledby="scholarship-eligibility-title">
-        <header class="grid border-b border-slate-200 lg:grid-cols-[minmax(0,1fr)_19rem]">
-            <div class="px-5 py-5 sm:px-6 sm:py-6">
-                <p class="student-kicker">{{ generalPreview ? 'Published eligibility' : verdict.eyebrow }}</p>
-                <h3 id="scholarship-eligibility-title" class="mt-2 font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">{{ generalPreview ? 'Who this scholarship is for' : verdict.title }}</h3>
-                <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{{ generalPreview ? 'Applicants see these rules compared with their own saved profile.' : verdict.description }}</p>
-                <a v-if="!preview && (!content.profile?.complete || !content.profile?.verified)" :href="contextualHref(profileAction.href)" class="student-button student-button-secondary mt-4">{{ profileAction.label }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
-            </div>
-            <figure class="relative hidden min-h-44 overflow-hidden bg-slate-100 lg:block">
-                <img :src="visual.image" :alt="visual.alt" class="absolute inset-0 h-full w-full object-cover">
-                <figcaption class="absolute inset-x-0 bottom-0 bg-slate-950/85 px-4 py-2 text-xs font-semibold leading-5 text-white">{{ visual.caption }}</figcaption>
-            </figure>
+        <header class="border-b border-slate-200 px-5 py-5 sm:px-6 sm:py-6">
+            <p class="student-kicker">{{ generalPreview ? 'Published eligibility' : 'Eligibility check' }}</p>
+            <h2 id="scholarship-eligibility-title" class="mt-1.5 font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">{{ generalPreview ? 'Who this scholarship is for' : verdict.title }}</h2>
+            <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{{ generalPreview ? 'Applicants see these rules compared with their own saved profile.' : verdict.description }}</p>
+            <a v-if="!preview && (!content.profile?.complete || !content.profile?.verified)" :href="contextualHref(profileAction.href)" class="student-button student-button-secondary mt-4">{{ profileAction.label }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
         </header>
 
         <p v-if="preview && !generalPreview" class="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs leading-5 text-slate-600 sm:px-6" data-preview-comparison-note>Illustrative sample only. These are not real applicant values or a recorded review decision.</p>
 
-        <dl v-if="rows.length && !generalPreview" data-eligibility-summary class="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-xs sm:px-6" aria-label="Profile comparison summary">
-            <div class="flex items-center gap-2"><dt class="text-slate-500">Matched</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.matched }}</dd></div>
-            <div class="flex items-center gap-2"><dt class="text-slate-500">Need attention</dt><dd :class="['font-bold tabular-nums', counts.attention ? 'text-amber-900' : 'text-slate-950']">{{ counts.attention }}</dd></div>
-            <div class="flex items-center gap-2"><dt class="text-slate-500">Unrestricted</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.open }}</dd></div>
+        <dl v-if="groups.length && !generalPreview" data-eligibility-summary class="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-xs sm:px-6" aria-label="Profile comparison summary">
+            <div v-if="counts.blocking" class="flex items-center gap-2 text-rose-800"><dt>Required rules not met</dt><dd class="font-bold tabular-nums">{{ counts.blocking }}</dd></div>
+            <div v-if="counts.review" class="flex items-center gap-2 text-slate-700"><dt>Not confirmed</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.review }}</dd></div>
+            <div v-if="counts.preferred" class="flex items-center gap-2 text-slate-700"><dt>Preferences to review</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.preferred }}</dd></div>
+            <div v-if="counts.matched" class="flex items-center gap-2 text-slate-700"><dt>Matched</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.matched }}</dd></div>
         </dl>
 
-        <section v-for="group in groups" :key="group.id" :data-eligibility-group="group.id" :aria-labelledby="`eligibility-${group.id}-title`">
-            <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-slate-200 px-5 py-4 sm:px-6">
-                <h4 :id="`eligibility-${group.id}-title`" class="text-sm font-bold text-slate-950">{{ group.label }} <span class="ml-1 text-xs font-normal text-slate-500">({{ group.rows.length }})</span></h4>
-                <p class="text-xs leading-5 text-slate-500">{{ group.description }}</p>
-            </header>
-            <div class="student-detail-label hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_12rem] gap-5 border-b border-slate-200 px-6 py-2 md:grid" aria-hidden="true">
-                <span>Program requirement</span><span>{{ preview ? 'Sample profile' : 'Your saved profile' }}</span><span>Comparison</span>
+        <component :is="group.collapsed ? 'details' : 'section'" v-for="group in groups" :key="group.id" class="group border-b border-slate-200" :data-eligibility-group="group.id" :aria-labelledby="`eligibility-${group.id}-title`">
+            <component :is="group.collapsed ? 'summary' : 'header'" :class="['flex min-h-14 items-center justify-between gap-3 bg-slate-50/60 px-5 py-3 sm:px-6', group.collapsed && 'cursor-pointer list-none hover:bg-slate-100 [&::-webkit-details-marker]:hidden']">
+                <span class="min-w-0">
+                    <span :id="`eligibility-${group.id}-title`" class="block text-sm font-bold text-slate-950">{{ group.label }} <span class="ml-1 text-xs font-normal text-slate-500">({{ group.rows.length }})</span></span>
+                    <span class="mt-0.5 block text-xs leading-5 text-slate-600">{{ group.description }}</span>
+                </span>
+                <i v-if="group.collapsed" class="fa-solid fa-chevron-down shrink-0 text-xs text-slate-500 transition group-open:rotate-180" aria-hidden="true"></i>
+            </component>
+            <div v-if="!generalPreview" class="student-detail-label hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_11rem] gap-4 border-t border-slate-200 px-6 py-2 md:grid" aria-hidden="true">
+                <span>{{ group.id === 'preferred' ? 'Program preference' : 'Program rule' }}</span><span>{{ preview ? 'Sample profile' : 'Your saved profile' }}</span><span>Comparison</span>
             </div>
-            <div class="divide-y divide-slate-200">
-                <article v-for="row in group.rows" :key="row.id" :data-eligibility-criterion="row.key" :data-comparison="row.result.status" class="px-5 py-4 sm:px-6">
-                    <div class="grid min-w-0 gap-x-5 gap-y-3 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_12rem] md:items-start">
+            <div class="divide-y divide-slate-200 border-t border-slate-200">
+                <article v-for="row in group.rows" :key="row.id" :data-eligibility-criterion="row.key" :data-comparison="generalPreview ? undefined : row.result.status" class="px-5 py-3.5 sm:px-6">
+                    <div :class="['grid min-w-0 gap-x-4 gap-y-2 md:items-start', !generalPreview && 'md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_11rem]']">
                         <div class="min-w-0">
-                            <h5 class="text-sm font-bold text-slate-950">{{ eligibilityValue(row.label, '', 'Eligibility requirement') }}</h5>
-                            <p class="mt-1 break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">{{ row.requirementValue }}</p>
+                            <h3 class="text-sm font-bold text-slate-950">{{ eligibilityValue(row.label, '', 'Eligibility requirement') }}</h3>
+                            <p class="mt-0.5 break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">{{ row.requirementValue }}</p>
                         </div>
-                        <div class="min-w-0">
+                        <div v-if="!generalPreview" class="min-w-0">
                             <p class="student-detail-label md:sr-only">{{ preview ? 'Sample profile' : 'Your saved profile' }}</p>
-                            <p class="break-words text-sm font-semibold leading-6 text-slate-800 [overflow-wrap:anywhere]">{{ generalPreview ? 'Compared when an applicant applies' : row.profileValue }}</p>
+                            <p class="break-words text-sm font-semibold leading-6 text-slate-800 [overflow-wrap:anywhere]">{{ row.profileValue }}</p>
                         </div>
-                        <div data-eligibility-result class="flex min-w-0 items-start md:justify-start">
-                            <span v-if="generalPreview" class="student-badge">Not compared</span>
-                            <span v-else :class="['student-badge', resultStyle(row).badge]"><i :class="[resultStyle(row).icon, 'block shrink-0 text-[10px] leading-none']" aria-hidden="true"></i>{{ row.result.label }}</span>
+                        <div v-if="!generalPreview" data-eligibility-result class="flex min-w-0 items-start">
+                            <span :class="['student-badge', resultStyle(row).badge]"><i :class="[resultStyle(row).icon, 'block shrink-0 text-[10px] leading-none']" aria-hidden="true"></i>{{ row.result.label }}</span>
                         </div>
                     </div>
 
-                    <div v-if="row.attention && !generalPreview" data-eligibility-explanation class="mt-3 border-l-2 border-slate-200 pl-3">
+                    <div v-if="row.attention && row.result.status !== 'preferred' && !generalPreview" data-eligibility-explanation class="mt-3 border-l-2 border-slate-200 pl-3">
                         <p class="text-xs leading-5 text-slate-600">{{ row.explanation || 'This comparison has not been confirmed. Review the published requirement and your saved information.' }}</p>
-                        <a v-if="!preview && ['missing', 'review', 'fail'].includes(row.result.status)" :href="contextualHref(row.profileHref)" class="mt-1.5 inline-flex min-h-7 items-center gap-2 text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950">{{ actionLabel(row) }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
+                        <a v-if="!preview && ['missing', 'review', 'fail'].includes(row.result.status)" :href="contextualHref(row.profileHref)" class="mt-1.5 inline-flex min-h-11 items-center gap-2 text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950">{{ actionLabel(row) }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
                         <p v-if="row.result.status === 'fail'" class="mt-1 text-xs leading-5 text-slate-500">Only correct your profile if the saved information is inaccurate.</p>
                     </div>
                     <details v-else-if="row.explanation && !generalPreview" data-eligibility-explanation class="mt-2 text-xs">
@@ -102,7 +94,7 @@ function actionLabel(row) {
                     </details>
                 </article>
             </div>
-        </section>
+        </component>
 
         <p v-if="!rows.length" data-eligibility-empty class="px-5 py-5 text-sm leading-6 text-slate-600 sm:px-6">The provider has not published structured eligibility rules. Review any written conditions below; your profile and application requirements still apply.</p>
 
@@ -123,7 +115,7 @@ function actionLabel(row) {
 
         <footer class="border-t border-slate-200 bg-slate-50/70 px-5 py-4 text-xs leading-5 text-slate-500 sm:px-6">
             <p>Your profile must be verified before you apply. Matching criteria does not guarantee selection.</p>
-            <a v-if="hasReadiness && applicationHref" :href="applicationHref" class="mt-1.5 inline-flex min-h-7 items-center gap-2 font-bold text-slate-800 hover:underline" @click="$emit('navigate', $event, 'application')">View application files and process<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
+            <a v-if="hasReadiness && applicationHref" :href="applicationHref" class="mt-1 inline-flex min-h-11 items-center gap-2 font-bold text-slate-800 hover:underline" @click="$emit('navigate', $event, 'application')">See how to apply<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
         </footer>
     </section>
 </template>

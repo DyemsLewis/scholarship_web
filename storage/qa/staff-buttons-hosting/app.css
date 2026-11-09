@@ -1,0 +1,1343 @@
+@import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&family=Source+Sans+3:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+@source '../**/*.vue';
+
+@theme {
+    --font-sans: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+    --font-display: 'Merriweather', ui-serif, Georgia, serif;
+    --color-ink-950: #09111f;
+    --color-ink-900: #0e172a;
+    --color-lagoon-500: #0ea5e9;
+    --color-lagoon-400: #38bdf8;
+    --color-aurora-400: #2dd4bf;
+    --color-mist-100: #e2ecff;
+    --color-mist-200: #bfd6ff;
+    --color-portal-navy: #081426;
+    --color-portal-paper: #f8fafc;
+    --color-portal-soft: #eef2f6;
+    --color-portal-gold: #fcd34d;
+}
+
+@layer base {
+    html,
+    body {
+        overflow-x: clip;
+    }
+
+    body {
+        @apply bg-slate-950 text-slate-100 antialiased;
+    }
+
+    [role='dialog'] {
+        color: #0f172a;
+    }
+
+    [role='dialog'] input:not([type='checkbox']):not([type='radio']),
+    [role='dialog'] select,
+    [role='dialog'] textarea {
+        color: #0f172a;
+    }
+
+    [role='dialog'] input::placeholder,
+    [role='dialog'] textarea::placeholder {
+        color: #94a3b8;
+        opacity: 1;
+    }
+
+    [role='dialog'] select,
+    [role='dialog'] select option {
+        background-color: #fff;
+        color: #0f172a;
+        color-scheme: light;
+    }
+}
+
+@layer components {
+    .student-shell {
+        @apply min-h-screen text-slate-900 lg:grid lg:grid-cols-[16rem_1fr];
+        background:
+            linear-gradient(180deg, rgba(8, 20, 38, 0.04), transparent 14rem),
+            #f8fafc;
+    }
+
+    .student-page {
+        @apply min-w-0 px-4 py-7 sm:px-6 sm:py-8 lg:px-8 lg:py-10;
+    }
+
+    .provider-shell,
+    .admin-shell {
+        @apply min-h-screen text-slate-900 lg:grid lg:grid-cols-[16rem_1fr];
+    }
+
+    .provider-shell {
+        @apply lg:grid-cols-[16.5rem_1fr];
+        background: #edf1f5;
+    }
+
+    .admin-shell {
+        background: #edf1f5;
+    }
+
+    .provider-page,
+    .admin-page {
+        @apply min-w-0 px-4 py-5 sm:px-6 lg:px-7 lg:py-6;
+    }
+
+    .provider-page {
+        @apply py-4 lg:px-8 lg:py-6;
+    }
+
+    .provider-container,
+    .admin-container {
+        @apply w-full;
+    }
+
+    .provider-container {
+        @apply mx-auto;
+        max-width: 92rem;
+    }
+
+    .admin-container {
+        max-width: none;
+    }
+
+    .provider-container-narrow,
+    .admin-container-narrow {
+        @apply max-w-6xl;
+    }
+
+    .provider-content-stack,
+    .admin-content-stack {
+        @apply mt-5 space-y-4;
+    }
+
+    .provider-content-stack {
+        @apply mt-4 space-y-3;
+    }
+
+    .provider-panel,
+    .admin-panel {
+        @apply rounded-lg border border-slate-200/90 bg-white shadow-[0_9px_24px_rgba(8,20,38,0.055)];
+        background:
+            linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0) 3.5rem),
+            #fff;
+    }
+
+    .provider-page .provider-panel {
+        @apply rounded-sm border-slate-300;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(8, 20, 38, 0.035);
+    }
+
+    .admin-page .admin-panel {
+        @apply rounded-sm border-slate-300;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(8, 20, 38, 0.035);
+    }
+
+    .provider-page h1,
+    .provider-page h2,
+    .provider-page h3,
+    .admin-page h1,
+    .admin-page h2,
+    .admin-page h3 {
+        font-family: var(--font-sans);
+    }
+
+    .provider-page .rounded-lg {
+        border-radius: 0.25rem;
+    }
+
+    .provider-page .rounded-md,
+    .provider-page .rounded {
+        border-radius: 0.1875rem;
+    }
+
+    :where(
+        .provider-page,
+        .admin-page,
+        body:has(> #app:is([data-page^='provider'], [data-page^='admin'])) :is([role='dialog'], [role='alertdialog'])
+    ) :is(button, a[class*='bg-'], a[class*='border']):not([class*='rounded-full']),
+    /* Staff workspaces that still use the shared student-page layout. */
+    :where(#app:is([data-page^='provider'], [data-page^='admin']) .student-page:not(.provider-page, .admin-page))
+        :is(button, a):is([class~='border'], [class^='bg-'], [class*=' bg-']):not(:where(
+            nav *, [role='tablist'] *, [role='tab'], [aria-pressed], [aria-selected],
+            [class*='rounded'], [class~='bg-transparent']
+        )) {
+        border-radius: 0.3125rem;
+    }
+
+    .provider-page input,
+    .provider-page select,
+    .provider-page textarea,
+    .admin-page input,
+    .admin-page select,
+    .admin-page textarea {
+        border-radius: 0.1875rem;
+    }
+
+    .provider-page input:not([type='checkbox']):not([type='radio']),
+    .provider-page select,
+    .provider-page textarea,
+    .admin-page input:not([type='checkbox']):not([type='radio']),
+    .admin-page select,
+    .admin-page textarea {
+        color: #0f172a;
+    }
+
+    .provider-page input::placeholder,
+    .provider-page textarea::placeholder,
+    .admin-page input::placeholder,
+    .admin-page textarea::placeholder {
+        color: #94a3b8;
+        opacity: 1;
+    }
+
+    .provider-page select option,
+    .admin-page select option {
+        background-color: #fff;
+        color: #0f172a;
+        color-scheme: light;
+    }
+
+    .provider-page .shadow-sm {
+        box-shadow: 0 1px 4px rgba(8, 20, 38, 0.04);
+    }
+
+    .provider-page input:focus,
+    .provider-page select:focus,
+    .provider-page textarea:focus,
+    .admin-page input:focus,
+    .admin-page select:focus,
+    .admin-page textarea:focus {
+        border-color: #475569;
+        box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.12);
+        outline: none;
+    }
+
+    .admin-page .workspace-dashboard-frame {
+        max-width: none;
+    }
+
+    .provider-page .portal-data-table thead,
+    .provider-page .portal-record-head {
+        @apply border-y border-slate-200 bg-slate-50;
+    }
+
+    .provider-page .portal-data-table tbody tr,
+    .provider-page .portal-record-row {
+        @apply border-slate-200 hover:bg-slate-50;
+    }
+
+    .student-container {
+        @apply mx-auto max-w-6xl;
+    }
+
+    .student-hero {
+        @apply relative flex min-h-0 flex-col justify-center overflow-hidden rounded-md border border-slate-800 px-4 py-4 text-white shadow-[0_12px_32px_rgba(8,20,38,0.13)] sm:px-5;
+        background:
+            radial-gradient(circle at 90% -20%, rgba(252, 211, 77, 0.20), transparent 28%),
+            linear-gradient(115deg, #081426 0%, #0e1f36 68%, #122a45 100%);
+    }
+
+    .provider-hero,
+    .admin-hero {
+        @apply relative flex min-h-28 flex-col justify-center overflow-hidden border border-white/80 bg-white/95 px-5 py-4 shadow-[0_18px_54px_rgba(8,20,38,0.10)] backdrop-blur;
+        border-radius: 1.15rem 2rem 1.15rem 1.15rem;
+        clip-path: polygon(0 0, calc(100% - 2rem) 0, 100% 2rem, 100% 100%, 0 100%);
+        background:
+            radial-gradient(circle at 92% 8%, rgba(252, 211, 77, 0.16), transparent 24%),
+            radial-gradient(circle at 8% 100%, rgba(8, 20, 38, 0.08), transparent 28%),
+            linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.92));
+    }
+
+    .provider-hero,
+    .admin-hero {
+        @apply min-h-0 rounded-lg border-slate-300/80 px-5 py-4 shadow-[0_10px_28px_rgba(8,20,38,0.07)] sm:px-6;
+        clip-path: none;
+        background:
+            linear-gradient(90deg, rgba(252, 211, 77, 0.12), transparent 15rem),
+            linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(241, 245, 249, 0.95));
+    }
+
+    .provider-page .provider-hero {
+        @apply rounded-sm px-4 py-3 shadow-[0_1px_4px_rgba(8,20,38,0.035)] sm:px-5;
+        background: #ffffff;
+    }
+
+    .admin-page .admin-hero {
+        @apply rounded-sm px-4 py-3 shadow-[0_1px_4px_rgba(8,20,38,0.035)] sm:px-5;
+        background: #ffffff;
+    }
+
+    .provider-page .provider-hero::before,
+    .provider-page .provider-hero::after,
+    .admin-page .admin-hero::after {
+        display: none;
+    }
+
+    .task-page-header {
+        min-height: 0 !important;
+    }
+
+    .provider-page .provider-hero h1,
+    .provider-page .provider-hero h2 {
+        font-size: 1.375rem;
+        line-height: 1.75rem;
+    }
+
+    .provider-page .provider-hero p[class*='uppercase'] {
+        font-size: 0.6875rem;
+        letter-spacing: 0.15em;
+    }
+
+    .provider-page .provider-hero p[class*='leading-6'] {
+        @apply mt-1;
+        line-height: 1.25rem;
+    }
+
+    .provider-page .provider-hero p[class*='text-slate-600'] {
+        display: -webkit-box;
+        overflow: hidden;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+    }
+
+    .provider-page .provider-help {
+        @apply rounded-sm border border-slate-300 bg-slate-50;
+    }
+
+    .provider-page .provider-help summary {
+        @apply cursor-pointer list-none px-3 py-2 text-xs font-bold text-slate-600;
+    }
+
+    .provider-page .provider-help summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .provider-page .provider-help-content {
+        @apply border-t border-slate-200 bg-white px-3 py-2.5 text-xs leading-5 text-slate-600;
+    }
+
+    .provider-program-form:not(.show-guidance) p[class*='text-xs'][class*='leading-5'][class*='text-slate-500'] {
+        display: none;
+    }
+
+    .provider-page .provider-hero + nav {
+        @apply mt-4;
+    }
+
+    .student-hero::before {
+        content: '';
+        @apply absolute inset-x-0 bottom-0 h-1 bg-amber-300;
+    }
+
+    .provider-hero::before,
+    .admin-hero::before {
+        content: '';
+        @apply absolute bottom-4 left-0 top-4 w-1 rounded-r-full bg-slate-900;
+    }
+
+    .provider-hero::before,
+    .admin-hero::before {
+        @apply bottom-0 top-0 rounded-none bg-slate-950;
+    }
+
+    .provider-hero::after,
+    .admin-hero::after {
+        content: '';
+        @apply absolute bottom-0 left-1 h-0.5 w-28 bg-amber-400;
+    }
+
+    .student-hero > *,
+    .provider-hero > *,
+    .admin-hero > * {
+        @apply relative z-10 w-full;
+    }
+
+    @media (min-width: 1024px) {
+        .admin-hero:not(.task-page-header) {
+            min-height: 7rem;
+        }
+
+        .student-hero,
+        .provider-hero,
+        .admin-hero.task-page-header {
+            min-height: 5.5rem;
+        }
+    }
+
+    .student-hero-icon {
+        @apply inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-amber-300 text-slate-950 shadow-sm;
+    }
+
+    .student-hero-icon > i,
+    .student-page header :is(span, button)[class*='place-items-center'] > i {
+        display: block;
+        line-height: 1;
+    }
+
+    .student-card {
+        @apply rounded-md border border-slate-200 bg-white shadow-sm;
+    }
+
+    .student-soft-card {
+        @apply rounded-md border border-slate-200/80 bg-slate-50/95;
+    }
+
+    .student-visual-card {
+        @apply relative overflow-hidden rounded-md border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md;
+    }
+
+    .student-icon-badge {
+        @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-800;
+    }
+
+    .student-muted-panel {
+        @apply rounded-md border border-slate-200 bg-slate-50 p-4;
+    }
+
+    .applicant-profile-editor:not(.show-guidance) p[class*='text-xs'][class*='leading-5'][class*='text-slate-500'] {
+        display: none;
+    }
+
+    .student-empty-state {
+        @apply rounded-md border border-dashed border-slate-300 bg-slate-50 p-6 text-sm leading-6 text-slate-500;
+    }
+
+    .student-detail-label {
+        @apply text-xs font-semibold leading-5 text-slate-600;
+    }
+
+    .student-badge {
+        @apply inline-flex min-h-7 max-w-full items-center gap-1.5 rounded-sm border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold leading-4 text-slate-700;
+    }
+
+    .student-badge-positive {
+        @apply border-emerald-200 bg-emerald-50 text-emerald-800;
+    }
+
+    .student-badge-attention {
+        @apply border-amber-200 bg-amber-50 text-amber-900;
+    }
+
+    .student-badge-negative {
+        @apply border-rose-200 bg-rose-50 text-rose-800;
+    }
+
+    .student-badge-info {
+        @apply border-sky-200 bg-sky-50 text-sky-800;
+    }
+
+    .student-button {
+        @apply inline-flex min-h-11 min-w-0 max-w-full items-center justify-center gap-2 rounded-sm border border-transparent px-4 py-2 text-center text-sm font-bold leading-5 transition;
+    }
+
+    .student-button-primary {
+        @apply border-slate-950 bg-slate-950 text-white hover:border-slate-800 hover:bg-slate-800;
+    }
+
+    .student-button-secondary {
+        @apply border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+    }
+
+    .student-button-accent {
+        @apply border-amber-300 bg-amber-300 text-slate-950 hover:border-amber-200 hover:bg-amber-200;
+    }
+
+    .student-button-on-dark {
+        @apply border-white/30 bg-white/5 text-white hover:bg-white/15;
+    }
+
+    .student-button-danger {
+        @apply border-rose-200 bg-white text-rose-700 hover:bg-rose-50;
+    }
+
+    .student-button-compact {
+        @apply min-h-10 px-3 text-xs;
+    }
+
+    .student-button-icon {
+        @apply w-10 px-0;
+    }
+
+    .student-button:focus-visible {
+        @apply outline-2 outline-offset-2 outline-amber-600;
+    }
+
+    .student-button-on-dark:focus-visible,
+    .student-button-accent:focus-visible {
+        @apply outline-amber-300;
+    }
+
+    .student-button:disabled,
+    .student-button[aria-disabled='true'] {
+        @apply cursor-not-allowed opacity-60;
+    }
+
+    .student-button > i,
+    .student-badge > i {
+        @apply block w-4 shrink-0 text-center text-xs leading-none;
+    }
+
+    .student-kicker {
+        @apply text-xs font-semibold uppercase tracking-[0.18em] text-amber-700;
+    }
+
+    .student-chip {
+        @apply rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white;
+    }
+
+    .student-section-head {
+        @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+    }
+
+    .student-section-mark {
+        @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-100 text-amber-800;
+    }
+
+    .student-stat-tile {
+        @apply rounded-md border border-slate-200 bg-slate-50 p-3;
+    }
+
+    /* Shared table and responsive record-list primitives. */
+    .portal-table-scroll {
+        @apply overflow-x-auto;
+        scrollbar-width: thin;
+        scrollbar-color: #94a3b8 transparent;
+    }
+
+    .staff-table-viewport {
+        min-height: 24rem;
+        overflow-x: auto;
+        background: #fff;
+        scrollbar-width: thin;
+        scrollbar-color: #94a3b8 transparent;
+    }
+
+    .staff-table-viewport--compact {
+        min-height: 0;
+    }
+
+    .staff-table-viewport > table {
+        width: 100%;
+    }
+
+    .staff-row-action {
+        @apply inline-flex shrink-0 items-center justify-center gap-2 border border-slate-300 bg-white font-bold text-slate-700 transition-colors hover:border-slate-950 hover:bg-slate-950 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700 disabled:opacity-40;
+        border-radius: 0.3125rem;
+    }
+
+    .staff-row-action--primary {
+        @apply border-slate-950 bg-slate-950 text-white hover:bg-slate-800;
+    }
+
+    .portal-data-table {
+        @apply w-full border-collapse text-left text-sm;
+    }
+
+    .portal-data-table thead {
+        @apply bg-slate-50;
+    }
+
+    .portal-data-table th {
+        @apply h-10 px-4 py-2.5 align-middle text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500;
+    }
+
+    .portal-data-table td {
+        @apply px-4 py-3 align-middle text-sm leading-5 text-slate-700;
+        vertical-align: middle !important;
+    }
+
+    .portal-data-table tbody tr {
+        @apply border-b border-slate-200 transition last:border-b-0 hover:bg-slate-50/70;
+    }
+
+    .portal-table-center {
+        @apply text-center;
+    }
+
+    .portal-table-end {
+        @apply text-right;
+    }
+
+    .portal-record-head {
+        @apply border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500;
+    }
+
+    .portal-record-row {
+        @apply min-h-[4.5rem] border-b border-slate-200 px-4 py-3 transition last:border-b-0 hover:bg-slate-50/70;
+    }
+
+    .portal-record-cell {
+        @apply min-w-0;
+    }
+
+    .portal-record-cell-center {
+        @apply flex min-w-0 items-center justify-between gap-3;
+    }
+
+    .portal-record-actions {
+        @apply flex min-w-0 items-center gap-2;
+    }
+
+    .portal-record-mobile-label {
+        @apply shrink-0 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400;
+    }
+
+    .portal-table-empty {
+        @apply px-5 py-8 text-center;
+    }
+
+    .portal-table-empty-title {
+        @apply text-sm font-bold text-slate-900;
+    }
+
+    .portal-table-empty-copy {
+        @apply mt-1 text-sm leading-6 text-slate-500;
+    }
+
+    @media (min-width: 1024px) {
+        .portal-record-cell-center {
+            @apply justify-center text-center;
+        }
+
+        .portal-record-actions {
+            @apply justify-center;
+        }
+    }
+
+    .student-action-card {
+        @apply relative overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-400 hover:shadow-md;
+    }
+}
+
+@layer utilities {
+    /* Admin-only refinements leave shared applicant and provider views unchanged. */
+    .admin-page :is(.task-page-heading, .workspace-dashboard-heading) {
+        align-items: center;
+    }
+
+    .admin-page .task-page-description {
+        display: block;
+        overflow: visible;
+        -webkit-line-clamp: unset;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-page .workspace-dashboard-header-row {
+        min-height: 0;
+        gap: 1.5rem;
+    }
+
+    .admin-page .workspace-dashboard-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-page :is(.task-page-eyebrow, .workspace-dashboard-label, .workspace-dashboard-status, .portal-data-table th, .uppercase[class~='text-[10px]'], .uppercase[class~='text-[11px]']) {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.08em;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-page .workspace-metric-content {
+        height: 100%;
+        min-height: 6.5rem;
+        align-items: center;
+    }
+
+    .admin-page .workspace-dashboard-text {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-page .workspace-dashboard-status {
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    .admin-page :is(.workspace-dashboard-action, .task-page-actions > a, .task-page-actions > button),
+    .admin-page .portal-data-table :is(a, button).h-9 {
+        min-height: 2.5rem;
+        font-size: 0.875rem;
+        flex-shrink: 0;
+    }
+
+    .admin-page .portal-data-table :is(a, button).w-9 {
+        width: 2.5rem;
+    }
+
+    .admin-page :is(.task-page-icon, .workspace-dashboard-icon, .admin-table-icon) > i,
+    .admin-page :is(a, button).inline-flex > i,
+    .admin-dialog i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        flex-shrink: 0;
+        text-align: center;
+    }
+
+    .admin-page :is(label, dd, th, td) {
+        min-width: 0;
+    }
+
+    .admin-page :is(a, button, summary):focus-visible,
+    .admin-dialog :is(a, button, input, select, textarea):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    .admin-dialog {
+        display: flex;
+        max-height: calc(100dvh - 3rem);
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .admin-dialog-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .admin-dialog > :is(header, footer) {
+        flex-shrink: 0;
+    }
+
+    .admin-dialog :is(h2, p, label) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    /* End admin shared refinements. */
+
+    /* Review-only text wrapping preserves applicant and provider presentation. */
+    .admin-review-workspace :is(.review-text, label, dd, td) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-review-workspace .review-text {
+        white-space: normal;
+    }
+
+    .admin-review-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    /* End admin review refinements. */
+
+    /* Keep support identifiers and notes readable without changing other roles. */
+    .admin-support-workspace :is(.support-text, label, dd, td) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-support-workspace .support-text {
+        white-space: normal;
+    }
+
+    .admin-support-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    /* End admin support refinements. */
+
+    /* Billing-only refinements preserve the shared provider service presentation. */
+    .admin-billing-workspace :is(.billing-text, label, dd, td, p, h2, h3) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-billing-workspace .billing-text {
+        white-space: normal;
+    }
+
+    .admin-billing-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    /* End admin billing refinements. */
+
+    /* Read-only finance and records views retain the shared admin hierarchy. */
+    :is(.admin-finance-workspace, .admin-records-workspace) :is(td, dd, p, h2, h3) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    :is(.admin-finance-workspace, .admin-records-workspace) .admin-ledger-table {
+        width: 100%;
+        min-width: 54rem;
+        table-layout: fixed;
+    }
+
+    :is(.admin-finance-workspace, .admin-records-workspace) span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .admin-records-workspace .admin-export-feedback:empty {
+        display: none;
+    }
+
+    /* End admin finance and records refinements. */
+
+    .admin-portal-workspace :is(td, p, strong) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-portal-workspace .portal-oversight-table {
+        width: 100%;
+        min-width: 52rem;
+        table-layout: fixed;
+    }
+
+    .admin-portal-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+    }
+
+    /* End admin portal refinements. */
+
+    /* Refine provider support and paid-service screens without affecting admin. */
+    .provider-service-workspace .service-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace :is(.service-text, [data-workspace-text-summary], label, dd, td, th, p, h1, h2, h3) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace .uppercase {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.07em;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace :is(header, .service-heading) :is(h1, h2, p, .min-w-0 > div) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace header .items-start:has(> span > i),
+    .provider-service-workspace header:has(> span > i) {
+        align-items: center;
+    }
+
+    .provider-service-workspace :is(button, select, a.inline-flex, a.inline-grid, a.grid, label.inline-flex):not(nav *) {
+        min-height: 2.5rem;
+    }
+
+    .provider-service-workspace :is(button, a).w-9 {
+        width: 2.5rem;
+        flex-shrink: 0;
+    }
+
+    .provider-service-workspace header :is(a.inline-flex, button.inline-flex),
+    .provider-service-workspace td :is(a, button) {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    .provider-service-workspace :is(a, button, label).inline-flex > i,
+    .provider-service-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        flex-shrink: 0;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .provider-service-workspace :is(input, select, textarea) {
+        min-width: 0;
+        color: var(--color-slate-900);
+    }
+
+    .provider-service-workspace :is(input, textarea)::placeholder {
+        color: var(--color-slate-500);
+    }
+
+    .provider-service-workspace .service-next-action {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    }
+
+    .provider-service-workspace .service-next-action > :is(span, a) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-service-workspace :is(a, button, summary, input, select, textarea):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Provider account and organization refinements never style applicant previews. */
+    .provider-settings-workspace .settings-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-settings-workspace :is(.settings-text, [data-workspace-text-summary], label, dd, td, th) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-settings-workspace .uppercase {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.07em;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-settings-workspace header :is(h1, h2, p, .min-w-0 > div) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-settings-workspace header .items-start:has(> span > i),
+    .provider-settings-workspace header:has(> span > i) {
+        align-items: center;
+    }
+
+    .provider-settings-workspace > header .settings-page-actions {
+        display: flex;
+        max-width: 48%;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .provider-settings-workspace header :is(a.inline-flex, button.inline-flex) {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    .provider-settings-workspace :is(button, select, a.inline-flex, a.grid):not(nav *) {
+        min-height: 2.5rem;
+    }
+
+    .provider-settings-workspace :is(button, a).w-9 {
+        width: 2.5rem;
+        flex-shrink: 0;
+    }
+
+    .provider-settings-workspace td :is(a, button) {
+        white-space: nowrap;
+    }
+
+    .provider-settings-workspace :is(a, button).inline-flex > i,
+    .provider-settings-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        flex-shrink: 0;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .provider-settings-workspace :is(td, header) img {
+        flex-shrink: 0;
+    }
+
+    .provider-settings-workspace .settings-program-list {
+        max-height: 24rem;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-settings-workspace.settings-dialog {
+        display: flex;
+        max-height: calc(100dvh - 3rem);
+        flex-direction: column;
+        overflow: hidden;
+        color: var(--color-slate-950);
+    }
+
+    .provider-settings-workspace .settings-dialog-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-settings-workspace.settings-dialog > :is(header, footer) {
+        flex-shrink: 0;
+    }
+
+    .provider-settings-workspace :is(a, button, summary, input, select, textarea):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Keep monitoring and distribution refinements out of applicant records. */
+    .provider-monitoring-workspace .monitoring-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-monitoring-workspace :is(.monitoring-text, [data-workspace-text-summary], label, dd, td, th) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-monitoring-workspace .uppercase {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.07em;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-monitoring-workspace header .items-start:has(> span > i),
+    .provider-monitoring-workspace header:has(> span > i) {
+        align-items: center;
+    }
+
+    .provider-monitoring-workspace .monitoring-page-actions {
+        display: flex;
+        max-width: 48%;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .provider-monitoring-workspace header :is(h1, h2, p, .min-w-0 > div) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-monitoring-workspace :is(button, select, a.inline-flex):not(nav *) {
+        min-height: 2.5rem;
+    }
+
+    .provider-monitoring-workspace :is(button, a).w-9 {
+        width: 2.5rem;
+    }
+
+    .provider-monitoring-workspace td :is(a.inline-flex, button) {
+        white-space: nowrap;
+    }
+
+    .provider-monitoring-workspace :is(a, button).inline-flex > i,
+    .provider-monitoring-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        flex-shrink: 0;
+        line-height: 1;
+        text-align: center;
+    }
+
+    .provider-monitoring-workspace .monitoring-recipient-picker {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        max-height: 16rem;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-monitoring-workspace .monitoring-candidate-list {
+        max-height: 24rem;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-monitoring-workspace.monitoring-dialog {
+        display: flex;
+        max-height: calc(100dvh - 3rem);
+        flex-direction: column;
+        overflow: hidden;
+        color: var(--color-slate-950);
+    }
+
+    .provider-monitoring-workspace .monitoring-dialog-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-monitoring-workspace.monitoring-dialog > :is(header, footer) {
+        flex-shrink: 0;
+    }
+
+    .provider-monitoring-workspace :is(a, button, summary, input, select, textarea):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Refinements stay inside the operational provider application screens. */
+    .provider-application-workspace .application-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-application-workspace .application-text {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-application-workspace .uppercase {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.07em;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-application-workspace :is(label, dd, td, th) {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-application-workspace td img {
+        flex-shrink: 0;
+    }
+
+    .provider-application-workspace header .items-start:has(> span > i),
+    .provider-application-workspace header:has(> span > i) {
+        align-items: center;
+    }
+
+    .provider-application-workspace :is(button, a.inline-flex):not(nav *) {
+        min-height: 2.5rem;
+    }
+
+    .provider-application-workspace select {
+        min-height: 2.5rem;
+    }
+
+    .provider-application-workspace :is(button, a).w-9 {
+        width: 2.5rem;
+    }
+
+    .provider-application-workspace :is(a, button).inline-flex > i,
+    .provider-application-workspace span.grid > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .provider-application-workspace .application-candidate-list {
+        max-height: 20rem;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-application-workspace.application-dialog {
+        display: flex;
+        max-height: calc(100dvh - 3rem);
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .provider-application-workspace .application-dialog-body {
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    .provider-application-workspace.application-dialog > :is(header, nav, footer) {
+        flex-shrink: 0;
+    }
+
+    .provider-application-workspace :is(a, button, summary):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Provider program refinements do not style embedded applicant previews. */
+    .provider-program-workspace .program-page-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-program-workspace .program-label {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.08em;
+    }
+
+    .provider-program-workspace .program-status {
+        max-width: 100%;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-program-workspace .program-field-label > span.font-normal {
+        color: var(--color-slate-600);
+    }
+
+    .provider-program-workspace .program-text {
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-program-workspace .program-page-actions {
+        display: flex;
+        max-width: 48%;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+
+    .provider-program-workspace .program-summary > div,
+    .provider-program-workspace .program-builder-form label,
+    .provider-program-workspace.program-benefit-dialog label {
+        min-width: 0;
+    }
+
+    .provider-program-workspace .program-action,
+    .provider-program-workspace .program-form-footer :is(a, button),
+    .provider-program-workspace .program-benefit-actions button {
+        min-height: 2.5rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+
+    .provider-program-workspace .program-icon > i,
+    .provider-program-workspace .program-summary i,
+    .provider-program-workspace .program-action > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .provider-program-workspace .program-builder-step {
+        align-content: start;
+    }
+
+    .provider-program-workspace :is(a, button):focus-visible,
+    .provider-program-workspace label:has(input[type='radio']:focus-visible) {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+
+    /* Shared dashboard components also serve admin pages; refinements are provider-only. */
+    .provider-dashboard .workspace-dashboard-header {
+        padding: 1.25rem 1.5rem;
+    }
+
+    .provider-dashboard .workspace-dashboard-header-row {
+        min-height: 0;
+        gap: 1.5rem;
+    }
+
+    .provider-dashboard .workspace-dashboard-header-row > .workspace-dashboard-heading {
+        flex: 1;
+    }
+
+    .provider-dashboard .workspace-dashboard-heading {
+        align-items: center;
+    }
+
+    .provider-dashboard .workspace-dashboard-title {
+        font-size: 1.75rem;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-dashboard .workspace-dashboard-label {
+        font-size: 0.75rem;
+        line-height: 1.5;
+        letter-spacing: 0.08em;
+    }
+
+    .provider-dashboard .workspace-metric-content {
+        height: 100%;
+        min-height: 6.5rem;
+        align-items: center;
+    }
+
+    .provider-dashboard .workspace-metric-content .workspace-dashboard-label,
+    .provider-dashboard .workspace-dashboard-detail {
+        color: var(--color-slate-600);
+    }
+
+    .provider-dashboard .workspace-dashboard-section-header {
+        min-height: 4.5rem;
+    }
+
+    .provider-dashboard .workspace-dashboard-text {
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-dashboard .workspace-dashboard-status {
+        max-width: 100%;
+        font-size: 0.75rem;
+        line-height: 1.5;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .provider-dashboard .workspace-dashboard-action,
+    .provider-page-header-actions > :is(a, button) {
+        min-height: 2.5rem;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+    }
+
+    .provider-dashboard .workspace-dashboard-action {
+        flex-shrink: 0;
+    }
+
+    .provider-dashboard .workspace-dashboard-icon > i,
+    .provider-dashboard .workspace-dashboard-action > i {
+        display: block;
+        width: 1rem;
+        line-height: 1;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .provider-dashboard .provider-dashboard-header-actions {
+        max-width: 45%;
+    }
+
+    .provider-dashboard .provider-dashboard-organization {
+        max-width: 16rem;
+    }
+
+    .provider-dashboard :is(a, button):focus-visible,
+    .provider-page-header :is(a, button, summary):focus-visible {
+        outline: 2px solid var(--color-slate-700);
+        outline-offset: 3px;
+    }
+}

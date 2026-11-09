@@ -76,10 +76,7 @@ final class SupportOfficerDashboardQuery
                 'label' => $case['state_label'],
                 'tone' => $attention ? 'attention' : 'neutral',
             ],
-            'meta' => [
-                $case['program']['title'] ?? $case['coordination_label'],
-                $case['submitted_at'] ?? 'Submitted time unavailable',
-            ],
+            'hint' => $case['coordination_label'],
             'action' => ['label' => 'Open case', 'url' => $case['action_url']],
         ];
     }

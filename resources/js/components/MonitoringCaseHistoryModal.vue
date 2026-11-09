@@ -37,7 +37,7 @@ function historyIcon(kind) {
             <section ref="dialogPanel" :class="['flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-md border border-slate-300 bg-white text-slate-950 shadow-2xl', providerWorkspace ? 'provider-monitoring-workspace monitoring-dialog' : '']" role="dialog" aria-modal="true" aria-labelledby="monitoring-history-title" tabindex="-1" @keydown="handleKeydown">
                 <header class="flex items-start justify-between gap-5 border-b border-slate-200 px-5 py-4 sm:px-6">
                     <div>
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Monitoring record</p>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">{{ providerWorkspace ? 'Monitoring record' : 'Support record' }}</p>
                         <h2 id="monitoring-history-title" class="mt-1 text-xl font-bold">Check-in history</h2>
                         <p v-if="subject" class="mt-1 text-sm text-slate-500">{{ subject }}</p>
                     </div>

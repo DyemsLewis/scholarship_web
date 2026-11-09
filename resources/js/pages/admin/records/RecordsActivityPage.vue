@@ -97,8 +97,8 @@ onMounted(() => loadActivity(queueState.page));
                 <colgroup><col style="width: 25%"><col style="width: 20%"><col style="width: 15%"><col style="width: 13%"><col style="width: 17%"><col style="width: 10%"></colgroup>
                 <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="border-b border-slate-200 px-5 py-3">Event</th><th class="border-b border-slate-200 px-4 py-3">Actor</th><th class="border-b border-slate-200 px-4 py-3">Category</th><th class="border-b border-slate-200 px-4 py-3">Source</th><th class="border-b border-slate-200 px-4 py-3">Recorded</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr></thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
-                    <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
-                        <td class="px-5 py-3.5"><p class="break-words text-sm font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td>
+                    <tr v-for="item in items" :key="item.id" class="align-middle hover:bg-slate-50/70">
+                        <td class="px-5 py-3.5 text-sm font-bold text-slate-950 [overflow-wrap:anywhere]">{{ item.description || item.action_label }}</td>
                         <td class="px-4 py-3.5"><p class="break-words text-sm font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ roleLabel(item.actor_role) }}</p></td>
                         <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', categoryClass(item.category)]">{{ categoryLabel(item.category) }}</span></td>
                         <td class="px-4 py-3.5 font-mono text-xs font-semibold text-slate-600">{{ item.ip_address || 'Not recorded' }}</td>

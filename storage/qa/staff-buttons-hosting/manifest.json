@@ -1,0 +1,2800 @@
+{
+  "_AccountDirectoryTable-BfUbw9yX.js": {
+    "file": "assets/AccountDirectoryTable-BfUbw9yX.js",
+    "name": "AccountDirectoryTable",
+    "imports": [
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_AdminDialog-Cc49ThrL.js": {
+    "file": "assets/AdminDialog-Cc49ThrL.js",
+    "name": "AdminDialog",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_AdminEmptyState-DKAMOZQX.js": {
+    "file": "assets/AdminEmptyState-DKAMOZQX.js",
+    "name": "AdminEmptyState",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_AdminLoadState-CVACo4zd.js": {
+    "file": "assets/AdminLoadState-CVACo4zd.js",
+    "name": "AdminLoadState",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_AdminServiceWorkspaceShell-BbaUWf-H.js": {
+    "file": "assets/AdminServiceWorkspaceShell-BbaUWf-H.js",
+    "name": "AdminServiceWorkspaceShell",
+    "imports": [
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "resources/js/app.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js"
+    ]
+  },
+  "_AdminSidebar-p2ttLVDX.js": {
+    "file": "assets/AdminSidebar-p2ttLVDX.js",
+    "name": "AdminSidebar",
+    "imports": [
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_AdminTableFrame-CtXK9nwl.js": {
+    "file": "assets/AdminTableFrame-CtXK9nwl.js",
+    "name": "AdminTableFrame",
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_AdminWorkspaceHeader-Bhsj1F75.js": {
+    "file": "assets/AdminWorkspaceHeader-Bhsj1F75.js",
+    "name": "AdminWorkspaceHeader",
+    "imports": [
+      "_TaskPageHeader-GPS16J1l.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_AdminWorkspacePage-IW4AMaYy.js": {
+    "file": "assets/AdminWorkspacePage-IW4AMaYy.js",
+    "name": "AdminWorkspacePage",
+    "imports": [
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_AdminWorkspaceSidebar-Be0C4a7f.js": {
+    "file": "assets/AdminWorkspaceSidebar-Be0C4a7f.js",
+    "name": "AdminWorkspaceSidebar",
+    "imports": [
+      "_RoleSidebar-BbnN9AnU.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_AgreementConcernPanel-oUfPlS5h.js": {
+    "file": "assets/AgreementConcernPanel-oUfPlS5h.js",
+    "name": "AgreementConcernPanel",
+    "imports": [
+      "_useWithdrawalList-BwBhw-y7.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "resources/js/app.js",
+      "_useConcernCollection-CkpEKUvz.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js"
+    ]
+  },
+  "_ApplicantApplicationShell-EWe75QmH.js": {
+    "file": "assets/ApplicantApplicationShell-EWe75QmH.js",
+    "name": "ApplicantApplicationShell",
+    "imports": [
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "resources/js/app.js",
+      "_ApplicantRecordTabs-Smsvtq5P.js"
+    ]
+  },
+  "_ApplicantPageHeader-BK_5RmNG.js": {
+    "file": "assets/ApplicantPageHeader-BK_5RmNG.js",
+    "name": "ApplicantPageHeader",
+    "imports": [
+      "_TaskPageHeader-GPS16J1l.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_ApplicantPagePreviewModal-DWGzYv-q.js": {
+    "file": "assets/ApplicantPagePreviewModal-DWGzYv-q.js",
+    "name": "ApplicantPagePreviewModal",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_ApplicantRecordTabs-Smsvtq5P.js": {
+    "file": "assets/ApplicantRecordTabs-Smsvtq5P.js",
+    "name": "ApplicantRecordTabs",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_ApplicantSidebar-BDI7EBJK.js": {
+    "file": "assets/ApplicantSidebar-BDI7EBJK.js",
+    "name": "ApplicantSidebar",
+    "imports": [
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "_ApplicantTextSummary-CM47ztwR.js": {
+    "file": "assets/ApplicantTextSummary-CM47ztwR.js",
+    "name": "ApplicantTextSummary",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_AuthShell-CT92-BWN.js": {
+    "file": "assets/AuthShell-CT92-BWN.js",
+    "name": "AuthShell",
+    "imports": [
+      "_SiteFooter-BQtZSnce.js",
+      "_SiteNavbar-Blxmtr7v.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_BenefitDeliveryReportDialog-DMtFFWUl.js": {
+    "file": "assets/BenefitDeliveryReportDialog-DMtFFWUl.js",
+    "name": "BenefitDeliveryReportDialog",
+    "imports": [
+      "resources/js/app.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_RecipientCaseReviewLauncher-BaC9--Gh.js"
+    ]
+  },
+  "_BenefitDeliveryReportPanel-BKYca1LZ.js": {
+    "file": "assets/BenefitDeliveryReportPanel-BKYca1LZ.js",
+    "name": "BenefitDeliveryReportPanel",
+    "imports": [
+      "resources/js/app.js",
+      "_BenefitDeliveryReportDialog-DMtFFWUl.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js"
+    ]
+  },
+  "_BillingServiceWorkspaceShell-B7Sy5bM5.js": {
+    "file": "assets/BillingServiceWorkspaceShell-B7Sy5bM5.js",
+    "name": "BillingServiceWorkspaceShell",
+    "imports": [
+      "_staffQueueState-12TWltRZ.js",
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js"
+    ]
+  },
+  "_CoverImagePickerModal-CdMvSxBX.js": {
+    "file": "assets/CoverImagePickerModal-CdMvSxBX.js",
+    "name": "CoverImagePickerModal",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_DecisionReopenDialog-Cjv01H1S.js": {
+    "file": "assets/DecisionReopenDialog-Cjv01H1S.js",
+    "name": "DecisionReopenDialog",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_EducationEligibilitySummary-iVPMtrF4.js": {
+    "file": "assets/EducationEligibilitySummary-iVPMtrF4.js",
+    "name": "EducationEligibilitySummary",
+    "imports": [
+      "_educationEligibilityPolicy-DhhIUfZu.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_EligibilityConditionList-Cb346Ttj.js": {
+    "file": "assets/EligibilityConditionList-Cb346Ttj.js",
+    "name": "EligibilityConditionList",
+    "imports": [
+      "_applicantEligibility-D2Btk8RD.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_EligibilityReviewPanel-BT9B4QBU.js": {
+    "file": "assets/EligibilityReviewPanel-BT9B4QBU.js",
+    "name": "EligibilityReviewPanel",
+    "imports": [
+      "_applicantEligibility-D2Btk8RD.js",
+      "resources/js/app.js",
+      "_EligibilityConditionList-Cb346Ttj.js"
+    ]
+  },
+  "_FilePreviewModal-DAN1NYYJ.js": {
+    "file": "assets/FilePreviewModal-DAN1NYYJ.js",
+    "name": "FilePreviewModal",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_LocationMapLink-b4XB6F9p.js": {
+    "file": "assets/LocationMapLink-b4XB6F9p.js",
+    "name": "LocationMapLink",
+    "imports": [
+      "_LocationMapModal-CDfnBqli.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_LocationMapModal-CDfnBqli.js": {
+    "file": "assets/LocationMapModal-CDfnBqli.js",
+    "name": "LocationMapModal",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_LocationPinField-B44Bjd5d.js": {
+    "file": "assets/LocationPinField-B44Bjd5d.js",
+    "name": "LocationPinField",
+    "imports": [
+      "_LocationMapModal-CDfnBqli.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_MonitoringCaseHistoryModal-CiZHUzMY.js": {
+    "file": "assets/MonitoringCaseHistoryModal-CiZHUzMY.js",
+    "name": "MonitoringCaseHistoryModal",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_PortalManagerSidebar-k7qTgJqt.js": {
+    "file": "assets/PortalManagerSidebar-k7qTgJqt.js",
+    "name": "PortalManagerSidebar",
+    "imports": [
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_PrivacyNoticeCard-CqRsdQ9S.js": {
+    "file": "assets/PrivacyNoticeCard-CqRsdQ9S.js",
+    "name": "PrivacyNoticeCard",
+    "imports": [
+      "_TermsModal-BYYiaalf.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_ProviderActionDialog-CrrNu3bI.js": {
+    "file": "assets/ProviderActionDialog-CrrNu3bI.js",
+    "name": "ProviderActionDialog",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_ProviderApplicantPreviewToolbar-DIcXW8fM.js": {
+    "file": "assets/ProviderApplicantPreviewToolbar-DIcXW8fM.js",
+    "name": "ProviderApplicantPreviewToolbar",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_ProviderSidebar-ClGHxObe.js": {
+    "file": "assets/ProviderSidebar-ClGHxObe.js",
+    "name": "ProviderSidebar",
+    "imports": [
+      "_RoleSidebar-BbnN9AnU.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_RecipientAgreementSummary-BqI1NWTa.js": {
+    "file": "assets/RecipientAgreementSummary-BqI1NWTa.js",
+    "name": "RecipientAgreementSummary",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_RecipientCaseReviewDialog-CC5Gvaka.js": {
+    "file": "assets/RecipientCaseReviewDialog-CC5Gvaka.js",
+    "name": "RecipientCaseReviewDialog",
+    "imports": [
+      "resources/js/app.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_FilePreviewModal-DAN1NYYJ.js"
+    ]
+  },
+  "_RecipientCaseReviewLauncher-BaC9--Gh.js": {
+    "file": "assets/RecipientCaseReviewLauncher-BaC9--Gh.js",
+    "name": "RecipientCaseReviewLauncher",
+    "imports": [
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_RecipientCaseReviewPanel-CeptnhLJ.js": {
+    "file": "assets/RecipientCaseReviewPanel-CeptnhLJ.js",
+    "name": "RecipientCaseReviewPanel",
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js"
+    ]
+  },
+  "_ReviewOfficerSidebar-DfSCfjNj.js": {
+    "file": "assets/ReviewOfficerSidebar-DfSCfjNj.js",
+    "name": "ReviewOfficerSidebar",
+    "imports": [
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_RoleSidebar-BbnN9AnU.js": {
+    "file": "assets/RoleSidebar-BbnN9AnU.js",
+    "name": "RoleSidebar",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_ScholarshipBenefitsPanel-C6fZqqqa.js": {
+    "file": "assets/ScholarshipBenefitsPanel-C6fZqqqa.js",
+    "name": "ScholarshipBenefitsPanel",
+    "imports": [
+      "_recipientAgreement-VAQ7_Nr0.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_ScholarshipPreparationReturn-NzcjYaxh.js": {
+    "file": "assets/ScholarshipPreparationReturn-NzcjYaxh.js",
+    "name": "ScholarshipPreparationReturn",
+    "imports": [
+      "_scholarshipPreparationContext-CO2PqsTw.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_SiteFooter-BQtZSnce.js": {
+    "file": "assets/SiteFooter-BQtZSnce.js",
+    "name": "SiteFooter",
+    "imports": [
+      "_TermsModal-BYYiaalf.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_SiteNavbar-Blxmtr7v.js": {
+    "file": "assets/SiteNavbar-Blxmtr7v.js",
+    "name": "SiteNavbar",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_StaffTableIdentity-B5u_mEDj.js": {
+    "file": "assets/StaffTableIdentity-B5u_mEDj.js",
+    "name": "StaffTableIdentity",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_StaffTableLoadError-Bcr_S5Wg.js": {
+    "file": "assets/StaffTableLoadError-Bcr_S5Wg.js",
+    "name": "StaffTableLoadError",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_TaskPageHeader-GPS16J1l.js": {
+    "file": "assets/TaskPageHeader-GPS16J1l.js",
+    "name": "TaskPageHeader",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_TermsAgreement-D1nZ9Wui.js": {
+    "file": "assets/TermsAgreement-D1nZ9Wui.js",
+    "name": "TermsAgreement",
+    "imports": [
+      "resources/js/app.js",
+      "_TermsModal-BYYiaalf.js"
+    ]
+  },
+  "_TermsModal-BYYiaalf.js": {
+    "file": "assets/TermsModal-BYYiaalf.js",
+    "name": "TermsModal",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_WorkspaceDashboardHeader-CAmILOYJ.js": {
+    "file": "assets/WorkspaceDashboardHeader-CAmILOYJ.js",
+    "name": "WorkspaceDashboardHeader",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_WorkspaceDashboardSection-DC3bSD2k.js": {
+    "file": "assets/WorkspaceDashboardSection-DC3bSD2k.js",
+    "name": "WorkspaceDashboardSection",
+    "imports": [
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js"
+    ]
+  },
+  "_WorkspaceMetricStrip-CxzM274Q.js": {
+    "file": "assets/WorkspaceMetricStrip-CxzM274Q.js",
+    "name": "WorkspaceMetricStrip",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_WorkspaceTextSummary-bKy5wPTH.js": {
+    "file": "assets/WorkspaceTextSummary-bKy5wPTH.js",
+    "name": "WorkspaceTextSummary",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "__plugin-vue_export-helper-DlAUqK2U.js": {
+    "file": "assets/_plugin-vue_export-helper-DlAUqK2U.js",
+    "name": "_plugin-vue_export-helper"
+  },
+  "_adminReviewPresentation-_iABRSPs.js": {
+    "file": "assets/adminReviewPresentation-_iABRSPs.js",
+    "name": "adminReviewPresentation",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_applicantEligibility-D2Btk8RD.js": {
+    "file": "assets/applicantEligibility-D2Btk8RD.js",
+    "name": "applicantEligibility"
+  },
+  "_applicantProfileDetails-C0cw6xhP.js": {
+    "file": "assets/applicantProfileDetails-C0cw6xhP.js",
+    "name": "applicantProfileDetails",
+    "imports": [
+      "_LocationMapLink-b4XB6F9p.js",
+      "resources/js/app.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "_applicantProfileLabels-CiJjD7Ea.js": {
+    "file": "assets/applicantProfileLabels-CiJjD7Ea.js",
+    "name": "applicantProfileLabels",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_applicationConfirmations-CmpG35K4.js": {
+    "file": "assets/applicationConfirmations-CmpG35K4.js",
+    "name": "applicationConfirmations"
+  },
+  "_applicationDecisionReasons-CEZDoF_y.js": {
+    "file": "assets/applicationDecisionReasons-CEZDoF_y.js",
+    "name": "applicationDecisionReasons"
+  },
+  "_educationEligibilityPolicy-DhhIUfZu.js": {
+    "file": "assets/educationEligibilityPolicy-DhhIUfZu.js",
+    "name": "educationEligibilityPolicy",
+    "imports": [
+      "_applicantProfileLabels-CiJjD7Ea.js"
+    ]
+  },
+  "_learnerProgramPaths-BtsAyBsH.js": {
+    "file": "assets/learnerProgramPaths-BtsAyBsH.js",
+    "name": "learnerProgramPaths"
+  },
+  "_phoneNumber-CNykz8qD.js": {
+    "file": "assets/phoneNumber-CNykz8qD.js",
+    "name": "phoneNumber"
+  },
+  "_recipientAgreement-VAQ7_Nr0.js": {
+    "file": "assets/recipientAgreement-VAQ7_Nr0.js",
+    "name": "recipientAgreement",
+    "imports": [
+      "resources/js/app.js"
+    ]
+  },
+  "_recipientWithdrawal-3RpokfEi.js": {
+    "file": "assets/recipientWithdrawal-3RpokfEi.js",
+    "name": "recipientWithdrawal"
+  },
+  "_scholarshipPreparationContext-CO2PqsTw.js": {
+    "file": "assets/scholarshipPreparationContext-CO2PqsTw.js",
+    "name": "scholarshipPreparationContext"
+  },
+  "_selectionPlan-ZdZBjDtp.js": {
+    "file": "assets/selectionPlan-ZdZBjDtp.js",
+    "name": "selectionPlan"
+  },
+  "_selectionSessionValidation-CbU0eOji.js": {
+    "file": "assets/selectionSessionValidation-CbU0eOji.js",
+    "name": "selectionSessionValidation"
+  },
+  "_staffQueueState-12TWltRZ.js": {
+    "file": "assets/staffQueueState-12TWltRZ.js",
+    "name": "staffQueueState"
+  },
+  "_useConcernCollection-CkpEKUvz.js": {
+    "file": "assets/useConcernCollection-CkpEKUvz.js",
+    "name": "useConcernCollection",
+    "imports": [
+      "resources/js/app.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_RecipientCaseReviewLauncher-BaC9--Gh.js"
+    ]
+  },
+  "_useWithdrawalList-BwBhw-y7.js": {
+    "file": "assets/useWithdrawalList-BwBhw-y7.js",
+    "name": "useWithdrawalList",
+    "imports": [
+      "resources/js/app.js",
+      "_recipientWithdrawal-3RpokfEi.js"
+    ]
+  },
+  "resources/css/app.css": {
+    "file": "assets/app-staff-buttons-e12a3061aeea.css",
+    "src": "resources/css/app.css",
+    "isEntry": true,
+    "name": "app",
+    "names": [
+      "app.css"
+    ]
+  },
+  "resources/js/app.js": {
+    "file": "assets/app-CnC2V-l-.js",
+    "name": "app",
+    "src": "resources/js/app.js",
+    "isEntry": true,
+    "dynamicImports": [
+      "resources/js/pages/AccountSetupPage.vue",
+      "resources/js/pages/AdminPage.vue",
+      "resources/js/pages/admin/reviews/RecipientCaseReviewDirectoryPage.vue",
+      "resources/js/pages/admin/accounts/AccountManagerDashboardPage.vue",
+      "resources/js/pages/AdminAccountManagerWorkspacePage.vue",
+      "resources/js/pages/admin/accounts/AccountDirectoryPage.vue",
+      "resources/js/pages/admin/accounts/AccountAttentionPage.vue",
+      "resources/js/pages/admin/accounts/AccountCreatePage.vue",
+      "resources/js/pages/admin/accounts/AccountRecordPage.vue",
+      "resources/js/pages/AdminAccountFormPage.vue",
+      "resources/js/pages/AdminApplicantReviewPage.vue",
+      "resources/js/pages/AdminBillingPage.vue",
+      "resources/js/pages/AdminFinancePage.vue",
+      "resources/js/pages/AdminLogsPage.vue",
+      "resources/js/pages/AdminMonitoringReviewPage.vue",
+      "resources/js/pages/AdminProfilePage.vue",
+      "resources/js/pages/AdminProgramReviewPage.vue",
+      "resources/js/pages/AdminProviderReviewPage.vue",
+      "resources/js/pages/AdminReviewOfficerWorkspacePage.vue",
+      "resources/js/pages/admin/reviews/ReviewOverviewPage.vue",
+      "resources/js/pages/admin/reviews/ReviewQueuePage.vue",
+      "resources/js/pages/admin/reviews/ReviewQueuePage.vue",
+      "resources/js/pages/admin/reviews/ReviewQueuePage.vue",
+      "resources/js/pages/admin/reviews/ReviewQueuePage.vue",
+      "resources/js/pages/admin/reviews/SelectionActivityRecordPage.vue",
+      "resources/js/pages/admin/reviews/ReviewQueuePage.vue",
+      "resources/js/pages/admin/reviews/ReviewQueuePage.vue",
+      "resources/js/pages/admin/reviews/ProviderReviewRecordPage.vue",
+      "resources/js/pages/admin/reviews/ProgramReviewRecordPage.vue",
+      "resources/js/pages/admin/reviews/ApplicantReviewRecordPage.vue",
+      "resources/js/pages/admin/reviews/MonitoringReviewRecordPage.vue",
+      "resources/js/pages/AdminSupportOfficerWorkspacePage.vue",
+      "resources/js/pages/admin/support/SupportOverviewPage.vue",
+      "resources/js/pages/admin/support/SupportCaseDirectoryPage.vue",
+      "resources/js/pages/admin/support/SupportCaseRecordPage.vue",
+      "resources/js/pages/AdminBillingOfficerWorkspacePage.vue",
+      "resources/js/pages/admin/billing/BillingOverviewPage.vue",
+      "resources/js/pages/admin/billing/BillingRequestDirectoryPage.vue",
+      "resources/js/pages/admin/billing/AdminServiceOverviewPage.vue",
+      "resources/js/pages/admin/billing/AdminServiceDeliveryPage.vue",
+      "resources/js/pages/admin/billing/AdminServiceFilesPage.vue",
+      "resources/js/pages/admin/billing/AdminServiceUpdatesPage.vue",
+      "resources/js/pages/admin/billing/AdminServiceMeetingPage.vue",
+      "resources/js/pages/admin/billing/AdminServiceCloseoutPage.vue",
+      "resources/js/pages/admin/billing/AdminServiceHistoryPage.vue",
+      "resources/js/pages/AdminFinanceOfficerWorkspacePage.vue",
+      "resources/js/pages/admin/finance/FinanceOverviewPage.vue",
+      "resources/js/pages/admin/finance/FinancePaymentsPage.vue",
+      "resources/js/pages/admin/finance/FinanceExceptionsPage.vue",
+      "resources/js/pages/admin/finance/FinanceReceiptPage.vue",
+      "resources/js/pages/AdminRecordsOfficerWorkspacePage.vue",
+      "resources/js/pages/admin/records/RecordsOfficerDashboardPage.vue",
+      "resources/js/pages/admin/records/RecordsActivityPage.vue",
+      "resources/js/pages/admin/records/RecordsActivityRecordPage.vue",
+      "resources/js/pages/admin/records/RecordsExportsPage.vue",
+      "resources/js/pages/AdminPortalManagerWorkspacePage.vue",
+      "resources/js/pages/admin/portal/PortalManagerAreaPage.vue",
+      "resources/js/pages/admin/governance/SuperAdminWorkspacePage.vue",
+      "resources/js/pages/admin/governance/SuperAdminAreaPage.vue",
+      "resources/js/pages/AdminReviewsPage.vue",
+      "resources/js/pages/AdminUsersPage.vue",
+      "resources/js/pages/UserDashboardPage.vue",
+      "resources/js/pages/UserApplicationOverviewPage.vue",
+      "resources/js/pages/UserApplicationSubmissionPage.vue",
+      "resources/js/pages/UserApplicationActivitiesPage.vue",
+      "resources/js/pages/UserApplicationOutcomePage.vue",
+      "resources/js/pages/UserApplicationHistoryPage.vue",
+      "resources/js/pages/UserApplicationDetailPage.vue",
+      "resources/js/pages/UserApplicationsPage.vue",
+      "resources/js/pages/UserDocumentsPage.vue",
+      "resources/js/pages/UserMonitoringPage.vue",
+      "resources/js/pages/UserMonitoringDetailPage.vue",
+      "resources/js/pages/UserProfilePage.vue",
+      "resources/js/pages/UserProvidersPage.vue",
+      "resources/js/pages/UserScholarshipDetailPage.vue",
+      "resources/js/pages/UserScholarshipsPage.vue",
+      "resources/js/pages/ForgotPasswordPage.vue",
+      "resources/js/pages/LandingPage.vue",
+      "resources/js/pages/LoginPage.vue",
+      "resources/js/pages/provider/ProviderManagerDashboardPage.vue",
+      "resources/js/pages/provider/ProviderAccountPage.vue",
+      "resources/js/pages/provider/reviews/ApplicationReviewerDashboardPage.vue",
+      "resources/js/pages/provider/reviews/ApplicationReviewDirectoryPage.vue",
+      "resources/js/pages/provider/reviews/ApplicationReviewRecordPage.vue",
+      "resources/js/pages/provider/selection/SelectionOfficerDashboardPage.vue",
+      "resources/js/pages/provider/selection/SelectionActivityDirectoryPage.vue",
+      "resources/js/pages/provider/selection/SelectionSessionFormPage.vue",
+      "resources/js/pages/provider/selection/SelectionSessionRecordPage.vue",
+      "resources/js/pages/provider/selection/SelectionActivityRecordPage.vue",
+      "resources/js/pages/provider/decisions/DecisionOfficerDashboardPage.vue",
+      "resources/js/pages/provider/decisions/FinalDecisionDirectoryPage.vue",
+      "resources/js/pages/provider/decisions/FinalDecisionRecordPage.vue",
+      "resources/js/pages/provider/recipients/RecipientOfficerDashboardPage.vue",
+      "resources/js/pages/provider/recipients/RecipientDirectoryPage.vue",
+      "resources/js/pages/provider/recipients/RecipientRecordPage.vue",
+      "resources/js/pages/provider/recipients/WithdrawalDirectoryPage.vue",
+      "resources/js/pages/provider/recipients/AgreementConcernDirectoryPage.vue",
+      "resources/js/pages/provider/releases/BenefitDeliveryReportDirectoryPage.vue",
+      "resources/js/pages/provider/monitoring/MonitoringOfficerDashboardPage.vue",
+      "resources/js/pages/provider/monitoring/MonitoringDirectoryPage.vue",
+      "resources/js/pages/provider/monitoring/MonitoringCheckInRecordPage.vue",
+      "resources/js/pages/provider/releases/BenefitReleaseOfficerDashboardPage.vue",
+      "resources/js/pages/provider/releases/BenefitReleaseDirectoryPage.vue",
+      "resources/js/pages/provider/releases/BenefitReleaseSchedulePage.vue",
+      "resources/js/pages/provider/releases/BenefitReleaseRecordPage.vue",
+      "resources/js/pages/provider/organization/OrganizationProfileDashboardPage.vue",
+      "resources/js/pages/provider/organization/OrganizationProfileReadinessPage.vue",
+      "resources/js/pages/provider/organization/OrganizationPublicProfilePage.vue",
+      "resources/js/pages/provider/organization/OrganizationContactPage.vue",
+      "resources/js/pages/provider/organization/OrganizationVerificationPage.vue",
+      "resources/js/pages/provider/team/TeamAdministratorDashboardPage.vue",
+      "resources/js/pages/provider/team/TeamDirectoryPage.vue",
+      "resources/js/pages/provider/support/SupportStaffDashboardPage.vue",
+      "resources/js/pages/provider/support/SupportCaseDirectoryPage.vue",
+      "resources/js/pages/provider/support/SupportCaseRecordPage.vue",
+      "resources/js/pages/provider/support/SupportPlatformReportPage.vue",
+      "resources/js/pages/provider/billing/BillingStaffDashboardPage.vue",
+      "resources/js/pages/provider/billing/BillingRequestDirectoryPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceCatalogPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceDetailPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceIntakePage.vue",
+      "resources/js/pages/provider/billing/BillingServiceReviewPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceOverviewPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceMeetingPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceFilesPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceUpdatesPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceCloseoutPage.vue",
+      "resources/js/pages/provider/billing/BillingServiceHistoryPage.vue",
+      "resources/js/pages/provider/programs/ProgramFormPage.vue",
+      "resources/js/pages/provider/programs/ProgramAccessPage.vue",
+      "resources/js/pages/provider/monitoring/MonitoringPlanPage.vue",
+      "resources/js/pages/provider/programs/ProgramCoordinatorDashboardPage.vue",
+      "resources/js/pages/provider/programs/ProgramDirectoryPage.vue",
+      "resources/js/pages/provider/programs/ProgramRecordPage.vue",
+      "resources/js/pages/provider/team/TeamAccountFormPage.vue",
+      "resources/js/pages/RegisterPage.vue",
+      "resources/js/pages/ResetPasswordPage.vue",
+      "resources/js/pages/SupportReportQueuePage.vue"
+    ]
+  },
+  "resources/js/pages/AccountSetupPage.vue": {
+    "file": "assets/AccountSetupPage-CIG05LvM.js",
+    "name": "AccountSetupPage",
+    "src": "resources/js/pages/AccountSetupPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_SiteFooter-BQtZSnce.js",
+      "_TermsModal-BYYiaalf.js"
+    ]
+  },
+  "resources/js/pages/AdminAccountFormPage.vue": {
+    "file": "assets/AdminAccountFormPage-B6Z0WQIs.js",
+    "name": "AdminAccountFormPage",
+    "src": "resources/js/pages/AdminAccountFormPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_phoneNumber-CNykz8qD.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminAccountManagerWorkspacePage.vue": {
+    "file": "assets/AdminAccountManagerWorkspacePage-Jx2H3ztA.js",
+    "name": "AdminAccountManagerWorkspacePage",
+    "src": "resources/js/pages/AdminAccountManagerWorkspacePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_phoneNumber-CNykz8qD.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminApplicantReviewPage.vue": {
+    "file": "assets/AdminApplicantReviewPage-CkGsR5F4.js",
+    "name": "AdminApplicantReviewPage",
+    "src": "resources/js/pages/AdminApplicantReviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_ReviewOfficerSidebar-DfSCfjNj.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_applicantProfileDetails-C0cw6xhP.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "resources/js/pages/AdminBillingOfficerWorkspacePage.vue": {
+    "file": "assets/AdminBillingOfficerWorkspacePage-CKRQy0W0.js",
+    "name": "AdminBillingOfficerWorkspacePage",
+    "src": "resources/js/pages/AdminBillingOfficerWorkspacePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminBillingPage.vue": {
+    "file": "assets/AdminBillingPage-Bn_6BUEt.js",
+    "name": "AdminBillingPage",
+    "src": "resources/js/pages/AdminBillingPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminFinanceOfficerWorkspacePage.vue": {
+    "file": "assets/AdminFinanceOfficerWorkspacePage-Wj_vXEMA.js",
+    "name": "AdminFinanceOfficerWorkspacePage",
+    "src": "resources/js/pages/AdminFinanceOfficerWorkspacePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminFinancePage.vue": {
+    "file": "assets/AdminFinancePage-Dj5jXXy_.js",
+    "name": "AdminFinancePage",
+    "src": "resources/js/pages/AdminFinancePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminLogsPage.vue": {
+    "file": "assets/AdminLogsPage-Ctxi0LdA.js",
+    "name": "AdminLogsPage",
+    "src": "resources/js/pages/AdminLogsPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminMonitoringReviewPage.vue": {
+    "file": "assets/AdminMonitoringReviewPage-CarGw9h4.js",
+    "name": "AdminMonitoringReviewPage",
+    "src": "resources/js/pages/AdminMonitoringReviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_ReviewOfficerSidebar-DfSCfjNj.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminPage.vue": {
+    "file": "assets/AdminPage-BWL9wgcL.js",
+    "name": "AdminPage",
+    "src": "resources/js/pages/AdminPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminSidebar-p2ttLVDX.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "resources/js/app.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminPortalManagerWorkspacePage.vue": {
+    "file": "assets/AdminPortalManagerWorkspacePage-qo8Z2ZS1.js",
+    "name": "AdminPortalManagerWorkspacePage",
+    "src": "resources/js/pages/AdminPortalManagerWorkspacePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminProfilePage.vue": {
+    "file": "assets/AdminProfilePage-bLWaGedu.js",
+    "name": "AdminProfilePage",
+    "src": "resources/js/pages/AdminProfilePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_phoneNumber-CNykz8qD.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminProgramReviewPage.vue": {
+    "file": "assets/AdminProgramReviewPage-CRmrOvWf.js",
+    "name": "AdminProgramReviewPage",
+    "src": "resources/js/pages/AdminProgramReviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_EligibilityConditionList-Cb346Ttj.js",
+      "_EducationEligibilitySummary-iVPMtrF4.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_ScholarshipBenefitsPanel-C6fZqqqa.js",
+      "_ReviewOfficerSidebar-DfSCfjNj.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_educationEligibilityPolicy-DhhIUfZu.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "_recipientAgreement-VAQ7_Nr0.js"
+    ]
+  },
+  "resources/js/pages/AdminProviderReviewPage.vue": {
+    "file": "assets/AdminProviderReviewPage-1DN7nPDl.js",
+    "name": "AdminProviderReviewPage",
+    "src": "resources/js/pages/AdminProviderReviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_ReviewOfficerSidebar-DfSCfjNj.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminRecordsOfficerWorkspacePage.vue": {
+    "file": "assets/AdminRecordsOfficerWorkspacePage-BIuYZ0IU.js",
+    "name": "AdminRecordsOfficerWorkspacePage",
+    "src": "resources/js/pages/AdminRecordsOfficerWorkspacePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminReviewOfficerWorkspacePage.vue": {
+    "file": "assets/AdminReviewOfficerWorkspacePage-Ds03PVS4.js",
+    "name": "AdminReviewOfficerWorkspacePage",
+    "src": "resources/js/pages/AdminReviewOfficerWorkspacePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ReviewOfficerSidebar-DfSCfjNj.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminReviewsPage.vue": {
+    "file": "assets/AdminReviewsPage-DuIvFZDw.js",
+    "name": "AdminReviewsPage",
+    "src": "resources/js/pages/AdminReviewsPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminSupportOfficerWorkspacePage.vue": {
+    "file": "assets/AdminSupportOfficerWorkspacePage-C_quxTcV.js",
+    "name": "AdminSupportOfficerWorkspacePage",
+    "src": "resources/js/pages/AdminSupportOfficerWorkspacePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_PortalManagerSidebar-k7qTgJqt.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/AdminUsersPage.vue": {
+    "file": "assets/AdminUsersPage-Cz65Uh_t.js",
+    "name": "AdminUsersPage",
+    "src": "resources/js/pages/AdminUsersPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/ForgotPasswordPage.vue": {
+    "file": "assets/ForgotPasswordPage-XTY_zviG.js",
+    "name": "ForgotPasswordPage",
+    "src": "resources/js/pages/ForgotPasswordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AuthShell-CT92-BWN.js",
+      "_SiteFooter-BQtZSnce.js",
+      "_TermsModal-BYYiaalf.js",
+      "_SiteNavbar-Blxmtr7v.js"
+    ]
+  },
+  "resources/js/pages/LandingPage.vue": {
+    "file": "assets/LandingPage-CriwICwT.js",
+    "name": "LandingPage",
+    "src": "resources/js/pages/LandingPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_SiteFooter-BQtZSnce.js",
+      "_SiteNavbar-Blxmtr7v.js",
+      "__plugin-vue_export-helper-DlAUqK2U.js",
+      "resources/js/app.js",
+      "_TermsModal-BYYiaalf.js"
+    ],
+    "css": [
+      "assets/LandingPage-BJvoZOoN.css"
+    ]
+  },
+  "resources/js/pages/LoginPage.vue": {
+    "file": "assets/LoginPage-B-xInOQJ.js",
+    "name": "LoginPage",
+    "src": "resources/js/pages/LoginPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AuthShell-CT92-BWN.js",
+      "_SiteFooter-BQtZSnce.js",
+      "_TermsModal-BYYiaalf.js",
+      "_SiteNavbar-Blxmtr7v.js"
+    ]
+  },
+  "resources/js/pages/RegisterPage.vue": {
+    "file": "assets/RegisterPage-D28a9FVz.js",
+    "name": "RegisterPage",
+    "src": "resources/js/pages/RegisterPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AuthShell-CT92-BWN.js",
+      "_TermsAgreement-D1nZ9Wui.js",
+      "_phoneNumber-CNykz8qD.js",
+      "_SiteFooter-BQtZSnce.js",
+      "_TermsModal-BYYiaalf.js",
+      "_SiteNavbar-Blxmtr7v.js"
+    ]
+  },
+  "resources/js/pages/ResetPasswordPage.vue": {
+    "file": "assets/ResetPasswordPage-BsGDhQZW.js",
+    "name": "ResetPasswordPage",
+    "src": "resources/js/pages/ResetPasswordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AuthShell-CT92-BWN.js",
+      "_SiteFooter-BQtZSnce.js",
+      "_TermsModal-BYYiaalf.js",
+      "_SiteNavbar-Blxmtr7v.js"
+    ]
+  },
+  "resources/js/pages/SupportReportQueuePage.vue": {
+    "file": "assets/SupportReportQueuePage-MD5vFytE.js",
+    "name": "SupportReportQueuePage",
+    "src": "resources/js/pages/SupportReportQueuePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminSidebar-p2ttLVDX.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js"
+    ]
+  },
+  "resources/js/pages/UserApplicationActivitiesPage.vue": {
+    "file": "assets/UserApplicationActivitiesPage-BScdYpst.js",
+    "name": "UserApplicationActivitiesPage",
+    "src": "resources/js/pages/UserApplicationActivitiesPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "resources/js/app.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_ApplicantApplicationShell-EWe75QmH.js",
+      "_applicationConfirmations-CmpG35K4.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_ApplicantRecordTabs-Smsvtq5P.js"
+    ]
+  },
+  "resources/js/pages/UserApplicationDetailPage.vue": {
+    "file": "assets/UserApplicationDetailPage-ChxJwNKr.js",
+    "name": "UserApplicationDetailPage",
+    "src": "resources/js/pages/UserApplicationDetailPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_applicationConfirmations-CmpG35K4.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_EligibilityConditionList-Cb346Ttj.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_RecipientAgreementSummary-BqI1NWTa.js",
+      "_TermsAgreement-D1nZ9Wui.js",
+      "_selectionPlan-ZdZBjDtp.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_TermsModal-BYYiaalf.js"
+    ]
+  },
+  "resources/js/pages/UserApplicationHistoryPage.vue": {
+    "file": "assets/UserApplicationHistoryPage-BtL7cfnF.js",
+    "name": "UserApplicationHistoryPage",
+    "src": "resources/js/pages/UserApplicationHistoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_ApplicantApplicationShell-EWe75QmH.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_ApplicantRecordTabs-Smsvtq5P.js"
+    ]
+  },
+  "resources/js/pages/UserApplicationOutcomePage.vue": {
+    "file": "assets/UserApplicationOutcomePage-Bvc3eVSJ.js",
+    "name": "UserApplicationOutcomePage",
+    "src": "resources/js/pages/UserApplicationOutcomePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_ApplicantApplicationShell-EWe75QmH.js",
+      "resources/js/app.js",
+      "_RecipientAgreementSummary-BqI1NWTa.js",
+      "_AgreementConcernPanel-oUfPlS5h.js",
+      "_RecipientCaseReviewPanel-CeptnhLJ.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_ApplicantRecordTabs-Smsvtq5P.js",
+      "_useWithdrawalList-BwBhw-y7.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_useConcernCollection-CkpEKUvz.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_RecipientCaseReviewLauncher-BaC9--Gh.js",
+      "_StaffTableIdentity-B5u_mEDj.js"
+    ]
+  },
+  "resources/js/pages/UserApplicationOverviewPage.vue": {
+    "file": "assets/UserApplicationOverviewPage-BSpV1A7-.js",
+    "name": "UserApplicationOverviewPage",
+    "src": "resources/js/pages/UserApplicationOverviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_ApplicantApplicationShell-EWe75QmH.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_ApplicantRecordTabs-Smsvtq5P.js"
+    ]
+  },
+  "resources/js/pages/UserApplicationSubmissionPage.vue": {
+    "file": "assets/UserApplicationSubmissionPage-ZfhgjaAH.js",
+    "name": "UserApplicationSubmissionPage",
+    "src": "resources/js/pages/UserApplicationSubmissionPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_TermsAgreement-D1nZ9Wui.js",
+      "_ApplicantApplicationShell-EWe75QmH.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_TermsModal-BYYiaalf.js",
+      "_ApplicantRecordTabs-Smsvtq5P.js"
+    ]
+  },
+  "resources/js/pages/UserApplicationsPage.vue": {
+    "file": "assets/UserApplicationsPage-g9UsUl5u.js",
+    "name": "UserApplicationsPage",
+    "src": "resources/js/pages/UserApplicationsPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ApplicantPageHeader-BK_5RmNG.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_EligibilityConditionList-Cb346Ttj.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_PrivacyNoticeCard-CqRsdQ9S.js",
+      "_ScholarshipBenefitsPanel-C6fZqqqa.js",
+      "_TermsAgreement-D1nZ9Wui.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_selectionPlan-ZdZBjDtp.js",
+      "_scholarshipPreparationContext-CO2PqsTw.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_TermsModal-BYYiaalf.js",
+      "_recipientAgreement-VAQ7_Nr0.js"
+    ]
+  },
+  "resources/js/pages/UserDashboardPage.vue": {
+    "file": "assets/UserDashboardPage-CWVzWelU.js",
+    "name": "UserDashboardPage",
+    "src": "resources/js/pages/UserDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantTextSummary-CM47ztwR.js",
+      "resources/js/app.js",
+      "_ApplicantPageHeader-BK_5RmNG.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/UserDocumentsPage.vue": {
+    "file": "assets/UserDocumentsPage-CoNP4JiL.js",
+    "name": "UserDocumentsPage",
+    "src": "resources/js/pages/UserDocumentsPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantPageHeader-BK_5RmNG.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_ScholarshipPreparationReturn-NzcjYaxh.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "resources/js/app.js",
+      "_PrivacyNoticeCard-CqRsdQ9S.js",
+      "_TermsAgreement-D1nZ9Wui.js",
+      "_scholarshipPreparationContext-CO2PqsTw.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_TermsModal-BYYiaalf.js"
+    ]
+  },
+  "resources/js/pages/UserMonitoringDetailPage.vue": {
+    "file": "assets/UserMonitoringDetailPage-BBPH9QMT.js",
+    "name": "UserMonitoringDetailPage",
+    "src": "resources/js/pages/UserMonitoringDetailPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "resources/js/app.js",
+      "_ApplicantRecordTabs-Smsvtq5P.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_MonitoringCaseHistoryModal-CiZHUzMY.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_BenefitDeliveryReportPanel-BKYca1LZ.js",
+      "_RecipientCaseReviewPanel-CeptnhLJ.js",
+      "_RecipientCaseReviewLauncher-BaC9--Gh.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_BenefitDeliveryReportDialog-DMtFFWUl.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_StaffTableIdentity-B5u_mEDj.js"
+    ]
+  },
+  "resources/js/pages/UserMonitoringPage.vue": {
+    "file": "assets/UserMonitoringPage-DbE5djOU.js",
+    "name": "UserMonitoringPage",
+    "src": "resources/js/pages/UserMonitoringPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantPageHeader-BK_5RmNG.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "resources/js/app.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/UserProfilePage.vue": {
+    "file": "assets/UserProfilePage-ejbWlxLf.js",
+    "name": "UserProfilePage",
+    "src": "resources/js/pages/UserProfilePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ApplicantPageHeader-BK_5RmNG.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_ScholarshipPreparationReturn-NzcjYaxh.js",
+      "_applicantProfileDetails-C0cw6xhP.js",
+      "_TermsAgreement-D1nZ9Wui.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "__plugin-vue_export-helper-DlAUqK2U.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_PrivacyNoticeCard-CqRsdQ9S.js",
+      "_phoneNumber-CNykz8qD.js",
+      "_learnerProgramPaths-BtsAyBsH.js",
+      "_educationEligibilityPolicy-DhhIUfZu.js",
+      "_scholarshipPreparationContext-CO2PqsTw.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_TermsModal-BYYiaalf.js"
+    ],
+    "css": [
+      "assets/UserProfilePage-C3I8Vljf.css"
+    ]
+  },
+  "resources/js/pages/UserProvidersPage.vue": {
+    "file": "assets/UserProvidersPage-DwhDF8RB.js",
+    "name": "UserProvidersPage",
+    "src": "resources/js/pages/UserProvidersPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ApplicantPageHeader-BK_5RmNG.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_ApplicantTextSummary-CM47ztwR.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_ProviderApplicantPreviewToolbar-DIcXW8fM.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "resources/js/pages/UserScholarshipDetailPage.vue": {
+    "file": "assets/UserScholarshipDetailPage-oRzriPuj.js",
+    "name": "UserScholarshipDetailPage",
+    "src": "resources/js/pages/UserScholarshipDetailPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_ProviderApplicantPreviewToolbar-DIcXW8fM.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "resources/js/app.js",
+      "_scholarshipPreparationContext-CO2PqsTw.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/UserScholarshipsPage.vue": {
+    "file": "assets/UserScholarshipsPage-Boihwm8e.js",
+    "name": "UserScholarshipsPage",
+    "src": "resources/js/pages/UserScholarshipsPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ApplicantPageHeader-BK_5RmNG.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_learnerProgramPaths-BtsAyBsH.js",
+      "__plugin-vue_export-helper-DlAUqK2U.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ],
+    "css": [
+      "assets/UserScholarshipsPage-DHtPfTgz.css"
+    ]
+  },
+  "resources/js/pages/admin/accounts/AccountAttentionPage.vue": {
+    "file": "assets/AccountAttentionPage-8XPsDdTP.js",
+    "name": "AccountAttentionPage",
+    "src": "resources/js/pages/admin/accounts/AccountAttentionPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AccountDirectoryTable-BfUbw9yX.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminEmptyState-DKAMOZQX.js"
+    ]
+  },
+  "resources/js/pages/admin/accounts/AccountCreatePage.vue": {
+    "file": "assets/AccountCreatePage-BTH57m-C.js",
+    "name": "AccountCreatePage",
+    "src": "resources/js/pages/admin/accounts/AccountCreatePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_phoneNumber-CNykz8qD.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/accounts/AccountDirectoryPage.vue": {
+    "file": "assets/AccountDirectoryPage-DYowXTw2.js",
+    "name": "AccountDirectoryPage",
+    "src": "resources/js/pages/admin/accounts/AccountDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AccountDirectoryTable-BfUbw9yX.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminEmptyState-DKAMOZQX.js"
+    ]
+  },
+  "resources/js/pages/admin/accounts/AccountManagerDashboardPage.vue": {
+    "file": "assets/AccountManagerDashboardPage-T22Y7G7Z.js",
+    "name": "AccountManagerDashboardPage",
+    "src": "resources/js/pages/admin/accounts/AccountManagerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/accounts/AccountRecordPage.vue": {
+    "file": "assets/AccountRecordPage-BWVlXApT.js",
+    "name": "AccountRecordPage",
+    "src": "resources/js/pages/admin/accounts/AccountRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminDialog-Cc49ThrL.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/AdminServiceCloseoutPage.vue": {
+    "file": "assets/AdminServiceCloseoutPage-B2g4ozwE.js",
+    "name": "AdminServiceCloseoutPage",
+    "src": "resources/js/pages/admin/billing/AdminServiceCloseoutPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminServiceWorkspaceShell-BbaUWf-H.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/AdminServiceDeliveryPage.vue": {
+    "file": "assets/AdminServiceDeliveryPage-BYFy5dlP.js",
+    "name": "AdminServiceDeliveryPage",
+    "src": "resources/js/pages/admin/billing/AdminServiceDeliveryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminServiceWorkspaceShell-BbaUWf-H.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/AdminServiceFilesPage.vue": {
+    "file": "assets/AdminServiceFilesPage-NcOXE4s-.js",
+    "name": "AdminServiceFilesPage",
+    "src": "resources/js/pages/admin/billing/AdminServiceFilesPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminServiceWorkspaceShell-BbaUWf-H.js",
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/AdminServiceHistoryPage.vue": {
+    "file": "assets/AdminServiceHistoryPage-Qw5Fpv2b.js",
+    "name": "AdminServiceHistoryPage",
+    "src": "resources/js/pages/admin/billing/AdminServiceHistoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminServiceWorkspaceShell-BbaUWf-H.js",
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/AdminServiceMeetingPage.vue": {
+    "file": "assets/AdminServiceMeetingPage-BwKp3nUE.js",
+    "name": "AdminServiceMeetingPage",
+    "src": "resources/js/pages/admin/billing/AdminServiceMeetingPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminServiceWorkspaceShell-BbaUWf-H.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/AdminServiceOverviewPage.vue": {
+    "file": "assets/AdminServiceOverviewPage-ChDoFHuB.js",
+    "name": "AdminServiceOverviewPage",
+    "src": "resources/js/pages/admin/billing/AdminServiceOverviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminServiceWorkspaceShell-BbaUWf-H.js",
+      "resources/js/app.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/AdminServiceUpdatesPage.vue": {
+    "file": "assets/AdminServiceUpdatesPage-DTMsQpLS.js",
+    "name": "AdminServiceUpdatesPage",
+    "src": "resources/js/pages/admin/billing/AdminServiceUpdatesPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminServiceWorkspaceShell-BbaUWf-H.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/BillingOverviewPage.vue": {
+    "file": "assets/BillingOverviewPage-CP7b65hu.js",
+    "name": "BillingOverviewPage",
+    "src": "resources/js/pages/admin/billing/BillingOverviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/billing/BillingRequestDirectoryPage.vue": {
+    "file": "assets/BillingRequestDirectoryPage-CKLmKOwp.js",
+    "name": "BillingRequestDirectoryPage",
+    "src": "resources/js/pages/admin/billing/BillingRequestDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/finance/FinanceExceptionsPage.vue": {
+    "file": "assets/FinanceExceptionsPage-MthXyW7B.js",
+    "name": "FinanceExceptionsPage",
+    "src": "resources/js/pages/admin/finance/FinanceExceptionsPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/finance/FinanceOverviewPage.vue": {
+    "file": "assets/FinanceOverviewPage-DAYTgfWN.js",
+    "name": "FinanceOverviewPage",
+    "src": "resources/js/pages/admin/finance/FinanceOverviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/finance/FinancePaymentsPage.vue": {
+    "file": "assets/FinancePaymentsPage-CUgc3Wbu.js",
+    "name": "FinancePaymentsPage",
+    "src": "resources/js/pages/admin/finance/FinancePaymentsPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/finance/FinanceReceiptPage.vue": {
+    "file": "assets/FinanceReceiptPage-C47syEJ2.js",
+    "name": "FinanceReceiptPage",
+    "src": "resources/js/pages/admin/finance/FinanceReceiptPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/governance/SuperAdminAreaPage.vue": {
+    "file": "assets/SuperAdminAreaPage-J6149qNC.js",
+    "name": "SuperAdminAreaPage",
+    "src": "resources/js/pages/admin/governance/SuperAdminAreaPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/governance/SuperAdminWorkspacePage.vue": {
+    "file": "assets/SuperAdminWorkspacePage-G9atGH7Q.js",
+    "name": "SuperAdminWorkspacePage",
+    "src": "resources/js/pages/admin/governance/SuperAdminWorkspacePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/portal/PortalManagerAreaPage.vue": {
+    "file": "assets/PortalManagerAreaPage-Cupm1ngM.js",
+    "name": "PortalManagerAreaPage",
+    "src": "resources/js/pages/admin/portal/PortalManagerAreaPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/records/RecordsActivityPage.vue": {
+    "file": "assets/RecordsActivityPage-CnxlaJjs.js",
+    "name": "RecordsActivityPage",
+    "src": "resources/js/pages/admin/records/RecordsActivityPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/records/RecordsActivityRecordPage.vue": {
+    "file": "assets/RecordsActivityRecordPage-CLuei5w3.js",
+    "name": "RecordsActivityRecordPage",
+    "src": "resources/js/pages/admin/records/RecordsActivityRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/records/RecordsExportsPage.vue": {
+    "file": "assets/RecordsExportsPage-DqT_aAoY.js",
+    "name": "RecordsExportsPage",
+    "src": "resources/js/pages/admin/records/RecordsExportsPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/records/RecordsOfficerDashboardPage.vue": {
+    "file": "assets/RecordsOfficerDashboardPage-BRRVmw8q.js",
+    "name": "RecordsOfficerDashboardPage",
+    "src": "resources/js/pages/admin/records/RecordsOfficerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/reviews/ApplicantReviewRecordPage.vue": {
+    "file": "assets/ApplicantReviewRecordPage-DmmX3QMB.js",
+    "name": "ApplicantReviewRecordPage",
+    "src": "resources/js/pages/admin/reviews/ApplicantReviewRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_applicantProfileDetails-C0cw6xhP.js",
+      "_adminReviewPresentation-_iABRSPs.js",
+      "__plugin-vue_export-helper-DlAUqK2U.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ],
+    "css": [
+      "assets/ApplicantReviewRecordPage-kGdBjeip.css"
+    ]
+  },
+  "resources/js/pages/admin/reviews/MonitoringReviewRecordPage.vue": {
+    "file": "assets/MonitoringReviewRecordPage-CIOEw1Zx.js",
+    "name": "MonitoringReviewRecordPage",
+    "src": "resources/js/pages/admin/reviews/MonitoringReviewRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminDialog-Cc49ThrL.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_adminReviewPresentation-_iABRSPs.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/reviews/ProgramReviewRecordPage.vue": {
+    "file": "assets/ProgramReviewRecordPage-CbEJflLY.js",
+    "name": "ProgramReviewRecordPage",
+    "src": "resources/js/pages/admin/reviews/ProgramReviewRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_EducationEligibilitySummary-iVPMtrF4.js",
+      "_recipientAgreement-VAQ7_Nr0.js",
+      "_adminReviewPresentation-_iABRSPs.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_educationEligibilityPolicy-DhhIUfZu.js",
+      "_applicantProfileLabels-CiJjD7Ea.js"
+    ]
+  },
+  "resources/js/pages/admin/reviews/ProviderReviewRecordPage.vue": {
+    "file": "assets/ProviderReviewRecordPage-C0Kejh2J.js",
+    "name": "ProviderReviewRecordPage",
+    "src": "resources/js/pages/admin/reviews/ProviderReviewRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_adminReviewPresentation-_iABRSPs.js",
+      "__plugin-vue_export-helper-DlAUqK2U.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ],
+    "css": [
+      "assets/ProviderReviewRecordPage-g4AxRDPg.css"
+    ]
+  },
+  "resources/js/pages/admin/reviews/RecipientCaseReviewDirectoryPage.vue": {
+    "file": "assets/RecipientCaseReviewDirectoryPage-Dbhx4-2_.js",
+    "name": "RecipientCaseReviewDirectoryPage",
+    "src": "resources/js/pages/admin/reviews/RecipientCaseReviewDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RecipientCaseReviewPanel-CeptnhLJ.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_FilePreviewModal-DAN1NYYJ.js"
+    ]
+  },
+  "resources/js/pages/admin/reviews/ReviewOverviewPage.vue": {
+    "file": "assets/ReviewOverviewPage-Dj1ZgF2G.js",
+    "name": "ReviewOverviewPage",
+    "src": "resources/js/pages/admin/reviews/ReviewOverviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/reviews/ReviewQueuePage.vue": {
+    "file": "assets/ReviewQueuePage-BOoQzzPa.js",
+    "name": "ReviewQueuePage",
+    "src": "resources/js/pages/admin/reviews/ReviewQueuePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_adminReviewPresentation-_iABRSPs.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/reviews/SelectionActivityRecordPage.vue": {
+    "file": "assets/SelectionActivityRecordPage-BTywzg74.js",
+    "name": "SelectionActivityRecordPage",
+    "src": "resources/js/pages/admin/reviews/SelectionActivityRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "resources/js/app.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "resources/js/pages/admin/support/SupportCaseDirectoryPage.vue": {
+    "file": "assets/SupportCaseDirectoryPage-C2zLhJkg.js",
+    "name": "SupportCaseDirectoryPage",
+    "src": "resources/js/pages/admin/support/SupportCaseDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminEmptyState-DKAMOZQX.js",
+      "_AdminTableFrame-CtXK9nwl.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/support/SupportCaseRecordPage.vue": {
+    "file": "assets/SupportCaseRecordPage-DLKPxWcP.js",
+    "name": "SupportCaseRecordPage",
+    "src": "resources/js/pages/admin/support/SupportCaseRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_AdminLoadState-CVACo4zd.js",
+      "_AdminDialog-Cc49ThrL.js",
+      "_AdminWorkspaceHeader-Bhsj1F75.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/admin/support/SupportOverviewPage.vue": {
+    "file": "assets/SupportOverviewPage-DtM_xwss.js",
+    "name": "SupportOverviewPage",
+    "src": "resources/js/pages/admin/support/SupportOverviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_AdminLoadState-CVACo4zd.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "_AdminWorkspacePage-IW4AMaYy.js",
+      "resources/js/app.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_AdminWorkspaceSidebar-Be0C4a7f.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/ProviderAccountPage.vue": {
+    "file": "assets/ProviderAccountPage-D4QjtWpj.js",
+    "name": "ProviderAccountPage",
+    "src": "resources/js/pages/provider/ProviderAccountPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_phoneNumber-CNykz8qD.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/ProviderManagerDashboardPage.vue": {
+    "file": "assets/ProviderManagerDashboardPage-C393iOQz.js",
+    "name": "ProviderManagerDashboardPage",
+    "src": "resources/js/pages/provider/ProviderManagerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingRequestDirectoryPage.vue": {
+    "file": "assets/BillingRequestDirectoryPage-meQe7_4s.js",
+    "name": "BillingRequestDirectoryPage",
+    "src": "resources/js/pages/provider/billing/BillingRequestDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceCatalogPage.vue": {
+    "file": "assets/BillingServiceCatalogPage-DzmJfzFz.js",
+    "name": "BillingServiceCatalogPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceCatalogPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceCloseoutPage.vue": {
+    "file": "assets/BillingServiceCloseoutPage-CCZ6dlI5.js",
+    "name": "BillingServiceCloseoutPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceCloseoutPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_BillingServiceWorkspaceShell-B7Sy5bM5.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceDetailPage.vue": {
+    "file": "assets/BillingServiceDetailPage-seZjdqKJ.js",
+    "name": "BillingServiceDetailPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceDetailPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceFilesPage.vue": {
+    "file": "assets/BillingServiceFilesPage-kD2enq8r.js",
+    "name": "BillingServiceFilesPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceFilesPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_BillingServiceWorkspaceShell-B7Sy5bM5.js",
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceHistoryPage.vue": {
+    "file": "assets/BillingServiceHistoryPage-CI6qsQaK.js",
+    "name": "BillingServiceHistoryPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceHistoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_BillingServiceWorkspaceShell-B7Sy5bM5.js",
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceIntakePage.vue": {
+    "file": "assets/BillingServiceIntakePage-CX9oJ6L_.js",
+    "name": "BillingServiceIntakePage",
+    "src": "resources/js/pages/provider/billing/BillingServiceIntakePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceMeetingPage.vue": {
+    "file": "assets/BillingServiceMeetingPage-CnGtbG5Q.js",
+    "name": "BillingServiceMeetingPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceMeetingPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_BillingServiceWorkspaceShell-B7Sy5bM5.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceOverviewPage.vue": {
+    "file": "assets/BillingServiceOverviewPage-czvlj-Qs.js",
+    "name": "BillingServiceOverviewPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceOverviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_BillingServiceWorkspaceShell-B7Sy5bM5.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceReviewPage.vue": {
+    "file": "assets/BillingServiceReviewPage-ixwSKx6S.js",
+    "name": "BillingServiceReviewPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceReviewPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingServiceUpdatesPage.vue": {
+    "file": "assets/BillingServiceUpdatesPage-C5afzRmR.js",
+    "name": "BillingServiceUpdatesPage",
+    "src": "resources/js/pages/provider/billing/BillingServiceUpdatesPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_BillingServiceWorkspaceShell-B7Sy5bM5.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/billing/BillingStaffDashboardPage.vue": {
+    "file": "assets/BillingStaffDashboardPage-Z2Zx7Sek.js",
+    "name": "BillingStaffDashboardPage",
+    "src": "resources/js/pages/provider/billing/BillingStaffDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/decisions/DecisionOfficerDashboardPage.vue": {
+    "file": "assets/DecisionOfficerDashboardPage-DBFLaHEV.js",
+    "name": "DecisionOfficerDashboardPage",
+    "src": "resources/js/pages/provider/decisions/DecisionOfficerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/decisions/FinalDecisionDirectoryPage.vue": {
+    "file": "assets/FinalDecisionDirectoryPage-UNsPmVvR.js",
+    "name": "FinalDecisionDirectoryPage",
+    "src": "resources/js/pages/provider/decisions/FinalDecisionDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/decisions/FinalDecisionRecordPage.vue": {
+    "file": "assets/FinalDecisionRecordPage-BZRIiz9G.js",
+    "name": "FinalDecisionRecordPage",
+    "src": "resources/js/pages/provider/decisions/FinalDecisionRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_DecisionReopenDialog-Cjv01H1S.js",
+      "_applicantProfileDetails-C0cw6xhP.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "_applicationDecisionReasons-CEZDoF_y.js",
+      "_EligibilityReviewPanel-BT9B4QBU.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_EligibilityConditionList-Cb346Ttj.js"
+    ]
+  },
+  "resources/js/pages/provider/monitoring/MonitoringCheckInRecordPage.vue": {
+    "file": "assets/MonitoringCheckInRecordPage-k8E-KmDW.js",
+    "name": "MonitoringCheckInRecordPage",
+    "src": "resources/js/pages/provider/monitoring/MonitoringCheckInRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_MonitoringCaseHistoryModal-CiZHUzMY.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/monitoring/MonitoringDirectoryPage.vue": {
+    "file": "assets/MonitoringDirectoryPage-CfiPcOsA.js",
+    "name": "MonitoringDirectoryPage",
+    "src": "resources/js/pages/provider/monitoring/MonitoringDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/monitoring/MonitoringOfficerDashboardPage.vue": {
+    "file": "assets/MonitoringOfficerDashboardPage-Lp2MLneM.js",
+    "name": "MonitoringOfficerDashboardPage",
+    "src": "resources/js/pages/provider/monitoring/MonitoringOfficerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/monitoring/MonitoringPlanPage.vue": {
+    "file": "assets/MonitoringPlanPage-BjDyOnk4.js",
+    "name": "MonitoringPlanPage",
+    "src": "resources/js/pages/provider/monitoring/MonitoringPlanPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/organization/OrganizationContactPage.vue": {
+    "file": "assets/OrganizationContactPage-DyNikXv3.js",
+    "name": "OrganizationContactPage",
+    "src": "resources/js/pages/provider/organization/OrganizationContactPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_LocationPinField-B44Bjd5d.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "resources/js/pages/provider/organization/OrganizationProfileDashboardPage.vue": {
+    "file": "assets/OrganizationProfileDashboardPage-BkNVR9p-.js",
+    "name": "OrganizationProfileDashboardPage",
+    "src": "resources/js/pages/provider/organization/OrganizationProfileDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/organization/OrganizationProfileReadinessPage.vue": {
+    "file": "assets/OrganizationProfileReadinessPage-D-9V6rfq.js",
+    "name": "OrganizationProfileReadinessPage",
+    "src": "resources/js/pages/provider/organization/OrganizationProfileReadinessPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/organization/OrganizationPublicProfilePage.vue": {
+    "file": "assets/OrganizationPublicProfilePage-BTh6MVgT.js",
+    "name": "OrganizationPublicProfilePage",
+    "src": "resources/js/pages/provider/organization/OrganizationPublicProfilePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ApplicantPagePreviewModal-DWGzYv-q.js",
+      "_CoverImagePickerModal-CdMvSxBX.js",
+      "resources/js/pages/UserProvidersPage.vue",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_ApplicantPageHeader-BK_5RmNG.js",
+      "_TaskPageHeader-GPS16J1l.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_ApplicantTextSummary-CM47ztwR.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_ProviderApplicantPreviewToolbar-DIcXW8fM.js"
+    ]
+  },
+  "resources/js/pages/provider/organization/OrganizationVerificationPage.vue": {
+    "file": "assets/OrganizationVerificationPage-Kmk0iVfj.js",
+    "name": "OrganizationVerificationPage",
+    "src": "resources/js/pages/provider/organization/OrganizationVerificationPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_ProviderActionDialog-CrrNu3bI.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/programs/ProgramAccessPage.vue": {
+    "file": "assets/ProgramAccessPage-AY-AH2ID.js",
+    "name": "ProgramAccessPage",
+    "src": "resources/js/pages/provider/programs/ProgramAccessPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/programs/ProgramCoordinatorDashboardPage.vue": {
+    "file": "assets/ProgramCoordinatorDashboardPage-Cekyr0Zz.js",
+    "name": "ProgramCoordinatorDashboardPage",
+    "src": "resources/js/pages/provider/programs/ProgramCoordinatorDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/programs/ProgramDirectoryPage.vue": {
+    "file": "assets/ProgramDirectoryPage-BnBkBCyt.js",
+    "name": "ProgramDirectoryPage",
+    "src": "resources/js/pages/provider/programs/ProgramDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/programs/ProgramFormPage.vue": {
+    "file": "assets/ProgramFormPage-Cok4uv-Z.js",
+    "name": "ProgramFormPage",
+    "src": "resources/js/pages/provider/programs/ProgramFormPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ApplicantPagePreviewModal-DWGzYv-q.js",
+      "_CoverImagePickerModal-CdMvSxBX.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_LocationPinField-B44Bjd5d.js",
+      "resources/js/pages/UserScholarshipDetailPage.vue",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_educationEligibilityPolicy-DhhIUfZu.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_ProviderApplicantPreviewToolbar-DIcXW8fM.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "_scholarshipPreparationContext-CO2PqsTw.js"
+    ]
+  },
+  "resources/js/pages/provider/programs/ProgramRecordPage.vue": {
+    "file": "assets/ProgramRecordPage-DuW7UZfI.js",
+    "name": "ProgramRecordPage",
+    "src": "resources/js/pages/provider/programs/ProgramRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_staffQueueState-12TWltRZ.js",
+      "_ApplicantPagePreviewModal-DWGzYv-q.js",
+      "_EducationEligibilitySummary-iVPMtrF4.js",
+      "resources/js/pages/UserScholarshipDetailPage.vue",
+      "_ProviderSidebar-ClGHxObe.js",
+      "resources/js/app.js",
+      "_educationEligibilityPolicy-DhhIUfZu.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "_ApplicantSidebar-BDI7EBJK.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_ProviderApplicantPreviewToolbar-DIcXW8fM.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_scholarshipPreparationContext-CO2PqsTw.js"
+    ]
+  },
+  "resources/js/pages/provider/recipients/AgreementConcernDirectoryPage.vue": {
+    "file": "assets/AgreementConcernDirectoryPage-BF8bYkt5.js",
+    "name": "AgreementConcernDirectoryPage",
+    "src": "resources/js/pages/provider/recipients/AgreementConcernDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_useConcernCollection-CkpEKUvz.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_RecipientCaseReviewLauncher-BaC9--Gh.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_FilePreviewModal-DAN1NYYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/recipients/RecipientDirectoryPage.vue": {
+    "file": "assets/RecipientDirectoryPage-CaA8DP17.js",
+    "name": "RecipientDirectoryPage",
+    "src": "resources/js/pages/provider/recipients/RecipientDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/recipients/RecipientOfficerDashboardPage.vue": {
+    "file": "assets/RecipientOfficerDashboardPage-9C6DNJsZ.js",
+    "name": "RecipientOfficerDashboardPage",
+    "src": "resources/js/pages/provider/recipients/RecipientOfficerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/recipients/RecipientRecordPage.vue": {
+    "file": "assets/RecipientRecordPage-Br1tH1Lt.js",
+    "name": "RecipientRecordPage",
+    "src": "resources/js/pages/provider/recipients/RecipientRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_DecisionReopenDialog-Cjv01H1S.js",
+      "_AgreementConcernPanel-oUfPlS5h.js",
+      "_RecipientCaseReviewPanel-CeptnhLJ.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_useWithdrawalList-BwBhw-y7.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_useConcernCollection-CkpEKUvz.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_RecipientCaseReviewLauncher-BaC9--Gh.js",
+      "_StaffTableIdentity-B5u_mEDj.js"
+    ]
+  },
+  "resources/js/pages/provider/recipients/WithdrawalDirectoryPage.vue": {
+    "file": "assets/WithdrawalDirectoryPage-BwpeYA1Q.js",
+    "name": "WithdrawalDirectoryPage",
+    "src": "resources/js/pages/provider/recipients/WithdrawalDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_useWithdrawalList-BwBhw-y7.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/releases/BenefitDeliveryReportDirectoryPage.vue": {
+    "file": "assets/BenefitDeliveryReportDirectoryPage-ffieE_Hn.js",
+    "name": "BenefitDeliveryReportDirectoryPage",
+    "src": "resources/js/pages/provider/releases/BenefitDeliveryReportDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_BenefitDeliveryReportDialog-DMtFFWUl.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_RecipientCaseReviewLauncher-BaC9--Gh.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_FilePreviewModal-DAN1NYYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/releases/BenefitReleaseDirectoryPage.vue": {
+    "file": "assets/BenefitReleaseDirectoryPage-CcKsESXU.js",
+    "name": "BenefitReleaseDirectoryPage",
+    "src": "resources/js/pages/provider/releases/BenefitReleaseDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/releases/BenefitReleaseOfficerDashboardPage.vue": {
+    "file": "assets/BenefitReleaseOfficerDashboardPage-DKnkB97_.js",
+    "name": "BenefitReleaseOfficerDashboardPage",
+    "src": "resources/js/pages/provider/releases/BenefitReleaseOfficerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/releases/BenefitReleaseRecordPage.vue": {
+    "file": "assets/BenefitReleaseRecordPage-DunZ80DF.js",
+    "name": "BenefitReleaseRecordPage",
+    "src": "resources/js/pages/provider/releases/BenefitReleaseRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_BenefitDeliveryReportDialog-DMtFFWUl.js",
+      "_BenefitDeliveryReportPanel-BKYca1LZ.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_RecipientCaseReviewDialog-CC5Gvaka.js",
+      "_recipientWithdrawal-3RpokfEi.js",
+      "_FilePreviewModal-DAN1NYYJ.js",
+      "_RecipientCaseReviewLauncher-BaC9--Gh.js"
+    ]
+  },
+  "resources/js/pages/provider/releases/BenefitReleaseSchedulePage.vue": {
+    "file": "assets/BenefitReleaseSchedulePage-1Srt8cME.js",
+    "name": "BenefitReleaseSchedulePage",
+    "src": "resources/js/pages/provider/releases/BenefitReleaseSchedulePage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_LocationPinField-B44Bjd5d.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "resources/js/pages/provider/reviews/ApplicationReviewDirectoryPage.vue": {
+    "file": "assets/ApplicationReviewDirectoryPage-DbG1ASOT.js",
+    "name": "ApplicationReviewDirectoryPage",
+    "src": "resources/js/pages/provider/reviews/ApplicationReviewDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/reviews/ApplicationReviewRecordPage.vue": {
+    "file": "assets/ApplicationReviewRecordPage-CHG83YND.js",
+    "name": "ApplicationReviewRecordPage",
+    "src": "resources/js/pages/provider/reviews/ApplicationReviewRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_DecisionReopenDialog-Cjv01H1S.js",
+      "_applicantProfileDetails-C0cw6xhP.js",
+      "_applicantProfileLabels-CiJjD7Ea.js",
+      "_applicationDecisionReasons-CEZDoF_y.js",
+      "_EligibilityReviewPanel-BT9B4QBU.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_LocationMapModal-CDfnBqli.js",
+      "_applicantEligibility-D2Btk8RD.js",
+      "_EligibilityConditionList-Cb346Ttj.js"
+    ]
+  },
+  "resources/js/pages/provider/reviews/ApplicationReviewerDashboardPage.vue": {
+    "file": "assets/ApplicationReviewerDashboardPage-DSsmSTfs.js",
+    "name": "ApplicationReviewerDashboardPage",
+    "src": "resources/js/pages/provider/reviews/ApplicationReviewerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/selection/SelectionActivityDirectoryPage.vue": {
+    "file": "assets/SelectionActivityDirectoryPage-DUXLwQ3c.js",
+    "name": "SelectionActivityDirectoryPage",
+    "src": "resources/js/pages/provider/selection/SelectionActivityDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_LocationPinField-B44Bjd5d.js",
+      "_selectionSessionValidation-CbU0eOji.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "resources/js/pages/provider/selection/SelectionActivityRecordPage.vue": {
+    "file": "assets/SelectionActivityRecordPage-D-sriTna.js",
+    "name": "SelectionActivityRecordPage",
+    "src": "resources/js/pages/provider/selection/SelectionActivityRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_DecisionReopenDialog-Cjv01H1S.js",
+      "_applicationDecisionReasons-CEZDoF_y.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/selection/SelectionOfficerDashboardPage.vue": {
+    "file": "assets/SelectionOfficerDashboardPage-CZuqbGtE.js",
+    "name": "SelectionOfficerDashboardPage",
+    "src": "resources/js/pages/provider/selection/SelectionOfficerDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/selection/SelectionSessionFormPage.vue": {
+    "file": "assets/SelectionSessionFormPage-DKUSwWeq.js",
+    "name": "SelectionSessionFormPage",
+    "src": "resources/js/pages/provider/selection/SelectionSessionFormPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_LocationPinField-B44Bjd5d.js",
+      "_selectionSessionValidation-CbU0eOji.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "resources/js/pages/provider/selection/SelectionSessionRecordPage.vue": {
+    "file": "assets/SelectionSessionRecordPage-9QfYnLNR.js",
+    "name": "SelectionSessionRecordPage",
+    "src": "resources/js/pages/provider/selection/SelectionSessionRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_LocationMapLink-b4XB6F9p.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_LocationMapModal-CDfnBqli.js"
+    ]
+  },
+  "resources/js/pages/provider/support/SupportCaseDirectoryPage.vue": {
+    "file": "assets/SupportCaseDirectoryPage-l4EZdloC.js",
+    "name": "SupportCaseDirectoryPage",
+    "src": "resources/js/pages/provider/support/SupportCaseDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_StaffTableIdentity-B5u_mEDj.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/support/SupportCaseRecordPage.vue": {
+    "file": "assets/SupportCaseRecordPage-DQ9dzZ4k.js",
+    "name": "SupportCaseRecordPage",
+    "src": "resources/js/pages/provider/support/SupportCaseRecordPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_WorkspaceTextSummary-bKy5wPTH.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_ProviderActionDialog-CrrNu3bI.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/support/SupportPlatformReportPage.vue": {
+    "file": "assets/SupportPlatformReportPage-D7oBAiPJ.js",
+    "name": "SupportPlatformReportPage",
+    "src": "resources/js/pages/provider/support/SupportPlatformReportPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/support/SupportStaffDashboardPage.vue": {
+    "file": "assets/SupportStaffDashboardPage-D2nUdE7Z.js",
+    "name": "SupportStaffDashboardPage",
+    "src": "resources/js/pages/provider/support/SupportStaffDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/team/TeamAccountFormPage.vue": {
+    "file": "assets/TeamAccountFormPage-bnBNC594.js",
+    "name": "TeamAccountFormPage",
+    "src": "resources/js/pages/provider/team/TeamAccountFormPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  },
+  "resources/js/pages/provider/team/TeamAdministratorDashboardPage.vue": {
+    "file": "assets/TeamAdministratorDashboardPage-CFcip4v1.js",
+    "name": "TeamAdministratorDashboardPage",
+    "src": "resources/js/pages/provider/team/TeamAdministratorDashboardPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "_ProviderSidebar-ClGHxObe.js",
+      "_WorkspaceDashboardSection-DC3bSD2k.js",
+      "_WorkspaceMetricStrip-CxzM274Q.js",
+      "resources/js/app.js",
+      "_RoleSidebar-BbnN9AnU.js",
+      "_WorkspaceDashboardHeader-CAmILOYJ.js"
+    ]
+  },
+  "resources/js/pages/provider/team/TeamDirectoryPage.vue": {
+    "file": "assets/TeamDirectoryPage-BIp3qaDH.js",
+    "name": "TeamDirectoryPage",
+    "src": "resources/js/pages/provider/team/TeamDirectoryPage.vue",
+    "isDynamicEntry": true,
+    "imports": [
+      "resources/js/app.js",
+      "_ProviderSidebar-ClGHxObe.js",
+      "_StaffTableLoadError-Bcr_S5Wg.js",
+      "_staffQueueState-12TWltRZ.js",
+      "_ProviderActionDialog-CrrNu3bI.js",
+      "_RoleSidebar-BbnN9AnU.js"
+    ]
+  }
+}

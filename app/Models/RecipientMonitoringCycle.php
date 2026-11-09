@@ -33,6 +33,8 @@ class RecipientMonitoringCycle extends Model
         'school_year',
         'opens_at',
         'due_at',
+        'handoff_at',
+        'handoff_location',
         'minimum_grade',
         'grading_scale',
         'instructions',
@@ -49,6 +51,7 @@ class RecipientMonitoringCycle extends Model
         return [
             'opens_at' => 'date',
             'due_at' => 'date',
+            'handoff_at' => 'datetime',
             'minimum_grade' => 'decimal:2',
             'monitoring_plan_version' => 'integer',
             'grace_period_days' => 'integer',
@@ -57,6 +60,20 @@ class RecipientMonitoringCycle extends Model
             'closed_at' => 'datetime',
             'reopened_at' => 'datetime',
         ];
+    }
+
+    public function isInPerson(): bool
+    {
+        return $this->handoff_at !== null;
+    }
+
+    /** @return array{scheduled_label: string, location: string}|null */
+    public function handoffDetails(): ?array
+    {
+        return $this->isInPerson() ? [
+            'scheduled_label' => $this->handoff_at->format('M d, Y g:i A').' (Philippine time)',
+            'location' => (string) $this->handoff_location,
+        ] : null;
     }
 
     public function scholarship(): BelongsTo

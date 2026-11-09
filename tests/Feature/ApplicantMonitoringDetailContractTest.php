@@ -63,6 +63,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ->assertOk()
             ->assertJsonPath('detail.version', 1)
             ->assertJsonPath('detail.view', 'overview')
+            ->assertJsonPath('detail.page.title', 'Scholarship Support')
             ->assertJsonPath('detail.identity.program.title', 'Harborlight Continuing Scholars Program')
             ->assertJsonPath('detail.identity.provider.name', 'Harborlight Education Foundation')
             ->assertJsonPath('detail.status.mode', 'recurring')
@@ -77,6 +78,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ->assertJsonPath('detail.navigation.1.label', 'Check-ins')
             ->assertJsonPath('detail.content.type', 'overview')
             ->assertJsonPath('detail.content.plan.mode', 'recurring')
+            ->assertJsonPath('detail.content.plan.mode_label', 'Recurring check-ins')
             ->assertJsonPath('detail.content.next_check_in.href', route('dashboard.monitoring.check-ins.show', [
                 'application' => $application,
                 'record' => 'check-in-'.$structured->id,

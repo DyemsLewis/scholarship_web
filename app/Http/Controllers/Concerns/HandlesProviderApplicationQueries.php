@@ -471,6 +471,8 @@ trait HandlesProviderApplicationQueries
         );
         $payload = $this->applicationPayload($application, true);
         $payload['decision_reopen'] = $this->providerDecisionReopenPayload($application, $request->user());
+        $payload['provider_next_step'] = app(\App\Services\ProviderApplicationNextStep::class)
+            ->forRecord($application, $request->user(), $workspace['mode'], $payload);
 
         return response()->json([
             'user' => $request->user()->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
@@ -650,13 +652,12 @@ trait HandlesProviderApplicationQueries
             'scholarship',
         ]);
         $workspace = $this->providerApplicationWorkspace($actor, $application);
-        $payload = $this->applicationDetailPayloadForWorkspace(
-            $this->applicationPayload($application, true),
-            $workspace,
-        );
+        $payload = $this->applicationPayload($application, true);
         $payload['decision_reopen'] = $this->providerDecisionReopenPayload($application, $actor);
+        $payload['provider_next_step'] = app(\App\Services\ProviderApplicationNextStep::class)
+            ->forRecord($application, $actor, $workspace['mode'], $payload);
 
-        return $payload;
+        return $this->applicationDetailPayloadForWorkspace($payload, $workspace);
     }
 
     private function providerDecisionReopenPayload(

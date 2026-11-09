@@ -37,7 +37,7 @@ test('directories retain scoped search, filters, sorting, pagination, logos and 
 });
 
 test('program records retain capacity, dates, complete summaries, stages, benefits and protected previews', () => {
-    for (const value of ['program.capacity.applications', 'program.capacity.application_limit', 'program.capacity.recipient_slots', 'timelineRows', 'program.selection_stages', 'program.support.summary', 'program.support.benefit_count', 'program.actions.edit_url', 'ApplicantPagePreviewModal', '/provider/previews/programs/']) assert.ok(record.includes(value), value);
+    for (const value of ['program.capacity.applications', 'program.capacity.application_limit', 'program.capacity.recipient_slots', 'timelineRows', 'program.selection_stages', 'program.support.summary', 'program.support.benefit_count', 'program.actions.edit_url', 'ApplicantPagePreviewModal', 'program?.actions?.preview_data_url', 'program.workspace_links']) assert.ok(record.includes(value), value);
     assert.match(record, /:aria-expanded="showFullDescription"/);
     assert.match(record, /aria-controls="program-summary-description"/);
     assert.match(record, /id="program-summary-description"/);

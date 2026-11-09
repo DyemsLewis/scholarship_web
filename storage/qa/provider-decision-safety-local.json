@@ -1,0 +1,16 @@
+{
+  "roles": [
+    "marilag"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\provider-part-2-decision-form.png",
+    "storage\\qa\\provider-part-2-final-confirmation.png",
+    "storage\\qa\\provider-part-2-reopen-dialog.png"
+  ],
+  "verified_application_ids": [],
+  "selectionReopenDialog": true,
+  "passed": true
+}

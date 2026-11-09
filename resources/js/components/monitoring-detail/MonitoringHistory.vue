@@ -50,7 +50,7 @@ function iconClass(tone) {
         <section v-if="content.timeline.length" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
             <header class="flex items-end justify-between gap-4 border-b border-slate-200 px-5 py-4 sm:px-6">
                 <div>
-                    <h3 class="text-base font-bold text-slate-950">Monitoring timeline</h3>
+                    <h3 class="text-base font-bold text-slate-950">Support timeline</h3>
                 </div>
                 <p class="shrink-0 text-xs font-bold text-slate-500">{{ content.timeline.length }} records</p>
             </header>
@@ -80,7 +80,7 @@ function iconClass(tone) {
                 <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
             </span>
             <h3 class="mt-3 text-base font-bold text-slate-950">No support history yet</h3>
-            <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-500">Completed monitoring activity and provider outcomes will appear here.</p>
+            <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-500">Completed check-ins and provider outcomes will appear here.</p>
         </section>
     </div>
 </template>

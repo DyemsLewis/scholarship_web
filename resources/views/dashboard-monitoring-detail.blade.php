@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'Monitoring Record')
+@section('title', 'Scholarship Support Record')
 @section('page', 'dashboardMonitoringDetail')
 @section('appAttributes')
     data-application-id="{{ $application->id }}"

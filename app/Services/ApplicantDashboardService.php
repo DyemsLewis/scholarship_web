@@ -365,7 +365,7 @@ class ApplicantDashboardService
                 description: $needsCorrection
                     ? ($itemCount === 1 ? 'One submitted item needs an update.' : "{$itemCount} submitted items need updates.")
                     : ($itemCount === 1 ? 'One requirement is ready for submission.' : "{$itemCount} requirements are ready for submission."),
-                context: $application->scholarship?->title ?: 'Scholarship monitoring',
+                context: $application->scholarship?->title ?: 'Scholarship Support',
                 href: $href,
                 cta: 'Open check-in',
                 priority: $needsCorrection ? 90 : 82,
@@ -480,7 +480,7 @@ class ApplicantDashboardService
                     description: 'There is nothing you need to submit right now.',
                     context: $application->scholarship?->title ?: 'Active scholarship support',
                     href: route('dashboard.monitoring.show', $application, false),
-                    cta: 'Open monitoring',
+                    cta: 'Open Scholarship Support',
                     priority: 0,
                     resourceKey: "application-{$application->id}",
                     tone: 'calm',
@@ -658,7 +658,7 @@ class ApplicantDashboardService
                     'key' => "monitoring-opens-{$application->id}-{$cycle->id}",
                     'kind' => 'monitoring',
                     'title' => $cycle->title,
-                    'detail' => 'Monitoring check-in opens',
+                    'detail' => 'Check-in opens',
                     'context' => $title,
                     'date_label' => $cycle->opens_at->format('M d, Y'),
                     'href' => $monitoringUrl,

@@ -3,7 +3,8 @@ import WorkspaceTextSummary from '../../../components/workspace-dashboard/Worksp
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
-import { createStaffQueueState } from '../../../support/staffQueueState.js';
+import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
+import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/monitoring/review': 'review',
@@ -14,7 +15,7 @@ const queueByPath = {
 const queueCopy = {
     review: { title: 'Monitoring review', description: 'Review submitted records and recipient requests.', empty: 'No check-ins need review.' },
     followup: { title: 'Recipient follow-ups', description: 'Resolve corrections and open support actions.', empty: 'No recipient follow-ups are open.' },
-    awaiting: { title: 'Awaiting uploads', description: 'Track open check-ins that still need recipient records.', empty: 'No check-ins are waiting for uploads.' },
+    awaiting: { title: 'Scheduled or waiting', description: 'Track upcoming appointments and check-ins waiting on recipients.', empty: 'No check-ins are scheduled or waiting.' },
     history: { title: 'Check-in history', description: 'Reference completed monitoring periods and decisions.', empty: 'No completed check-ins are recorded.' },
 };
 
@@ -38,7 +39,7 @@ let requestedPage = 1;
 const queues = computed(() => [
     { key: 'review', label: 'Needs review', count: summary.value.review, href: '/provider/workspaces/monitoring/review' },
     { key: 'followup', label: 'Follow-ups', count: summary.value.followup, href: '/provider/workspaces/monitoring/follow-ups' },
-    { key: 'awaiting', label: 'Awaiting uploads', count: summary.value.awaiting, href: '/provider/workspaces/monitoring/awaiting' },
+    { key: 'awaiting', label: 'Scheduled or waiting', count: summary.value.awaiting, href: '/provider/workspaces/monitoring/awaiting' },
     { key: 'history', label: 'History', count: summary.value.history, href: '/provider/workspaces/monitoring/history' },
 ]);
 const resultRange = computed(() => isLoading.value ? 'Updating results...' : errorMessage.value ? 'Results unavailable' : pagination.value.total
@@ -52,29 +53,14 @@ function stateClass(state) {
 }
 
 function deadlineLabel(checkIn) {
+    if (checkIn.handoff) return checkIn.handoff.scheduled_label;
     if (!checkIn.due_label) return 'No deadline';
-    if (checkIn.timing_state === 'closed') return `Closed ${checkIn.due_label}`;
+    if (checkIn.timing_state === 'closed') return checkIn.due_label;
     if (checkIn.timing_state === 'grace_period') return 'Request window open';
     if (checkIn.timing_state === 'extended') return 'Personal extension active';
     if (checkIn.days_until_due < 0) return `${Math.abs(checkIn.days_until_due)} days overdue`;
     if (checkIn.days_until_due === 0) return 'Due today';
     return `Due ${checkIn.due_label}`;
-}
-
-function workloadLabel(checkIn) {
-    if (activeQueue === 'review') {
-        const count = Number(checkIn.counts.provider_actions ?? 0);
-        return `${count} recipient${count === 1 ? '' : 's'} need a decision`;
-    }
-    if (activeQueue === 'followup') {
-        const count = Number(checkIn.counts.followup_cases ?? 0) + Number(checkIn.counts.overdue_cases ?? 0);
-        return `${count} recipient follow-up${count === 1 ? '' : 's'}`;
-    }
-    if (activeQueue === 'awaiting') {
-        const count = Number(checkIn.counts.recipient_actions ?? 0);
-        return count ? `${count} recipient${count === 1 ? '' : 's'} have the next step` : 'Waiting for the check-in to open';
-    }
-    return `${checkIn.counts.completed_cases ?? 0} recipient record${Number(checkIn.counts.completed_cases ?? 0) === 1 ? '' : 's'} closed`;
 }
 
 async function loadCheckIns(page = 1) {
@@ -137,15 +123,16 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                         <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Monitoring scope</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Program access</p>
                             <p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p>
                             <p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p>
                         </div>
                     </div>
+                    <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>
 
                 <nav class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Monitoring queues">
-                    <a v-for="queue in queues" :key="queue.key" :href="queue.href" :aria-current="activeQueue === queue.key ? 'page' : undefined" :class="['flex min-h-16 items-center justify-between border-r border-slate-200 px-5 last:border-r-0', activeQueue === queue.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']">
+                    <a v-for="queue in queues" :key="queue.key" :href="providerProgramQueueLink(queue.href, selectedProgram)" :aria-current="activeQueue === queue.key ? 'page' : undefined" :class="['flex min-h-16 items-center justify-between border-r border-slate-200 px-5 last:border-r-0', activeQueue === queue.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']">
                         <span class="text-sm font-bold">{{ queue.label }}</span>
                         <span :class="['min-w-7 px-2 py-1 text-center text-xs font-bold', activeQueue === queue.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-700']">{{ queue.count }}</span>
                     </a>
@@ -181,13 +168,13 @@ onBeforeUnmount(() => {
 
                     <div v-else-if="checkIns.length" class="staff-table-viewport">
                         <table class="w-full min-w-[56rem] table-fixed border-collapse text-left">
-                            <colgroup><col><col class="w-44"><col class="w-44"><col class="w-36"><col class="w-32"></colgroup>
+                            <colgroup><col><col class="w-48"><col class="w-36"><col class="w-44"><col class="w-32"></colgroup>
                             <thead class="bg-slate-50">
                                 <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
                                     <th class="px-5 py-3">Check-in</th>
                                     <th class="px-5 py-3">Current work</th>
-                                    <th class="px-5 py-3">Coverage</th>
-                                    <th class="px-5 py-3">Deadline</th>
+                                    <th class="px-5 py-3">Workload</th>
+                                    <th class="px-5 py-3">Schedule</th>
                                     <th class="px-5 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
@@ -195,17 +182,12 @@ onBeforeUnmount(() => {
                                 <tr v-for="checkIn in checkIns" :key="checkIn.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4">
                                         <p class="monitoring-text text-sm font-bold text-slate-950">{{ checkIn.title }}</p>
-                                        <p class="mt-1 monitoring-text text-xs text-slate-500">{{ checkIn.program.title }}</p>
-                                        <p class="mt-1 text-xs font-semibold text-slate-500">{{ checkIn.period_label }}</p>
+                                        <p class="mt-1 monitoring-text text-xs text-slate-500">{{ checkIn.program.title }}<template v-if="checkIn.period_label"> &middot; {{ checkIn.period_label }}</template></p>
                                     </td>
                                     <td class="px-5 py-4">
                                         <span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', stateClass(checkIn.work_state)]">{{ checkIn.work_label }}</span>
-                                        <p class="monitoring-text mt-2 text-xs text-slate-500">{{ checkIn.detail }}</p>
                                     </td>
-                                    <td class="px-5 py-4">
-                                        <p class="text-sm font-bold text-slate-900">{{ workloadLabel(checkIn) }}</p>
-                                        <p class="mt-1 text-xs text-slate-500">{{ checkIn.recipient_count }} recipients · {{ checkIn.counts.requirements }} requirements</p>
-                                    </td>
+                                    <td class="px-5 py-4 text-sm font-bold text-slate-900">{{ checkIn.workload_label }}</td>
                                     <td class="px-5 py-4">
                                         <p :class="['text-sm font-bold', checkIn.timing_state === 'overdue' ? 'text-rose-700' : ['due_soon', 'grace_period'].includes(checkIn.timing_state) ? 'text-amber-700' : 'text-slate-800']">{{ deadlineLabel(checkIn) }}</p>
                                     </td>

@@ -73,10 +73,7 @@ final class FinanceOfficerDashboardQuery
             'image_url' => $payment['provider_logo_url'],
             'image_fit' => 'contain',
             'status' => ['label' => ucfirst($payment['status']), 'tone' => 'attention'],
-            'meta' => [
-                $payment['reference_number'],
-                $this->money($payment['amount'], $payment['currency']),
-            ],
+            'hint' => $this->money($payment['amount'], $payment['currency']),
             'action' => ['label' => 'Open exceptions', 'url' => '/admin/workspaces/finance/exceptions?search='.urlencode($payment['reference_number'])],
         ];
     }
@@ -91,10 +88,7 @@ final class FinanceOfficerDashboardQuery
             'image_url' => $payment['provider_logo_url'],
             'image_fit' => 'contain',
             'status' => ['label' => 'Confirmed', 'tone' => 'positive'],
-            'meta' => [
-                $this->money($payment['amount'], $payment['currency']),
-                $payment['paid_at'] ?? 'Payment date unavailable',
-            ],
+            'hint' => $this->money($payment['amount'], $payment['currency']),
             'action' => ['label' => 'Open receipt', 'url' => $payment['receipt_url']],
         ];
     }

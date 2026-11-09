@@ -84,7 +84,7 @@ const operationalWorkspaces = [
     ['/provider/workspaces/monitoring', 'Monitoring dashboard'],
     ['/provider/workspaces/monitoring/review', 'Monitoring review'],
     ['/provider/workspaces/monitoring/follow-ups', 'Recipient follow-ups'],
-    ['/provider/workspaces/monitoring/awaiting', 'Awaiting uploads'],
+    ['/provider/workspaces/monitoring/awaiting', 'Scheduled or waiting'],
     ['/provider/workspaces/monitoring/history', 'Check-in history'],
     ['/provider/workspaces/releases', 'Benefit release dashboard'],
     ['/provider/workspaces/releases/issues', 'Reported release issues'],
@@ -150,9 +150,9 @@ const preparationStateCases = [
     { key: 'required-mismatch', state: 'blocked', step: 'eligibility', status: 'blocked', label: 'Required rules not met' },
     { key: 'preferences', state: 'eligible', step: 'submit', status: 'preferences_differ', label: 'Preferences differ', starts: true },
     { key: 'manual-review', state: 'eligible', step: 'submit', status: 'needs_review', label: 'Provider review needed', starts: true },
-    { key: 'missing-files', state: 'eligible', step: 'requirements', status: 'needs_files', label: 'Files needed', starts: true },
+    { key: 'missing-files', state: 'eligible', step: 'requirements', status: 'needs_files', label: 'Upload needed', starts: true },
     { key: 'no-files', state: 'eligible', step: 'submit', status: 'not_required', label: 'No initial files', starts: true },
-    { key: 'email', state: 'eligible', step: 'submit', status: 'email_unverified', label: 'Verify email' },
+    { key: 'email', state: 'eligible', step: 'submit', status: 'email_unverified', label: 'Verify email', starts: true },
     ...['upcoming', 'closed', 'full'].map((key) => ({ key, state: key, step: null })),
     { key: 'existing', state: 'applied', step: null },
 ];
@@ -180,13 +180,18 @@ function preparationStateFixture(payload, example) {
         Object.assign(rows.requirements, { status: example.status, status_label: example.label, tone: example.key === 'missing-files' ? 'attention' : 'neutral' });
         Object.assign(rows.requirements.details, { saved_file_count: 0, missing_file_count: example.key === 'missing-files' ? rows.requirements.details.required_file_count : 0 });
         if (example.key === 'no-files') Object.assign(rows.requirements.details, { required_file_count: 0, question_count: 0, required_question_count: 0 });
+        const readiness = detail.content.requirements?.readiness;
+        if (readiness && example.key === 'missing-files') {
+            readiness.items = readiness.items.map((item) => ({ ...item, status: 'missing' }));
+            readiness.ready_count = 0;
+        }
     } else if (example.key === 'email') {
         Object.assign(rows.submit, { status: example.status, status_label: example.label, tone: 'attention', action: { kind: 'link', label: 'Review email verification', href: '/dashboard' } });
     } else if (example.key === 'existing') {
         rows.submit.action = { kind: 'link', label: 'View application', href: '/dashboard/applications/1' };
     }
     guide.next_action = example.step ? rows[example.step].action : example.key === 'existing' ? rows.submit.action : { kind: 'save', label: 'Save scholarship' };
-    detail.decision.action = guide.next_action;
+    detail.decision.action = example.starts ? start : guide.next_action;
     return payload;
 }
 
@@ -773,28 +778,29 @@ async function main() {
                 for (const example of preparationStateCases) {
                     activePreparationFixture = example;
                     await client.send('Page.navigate', { url: workspaceUrl.href });
-                    await waitFor(() => client.evaluate(`document.querySelector('[data-scholarship-detail-header]')?.innerText.includes(${JSON.stringify(`Browser-only fixture: ${example.key}`)}) && Boolean(document.querySelector('[data-scholarship-application-guide]'))`), `the ${example.key} browser-only fixture`);
+                    await waitFor(() => client.evaluate(`document.querySelector('[data-scholarship-next-action]')?.innerText.includes(${JSON.stringify(`Browser-only fixture: ${example.key}`)}) && Boolean(document.querySelector('[data-scholarship-application-guide]'))`), `the ${example.key} browser-only fixture`);
                     await client.evaluate("(() => { const readiness = document.querySelector('[data-guide-readiness]'); if (readiness) readiness.open = true; })()");
                     const result = await client.evaluate(`(() => {
                         const panel = document.querySelector('[data-scholarship-application-guide]');
                         return { current: panel.querySelector('[data-guide-next]')?.dataset.preparationStep ?? null,
                             start: Boolean(panel.querySelector('a[href*="/applications/start/"]')),
                             existing: Boolean(panel.querySelector('[data-guide-existing-application]')),
-                            label: ${example.label ? `panel.innerText.includes(${JSON.stringify(example.label)})` : 'true'},
+                            label: ${example.label ? `document.querySelector('[data-scholarship-how-to-apply]').innerText.includes(${JSON.stringify(example.label)})` : 'true'},
                             overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
                         };
                     })()`);
-                    if (result.current !== example.step || result.start !== (example.starts === true) || result.existing !== (example.key === 'existing') || !result.label || result.overflow) fail(`State fixture ${example.key} failed: ${JSON.stringify(result)}`);
+                    const expectedCheck = ['profile', 'eligibility'].includes(example.step) || example.key === 'email' ? example.step : null;
+                    if (result.current !== expectedCheck || result.start !== (example.starts === true) || result.existing !== (example.key === 'existing') || !result.label || result.overflow) fail(`State fixture ${example.key} failed: ${JSON.stringify(result)}`);
                     if (['upcoming', 'closed', 'full'].includes(example.key)) {
                         await client.evaluate("document.querySelector('[data-guide-intake-notice] button').click()");
-                        await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-guide-intake-notice] a[href*=\"view=saved\"]')) && document.querySelector('[data-scholarship-detail-header]').innerText.includes('View saved scholarships')"), 'mock bookmark feedback in both header and guide');
+                        await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-guide-intake-notice] a[href*=\"view=saved\"]'))"), 'mock bookmark feedback in the application guide');
                     }
                     if (fixtureErrors.length || runtimeErrors.length) fail([...fixtureErrors, ...runtimeErrors].join('; '));
                     console.log(`PASS Browser-only preparation state: ${example.key}`);
                 }
                 activePreparationFixture = null;
                 await client.send('Page.navigate', { url: workspaceUrl.href });
-                await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-scholarship-application-guide]')) && !document.querySelector('[data-scholarship-detail-header]').innerText.includes('Browser-only fixture')"), 'the real applicant page after isolated fixtures');
+                await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-scholarship-application-guide]')) && !document.querySelector('[data-scholarship-next-action]').innerText.includes('Browser-only fixture')"), 'the real applicant page after isolated fixtures');
             }
 
             const unavailable = await client.evaluate("/is unavailable|unable to load/i.test(document.body.innerText)");
@@ -858,10 +864,6 @@ async function main() {
 
             if (verifyScholarshipEligibility) {
                 await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-scholarship-eligibility]'))"), 'the scholarship eligibility checklist');
-                await waitFor(() => client.evaluate(`(() => {
-                    const photo = document.querySelector('[data-scholarship-eligibility] figure img');
-                    return !photo || getComputedStyle(photo.parentElement).display === 'none' || (photo.complete && photo.naturalWidth > 0);
-                })()`), 'the eligibility section photograph');
                 await client.evaluate(`(() => {
                     window.__eligibilityWrites = 0;
                     window.axios.interceptors.request.use((config) => {
@@ -872,8 +874,9 @@ async function main() {
                 const eligibilityAudit = await client.evaluate(`(() => {
                     const panel = document.querySelector('[data-scholarship-eligibility]');
                     const rows = [...panel.querySelectorAll('[data-eligibility-criterion]')];
-                    const results = rows.map((row) => row.querySelector('[data-eligibility-result]').getBoundingClientRect());
+                    const results = rows.map((row) => row.querySelector('[data-eligibility-result]')?.getBoundingClientRect()).filter((rect) => rect?.height);
                     const explanations = [...panel.querySelectorAll('[data-eligibility-explanation]')];
+                    const matched = panel.querySelector('[data-eligibility-group="matched"]');
                     return {
                         rows: rows.length,
                         groups: [...panel.querySelectorAll('[data-eligibility-group]')].map((group) => group.dataset.eligibilityGroup),
@@ -881,12 +884,13 @@ async function main() {
                         clipped: results.some((rect) => rect.right > panel.getBoundingClientRect().right + 1),
                         rawValues: /senior_high_school|grade_point|state_university|current_scholarship_support/.test(panel.innerText),
                         documentsAsRule: Boolean(panel.querySelector('[data-eligibility-criterion="documents"]')),
+                        matchedCollapsed: !matched || (matched.tagName === 'DETAILS' && !matched.open),
                         explanationsProgressive: explanations.filter((node) => node.tagName === 'DETAILS').every((node) => !node.open),
                         attentionExplanationsVisible: explanations.filter((node) => node.tagName !== 'DETAILS').every((node) => node.getBoundingClientRect().height > 0),
                     };
                 })()`);
-                if (!eligibilityAudit.aligned || eligibilityAudit.clipped || eligibilityAudit.rawValues || eligibilityAudit.documentsAsRule || !eligibilityAudit.explanationsProgressive || !eligibilityAudit.attentionExplanationsVisible) fail(`The eligibility checklist has inconsistent results or hidden information: ${JSON.stringify(eligibilityAudit)}`);
-                const disclosures = ['[data-unrestricted-criteria]', '[data-provider-eligibility-conditions]', '[data-eligibility-explanation]'];
+                if (!eligibilityAudit.aligned || eligibilityAudit.clipped || eligibilityAudit.rawValues || eligibilityAudit.documentsAsRule || !eligibilityAudit.matchedCollapsed || !eligibilityAudit.explanationsProgressive || !eligibilityAudit.attentionExplanationsVisible) fail(`The eligibility checklist has inconsistent results or hidden information: ${JSON.stringify(eligibilityAudit)}`);
+                const disclosures = ['[data-eligibility-group="matched"]', '[data-unrestricted-criteria]', '[data-provider-eligibility-conditions]'];
                 for (const selector of disclosures) {
                     if (!await client.evaluate(`document.querySelector(${JSON.stringify(selector)})?.tagName === 'DETAILS'`)) continue;
                     await client.send('Page.bringToFront');
@@ -904,6 +908,8 @@ async function main() {
             if (verifyScholarshipPreparation) {
                 if (verifyPreparationPreview) {
                     await client.evaluate("[...document.querySelectorAll('button')].find((button) => button.innerText.trim() === 'Applicant preview').click()");
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-embedded-preview] [data-scholarship-detail-navigation] a'))"), 'preview navigation');
+                    await client.evaluate("[...document.querySelectorAll('[data-embedded-preview] [data-scholarship-detail-navigation] a')].find(a => a.innerText.trim() === 'How to apply').click()");
                 }
                 await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-scholarship-application-guide]'))"), 'the application preparation guide');
                 const readinessInitiallyOpen = await client.evaluate("Boolean(document.querySelector('[data-guide-readiness]')?.open)");
@@ -918,24 +924,21 @@ async function main() {
                 const preparationAudit = await client.evaluate(`(() => {
                     const panel = document.querySelector('[data-scholarship-application-guide]');
                     const rows = [...panel.querySelectorAll('[data-preparation-step]')];
-                    const rects = rows.map((row) => row.querySelector('[data-guide-status]').getBoundingClientRect());
-                    const actions = rows.map((row) => row.querySelector('[data-guide-action]').getBoundingClientRect());
                     const bounds = panel.getBoundingClientRect();
                     return {
                         existing: Boolean(panel.querySelector('[data-guide-existing-application]')),
                         instructions: panel.querySelectorAll('[data-application-instruction]').length,
                         actualControls: ['Start pre-screening', 'Continue to Eligibility', 'Continue to Requirements', 'Continue to Confirm', 'Submit application'].every((label) => panel.innerText.includes(label)),
                         rows: rows.map((row) => row.dataset.preparationStep),
-                        current: panel.querySelectorAll('[aria-current="step"]').length,
-                        aligned: rects.every((rect) => Math.abs(rect.left - rects[0].left) < 2) && actions.every((rect) => Math.abs(rect.left - actions[0].left) < 2),
-                        clipped: [...panel.querySelectorAll('a, [data-guide-status] > span')].some((node) => node.getBoundingClientRect().right > bounds.right + 1),
+                        current: panel.querySelectorAll('[data-guide-next]').length,
+                        clipped: [...panel.querySelectorAll('a, [data-guide-status]')].some((node) => node.getBoundingClientRect().right > bounds.right + 1),
                         progressive: [...panel.querySelectorAll('details:not([data-guide-readiness])')].every((node) => !node.open),
                         rawValues: /profile_unverified|preferences_differ|evidence_missing|in_application|not_compared/.test(panel.innerText),
                         preview: panel.innerText.includes('Read-only preview'),
                         livePreviewLinks: panel.innerText.includes('Read-only preview') && [...panel.querySelectorAll('a')].some((node) => node.getAttribute('href').startsWith('/dashboard')),
                     };
                 })()`);
-                if ((!preparationAudit.existing && (preparationAudit.rows.join(',') !== 'profile,eligibility,requirements,submit' || preparationAudit.instructions !== 4 || !preparationAudit.actualControls)) || preparationAudit.current > 1 || !preparationAudit.aligned || preparationAudit.clipped || !preparationAudit.progressive || preparationAudit.rawValues || preparationAudit.livePreviewLinks) fail(`Application preparation guide audit failed: ${JSON.stringify(preparationAudit)}`);
+                if ((!preparationAudit.existing && (!['profile,eligibility', 'profile,eligibility,submit'].includes(preparationAudit.rows.join(',')) || preparationAudit.instructions !== 4 || !preparationAudit.actualControls)) || preparationAudit.current > 1 || preparationAudit.clipped || !preparationAudit.progressive || preparationAudit.rawValues || preparationAudit.livePreviewLinks) fail(`Application preparation guide audit failed: ${JSON.stringify(preparationAudit)}`);
                 for (const selector of ['[data-guide-missing]', '[data-guide-submission-note]']) {
                     if (!await client.evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)}))`)) continue;
                     await client.send('Page.bringToFront');
@@ -947,16 +950,15 @@ async function main() {
                 }
                 if (verifyPreparationPreview) {
                     const originalPath = await client.evaluate('location.pathname');
-                    for (const [key, target] of [['eligibility', '[data-scholarship-eligibility]'], ['requirements', '[data-scholarship-application-files]']]) {
-                        await client.evaluate("document.querySelector('[data-guide-readiness]').open = true");
-                        await client.evaluate(`document.querySelector('[data-preparation-step="${key}"] a').click()`);
-                        await waitFor(() => client.evaluate(`Boolean(document.querySelector('[data-embedded-preview] ${target}'))`), `${key} within the preview modal`);
-                        if (await client.evaluate('location.pathname') !== originalPath) fail('The guide navigated away from the provider preview modal.');
-                        await client.evaluate("[...document.querySelectorAll('[data-embedded-preview] nav a')].find((node) => /^\\/provider\\/previews\\/programs\\/\\d+\\/?$/.test(new URL(node.href).pathname)).click()");
-                        await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-scholarship-application-guide]'))"), 'the overview guide in the preview modal');
-                    }
+                    await client.evaluate("document.querySelector('[data-guide-readiness]').open = true; document.querySelector('[data-preparation-step=\"eligibility\"] a').click()");
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-embedded-preview] [data-scholarship-eligibility]'))"), 'eligibility within the preview modal');
+                    if (await client.evaluate('location.pathname') !== originalPath) fail('The guide navigated away from the provider preview modal.');
+                    await client.evaluate("[...document.querySelectorAll('[data-embedded-preview] [data-scholarship-detail-navigation] a')].find(a => a.innerText.trim() === 'How to apply').click()");
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-scholarship-application-guide]'))"), 'the application guide in the preview modal');
                     for (const scenario of ['eligible', 'ineligible', 'general']) {
                         await client.evaluate(`(() => { const select = document.querySelector('[data-applicant-page-preview-modal] select'); select.value = '${scenario}'; select.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+                        await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-embedded-preview] [data-scholarship-overview]'))"), `${scenario} preview overview`);
+                        await client.evaluate("[...document.querySelectorAll('[data-embedded-preview] [data-scholarship-detail-navigation] a')].find(a => a.innerText.trim() === 'How to apply').click()");
                         const expectedLabel = { general: 'Applicant-specific', eligible: 'No required mismatches', ineligible: 'Required rules not met' }[scenario];
                         await waitFor(() => client.evaluate(`document.querySelector('[data-scholarship-application-guide] [data-preparation-step="eligibility"] [data-guide-status]')?.textContent.includes(${JSON.stringify(expectedLabel)})`), `${scenario} guide preview scenario`);
                         await client.evaluate("document.querySelector('[data-guide-readiness]').open = true");
@@ -966,13 +968,10 @@ async function main() {
                 if (await client.evaluate('window.__guideWrites !== 0')) fail('Reading the guide caused an unexpected mutation.');
                 if (!readinessInitiallyOpen) await client.evaluate("(() => { const readiness = document.querySelector('[data-guide-readiness]'); if (readiness) readiness.open = false; })()");
                 await client.evaluate("document.activeElement?.blur(); document.querySelector('[data-scholarship-application-guide]').scrollIntoView({ block: 'start' }); window.scrollBy(0, -16)");
-                console.log(`PASS Application preparation guide: aligned steps, progressive details and safe actions ${JSON.stringify(preparationAudit)}`);
+                console.log(`PASS Application preparation guide: instructions, progressive details and safe actions ${JSON.stringify(preparationAudit)}`);
             }
 
             if (verifyScholarshipRequirements) {
-                if (verifyPreparationPreview) {
-                    await client.evaluate("document.querySelector('[data-preparation-step=\"requirements\"] a').click()");
-                }
                 await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-scholarship-application-files]'))"), 'the pre-submission requirements card');
                 const requirementsAudit = await client.evaluate(`(() => {
                     const panel = document.querySelector('[data-scholarship-application-files]');
@@ -1004,9 +1003,7 @@ async function main() {
                     await client.evaluate("document.querySelector('[data-scholarship-application-files] a[href^=\"/dashboard/documents\"]').click()");
                     await waitFor(() => client.evaluate("location.pathname === '/dashboard/documents' && Boolean(document.querySelector('[data-preparation-return] a'))"), 'document library return context');
                     await client.evaluate("document.querySelector('[data-preparation-return] a').click()");
-                    await waitFor(() => client.evaluate(`location.pathname === ${JSON.stringify(workspacePath)} && Boolean(document.querySelector('[data-scholarship-application-files]'))`), 'return to the same scholarship requirements');
-                    const summaryPath = workspacePath.replace(/\/application$/, '');
-                    await client.evaluate(`[...document.querySelectorAll('[data-scholarship-detail-navigation] a')].find((node) => new URL(node.href).pathname === ${JSON.stringify(summaryPath)}).click()`);
+                    await waitFor(() => client.evaluate(`(window.portalPathname?.() ?? location.pathname) === ${JSON.stringify(workspacePath)} && Boolean(document.querySelector('[data-scholarship-application-files]'))`), 'return to the same scholarship requirements');
                     await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-preparation-step=\"profile\"] a'))"), 'the profile preparation action');
                     await client.evaluate("document.querySelector('[data-guide-readiness]').open = true");
                     await client.evaluate("document.querySelector('[data-preparation-step=\"profile\"] a').click()");
@@ -1014,9 +1011,9 @@ async function main() {
                     await client.evaluate("document.querySelector('[aria-label=\"Close profile editor\"]').click()");
                     await waitFor(() => client.evaluate("!document.querySelector('[aria-label=\"Close profile editor\"]')"), 'the unchanged profile editor to close');
                     await client.evaluate("document.querySelector('[data-preparation-return] a').click()");
-                    await waitFor(() => client.evaluate(`location.pathname === ${JSON.stringify(summaryPath)} && Boolean(document.querySelector('[data-scholarship-application-guide]'))`), 'return to the same scholarship overview');
-                    await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-guide-start]'))"), 'the start link in the actual application instructions');
-                    await client.evaluate("document.querySelector('[data-guide-start]').click()");
+                    await waitFor(() => client.evaluate(`(window.portalPathname?.() ?? location.pathname) === ${JSON.stringify(workspacePath)} && Boolean(document.querySelector('[data-scholarship-application-guide]'))`), 'return to the same scholarship application guide');
+                    await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-scholarship-primary-action][href*=\"/applications/start/\"]'))"), 'the start link in the application guide');
+                    await client.evaluate("document.querySelector('[data-scholarship-primary-action]').click()");
                     await waitFor(() => client.evaluate("Boolean(document.querySelector('[data-application-preparation-handoff] a'))"), 'the preselected scholarship form');
                     await client.evaluate("document.querySelectorAll('nav[aria-label=\"Pre-screening process\"] button')[2].click()");
                     await waitFor(() => client.evaluate("Boolean(document.querySelector('textarea'))"), 'an application question');
@@ -1031,7 +1028,7 @@ async function main() {
                     if (!await client.evaluate("document.querySelector('textarea').value === 'Read-only browser test answer'")) fail('Cancelling navigation lost an unsent answer.');
                     await client.evaluate("(() => { const input = document.querySelector('textarea'); input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true })); })()");
                     await client.evaluate("document.querySelector('[data-application-preparation-handoff] a').click()");
-                    await waitFor(() => client.evaluate(`location.pathname === ${JSON.stringify(workspacePath)} && Boolean(document.querySelector('[data-scholarship-application-files]'))`), 'return from an unchanged form');
+                    await waitFor(() => client.evaluate(`(window.portalPathname?.() ?? location.pathname) === ${JSON.stringify(workspacePath)} && Boolean(document.querySelector('[data-scholarship-application-files]'))`), 'return from an unchanged form');
                     if (preparationWrites.length) fail(`The read-only handoff changed application data: ${preparationWrites.join(', ')}`);
                     console.log('PASS Scholarship handoff: document/profile return links, selected form and unsent-answer protection without submission');
                 }

@@ -1,4 +1,5 @@
 <script setup>
+import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
@@ -27,6 +28,7 @@ const errorMessage = ref('');
 const successMessage = ref('');
 const confirmation = ref(null);
 const showReopenDialog = ref(false);
+const reopenError = ref('');
 const pendingWithdrawal = ref(false);
 const supportForm = ref({
     decision: 'renewed',
@@ -232,16 +234,16 @@ async function resolveRequest() {
     }
 }
 
-async function reopenDecision(reason) {
+async function reopenDecision(payload) {
     actionBusy.value = true;
-    errorMessage.value = '';
+    reopenError.value = '';
     successMessage.value = '';
     try {
-        const response = await window.axios.patch(`/provider/applications/${applicationId}/decision/reopen`, { reason });
+        const response = await window.axios.patch(`/provider/applications/${applicationId}/decision/reopen`, payload);
         showReopenDialog.value = false;
         window.location.assign(response.data.redirect_url);
     } catch (error) {
-        errorMessage.value = firstError(error, 'The decision could not be reopened.');
+        reopenError.value = firstError(error, 'The decision could not be reopened.');
         actionBusy.value = false;
     }
 }
@@ -280,6 +282,8 @@ async function refreshAfterWithdrawal() {
                     <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                         <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-start gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-user-shield" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Recipient management</p><h1 id="recipient-record-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Manage recipient support</h1><p class="mt-2 text-sm leading-6 text-slate-600">Review the agreement, support status, and recorded outcomes.</p></div></div><div class="flex items-center gap-3"><button v-if="decisionReopen.can_reopen" type="button" class="h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="showReopenDialog = true"><i class="fa-solid fa-rotate-left mr-2" aria-hidden="true"></i>Reopen final decision</button><span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', statusClass(support.is_closed ? 'closed' : agreement.status)]">{{ support.is_closed ? support.support_status_label : agreement.status_label }}</span></div></div>
                     </header>
+
+                    <ProviderNextStep :step="record.provider_next_step" />
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Recipient identity">
                         <div class="flex items-center gap-4 px-6 py-4"><img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile`" class="h-14 w-14 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-14 w-14 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Recipient</p><h2 class="mt-1 application-text text-xl font-bold text-slate-950">{{ recipient.name }}</h2><p class="mt-1 application-text text-sm text-slate-500">{{ program.title }} · {{ recipient.email }}</p></div><div class="border-l border-slate-200 pl-6 text-right"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Current support</p><p class="mt-1 text-sm font-bold text-slate-950">{{ support.support_status_label }}</p><p class="mt-1 text-xs text-slate-500">{{ agreement.status_label }}</p></div></div>
@@ -347,6 +351,6 @@ async function refreshAfterWithdrawal() {
         </section>
 
         <ConfirmationDialog :open="Boolean(confirmation)" :title="confirmation?.title" :message="confirmation?.message" :confirm-label="confirmation?.confirmLabel" :tone="confirmation?.tone" @confirm="confirmAction" @cancel="confirmation = null" />
-        <DecisionReopenDialog :open="showReopenDialog" :decision="decisionReopen" :busy="actionBusy" @confirm="reopenDecision" @cancel="showReopenDialog = false" />
+        <DecisionReopenDialog :open="showReopenDialog" :decision="decisionReopen" :record-name="recipient.name" :busy="actionBusy" :error="reopenError" @confirm="reopenDecision" @cancel="showReopenDialog = false; reopenError = ''" />
     </main>
 </template>

@@ -87,13 +87,6 @@ function programActionLabel(program) {
     return plan.can_edit_plan ? 'Set up' : 'View plan';
 }
 
-function deadlineNote(deadline) {
-    if (deadline.days_remaining === null) return '';
-    if (deadline.state === 'passed') return 'Application period ended';
-    if (deadline.state === 'today') return 'Due today';
-    return `${deadline.days_remaining} days remaining`;
-}
-
 async function loadPrograms(page = 1, params = {
     filter: activeFilter,
     workspace: isMonitoringDirectory ? 'monitoring' : 'programs',
@@ -256,8 +249,8 @@ onMounted(() => loadPrograms(queueState.page));
                                             <StaffTableIdentity kind="program" :src="program.logo_url" class="h-11 w-11" />
                                             <div class="min-w-0">
                                                 <a :href="isMonitoringDirectory ? program.monitoring.plan_url : queueState.link(program.record_url)" class="program-text block text-sm font-semibold text-slate-950 hover:text-amber-700">{{ program.title }}</a>
-                                                <p class="program-text mt-1 text-xs text-slate-600">
-                                                    {{ program.category || 'Uncategorized' }}<template v-if="program.cycle"> · {{ program.cycle }}</template>
+                                                <p v-if="program.cycle || (isMonitoringDirectory && program.monitoring.frequency_label)" class="program-text mt-1 text-xs text-slate-600">
+                                                    {{ program.cycle }}<template v-if="isMonitoringDirectory && program.monitoring.frequency_label"><template v-if="program.cycle"> &middot; </template>{{ program.monitoring.frequency_label }}</template>
                                                 </p>
                                             </div>
                                         </div>
@@ -266,15 +259,12 @@ onMounted(() => loadPrograms(queueState.page));
                                         <span :class="['program-status inline-flex border px-2.5 py-1 font-bold uppercase tracking-wide', statusClass(isMonitoringDirectory ? program.monitoring.status_tone : program.status.tone)]">
                                             {{ isMonitoringDirectory ? program.monitoring.status_label : program.status.label }}
                                         </span>
-                                        <p v-if="isMonitoringDirectory && program.monitoring.frequency_label" class="mt-1 text-xs text-slate-500">{{ program.monitoring.frequency_label }}</p>
                                     </td>
+                                    <td class="px-5 py-4 text-sm font-semibold text-slate-800">{{ isMonitoringDirectory ? program.monitoring.requirements_count : applicationLabel(program) }}</td>
                                     <td class="px-5 py-4">
-                                        <p class="text-sm font-semibold text-slate-800">{{ isMonitoringDirectory ? program.monitoring.requirements_count : applicationLabel(program) }}</p>
-                                        <p class="mt-1 text-xs text-slate-500">{{ isMonitoringDirectory ? (program.monitoring.requirements_count === 1 ? 'required item' : 'required items') : (program.slots === null ? 'Slots not set' : `${program.slots} recipient slots`) }}</p>
-                                    </td>
-                                    <td class="px-5 py-4">
-                                        <p class="text-sm font-semibold text-slate-800">{{ isMonitoringDirectory ? program.monitoring.check_ins_count : program.application_period.deadline.display }}</p>
-                                        <p class="mt-1 text-xs text-slate-500">{{ isMonitoringDirectory ? (program.monitoring.check_ins_count === 1 ? 'period published' : 'periods published') : deadlineNote(program.application_period.deadline) }}</p>
+                                        <p class="text-sm font-semibold text-slate-800">{{ isMonitoringDirectory ? `${program.monitoring.check_ins_count} published` : program.application_period.deadline.display }}</p>
+                                        <p v-if="!isMonitoringDirectory && program.application_period.deadline.state === 'today'" class="mt-1 text-xs font-semibold text-amber-800">Due today</p>
+                                        <p v-else-if="!isMonitoringDirectory && program.application_period.deadline.state === 'passed'" class="mt-1 text-xs text-slate-500">Past deadline</p>
                                     </td>
                                     <td class="px-5 py-4 text-sm text-slate-600">{{ program.updated_display || 'Not available' }}</td>
                                     <td class="px-4 py-4 text-right">

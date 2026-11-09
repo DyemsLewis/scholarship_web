@@ -1,11 +1,13 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ScholarshipPreparationReturn from '../components/ScholarshipPreparationReturn.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
+import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
+import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { labelFromKey } from '../support/display';
 import { preparationQuery, withPreparationContext } from '../support/scholarshipPreparationContext';
 
@@ -21,6 +23,8 @@ const documentOptions = ref([]);
 const preparedDocumentTermsAccepted = ref(false);
 const updatingPreparedId = ref(null);
 const removingPreparedId = ref(null);
+const preparedFilesBusy = computed(() => Boolean(uploadingPreparedName.value) || updatingPreparedId.value !== null || removingPreparedId.value !== null);
+const { confirmation, requestConfirmation, confirmConfirmation, cancelConfirmation } = useConfirmationDialog();
 const previewDocument = ref(null);
 const documentsPerPage = 7;
 const documentsPage = ref(1);
@@ -336,6 +340,18 @@ async function updatePreparedDocument(document, event) {
 }
 
 async function deletePreparedDocument(document) {
+    const canRemove = () => !isLoading.value && !preparedFilesBusy.value && preparedDocuments.value.includes(document);
+    if (confirmation.open || !canRemove()) return;
+
+    const confirmed = await requestConfirmation({
+        title: 'Remove file from My Documents?',
+        message: `"${document.original_name || document.document_name}" will no longer be available to reuse. Copies already submitted with applications will stay attached.`,
+        confirmLabel: 'Remove file',
+        cancelLabel: 'Keep file',
+        tone: 'danger',
+    });
+    if (!confirmed || !canRemove()) return;
+
     removingPreparedId.value = document.id;
     errorMessage.value = '';
 
@@ -351,11 +367,19 @@ async function deletePreparedDocument(document) {
 }
 
 onMounted(loadDocuments);
+onBeforeUnmount(cancelConfirmation);
 </script>
 
 <template>
     <main class="student-shell">
         <ApplicantSidebar />
+
+        <ConfirmationDialog
+            data-document-removal-confirmation
+            v-bind="confirmation"
+            @confirm="confirmConfirmation"
+            @cancel="cancelConfirmation"
+        />
 
         <FilePreviewModal
             :file="previewDocument"
@@ -377,7 +401,7 @@ onMounted(loadDocuments);
                     :secondary-label="documentPageContent.secondaryLabel"
                 />
 
-                <ScholarshipPreparationReturn v-if="!isLoading" :context="preparationContext" :busy="Boolean(uploadingPreparedName || updatingPreparedId || removingPreparedId)" class="my-4" />
+                <ScholarshipPreparationReturn v-if="!isLoading" :context="preparationContext" :busy="preparedFilesBusy" class="my-4" />
 
                 <PrivacyNoticeCard context="documents" compact />
 
@@ -479,7 +503,7 @@ onMounted(loadDocuments);
                                     <button
                                         v-if="row.document"
                                         type="button"
-                                        :disabled="removingPreparedId === row.document.id"
+                                        :disabled="preparedFilesBusy"
                                         class="student-button student-button-danger student-button-compact student-button-icon"
                                         :aria-label="`Remove ${row.name}`"
                                         @click="deletePreparedDocument(row.document)"
@@ -550,7 +574,7 @@ onMounted(loadDocuments);
                                             <i :class="[updatingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-rotate', 'text-xs']" aria-hidden="true"></i>
                                             Replace
                                         </label>
-                                        <button type="button" :disabled="removingPreparedId === document.id" class="student-button student-button-danger student-button-compact student-button-icon" :aria-label="`Remove ${document.document_name}`" @click="deletePreparedDocument(document)">
+                                        <button type="button" :disabled="preparedFilesBusy" class="student-button student-button-danger student-button-compact student-button-icon" :aria-label="`Remove ${document.document_name}`" @click="deletePreparedDocument(document)">
                                             <i :class="[removingPreparedId === document.id ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-trash-can', 'text-xs']" aria-hidden="true"></i>
                                         </button>
                                     </div>

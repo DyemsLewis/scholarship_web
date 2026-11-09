@@ -40,14 +40,19 @@ function roleIcon(role) {
 
 function primaryIssue(account) {
     if (account.account_status === 'suspended') return 'Suspended';
+    return signInLabel(account, 'No issue');
+}
+
+function signInLabel(account, readyLabel = 'Email verified') {
+    if (!account.email_verified && account.must_reset_password) return 'Email and password reset pending';
     if (!account.email_verified) return 'Email unverified';
-    if (account.must_reset_password) return 'Password reset';
-    return 'No issue';
+    if (account.must_reset_password) return 'Password reset due';
+    return readyLabel;
 }
 
 function issueClass(account) {
     if (account.account_status === 'suspended') return 'bg-rose-100 text-rose-800';
-    if (!account.email_verified) return 'bg-amber-100 text-amber-900';
+    if (!account.email_verified || account.must_reset_password) return 'bg-amber-100 text-amber-900';
     return 'bg-slate-100 text-slate-700';
 }
 </script>
@@ -71,7 +76,7 @@ function issueClass(account) {
             </tr>
         </thead>
         <tbody class="divide-y divide-slate-200 bg-white">
-            <tr v-for="account in accounts" :key="account.id" class="hover:bg-slate-50/70">
+            <tr v-for="account in accounts" :key="account.id" class="align-middle hover:bg-slate-50/70">
                 <td class="px-5 py-3.5">
                     <div class="flex min-w-0 items-center gap-3">
                         <StaffTableIdentity :kind="account.role" :src="account.avatar_url" :icon="roleIcon(account.role)" class="h-10 w-10" />
@@ -86,10 +91,9 @@ function issueClass(account) {
                     <span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', issueClass(account)]">{{ primaryIssue(account) }}</span>
                 </td>
                 <td v-else class="px-4 py-3.5">
-                    <span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', account.email_verified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
-                        {{ account.email_verified ? 'Email verified' : 'Email unverified' }}
+                    <span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', account.email_verified && !account.must_reset_password ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900']">
+                        {{ signInLabel(account) }}
                     </span>
-                    <span v-if="account.must_reset_password" class="mt-1 inline-flex bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-700">Reset due</span>
                 </td>
                 <td class="px-4 py-3.5">
                     <span :class="['inline-flex px-2 py-1 text-[10px] font-bold uppercase tracking-wide', account.account_status === 'suspended' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800']">
@@ -98,7 +102,7 @@ function issueClass(account) {
                 </td>
                 <td class="px-4 py-3.5 text-sm text-slate-600">{{ account.created_at }}</td>
                 <td class="px-5 py-3.5 text-right">
-                    <a :href="recordLink(`/admin/workspaces/accounts/${account.id}`)" class="staff-row-action h-9 w-9" :aria-label="`Open ${account.name}`" title="Open account">
+                    <a :href="recordLink(`/admin/workspaces/accounts/${account.id}`)" class="staff-row-action h-10 w-10" :aria-label="`Open ${account.name}`" title="Open account">
                         <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                     </a>
                 </td>

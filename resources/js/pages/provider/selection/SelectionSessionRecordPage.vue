@@ -1,5 +1,6 @@
 <script setup>
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
+import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
@@ -11,7 +12,8 @@ const appElement = document.getElementById('app');
 const sessionId = appElement?.dataset.sessionId;
 const programId = appElement?.dataset.programId;
 const session = ref(null);
-const activeSection = ref('overview');
+const requestedSection = new URLSearchParams(window.location.search).get('section');
+const activeSection = ref(['roster', 'proof'].includes(requestedSection) ? requestedSection : 'overview');
 const candidates = ref([]);
 const selectedCandidates = ref([]);
 const candidateSearch = ref('');
@@ -38,9 +40,8 @@ const sections = [
 const activeAssignments = computed(() => (session.value?.assignments ?? []).filter((item) => ['assigned', 'acknowledged'].includes(item.status)));
 const canAddApplicants = computed(() => ['draft', 'scheduled'].includes(session.value?.status));
 const canRecordAttendance = computed(() => ['scheduled', 'ongoing'].includes(session.value?.status));
-const currentEvidence = computed(() => (session.value?.evidence ?? []).filter((item) => item.is_current));
-const pendingAttendance = computed(() => activeAssignments.value.filter((item) => (item.attendance?.status ?? 'pending') === 'pending').length);
-const completionBlocked = computed(() => pendingAttendance.value > 0 || (session.value?.proof_required && currentEvidence.value.length === 0));
+const currentEvidence = computed(() => (session.value?.evidence ?? []).filter((item) => item.is_current && item.scope === 'session'));
+const completionBlocked = computed(() => !session.value?.completion?.can_complete);
 
 function labelize(value) {
     return value ? String(value).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()) : 'Not set';
@@ -206,6 +207,7 @@ async function uploadProof() {
 }
 
 function requestSessionAction(action) {
+    if (action === 'complete' && completionBlocked.value) return;
     pendingAction.value = action;
     cancelReason.value = '';
     showActionDialog.value = true;
@@ -257,11 +259,12 @@ const backToQueue = staffQueueReturn(window, 'selection', '/provider/workspaces/
                                 <a v-if="session.status === 'draft'" :href="`/provider/workspaces/selection/sessions/${session.id}/edit`" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950"><i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>Edit</a>
                                 <button v-if="session.status === 'draft'" type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="actionBusy" @click="publishSession"><i class="fa-solid fa-paper-plane text-[10px]" aria-hidden="true"></i>Publish</button>
                                 <button v-if="['scheduled', 'ongoing'].includes(session.status)" type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="actionBusy || completionBlocked" @click="requestSessionAction('complete')"><i class="fa-solid fa-check text-[10px]" aria-hidden="true"></i>Complete session</button>
-                                <a v-if="session.status === 'completed'" href="/provider/workspaces/selection/results" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-clipboard-check text-[10px]" aria-hidden="true"></i>Record outcomes</a>
                                 <button v-if="!['completed', 'cancelled'].includes(session.status)" type="button" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-rose-700 hover:border-rose-400" @click="requestSessionAction('cancel')"><i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>Cancel</button>
                             </div>
                         </div>
                     </header>
+
+                    <ProviderNextStep :step="session.next_step" @open-section="activeSection = $event" />
 
                     <nav class="mt-4 grid grid-cols-3 border border-slate-200 bg-white shadow-sm" aria-label="Session record sections">
                         <button v-for="section in sections" :key="section.key" type="button" :class="['flex min-h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50']" @click="activeSection = section.key"><i :class="[section.icon, activeSection === section.key ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>{{ section.label }}<span v-if="section.key === 'roster'" :class="['px-2 py-0.5 text-xs', activeSection === section.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-600']">{{ activeAssignments.length }}</span></button>

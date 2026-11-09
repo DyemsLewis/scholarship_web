@@ -92,9 +92,15 @@ const monitoringDetail = (selected = null) => ({
     summary: { check_ins: { open: 1, next_due_label: 'Jan 15, 2027' }, benefits: { total: 2, next_release_label: 'Dec 11, 2026' } },
 });
 
+test('the applicant sidebar and directory use Scholarship Support at the existing URL', () => {
+    assert.match(read('components/ApplicantSidebar.vue'), /href: '\/dashboard\/monitoring',\s+label: 'Scholarship Support'/);
+    assert.match(read('pages/UserMonitoringPage.vue'), /title="Scholarship Support"/);
+});
+
 test('monitoring directories retain their introduction, date facts, status and application link', async () => {
     const html = await render(MonitoringShell, { detail: monitoringDetail() });
-    for (const text of ['Education scholarship', 'Support active', 'Jan 15, 2027', 'Dec 11, 2026', '1 open', '2 recorded', 'Application record']) assert.ok(html.includes(text));
+    for (const text of ['Back to Scholarship Support', 'Support record sections', 'Education scholarship', 'Support active', 'Jan 15, 2027', 'Dec 11, 2026', '1 open', '2 recorded', 'Application record']) assert.ok(html.includes(text));
+    assert.match(html, /href="\/dashboard\/monitoring"/);
     assert.match(html, /href="\/dashboard\/applications\/1"/);
     assert.equal((html.match(/Support active/g) ?? []).length, 1);
     assert.match(html, /data-record-section-intro/);

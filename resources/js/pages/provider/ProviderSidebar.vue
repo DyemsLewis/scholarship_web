@@ -41,6 +41,7 @@ if (permissions.has('verify_applications')) {
         icon: 'fa-solid fa-clipboard-check',
         key: 'reviews',
         children: [
+            { href: '/provider/workspaces/reviews/all', label: 'Team queue', exact: true },
             { href: '/provider/workspaces/reviews/assigned', label: 'My reviews', exact: true },
             { href: '/provider/workspaces/reviews/unassigned', label: 'Unassigned', exact: true },
             { href: '/provider/workspaces/reviews/returned', label: 'Returned updates', exact: true },
@@ -105,7 +106,7 @@ if (permissions.has('manage_monitoring')) {
             { href: '/provider/monitoring/plans', label: 'Plans & schedules', exact: true },
             { href: '/provider/workspaces/monitoring/review', label: 'Needs review', exact: true },
             { href: '/provider/workspaces/monitoring/follow-ups', label: 'Follow-ups', exact: true },
-            { href: '/provider/workspaces/monitoring/awaiting', label: 'Awaiting uploads', exact: true },
+            { href: '/provider/workspaces/monitoring/awaiting', label: 'Scheduled or waiting', exact: true },
             { href: '/provider/workspaces/monitoring/history', label: 'Check-in history', exact: true },
         ],
     });

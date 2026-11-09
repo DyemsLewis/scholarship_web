@@ -47,15 +47,26 @@ test('summary loading hides provisional zero counts and preserves accessible sta
     assert.match(staticMetric, />0<\/p>/);
 });
 
-test('dashboard records keep photos, full names, statuses, dates and contextual navigation', async () => {
-    const item = { id: 1, title: `${longTitle}<img onerror=alert(1)>`, subtitle: longTitle, image_url: '/applicant-photo.png', status: { tone: 'attention', label: 'Needs evidence review' }, meta: ['First semester - 2026-2027', 'Due Nov 18, 2026'], action: { label: 'Review', url: '/provider/applications/7' } };
+test('dashboard records keep a single inline cue without adding lines below the badge', async () => {
+    const item = { id: 1, title: `${longTitle}<img onerror=alert(1)>`, subtitle: longTitle, image_url: '/applicant-photo.png', status: { tone: 'attention', label: 'Needs evidence review' }, hint: 'Due Nov 18, 2026', meta: ['4 files submitted', '0 days waiting'], action: { label: 'Review', url: '/provider/applications/7' } };
     const html = await render(Items, { items: [item] });
-    for (const text of ['/applicant-photo.png', longTitle, 'Needs evidence review', 'First semester - 2026-2027', 'Due Nov 18, 2026', 'href="/provider/applications/7"', 'aria-label="Review: ', 'workspace-dashboard-status', 'workspace-dashboard-text']) assert.ok(html.includes(text), text);
+    for (const text of ['/applicant-photo.png', longTitle, 'Needs evidence review', 'Due Nov 18, 2026', 'href="/provider/applications/7"', 'aria-label="Review: ', 'workspace-dashboard-status', 'workspace-dashboard-text', 'staff-row-action--primary']) assert.ok(html.includes(text), text);
+    assert.match(html, /<p[^>]*workspace-dashboard-detail[^>]*>[^]*Due Nov 18, 2026[^]*<\/p><\/div><\/div><div class="min-w-0"><span[^>]*workspace-dashboard-status[^>]*>Needs evidence review<\/span><\/div>/);
+    assert.doesNotMatch(html, /4 files submitted|0 days waiting|\btruncate\b/);
     assert.match(html, /&lt;img onerror=alert\(1\)&gt;/);
     assert.doesNotMatch(html, /<img onerror=/);
     const noImage = await render(Items, { items: [{ ...item, image_url: null }], fallbackIcon: 'fa-solid fa-award' });
     assert.match(noImage, /fa-solid fa-award/);
     assert.doesNotMatch(noImage, /<img\b/);
+});
+
+test('dashboard rows render no empty subtitle line and staff row actions share the 5px radius', async () => {
+    const item = { id: 1, title: 'Program review', status: { label: 'Clear' }, action: { label: 'Open queue', url: '/admin/workspaces/reviews/programs' } };
+    const html = await render(Items, { items: [item] });
+    assert.doesNotMatch(html, /workspace-dashboard-detail|No record is waiting/);
+    assert.match(html, /<article[^>]*items-center/);
+    const css = readFileSync(new URL('../../resources/css/app.css', import.meta.url), 'utf8');
+    assert.match(css, /\.staff-row-action\s*\{[^}]*border-radius: 0\.3125rem;/);
 });
 
 test('dashboard section empty and loading states retain distinct, useful feedback', async () => {

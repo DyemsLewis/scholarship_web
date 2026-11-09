@@ -52,8 +52,8 @@ test('limited previews disclose shown rows versus the real totals', async () => 
     await s.loadArea();
     assert.match(s.accountDescription.value, /1 of 21/); assert.match(s.serviceDescription.value, /2 of 29/);
     assert.match(s.supportDescription.value, /1 of 50/); assert.match(s.financeDescription.value, /1 of 30/); assert.match(s.activityDescription.value, /1 of 200/);
-    assert.equal(s.reviewNames({ count: 3, items: [] }), 'Waiting records are not available in this preview.');
-    assert.equal(s.reviewNames({ count: 0, items: [] }), 'No waiting records');
+    assert.equal(s.reviewNames({ count: 3, items: [] }), 'Preview unavailable');
+    assert.equal(s.reviewNames({ count: 0, items: [] }), 'None');
 });
 
 test('all portal tables use fixed columns and keep oversight distinct from specialist actions', () => {

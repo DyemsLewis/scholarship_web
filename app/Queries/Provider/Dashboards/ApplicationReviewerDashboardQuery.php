@@ -35,7 +35,6 @@ final class ApplicationReviewerDashboardQuery
                 ->where('assigned_reviewer_id', $reviewer->id)
                 ->orWhereNull('assigned_reviewer_id'))
             ->with(['applicant.studentProfile', 'scholarship'])
-            ->withCount('documents')
             ->orderByRaw("CASE WHEN correction_status = 'submitted' THEN 0 ELSE 1 END")
             ->orderByRaw('CASE WHEN assigned_reviewer_id = ? THEN 0 ELSE 1 END', [$reviewer->id])
             ->orderBy('submitted_at')
@@ -45,12 +44,11 @@ final class ApplicationReviewerDashboardQuery
             ->map(fn (ScholarshipApplication $application): array => $this->item(
                 $application,
                 $reviewer,
-                '/provider/workspaces/reviews/assigned',
+                '/provider/workspaces/reviews/all?page=1',
             ));
 
         $recent = (clone $history)
             ->with(['applicant.studentProfile', 'scholarship'])
-            ->withCount('documents')
             ->latest('reviewed_at')
             ->latest('id')
             ->limit(5)
@@ -116,7 +114,7 @@ final class ApplicationReviewerDashboardQuery
                     'empty_message' => 'No applications currently need verification.',
                     'action' => [
                         'label' => 'Open full queue',
-                        'url' => '/provider/workspaces/reviews/assigned',
+                        'url' => '/provider/workspaces/reviews/all',
                     ],
                     'items' => $priorities,
                 ],
@@ -157,9 +155,7 @@ final class ApplicationReviewerDashboardQuery
         $profile = $application->applicant?->studentProfile;
         $isMine = $application->assigned_reviewer_id === $reviewer->id;
         $isReturned = $application->correction_status === 'submitted';
-        $referenceAt = $completed
-            ? $application->reviewed_at
-            : ($application->submitted_at ?? $application->created_at);
+        $waitingDays = $completed ? 0 : $this->waitingDays($application->submitted_at ?? $application->created_at);
 
         return [
             'id' => (int) $application->id,
@@ -174,12 +170,9 @@ final class ApplicationReviewerDashboardQuery
                     : ($isReturned ? 'Returned update' : ($isMine ? 'Assigned to you' : 'Available to claim')),
                 'tone' => $completed ? 'positive' : ($isReturned ? 'attention' : 'neutral'),
             ],
-            'meta' => [
-                $completed
-                    ? 'Reviewed '.($referenceAt?->format('M d, Y') ?: 'recently')
-                    : $this->waitingDays($referenceAt).' day'.($this->waitingDays($referenceAt) === 1 ? '' : 's').' waiting',
-                ((int) ($application->documents_count ?? 0)).' file'.((int) ($application->documents_count ?? 0) === 1 ? '' : 's').' submitted',
-            ],
+            'hint' => $completed
+                ? $application->reviewed_at?->format('M d, Y')
+                : ($waitingDays > 0 ? $waitingDays.' day'.($waitingDays === 1 ? '' : 's').' waiting' : null),
             'action' => [
                 'label' => $completed ? 'View record' : 'Open review',
                 'url' => route('provider.applications.show', [

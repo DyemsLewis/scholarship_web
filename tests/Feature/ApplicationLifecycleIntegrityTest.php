@@ -252,6 +252,49 @@ class ApplicationLifecycleIntegrityTest extends TestCase
         ]);
     }
 
+    public function test_confirmed_waitlist_promotion_preserves_amount_and_rejects_a_stale_pending_form(): void
+    {
+        $provider = $this->provider();
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $program = $this->program($provider, ['award_amount' => 8000]);
+        $application = $this->applicationAtDecision($program, $applicant, $provider);
+        $url = "/provider/applications/{$application->id}/final-outcome";
+
+        $this->actingAs($provider)->patchJson($url, ['outcome' => 'waitlisted', 'expected_outcome' => null, 'notes' => 'We are waiting for a slot to open.'])
+            ->assertOk()->assertJsonPath('application.final_outcome', 'waitlisted');
+
+        $this->patchJson($url, ['outcome' => 'selected', 'expected_outcome' => null, 'awarded_amount' => 4500])
+            ->assertUnprocessable()->assertJsonValidationErrors('outcome');
+        $this->assertSame('waitlisted', $application->fresh()->final_outcome);
+
+        $this->patchJson($url, ['outcome' => 'selected', 'expected_outcome' => 'waitlisted', 'awarded_amount' => 4500])
+            ->assertOk()->assertJsonPath('application.final_outcome', 'selected');
+        $application->refresh();
+        $this->assertNull($application->outcome_notes);
+        $this->assertSame('4500.00', $application->awarded_amount);
+        $this->assertSame('4500.00', $application->provider_contract_terms_snapshot['award_amount']);
+    }
+
+    public function test_reopen_confirmation_cannot_reopen_a_different_result_recorded_after_it_was_opened(): void
+    {
+        $provider = $this->provider();
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $workflow = app(ApplicationWorkflowService::class);
+        $application = $this->applicationAtDecision($this->program($provider), $applicant, $provider);
+        $application = $workflow->recordFinalOutcome($application, 'waitlisted', $provider);
+        $reference = $this->actingAs($provider)
+            ->getJson("/provider/applications/{$application->id}/data?workspace=decision")
+            ->assertOk()->assertJsonPath('application.decision_reopen.can_reopen', true)
+            ->json('application.decision_reopen.decision_reference');
+
+        $workflow->recordFinalOutcome($application, 'selected', $provider);
+        $this->patchJson("/provider/applications/{$application->id}/decision/reopen", [
+            'reason' => 'Reopen the waitlist entry reviewed in the previous tab.',
+            'decision_reference' => $reference,
+        ])->assertUnprocessable()->assertJsonValidationErrors('reason');
+        $this->assertSame('selected', $application->fresh()->final_outcome);
+    }
+
     public function test_provider_can_reopen_the_latest_stage_result_with_an_audit_reason(): void
     {
         $provider = $this->provider();
@@ -343,6 +386,32 @@ class ApplicationLifecycleIntegrityTest extends TestCase
             'status' => 'current',
             'result' => null,
         ]);
+    }
+
+    public function test_selected_record_hands_off_to_the_applicant_until_the_agreement_is_accepted(): void
+    {
+        $provider = $this->provider();
+        $applicant = User::factory()->create(['role' => 'applicant']);
+        $application = $this->applicationAtDecision($this->program($provider), $applicant, $provider);
+        $application = app(ApplicationWorkflowService::class)->recordFinalOutcome($application, 'selected', $provider);
+        $recordUrl = "/provider/applications/{$application->id}";
+
+        $this->actingAs($provider)->getJson("$recordUrl/data?workspace=decision")->assertOk()
+            ->assertJsonPath('application.provider_next_step.owner', 'Applicant')
+            ->assertJsonPath('application.provider_next_step.action.url', "$recordUrl?workspace=recipient");
+
+        $decisionOfficer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $provider->id,
+            'permissions' => ['record_final_decisions'],
+        ]);
+        $this->actingAs($decisionOfficer)->getJson("$recordUrl/data?workspace=decision")->assertOk()
+            ->assertJsonPath('application.provider_next_step.owner', 'Applicant')
+            ->assertJsonPath('application.provider_next_step.action', null);
+
+        $application->update(['student_response_status' => 'accepted']);
+        $this->actingAs($provider)->getJson("$recordUrl/data?workspace=decision")->assertOk()
+            ->assertJsonPath('application.provider_next_step', null);
     }
 
     public function test_provider_can_reopen_a_final_outcome_before_recipient_onboarding(): void

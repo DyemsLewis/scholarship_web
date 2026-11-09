@@ -28,8 +28,12 @@ function toneClass(tone) {
                     <i :class="fallbackIcon"></i>
                 </span>
                 <div class="min-w-0">
-                    <h3 class="workspace-dashboard-text truncate text-sm font-black text-slate-950">{{ item.title }}</h3>
-                    <p class="workspace-dashboard-text workspace-dashboard-detail mt-1 truncate text-xs font-medium text-slate-500">{{ item.subtitle }}</p>
+                    <h3 class="workspace-dashboard-text break-words text-sm font-black text-slate-950">{{ item.title }}</h3>
+                    <p v-if="item.subtitle || item.hint" class="workspace-dashboard-text workspace-dashboard-detail mt-1 break-words text-xs font-medium text-slate-500">
+                        <span v-if="item.subtitle">{{ item.subtitle }}</span>
+                        <span v-if="item.subtitle && item.hint" class="mx-1" aria-hidden="true">&middot;</span>
+                        <span v-if="item.hint" class="font-semibold text-slate-700">{{ item.hint }}</span>
+                    </p>
                 </div>
             </div>
 
@@ -37,10 +41,9 @@ function toneClass(tone) {
                 <span :class="['workspace-dashboard-status inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', toneClass(item.status?.tone)]">
                     {{ item.status?.label }}
                 </span>
-                <p v-for="detail in item.meta" :key="detail" class="workspace-dashboard-text workspace-dashboard-detail mt-1 truncate text-xs text-slate-500">{{ detail }}</p>
             </div>
 
-            <a :href="item.action.url" class="workspace-dashboard-action inline-flex h-9 items-center justify-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white hover:bg-slate-800" :aria-label="`${item.action.label}: ${item.title}`">
+            <a :href="item.action.url" class="workspace-dashboard-action staff-row-action staff-row-action--primary min-h-10 px-3 py-2 text-center text-xs" :aria-label="`${item.action.label}: ${item.title}`">
                 {{ item.action.label }}
                 <i class="fa-solid fa-arrow-right text-[10px] text-amber-300" aria-hidden="true"></i>
             </a>

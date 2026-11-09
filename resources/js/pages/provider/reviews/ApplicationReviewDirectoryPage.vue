@@ -3,15 +3,22 @@ import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
-import { createStaffQueueState } from '../../../support/staffQueueState.js';
+import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
+import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
+    '/provider/workspaces/reviews/all': 'all',
     '/provider/workspaces/reviews/assigned': 'mine',
     '/provider/workspaces/reviews/unassigned': 'unassigned',
     '/provider/workspaces/reviews/returned': 'returned',
     '/provider/workspaces/reviews/history': 'history',
 };
 const queueCopy = {
+    all: {
+        title: 'Team review queue',
+        description: 'See all active screening records in the programs you can access.',
+        empty: 'No applications are awaiting screening.',
+    },
     mine: {
         title: 'My review queue',
         description: 'Verify the applications assigned to you, one record at a time.',
@@ -38,7 +45,7 @@ const path = (window.portalPathname?.() ?? window.location.pathname).replace(/\/
 const activeQueue = queueByPath[path] ?? 'mine';
 const pageCopy = queueCopy[activeQueue];
 const workspace = ref(null);
-const summary = ref({ mine: 0, unassigned: 0, returned: 0, history: 0, oldest_wait_days: 0 });
+const summary = ref({ team: 0, mine: 0, unassigned: 0, returned: 0, history: 0, oldest_wait_days: 0 });
 const programs = ref([]);
 const applications = ref([]);
 const nextReview = ref(null);
@@ -55,6 +62,7 @@ let requestedPage = 1;
 let searchTimer = null;
 
 const queues = computed(() => [
+    { key: 'all', label: 'Team queue', count: summary.value.team, href: '/provider/workspaces/reviews/all' },
     { key: 'mine', label: 'My reviews', count: summary.value.mine, href: '/provider/workspaces/reviews/assigned' },
     { key: 'unassigned', label: 'Unassigned', count: summary.value.unassigned, href: '/provider/workspaces/reviews/unassigned' },
     { key: 'returned', label: 'Returned', count: summary.value.returned, href: '/provider/workspaces/reviews/returned' },
@@ -160,18 +168,19 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                         <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Review scope</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Program access</p>
                             <p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p>
                             <p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p>
                         </div>
                     </div>
+                    <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>
 
-                <nav class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Application review queues">
+                <nav class="mt-4 grid grid-cols-5 border border-slate-200 bg-white shadow-sm" aria-label="Application review queues">
                     <a
                         v-for="queue in queues"
                         :key="queue.key"
-                        :href="queue.href"
+                        :href="providerProgramQueueLink(queue.href, selectedProgram)"
                         :aria-current="activeQueue === queue.key ? 'page' : undefined"
                         :class="[
                             'flex min-h-16 items-center justify-between border-r border-slate-200 px-5 last:border-r-0',
@@ -217,7 +226,7 @@ onBeforeUnmount(() => {
 
                     <div class="staff-table-viewport" :aria-busy="isLoading">
                         <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadApplications(requestedPage)" />
-                        <table v-else class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-40"><col class="w-36"><col class="w-32"><col class="w-36"></colgroup>
+                        <table v-else class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-48"><col class="w-36"><col class="w-36"><col class="w-32"></colgroup>
                             <caption class="sr-only">Applications in {{ pageCopy.title }}. The saved match is advisory, not an eligibility decision.</caption>
                             <thead class="bg-slate-50">
                                 <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
@@ -247,13 +256,12 @@ onBeforeUnmount(() => {
                                             <div class="min-w-0">
                                                 <p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p>
                                                 <p class="mt-1 application-text text-xs text-slate-500">{{ application.program.title }}</p>
-                                                <p v-if="application.applicant.education" class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education }}</p>
                                             </div>
                                         </div>
                                     </td>
                                     <td class="px-5 py-4">
                                         <span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(application.evidence.state)]">{{ application.evidence.label }}</span>
-                                        <p class="mt-1.5 text-xs text-slate-500">{{ application.evidence.detail }}</p>
+                                        <p v-if="application.evidence.required > 0" class="mt-1 text-xs text-slate-500">{{ application.evidence.accepted }} of {{ application.evidence.required }} accepted</p>
                                     </td>
                                     <td class="px-5 py-4">
                                         <p class="text-sm font-semibold text-slate-800">{{ application.eligibility_score == null ? 'Not calculated' : `${application.eligibility_score}%` }}</p>
@@ -261,7 +269,8 @@ onBeforeUnmount(() => {
                                     </td>
                                     <td class="px-5 py-4">
                                         <p class="text-sm font-semibold text-slate-800">{{ application.assignment.label }}</p>
-                                        <p class="mt-1 text-xs text-slate-500">{{ activeQueue === 'history' ? (application.reviewed_at || 'Reviewed') : `${application.waiting_days} day${application.waiting_days === 1 ? '' : 's'} waiting` }}</p>
+                                        <p v-if="activeQueue === 'history' && application.reviewed_at" class="mt-1 text-xs text-slate-500">{{ application.reviewed_at }}</p>
+                                        <p v-else-if="activeQueue !== 'history' && application.waiting_days > 0" class="mt-1 text-xs text-slate-500">{{ application.waiting_days }} day{{ application.waiting_days === 1 ? '' : 's' }} waiting</p>
                                     </td>
                                     <td class="px-5 py-4 text-right">
                                         <button v-if="application.assignment.state === 'unassigned' && activeQueue !== 'history'" type="button" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :disabled="claimingId !== null" @click="claimAndOpen(application)" :aria-label="`${claimingId === application.id ? 'Claiming...' : 'Claim'} review for ${application.applicant.name}`">

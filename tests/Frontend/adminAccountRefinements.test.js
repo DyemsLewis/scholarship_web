@@ -219,7 +219,14 @@ test('account tables retain complete escaped identities, photos/logos, and expli
         '../../../components/StaffTableIdentity.vue': compile('components/StaffTableIdentity.vue'),
     }))).default;
     const email = `${'very.long.account.'.repeat(8)}@example.test`;
-    const html = await renderToString(createSSRApp(Table, { accounts: [{ id: 39, name: 'Mira <script>name</script>', email, role: 'applicant', avatar_url: '/private-photo', email_verified: true, account_status: 'active' }, { id: 11, name: 'Provider', role: 'provider', avatar_url: '/logo.png', email_verified: false, account_status: 'active' }] }));
+    const html = await renderToString(createSSRApp(Table, { accounts: [
+        { id: 39, name: 'Mira <script>name</script>', email, role: 'applicant', avatar_url: '/private-photo', email_verified: true, account_status: 'active' },
+        { id: 11, name: 'Provider', role: 'provider', avatar_url: '/logo.png', email_verified: false, account_status: 'active' },
+        { id: 12, name: 'Pending Setup', role: 'provider', email_verified: false, must_reset_password: true, account_status: 'active' },
+    ] }));
     for (const token of [email, '&lt;script&gt;', 'src="/private-photo"', 'src="/logo.png"', 'object-contain p-1', 'Email verified', 'Email unverified', 'table-fixed', '<colgroup>', 'scope="col"', 'href="/admin/workspaces/accounts/39"']) assert.ok(html.includes(token), token);
     assert.doesNotMatch(html, /<script>|\btruncate\b/);
+    const pending = html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/g).find((row) => row.includes('Pending Setup'));
+    assert.match(pending, />Email and password reset pending</);
+    assert.doesNotMatch(pending, />Email unverified<|>Reset due</);
 });

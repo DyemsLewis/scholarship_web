@@ -266,14 +266,14 @@ class ApplicantApplicationDetailService
                 'state' => 'recipient_support',
                 'tone' => 'positive',
                 'eyebrow' => 'Application complete',
-                'title' => 'Continue to recipient support',
-                'description' => 'Your selection and agreement are recorded. Monitoring and benefit releases continue in their own workspace.',
+                'title' => 'Continue to Scholarship Support',
+                'description' => 'Your selection and agreement are recorded. See check-ins and benefit releases in Scholarship Support.',
                 'actor' => 'applicant',
                 'actor_label' => 'You',
                 'due_label' => null,
                 'action' => [
                     'kind' => 'link',
-                    'label' => 'Open recipient support',
+                    'label' => 'Open Scholarship Support',
                     'href' => route('dashboard.monitoring.show', $application, false),
                 ],
             ];
@@ -527,10 +527,10 @@ class ApplicantApplicationDetailService
                 : null,
             'recipient_support' => $selected && $application->student_response_status === 'accepted'
                 ? [
-                    'title' => 'Recipient support',
+                    'title' => 'Scholarship Support',
                     'description' => $application->status === 'benefits_terminated'
-                        ? 'Future support has ended. Earlier monitoring and release records remain available.'
-                        : 'Monitoring and benefit releases continue in a separate workspace.',
+                        ? 'Future support has ended. Earlier check-ins and benefit release records remain available.'
+                        : 'Review your check-ins and benefit releases in Scholarship Support.',
                     'href' => route('dashboard.monitoring.show', $application, false),
                 ]
                 : null,

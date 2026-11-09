@@ -407,6 +407,9 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/reviews/assigned', [ProviderWorkspacePageController::class, 'reviews'])
             ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('workspaces.reviews.assigned');
+        Route::get('/workspaces/reviews/all', [ProviderWorkspacePageController::class, 'reviews'])
+            ->middleware(['permission:verify_applications', 'provider.approved'])
+            ->name('workspaces.reviews.all');
         Route::get('/workspaces/reviews/unassigned', [ProviderWorkspacePageController::class, 'reviews'])
             ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('workspaces.reviews.unassigned');
@@ -506,7 +509,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/monitoring', [ProviderWorkspacePageController::class, 'monitoringDashboard'])
             ->middleware(['permission:manage_monitoring', 'provider.approved'])
             ->name('workspaces.monitoring');
-        Route::get('/workspaces/monitoring/dashboard/data', [RoleDashboardController::class, 'monitoring'])
+        Route::get('/workspaces/monitoring/dashboard/data', [ProviderController::class, 'monitoringOfficerDashboardData'])
             ->middleware(['permission:manage_monitoring', 'provider.approved'])
             ->name('workspaces.monitoring.dashboard.data');
         Route::get('/workspaces/monitoring/review', [ProviderWorkspacePageController::class, 'monitoring'])

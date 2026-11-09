@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { formatAdminServiceDateTime, formatAdminServiceFileSize, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
+import { formatAdminServiceDateTime, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
 
 const { purchaseId, purchase, isLoading, loadError, loadRecord, isSaving: isUploading, canEdit, errorMessage, successMessage, queueUrl, runAction } = useAdminServiceWorkspace('files');
@@ -38,9 +38,9 @@ async function uploadDeliverable(event) {
             <div v-else class="staff-table-viewport staff-table-viewport--compact">
                 <table class="portal-data-table min-w-[900px] table-fixed">
                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500"><tr><th class="w-[38%] border-b border-slate-200 px-5 py-3">File</th><th class="w-[24%] border-b border-slate-200 px-5 py-3">Source</th><th class="w-[22%] border-b border-slate-200 px-5 py-3">Shared</th><th class="w-[16%] border-b border-slate-200 px-5 py-3 text-right">Actions</th></tr></thead>
-                    <tbody class="divide-y divide-slate-200 bg-white"><tr v-for="file in files" :key="file.id" class="hover:bg-slate-50/70">
-                        <td class="px-5 py-4"><p class="billing-text text-sm font-bold text-slate-950" data-file-name>{{ file.original_name }}</p><p class="mt-1 text-xs text-slate-500">{{ formatAdminServiceFileSize(file.size) }}</p></td>
-                        <td class="px-5 py-4"><p class="text-sm font-semibold text-slate-800">{{ sourceLabel(file) }}</p><p class="mt-1 text-xs text-slate-500">{{ file.uploaded_by }}</p></td>
+                    <tbody class="divide-y divide-slate-200 bg-white"><tr v-for="file in files" :key="file.id" class="align-middle hover:bg-slate-50/70">
+                        <td class="px-5 py-4"><p class="billing-text text-sm font-bold text-slate-950" data-file-name>{{ file.original_name }}</p></td>
+                        <td class="px-5 py-4"><p class="text-sm font-semibold text-slate-800">{{ sourceLabel(file) }}</p><p v-if="file.uploaded_by" class="billing-text mt-0.5 text-xs text-slate-500">{{ file.uploaded_by }}</p></td>
                         <td class="px-5 py-4 text-sm text-slate-600">{{ formatAdminServiceDateTime(file.created_at) }}</td>
                         <td class="px-5 py-4 text-right"><div class="inline-flex gap-2"><a :href="file.view_url" data-file-preview="true" :data-file-name="file.original_name" :data-download-url="file.download_url" class="staff-row-action h-10 w-10" :aria-label="`Preview ${file.original_name}`" title="Preview file"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><a :href="file.download_url" download data-file-preview="false" class="staff-row-action staff-row-action--primary h-10 w-10" :aria-label="`Download ${file.original_name}`" title="Download file"><i class="fa-solid fa-download text-xs" aria-hidden="true"></i></a></div></td>
                     </tr></tbody>

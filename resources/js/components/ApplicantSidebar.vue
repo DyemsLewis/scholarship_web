@@ -36,7 +36,7 @@ const navLinks = [
     },
     {
         href: '/dashboard/monitoring',
-        label: 'Monitoring',
+        label: 'Scholarship Support',
         icon: 'fa-solid fa-heart-pulse',
         activePaths: ['/dashboard/monitoring'],
     },

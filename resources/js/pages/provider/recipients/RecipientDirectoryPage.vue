@@ -1,10 +1,10 @@
 <script setup>
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
-import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
-import { createStaffQueueState } from '../../../support/staffQueueState.js';
+import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
+import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/recipients/agreements': 'awaiting',
@@ -113,10 +113,11 @@ onBeforeUnmount(() => {
                         <div class="flex min-w-0 items-start gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-award" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Recipient onboarding</p><h1 id="recipient-directory-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
                         <a href="/provider/workspaces/recipients/withdrawals" class="inline-flex min-h-10 shrink-0 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700"><i class="fa-solid fa-arrow-right-from-bracket text-xs" aria-hidden="true"></i>Withdrawal requests</a>
                     </div>
+                    <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>
 
                 <nav class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Recipient queues">
-                    <a v-for="queue in queues" :key="queue.key" :href="queue.href" :aria-current="activeQueue === queue.key ? 'page' : undefined" :class="['flex min-h-16 items-center justify-between border-r border-slate-200 px-5 last:border-r-0', activeQueue === queue.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']"><span class="text-sm font-bold">{{ queue.label }}</span><span :class="['min-w-7 px-2 py-1 text-center text-xs font-bold', activeQueue === queue.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-700']">{{ queue.count }}</span></a>
+                    <a v-for="queue in queues" :key="queue.key" :href="providerProgramQueueLink(queue.href, selectedProgram)" :aria-current="activeQueue === queue.key ? 'page' : undefined" :class="['flex min-h-16 items-center justify-between border-r border-slate-200 px-5 last:border-r-0', activeQueue === queue.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']"><span class="text-sm font-bold">{{ queue.label }}</span><span :class="['min-w-7 px-2 py-1 text-center text-xs font-bold', activeQueue === queue.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-700']">{{ queue.count }}</span></a>
                 </nav>
 
                 <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Recipient list">
@@ -136,9 +137,13 @@ onBeforeUnmount(() => {
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="recipient in recipients" :key="recipient.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4"><div class="flex items-center gap-3"><StaffTableIdentity :src="recipient.applicant.profile_photo_url" class="h-11 w-11" /><div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ recipient.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ recipient.program.title }}</p></div></div></td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(recipient.onboarding.state)]">{{ recipient.onboarding.label }}</span><WorkspaceTextSummary class="mt-2 text-xs text-slate-500" :text="recipient.onboarding.response_note || recipient.onboarding.next_step" label="note" /></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ recipient.onboarding.state === 'active' ? 'Support active' : recipient.onboarding.state === 'closed' ? 'Support record closed' : 'Not started' }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ recipient.program.support_period || recipient.support.latest_decision_at || 'Dates set by the program' }}</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ recipient.award.amount_label }}</p><p class="mt-1 text-xs text-slate-500">{{ recipient.onboarding.responded_at || `${recipient.waiting_days} days waiting` }}</p></td>
+                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(recipient.onboarding.state)]">{{ recipient.onboarding.label }}</span></td>
+                                    <td class="px-5 py-4">
+                                        <p class="text-sm font-bold text-slate-900">{{ recipient.onboarding.state === 'active' ? 'Active' : recipient.onboarding.state === 'closed' ? 'Closed' : 'Not started' }}</p>
+                                        <p v-if="recipient.onboarding.state === 'active' && recipient.program.support_period" class="mt-1 application-text text-xs text-slate-500">{{ recipient.program.support_period }}</p>
+                                        <p v-else-if="recipient.onboarding.state === 'closed' && recipient.support.latest_decision_at" class="mt-1 text-xs text-slate-500">{{ recipient.support.latest_decision_at }}</p>
+                                    </td>
+                                    <td class="px-5 py-4 text-sm font-bold text-slate-900">{{ recipient.award.amount_label }}</td>
                                     <td class="px-5 py-4 text-right"><a :href="recordUrl(recipient)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`${recipient.onboarding.action_label} for ${recipient.applicant.name}`">{{ recipient.onboarding.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                 </tr>
                             </tbody>

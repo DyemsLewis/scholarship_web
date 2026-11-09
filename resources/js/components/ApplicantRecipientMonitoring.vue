@@ -78,7 +78,7 @@ const nextStep = computed(() => {
     if (latestDecision.value?.can_respond) return { panel: 'status', icon: 'fa-solid fa-file-signature', tone: 'amber', label: 'Response needed', title: latestDecision.value.decision_label, detail: 'Acknowledge the outcome or ask the provider to review it.' };
     const release = activeReleases.value[0];
     if (release) return { panel: 'benefits', icon: releaseStatusIcon(release.status), tone: 'sky', label: release.status === 'prepared' ? 'Benefit ready' : 'Upcoming release', title: release.title, detail: release.release_label || 'Open the release details for instructions.' };
-    return { panel: 'requirements', icon: 'fa-solid fa-circle-check', tone: 'emerald', label: 'No action needed', title: 'Your monitoring record is up to date', detail: 'New requirements and release schedules will appear here.' };
+    return { panel: 'requirements', icon: 'fa-solid fa-circle-check', tone: 'emerald', label: 'No action needed', title: 'Your support record is up to date', detail: 'New requirements and release schedules will appear here.' };
 });
 
 function nextStepClass(tone) {
@@ -331,7 +331,7 @@ async function saveManualGrade(cycle) {
             <div class="flex min-w-0 items-start gap-3">
                 <span class="grid h-11 w-11 shrink-0 place-items-center rounded-md bg-amber-100 text-amber-800"><i class="fa-solid fa-heart-pulse" aria-hidden="true"></i></span>
                 <div class="min-w-0">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Recipient monitoring</p>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Scholarship Support</p>
                     <h3 class="mt-1 text-lg font-bold text-slate-950">Keep your scholarship on track</h3>
                     <p class="mt-1 text-sm text-slate-500">Submit requirements and check benefit releases.</p>
                 </div>
@@ -349,7 +349,7 @@ async function saveManualGrade(cycle) {
             </div>
         </div>
 
-        <nav v-if="showNavigation" class="grid grid-cols-3 border-y border-slate-200 bg-slate-50 p-1" aria-label="Recipient monitoring sections">
+        <nav v-if="showNavigation" class="grid grid-cols-3 border-y border-slate-200 bg-slate-50 p-1" aria-label="Support record sections">
             <button v-for="tab in monitoringTabs" :key="tab.key" type="button" :class="['flex min-w-0 items-center justify-center gap-2 rounded px-2 py-2.5 text-xs font-bold transition sm:text-sm', activePanel === tab.key ? 'bg-slate-950 text-white shadow-sm' : 'text-slate-600 hover:bg-white hover:text-slate-950']" @click="activePanel = tab.key"><i :class="[tab.icon, 'text-xs']" aria-hidden="true"></i><span class="truncate">{{ tab.label }}</span></button>
         </nav>
 

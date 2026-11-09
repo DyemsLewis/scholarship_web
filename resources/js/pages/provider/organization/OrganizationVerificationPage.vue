@@ -48,12 +48,6 @@ function statusLabel(status) {
     return status === 'approved' ? 'Approved' : status === 'rejected' ? 'Changes requested' : 'Under review';
 }
 
-function fileSize(bytes) {
-    const size = Number(bytes || 0);
-    if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`;
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
-}
-
 function applyResponse(data) {
     profile.value = data.profile;
     documents.value = data.verification_documents ?? [];
@@ -211,9 +205,12 @@ onMounted(loadVerification);
                                 <thead class="bg-white"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600"><th class="px-5 py-3">Document</th><th class="px-5 py-3">Type</th><th class="px-5 py-3">Review status</th><th class="px-5 py-3">Uploaded</th><th class="px-5 py-3 text-right">Actions</th></tr></thead>
                                 <tbody class="divide-y divide-slate-200">
                                     <tr v-for="document in documents" :key="document.id" class="align-middle hover:bg-slate-50/70">
-                                        <td class="px-5 py-4"><p class="settings-text text-sm font-bold text-slate-950">{{ document.original_name }}</p><p class="mt-1 text-xs text-slate-500">{{ fileSize(document.size) }}</p></td>
+                                        <td class="px-5 py-4">
+                                            <p class="settings-text text-sm font-bold text-slate-950">{{ document.original_name }}</p>
+                                            <WorkspaceTextSummary v-if="document.review_notes" disclosure-only class="mt-1 text-xs text-slate-600" :text="document.review_notes" label="review note" />
+                                        </td>
                                         <td class="px-5 py-4 text-sm text-slate-700">{{ labelFromKey(document.document_type) }}</td>
-                                        <td class="px-5 py-4"><span :class="['inline-flex px-2.5 py-1 text-xs font-bold uppercase tracking-wide', documentStatusClass(document.status)]">{{ statusLabel(document.status) }}</span><p v-if="document.reviewed_at" class="mt-1 text-xs text-slate-500">Reviewed {{ document.reviewed_at }}</p><WorkspaceTextSummary v-if="document.review_notes" class="mt-2 text-xs text-slate-600" :text="document.review_notes" label="review note" /></td>
+                                        <td class="px-5 py-4"><span :class="['inline-flex px-2.5 py-1 text-xs font-bold uppercase tracking-wide', documentStatusClass(document.status)]">{{ statusLabel(document.status) }}</span><p v-if="document.reviewed_at" class="mt-1 text-xs text-slate-500">Reviewed {{ document.reviewed_at }}</p></td>
                                         <td class="px-5 py-4 text-xs font-semibold text-slate-600">{{ document.uploaded_at }}</td>
                                         <td class="px-5 py-4"><div class="flex justify-end gap-2"><a :href="document.view_url" target="_blank" rel="noopener" class="staff-row-action h-9 w-9" :aria-label="`View ${document.original_name}`" title="View document"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><a :href="document.download_url" class="staff-row-action h-9 w-9" :aria-label="`Download ${document.original_name}`" title="Download document"><i class="fa-solid fa-download text-xs" aria-hidden="true"></i></a><button type="button" :disabled="isUploading" class="staff-row-action h-9 w-9" :aria-label="`Replace ${document.original_name}`" title="Replace document" @click="replaceDocument(document)"><i class="fa-solid fa-file-arrow-up text-xs" aria-hidden="true"></i></button><button type="button" :disabled="deletingId === document.id" class="grid h-9 w-9 place-items-center border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40" aria-label="Remove document" @click="requestDelete(document)"><i class="fa-solid fa-trash text-xs" aria-hidden="true"></i></button></div></td>
                                     </tr>

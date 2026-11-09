@@ -72,7 +72,7 @@ const applicationViewContent = {
     action: {
         eyebrow: 'Needs my action',
         title: 'Complete your pending tasks',
-        description: 'Corrections, agreements, schedules, and monitoring requirements that need your response.',
+        description: 'Corrections, agreements, schedules, and check-ins that need your response.',
         sectionTitle: 'Waiting for your response',
         emptyTitle: 'You have no pending tasks',
         emptyText: 'Nothing currently requires your response. Provider updates will appear here when action is needed.',
@@ -462,9 +462,9 @@ function applicationCardAction(application) {
 
     if (pendingMonitoring > 0) {
         return {
-            eyebrow: 'Monitoring update',
+            eyebrow: 'Check-in update',
             title: `${pendingMonitoring} requirement${pendingMonitoring === 1 ? '' : 's'} ready for submission`,
-            description: 'Open Monitoring to submit the requested academic update.',
+            description: 'Open Scholarship Support for the check-in instructions.',
             icon: 'fa-solid fa-graduation-cap',
         };
     }
@@ -473,7 +473,7 @@ function applicationCardAction(application) {
         return {
             eyebrow: 'Recipient support',
             title: application?.recipient_monitoring?.support_status_label || 'Scholarship support is active',
-            description: 'Review requirements, benefit releases, and provider notices in Monitoring.',
+            description: 'Review requirements, benefit releases, and provider notices in Scholarship Support.',
             icon: 'fa-solid fa-award',
         };
     }
@@ -887,6 +887,8 @@ async function loadApplications() {
 }
 
 async function submitApplication() {
+    if (applicationBusy.value || confirmation.open) return;
+
     if (selectedScholarship.value?.application_limit_reached) {
         errorMessage.value = 'This scholarship has reached its application limit.';
         currentStep.value = 0;
@@ -918,12 +920,24 @@ async function submitApplication() {
         return;
     }
 
+    if (!canSubmitApplication.value) return;
+
+    const scholarship = selectedScholarship.value;
+    const confirmed = await requestConfirmation({
+        title: 'Submit this application?',
+        message: `Your application for "${scholarship.title}" will be sent to the provider for review. You cannot edit your answers after submitting.`,
+        confirmLabel: 'Submit application',
+        cancelLabel: 'Keep reviewing',
+    });
+    if (!confirmed || applicationBusy.value || selectedScholarship.value !== scholarship
+        || !canSubmitApplication.value || !selectedIsEligible.value || scholarship.application_limit_reached) return;
+
     isSubmitting.value = true;
     errorMessage.value = '';
 
     try {
         await window.axios.post('/dashboard/applications', {
-            scholarship_id: selectedScholarship.value.id,
+            scholarship_id: scholarship.id,
             document_checklist: documentChecklist.value,
             application_answers: selectedApplicationQuestions.value.map((question) => ({
                 question_id: question.id,
@@ -977,7 +991,7 @@ async function handleApplicationNavigation(event) {
         showPortalToast({ type: 'warning', message: 'Wait for the current upload or submission to finish before leaving.' });
         return;
     }
-    if (pendingApplicationNavigation) return;
+    if (confirmation.open || pendingApplicationNavigation) return;
     pendingApplicationNavigation = true;
     const leave = await requestConfirmation({
         eyebrow: 'Unsent application answers', title: 'Leave this application form?',
@@ -1532,7 +1546,7 @@ watch(selectedScholarship, (scholarship) => {
                                     <button
                                         v-else
                                         type="button"
-                                        :disabled="isSubmitting || !canSubmitApplication"
+                                        :disabled="applicationBusy || confirmation.open || !canSubmitApplication"
                                         class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 sm:w-auto"
                                         @click="submitApplication"
                                     >

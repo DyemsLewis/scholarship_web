@@ -1,12 +1,15 @@
 <script setup>
+import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
+import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { applicantProfileDetails } from '../../../support/applicantProfileDetails';
 import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
+import { stageDecisionConsequence } from '../../../support/providerDecisionConfirmation.js';
 import EligibilityReviewPanel from './components/EligibilityReviewPanel.vue';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
@@ -32,6 +35,7 @@ const actionBusy = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 const showReopenDialog = ref(false);
+const reopenError = ref('');
 const selectedDocument = ref(null);
 const documentForm = ref({ status: 'accepted', review_notes: '' });
 const showCorrectionForm = ref(false);
@@ -45,7 +49,7 @@ const { handleKeydown: handleDocumentKeydown } = useModalAccessibility(() => Boo
 const { handleKeydown: handleCorrectionKeydown } = useModalAccessibility(() => showCorrectionForm.value, correctionDialog, () => { showCorrectionForm.value = false; });
 const { handleKeydown: handlePhotoKeydown } = useModalAccessibility(() => showPhotoReplacementForm.value, photoDialog, () => { showPhotoReplacementForm.value = false; });
 const academicForm = ref({ academic_grading_scale: '', academic_result: '' });
-const decisionForm = ref({ decision: 'approve', decision_reason: '', review_notes: '' });
+const decisionForm = ref({ decision: '', decision_reason: '', review_notes: '' });
 const rubricScores = ref({});
 
 const applicant = computed(() => application.value?.applicant ?? {});
@@ -60,6 +64,14 @@ const isAssignedToMe = computed(() => assignedReviewerId.value === currentUserId
 const isUnassigned = computed(() => !assignedReviewerId.value);
 const isScreening = computed(() => application.value?.workflow_stage === 'screening');
 const canEditReview = computed(() => isScreening.value && isAssignedToMe.value);
+const screeningBlocker = computed(() => {
+    if (['requested', 'submitted'].includes(application.value?.correction_status)) return 'Resolve the open correction request before recording a result.';
+    if (decisionForm.value.decision === 'approve' && readiness.value.ready === false) return 'Accept the required evidence before passing screening.';
+    return '';
+});
+const canSubmitScreening = computed(() => canEditReview.value && !workflow.value.is_closed && !actionBusy.value
+    && !screeningBlocker.value && Boolean(decisionForm.value.decision)
+    && !(decisionForm.value.decision === 'reject' && !decisionForm.value.decision_reason));
 const assignmentLabel = computed(() => {
     if (isAssignedToMe.value) return 'Assigned to you';
     if (isUnassigned.value) return 'Unassigned';
@@ -245,20 +257,29 @@ async function resolveCorrection() {
 }
 
 async function recordResult() {
-    if (!canEditReview.value || actionBusy.value) return;
-    if (!await confirmOutcome({ record: `${applicant.value.name} - ${scholarship.value.title}`, outcome: decisionForm.value.decision,
-        danger: decisionForm.value.decision === 'reject', consequence: decisionForm.value.decision === 'reject'
-            ? 'This closes the application at pre-screening.' : 'This records the screening outcome and moves the applicant to the configured next stage.' },
-    () => canEditReview.value && !actionBusy.value)) return;
+    if (!canSubmitScreening.value) return;
+    const { decision, decision_reason, review_notes } = decisionForm.value;
+    const scores = { ...rubricScores.value };
+    const passed = decision === 'approve';
+    const reason = rejectionReasons.find((option) => option.value === decision_reason)?.label;
+    if (!await confirmOutcome({ title: 'Confirm screening result', record: applicant.value.name,
+        outcome: passed ? 'Pass screening' : 'Do not pass screening', danger: !passed,
+        details: [`Program: ${scholarship.value.title}`, !passed && reason ? `Reason: ${reason}` : ''],
+        consequence: stageDecisionConsequence(workflow.value, 'screening', passed),
+        confirmLabel: 'Record screening result',
+    }, () => canSubmitScreening.value)) return;
     actionBusy.value = true;
     errorMessage.value = '';
     try {
-        const response = await window.axios.patch(`/provider/applications/${applicationId}/decision`, {
-            ...decisionForm.value,
-            decision_reason: decisionForm.value.decision === 'reject' ? decisionForm.value.decision_reason : null,
-            rubric_scores: rubricScores.value,
+        const response = await window.axios.patch(`/provider/applications/${applicationId}/stages/screening/result`, {
+            result: passed ? 'passed' : 'not_passed',
+            decision_reason: passed ? null : decision_reason,
+            notes: review_notes || null,
+            rubric_scores: scores,
         });
         syncApplication(response.data.application);
+        decisionForm.value = { decision: '', decision_reason: '', review_notes: '' };
+        successMessage.value = response.data.message;
         activeSection.value = 'history';
     } catch (error) {
         errorMessage.value = firstError(error, 'The screening result could not be recorded.');
@@ -267,18 +288,22 @@ async function recordResult() {
     }
 }
 
-async function reopenDecision(reason) {
+async function reopenDecision(payload) {
     actionBusy.value = true;
-    errorMessage.value = '';
+    reopenError.value = '';
     successMessage.value = '';
     try {
-        const response = await window.axios.patch(`/provider/applications/${applicationId}/decision/reopen`, { reason });
+        const response = await window.axios.patch(`/provider/applications/${applicationId}/decision/reopen`, payload);
+        if (decisionReopen.value.stage !== 'screening') {
+            window.location.assign(response.data.redirect_url);
+            return;
+        }
         syncApplication(response.data.application);
         showReopenDialog.value = false;
         activeSection.value = 'decision';
         successMessage.value = response.data.message;
     } catch (error) {
-        errorMessage.value = firstError(error, 'The decision could not be reopened.');
+        reopenError.value = firstError(error, 'The decision could not be reopened.');
     } finally {
         actionBusy.value = false;
     }
@@ -313,8 +338,7 @@ onMounted(loadApplication);
                 <template v-else-if="application">
                     <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
                         <div class="flex items-center gap-5 px-7 py-5">
-                            <img v-if="applicant.profile_photo_url" :src="applicant.profile_photo_url" :alt="`${applicant.name} profile`" class="h-16 w-16 shrink-0 border border-slate-200 object-cover">
-                            <span v-else class="grid h-16 w-16 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-xl text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span>
+                            <StaffTableIdentity :src="applicant.profile_photo_url" class="h-16 w-16" />
                             <div class="min-w-0 flex-1">
                                 <p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Application review</p>
                                 <h1 id="application-review-title" class="application-page-title mt-1 application-text font-display text-3xl font-bold tracking-tight text-slate-950">{{ applicant.name }}</h1>
@@ -349,6 +373,8 @@ onMounted(loadApplication);
                         <strong>{{ isUnassigned ? 'Claim this application before reviewing it.' : 'This record belongs to another reviewer.' }}</strong>
                         <span class="ml-1">You can read the record, but review actions are unavailable.</span>
                     </div>
+
+                    <ProviderNextStep :step="application.provider_next_step" @open-section="updateSection" />
 
                     <nav class="mt-4 grid grid-cols-5 border border-slate-200 bg-white shadow-sm" aria-label="Review record sections">
                         <button v-for="section in sections" :key="section.key" type="button" :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950']" @click="updateSection(section.key)">
@@ -423,7 +449,7 @@ onMounted(loadApplication);
                         <form v-if="canEditReview" class="divide-y divide-slate-200" @submit.prevent="recordResult">
                             <div class="px-6 py-5"><h3 class="font-bold text-slate-950">Review rubric</h3><div class="mt-4 divide-y divide-slate-200 border border-slate-200"><label v-for="criterion in rubricCriteria" :key="criterion.key" class="grid grid-cols-[1fr_8rem] items-center gap-6 px-4 py-3"><span><span class="block text-sm font-bold text-slate-900">{{ criterion.label }} <span class="font-normal text-slate-500">({{ criterion.weight }}%)</span></span><span class="mt-1 block text-xs text-slate-500">{{ criterion.guidance }}</span></span><input v-model.number="rubricScores[criterion.key]" type="number" min="0" max="100" required class="h-10 border border-slate-300 px-3 text-sm" placeholder="0-100"></label><p v-if="!rubricCriteria.length" class="px-4 py-6 text-sm text-slate-500">This program does not use a scored rubric.</p></div></div>
                             <div class="px-6 py-5"><h3 class="font-bold text-slate-950">Decision</h3><div class="mt-4 flex gap-3"><label :class="['flex flex-1 cursor-pointer items-center gap-3 border p-4', decisionForm.decision === 'approve' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300']"><input v-model="decisionForm.decision" type="radio" value="approve"><span><span class="block text-sm font-bold text-slate-950">Pass screening</span><span class="mt-1 block text-xs text-slate-500">Move the application to the next configured stage.</span></span></label><label :class="['flex flex-1 cursor-pointer items-center gap-3 border p-4', decisionForm.decision === 'reject' ? 'border-rose-500 bg-rose-50' : 'border-slate-300']"><input v-model="decisionForm.decision" type="radio" value="reject"><span><span class="block text-sm font-bold text-slate-950">Do not pass</span><span class="mt-1 block text-xs text-slate-500">End the application at screening.</span></span></label></div><label v-if="decisionForm.decision === 'reject'" class="mt-4 block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Reason</span><select v-model="decisionForm.decision_reason" required class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option value="" disabled>Select a reason</option><option v-for="reason in rejectionReasons" :key="reason.value" :value="reason.value">{{ reason.label }}</option></select></label><label class="mt-4 block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Review note <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="decisionForm.review_notes" rows="3" class="w-full border border-slate-300 px-3 py-2 text-sm" placeholder="Add only information needed for this decision."></textarea></label></div>
-                            <footer class="flex justify-end bg-slate-50 px-6 py-4"><button type="submit" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ actionBusy ? 'Saving...' : 'Record screening result' }}</button></footer>
+                            <footer class="flex items-center justify-between gap-4 bg-slate-50 px-6 py-4"><p class="text-sm text-slate-600">{{ screeningBlocker || (!decisionForm.decision ? 'Choose a screening result to continue.' : '') }}</p><button type="submit" class="inline-flex h-11 shrink-0 items-center gap-2 rounded-[5px] bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="!canSubmitScreening"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-clipboard-check']" aria-hidden="true"></i>{{ actionBusy ? 'Saving...' : 'Review result' }}</button></footer>
                         </form>
                         <div v-else class="px-6 py-10 text-center"><p class="font-bold text-slate-900">{{ isScreening ? 'Review action unavailable' : 'Screening review completed' }}</p><p class="mt-1 text-sm text-slate-500">{{ isScreening ? assignmentLabel : `This application is now at ${workflow.current_stage_label || labelize(application.workflow_stage)}.` }}</p><button v-if="decisionReopen.can_reopen" type="button" class="mt-5 h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="showReopenDialog = true"><i class="fa-solid fa-rotate-left mr-2" aria-hidden="true"></i>Reopen {{ decisionReopen.stage_label }}</button></div>
                     </section>
@@ -451,6 +477,6 @@ onMounted(loadApplication);
 
         <div v-if="showPhotoReplacementForm" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" @click.self="showPhotoReplacementForm = false"><form ref="photoDialog" class="provider-application-workspace application-dialog w-full max-w-lg border border-slate-200 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="review-photo-title" tabindex="-1" @keydown="handlePhotoKeydown" @submit.prevent="reviewPhoto('request_replacement')"><header class="border-b border-slate-200 px-6 py-5"><h2 id="review-photo-title" class="text-xl font-bold text-slate-950">Request a new applicant photo</h2><p class="mt-1 text-sm text-slate-500">Explain what makes the current photo unsuitable.</p></header><div class="application-dialog-body px-6 py-5"><textarea v-model="photoReason" rows="4" required minlength="5" class="w-full border border-slate-300 px-3 py-2 text-sm" placeholder="Example: The photo is too dark to identify the applicant."></textarea></div><footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 px-4 text-xs font-bold text-slate-700" @click="showPhotoReplacementForm = false">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white" :disabled="actionBusy"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-camera-rotate']" aria-hidden="true"></i>Request replacement</button></footer></form></div>
 
-        <DecisionReopenDialog :open="showReopenDialog" :decision="decisionReopen" :busy="actionBusy" @confirm="reopenDecision" @cancel="showReopenDialog = false" />
+        <DecisionReopenDialog :open="showReopenDialog" :decision="decisionReopen" :record-name="applicant.name" :busy="actionBusy" :error="reopenError" @confirm="reopenDecision" @cancel="showReopenDialog = false; reopenError = ''" />
     </main>
 </template>

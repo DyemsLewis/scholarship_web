@@ -77,23 +77,23 @@ class ApplicantMonitoringDetailService
     {
         return match ($view) {
             'check-ins' => [
-                'eyebrow' => 'Monitoring requirements',
+                'eyebrow' => 'Scholarship Support',
                 'title' => 'Check-ins',
-                'description' => 'Submit open requirements and review provider feedback.',
+                'description' => 'Review check-in instructions, due dates, and provider feedback.',
             ],
             'benefits' => [
-                'eyebrow' => 'Scholarship support',
+                'eyebrow' => 'Scholarship Support',
                 'title' => 'Benefit releases',
                 'description' => 'Review release schedules and confirm completed benefits.',
             ],
             'history' => [
                 'eyebrow' => 'Support record',
                 'title' => 'Support history',
-                'description' => 'Review meaningful monitoring and support outcomes.',
+                'description' => 'Review completed check-ins and provider outcomes.',
             ],
             default => [
-                'eyebrow' => 'Recipient monitoring',
-                'title' => 'Scholarship support',
+                'eyebrow' => 'Support record',
+                'title' => 'Scholarship Support',
                 'description' => 'See what needs attention and what support comes next.',
             ],
         };
@@ -126,7 +126,7 @@ class ApplicantMonitoringDetailService
         if (! ($monitoring['eligible'] ?? false)) {
             return [
                 'key' => 'not_active',
-                'label' => 'Monitoring not active',
+                'label' => 'Scholarship support not active',
                 'tone' => 'neutral',
                 'mode' => 'not_active',
                 'mode_label' => 'Not active',
@@ -181,7 +181,7 @@ class ApplicantMonitoringDetailService
                 'total' => $checkIns->count(),
                 'open' => $openCheckIns->count(),
                 'completed' => $completedCheckIns->count(),
-                'next_due_label' => $nextCheckIn['due_label'] ?? null,
+                'next_due_label' => $nextCheckIn['handoff']['scheduled_label'] ?? $nextCheckIn['due_label'] ?? null,
             ],
             'benefits' => [
                 'total' => $releases->count(),
@@ -326,7 +326,7 @@ class ApplicantMonitoringDetailService
         return [
             'mode' => $mode,
             'mode_label' => match ($mode) {
-                'recurring' => 'Recurring monitoring',
+                'recurring' => 'Recurring check-ins',
                 'one_time' => 'One-time benefit only',
                 default => 'No schedule published',
             },
@@ -350,8 +350,8 @@ class ApplicantMonitoringDetailService
             return $this->decisionRecord(
                 'not_active',
                 'neutral',
-                'Monitoring not active',
-                'Monitoring begins after scholarship support is formally activated.',
+                'Scholarship support not active',
+                'Check-ins and benefits appear here once scholarship support is active.',
                 'provider',
             );
         }
@@ -361,7 +361,7 @@ class ApplicantMonitoringDetailService
                 'agreement_required',
                 'attention',
                 'Review the recipient agreement',
-                'Accept the scholarship terms before submitting monitoring records.',
+                'Accept the scholarship terms to continue with check-ins and benefits.',
                 'applicant',
                 'Review agreement',
                 route('dashboard.applications.show.section', [
@@ -432,6 +432,20 @@ class ApplicantMonitoringDetailService
             );
         }
 
+        $appointment = $checkIns->first(fn (array $checkIn): bool => isset($checkIn['handoff']) && $checkIn['state'] === 'upcoming');
+        if ($appointment) {
+            return $this->decisionRecord(
+                'check_in_scheduled',
+                'scheduled',
+                'Attend your scheduled check-in',
+                'Bring the listed documents to the provider in person. Do not upload them here.',
+                'applicant',
+                'View appointment',
+                $this->checkInUrl($application, $appointment['record_key']),
+                $appointment['handoff']['scheduled_label'],
+            );
+        }
+
         $underReview = $checkIns->firstWhere('state', 'under_review');
 
         if ($underReview) {
@@ -439,11 +453,13 @@ class ApplicantMonitoringDetailService
                 'provider_review',
                 'waiting',
                 'Wait for the provider review',
-                'Your records were submitted. The provider will post the result here.',
+                isset($underReview['handoff'])
+                    ? 'The provider will post the results of the in-person check-in here.'
+                    : 'Your records were submitted. The provider will post the result here.',
                 'provider',
                 'View check-in',
                 $this->checkInUrl($application, $underReview['record_key']),
-                $underReview['due_label'] ?? null,
+                $underReview['handoff']['scheduled_label'] ?? $underReview['due_label'] ?? null,
             );
         }
 
@@ -473,7 +489,7 @@ class ApplicantMonitoringDetailService
             'no_action',
             'positive',
             'No action needed right now',
-            'Your monitoring record is up to date. New requests will appear here.',
+            'Your support record is up to date. New requests will appear here.',
             'provider',
         );
     }
@@ -612,7 +628,7 @@ class ApplicantMonitoringDetailService
             return 'completed';
         }
 
-        return 'open';
+        return isset($checkIn['handoff']) ? 'under_review' : 'open';
     }
 
     private function checkInStateLabel(string $state): string
@@ -873,8 +889,8 @@ class ApplicantMonitoringDetailService
             'key' => $hasBenefits ? 'one_time_benefit' : 'not_scheduled',
             'title' => $hasBenefits ? 'No recurring check-ins required' : 'No check-in scheduled',
             'description' => $hasBenefits
-                ? 'This scholarship currently uses a one-time benefit record instead of recurring monitoring.'
-                : 'The provider has not published a monitoring requirement yet.',
+                ? 'This scholarship currently uses a one-time benefit record instead of recurring check-ins.'
+                : 'The provider has not published a check-in yet.',
         ];
     }
 
@@ -895,6 +911,7 @@ class ApplicantMonitoringDetailService
                 'title' => $checkIn['title'],
                 'period_label' => $checkIn['period_label'] ?? null,
                 'due_label' => $checkIn['effective_due_label'] ?? $checkIn['due_label'] ?? null,
+                'handoff' => $checkIn['handoff'] ?? null,
                 'state' => $checkIn['state'],
                 'state_label' => $checkIn['state_label'],
                 'total_items' => $totalItems,
@@ -904,7 +921,7 @@ class ApplicantMonitoringDetailService
                     'action_required' => trans_choice(':count item needs action|:count items need action', $pendingItems, ['count' => $pendingItems]),
                     'under_review' => 'Submitted for provider review',
                     'completed' => $totalItems > 0 ? "{$completedItems} of {$totalItems} complete" : 'Completed',
-                    'upcoming' => $checkIn['opens_label'] ?? 'Opens later',
+                    'upcoming' => isset($checkIn['handoff']) ? 'In-person appointment' : ($checkIn['opens_label'] ?? 'Opens later'),
                     'cancelled' => 'No action required',
                     default => $totalItems > 0 ? "{$completedItems} of {$totalItems} complete" : 'Ready to review',
                 },

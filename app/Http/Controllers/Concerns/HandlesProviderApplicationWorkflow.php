@@ -6,7 +6,6 @@ use App\Models\ActivityLog;
 use App\Models\ApplicantVerificationDocument;
 use App\Models\ApplicationDocument;
 use App\Models\ApplicationSchedule;
-use App\Models\ApplicationStageAssignment;
 use App\Models\ApplicationStatusHistory;
 use App\Models\PortalNotification;
 use App\Models\Scholarship;
@@ -17,6 +16,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use App\Services\AcademicRecordOcrService;
 use App\Services\ApplicantEvidenceReviewService;
+use App\Services\ApplicationStageResultGate;
 use App\Services\ApplicationWorkflowService;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
@@ -344,34 +344,40 @@ trait HandlesProviderApplicationWorkflow
         ]);
         $notes = $validated['notes'] ?? $validated['review_notes'] ?? null;
 
-        $this->ensureStageActivityCompleted($application, $stage);
+        $actor = $request->user();
+        $updated = DB::transaction(function () use ($application, $stage, $validated, $actor, $notes): ScholarshipApplication {
+            $locked = ScholarshipApplication::query()->lockForUpdate()->findOrFail($application->id);
+            if ($locked->workflow_stage !== null && $locked->workflow_stage !== $stage) {
+                throw ValidationException::withMessages(['result' => 'This applicant is no longer at that stage. Reload the record.']);
+            }
+            $this->ensureStageActivityCompleted($locked, $stage);
 
-        if ($stage === 'screening') {
-            $rubric = $this->requireCompleteApplicationRubric($application, $validated['rubric_scores'] ?? null);
+            if ($stage === 'screening') {
+                $rubric = $this->requireCompleteApplicationRubric($locked, $validated['rubric_scores'] ?? null);
 
-            if ($validated['result'] === 'passed') {
-                $this->ensureApplicationDocumentsReadyForStatus($application, 'approved');
+                if ($validated['result'] === 'passed') {
+                    $this->ensureApplicationDocumentsReadyForStatus($locked, 'approved');
+                }
+
+                if ($rubric !== null) {
+                    $locked->update([
+                        'rubric_scores' => $rubric['scores'],
+                        'rubric_total_score' => $rubric['total_score'],
+                        'rubric_scored_by' => $actor->id,
+                        'rubric_scored_at' => now(),
+                    ]);
+                }
             }
 
-            if ($rubric !== null) {
-                $application->update([
-                    'rubric_scores' => $rubric['scores'],
-                    'rubric_total_score' => $rubric['total_score'],
-                    'rubric_scored_by' => $request->user()->id,
-                    'rubric_scored_at' => now(),
-                ]);
-            }
-        }
-
-        $previousStage = $this->workflowService->payload($application)['current_stage'];
-        $updated = $this->workflowService->recordStageResult(
-            $application,
-            $stage,
-            $validated['result'],
-            $request->user(),
-            $notes,
-            $validated['decision_reason'] ?? null,
-        );
+            return $this->workflowService->recordStageResult(
+                $locked,
+                $stage,
+                $validated['result'],
+                $actor,
+                $notes,
+                $validated['decision_reason'] ?? null,
+            );
+        });
         app(ScholarshipEventService::class)->syncApplication($updated);
         $updated = $updated->fresh()->load([
             'applicant.studentProfile',
@@ -384,7 +390,7 @@ trait HandlesProviderApplicationWorkflow
         $workflow = $this->workflowService->payload($updated);
         $notification = $this->workflowStageNotification(
             $updated,
-            $previousStage,
+            $stage,
             $validated['result'],
             $workflow['current_stage_label'],
         );
@@ -423,7 +429,7 @@ trait HandlesProviderApplicationWorkflow
         return response()->json([
             'message' => $notification['title'].'.',
             'application' => $this->applicationPayloadForProviderActor($updated, $request->user()),
-            'review_navigation' => $this->reviewNavigationPayload($updated, $previousStage),
+            'review_navigation' => $this->reviewNavigationPayload($updated, $stage),
         ]);
     }
 
@@ -444,7 +450,8 @@ trait HandlesProviderApplicationWorkflow
                 Rule::in(ApplicationDecisionReason::acceptedValues()),
             ],
             'notes' => ['nullable', 'string', 'max:2000'],
-            'awarded_amount' => ['nullable', 'numeric', 'min:0', 'max:999999999.99'],
+            'awarded_amount' => ['prohibited_unless:outcome,selected', 'nullable', 'numeric', 'min:0', 'max:999999999.99'],
+            'expected_outcome' => ['sometimes', 'nullable', Rule::in(['waitlisted'])],
         ]);
 
         if ($validated['outcome'] === 'selected') {
@@ -457,12 +464,8 @@ trait HandlesProviderApplicationWorkflow
             $request->user(),
             $validated['notes'] ?? null,
             $validated['decision_reason'] ?? null,
+            array_intersect_key($validated, array_flip(['expected_outcome', 'awarded_amount'])),
         );
-
-        if (array_key_exists('awarded_amount', $validated)) {
-            $updated->update(['awarded_amount' => $validated['awarded_amount']]);
-            $updated = $this->workflowService->refreshRecipientAgreementSnapshot($updated->fresh());
-        }
 
         $updated = $updated->fresh()->load([
             'applicant.studentProfile',
@@ -505,6 +508,7 @@ trait HandlesProviderApplicationWorkflow
 
         $validated = $request->validate([
             'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'decision_reference' => ['sometimes', 'required', 'string', 'regex:/^[a-f0-9]{64}$/'],
         ]);
         $availability = $this->workflowService->reopenDecisionAvailability($application);
         abort_unless(
@@ -517,6 +521,7 @@ trait HandlesProviderApplicationWorkflow
             $application,
             $request->user(),
             trim($validated['reason']),
+            $validated['decision_reference'] ?? null,
         );
         app(ScholarshipEventService::class)->syncApplication($updated);
         $updated = $updated->fresh()->load([
@@ -1432,6 +1437,7 @@ trait HandlesProviderApplicationWorkflow
                 $validated['action'] === 'promote' ? 'selected' : 'waitlisted',
                 $request->user(),
                 $validated['note'] ?? null,
+                confirmed: $validated['action'] === 'promote' ? ['expected_outcome' => 'waitlisted'] : [],
             );
             $message = $validated['action'] === 'promote'
                 ? 'Waitlisted applicant marked as selected.'
@@ -1999,66 +2005,7 @@ trait HandlesProviderApplicationWorkflow
 
     private function stageActivityIsComplete(ScholarshipApplication $application, string $stage): bool
     {
-        if (! ScholarshipSelectionPlan::isSchedulable($stage)) {
-            return true;
-        }
-
-        $normalizedSessions = ApplicationStageAssignment::query()
-            ->where('scholarship_application_id', $application->id)
-            ->whereIn('status', ['assigned', 'acknowledged'])
-            ->whereHas('session', fn (Builder $query) => $query
-                ->where('stage_key', $stage)
-                ->where('status', '!=', 'cancelled'));
-        $normalizedSessionExists = (clone $normalizedSessions)->exists();
-        $normalizedSessionCompleted = (clone $normalizedSessions)
-            ->whereHas('attendance', fn (Builder $query) => $query->where('status', '!=', 'pending'))
-            ->whereHas('session', fn (Builder $query) => $query
-                ->where('stage_key', $stage)
-                ->where('status', 'completed')
-                ->where(function (Builder $proofQuery): void {
-                    $proofQuery
-                        ->where('proof_required', false)
-                        ->orWhereHas('evidence', fn (Builder $evidenceQuery) => $evidenceQuery
-                            ->where('scope', 'session')
-                            ->where('is_current', true));
-                }))
-            ->exists();
-
-        if ($normalizedSessionCompleted) {
-            return true;
-        }
-
-        if ($application->relationLoaded('schedules')) {
-            $stageSchedules = $application->schedules
-                ->where('type', $stage)
-                ->where('status', '!=', 'cancelled');
-
-            // A formal application can be reviewed directly. Once an appointment is
-            // assigned, it follows the same completion rule as exams and interviews.
-            if ($stage === 'formal_application'
-                && ! $normalizedSessionExists
-                && $stageSchedules->isEmpty()) {
-                return true;
-            }
-
-            return $stageSchedules->contains(fn (ApplicationSchedule $schedule): bool => (
-                $schedule->type === $stage && $schedule->status === 'completed'
-            ));
-        }
-
-        $stageSchedules = $application->schedules()
-            ->where('type', $stage)
-            ->where('status', '!=', 'cancelled');
-
-        if ($stage === 'formal_application'
-            && ! $normalizedSessionExists
-            && ! (clone $stageSchedules)->exists()) {
-            return true;
-        }
-
-        return $stageSchedules
-            ->where('status', 'completed')
-            ->exists();
+        return app(ApplicationStageResultGate::class)->activityComplete($application, $stage);
     }
 
     private function ensureStageActivityCompleted(ScholarshipApplication $application, string $stage): void

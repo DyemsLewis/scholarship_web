@@ -1,5 +1,4 @@
 <script setup>
-import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
@@ -200,13 +199,10 @@ onBeforeUnmount(() => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-200">
-                                <tr v-for="entry in entries" :key="entry.id" class="align-top hover:bg-slate-50/70">
+                                <tr v-for="entry in entries" :key="entry.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4">
                                         <p class="font-bold text-slate-950">{{ entry.plan_name }}</p>
-                                        <p class="mt-1 text-xs text-slate-500">
-                                            <template v-if="entry.reference_number">{{ entry.reference_number }} · </template>
-                                            Updated {{ dateLabel(entry.updated_at || entry.created_at) }}
-                                        </p>
+                                        <p v-if="entry.reference_number" class="mt-1 text-xs text-slate-500">{{ entry.reference_number }}</p>
                                     </td>
                                     <td v-if="isRequestQueue" class="px-5 py-4">
                                         <p class="service-text text-sm font-bold text-slate-900">{{ entry.program_name }}</p>
@@ -214,11 +210,9 @@ onBeforeUnmount(() => {
                                     </td>
                                     <td v-else class="px-5 py-4">
                                         <span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(entry)]">{{ entry.work_label }}</span>
-                                        <WorkspaceTextSummary  class="mt-2 text-xs leading-5 text-slate-500" :text="entry.work_detail" label="details" />
                                     </td>
                                     <td v-if="isRequestQueue" class="px-5 py-4">
                                         <span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(entry)]">{{ entry.work_label }}</span>
-                                        <WorkspaceTextSummary  class="mt-2 text-xs leading-5 text-slate-500" :text="entry.work_detail" label="details" />
                                     </td>
                                     <td v-else class="px-5 py-4">
                                         <p class="text-sm font-bold text-slate-900">{{ amountLabel(entry) }}</p>

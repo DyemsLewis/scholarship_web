@@ -9,11 +9,13 @@ use App\Models\RecipientAgreementCaseEvidence;
 use App\Models\RecipientAgreementCaseResponse;
 use App\Models\RecipientBenefitEntitlement;
 use App\Models\RecipientBenefitReceiptResponse;
+use App\Models\RecipientBenefitRelease;
 use App\Models\RecipientBenefitReleaseRecord;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -51,9 +53,9 @@ final class BenefitDeliveryReportService
             ->where(fn ($q) => $q->where('status', 'released')->orWhereHas('release', fn ($r) => $r->whereNotNull('published_at')));
     }
 
-    public function openForRecord(RecipientBenefitReleaseRecord $record): Builder
+    public function openForRecord(RecipientBenefitReleaseRecord $record, ?Collection $oneTimeEntitlementIds = null): Builder
     {
-        $ids = $record->allocations()->whereHas('entitlement', fn ($e) => $e->where('frequency', 'one_time'))->pluck('recipient_benefit_entitlement_id');
+        $ids = $oneTimeEntitlementIds ?? $record->allocations()->whereHas('entitlement', fn ($e) => $e->where('frequency', 'one_time'))->pluck('recipient_benefit_entitlement_id');
 
         return RecipientAgreementCase::query()->where('case_type', Catalog::BENEFIT_DELIVERY)
             ->where('scholarship_application_id', $record->scholarship_application_id)->whereIn('status', self::OPEN)
@@ -67,6 +69,26 @@ final class BenefitDeliveryReportService
             ->where('scholarship_application_id', $entitlement->scholarship_application_id)->whereIn('status', self::OPEN)
             ->where(fn ($q) => $q->where('benefit_entitlement_id', $entitlement->id)
                 ->orWhereHas('releaseRecord.allocations', fn ($a) => $a->where('recipient_benefit_entitlement_id', $entitlement->id)));
+    }
+
+    /** @return Collection<int, bool> */
+    public function openReportsByReleaseRecord(RecipientBenefitRelease $release): Collection
+    {
+        $release->loadMissing('records.allocations.entitlement');
+
+        return $release->records->mapWithKeys(fn (RecipientBenefitReleaseRecord $record): array => [
+            $record->id => $this->openForRecord(
+                $record,
+                $record->allocations->where('entitlement.frequency', 'one_time')->pluck('recipient_benefit_entitlement_id'),
+            )->exists(),
+        ]);
+    }
+
+    public function openIssueCount(RecipientBenefitRelease $release, Collection $deliveryReports): int
+    {
+        return $release->records->filter(fn (RecipientBenefitReleaseRecord $record): bool =>
+            $record->receiptResponse?->status === 'open' || $deliveryReports->get($record->id, false),
+        )->count();
     }
 
     public function options(ScholarshipApplication $application): array

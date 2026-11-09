@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, reactive, ref } from 'vue';
 import { confirmOutcome, registerOutcomeConfirmationPresenter } from '../../resources/js/support/outcomeConfirmation.js';
+import { decisionAwardLabel, finalDecisionConsequence, stageDecisionConsequence } from '../../resources/js/support/providerDecisionConfirmation.js';
 import { useConfirmationDialog } from '../../resources/js/composables/useConfirmationDialog.js';
 import { useApplicantEvidenceDecision } from '../../resources/js/composables/useApplicantEvidenceDecision.js';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -28,6 +29,7 @@ const guarded = [
     'pages/admin/reviews/ProviderDocumentReviewDialog.vue', 'pages/admin/reviews/ProgramReviewRecordPage.vue',
     'pages/admin/reviews/MonitoringReviewRecordPage.vue', 'pages/admin/support/SupportCaseRecordPage.vue',
     'pages/provider/reviews/ApplicationReviewRecordPage.vue', 'pages/provider/selection/SelectionActivityRecordPage.vue',
+    'pages/provider/decisions/FinalDecisionRecordPage.vue',
     'pages/provider/selection/SelectionSessionRecordPage.vue', 'pages/provider/monitoring/MonitoringCheckInRecordPage.vue',
 ];
 
@@ -125,6 +127,48 @@ function harness(path, deps, exposed) {
     return new Function(...Object.keys(bindings), `${script}\nreturn {${exposed}};`)(...Object.values(bindings));
 }
 
+test('final outcome starts blank; the amount reviewed on promotion is the amount sent after confirmation', async () => {
+    const dialog = useConfirmationDialog(), writes = [];
+    const unregister = registerOutcomeConfirmationPresenter(dialog.requestConfirmation);
+    const application = {
+        final_outcome: 'waitlisted', workflow: { current_stage: 'decision', is_closed: false },
+        applicant: { name: 'Mira Cruz' }, scholarship: { title: 'Learning Grant', slots_available: 3, award_amount: 8000 },
+    };
+    const window = { location: { search: '' }, axios: {
+        get: async () => ({ data: { application } }),
+        patch: async (...args) => { writes.push(args); return { data: { application: { ...application, final_outcome: 'selected' } } }; },
+    } };
+    const state = harness('pages/provider/decisions/FinalDecisionRecordPage.vue', {
+        window, document: { getElementById: () => ({ dataset: { applicationId: 2 } }) },
+        decisionReasonOptions: [], decisionAwardLabel, finalDecisionConsequence,
+    }, 'loadApplication, askToRecordOutcome, decisionForm');
+    try {
+        await state.loadApplication();
+        assert.equal(state.decisionForm.value.outcome, '');
+        await state.askToRecordOutcome();
+        assert.equal(dialog.confirmation.open, false);
+        Object.assign(state.decisionForm.value, { outcome: 'selected', awarded_amount: 4500, notes: 'Confirmed from the program record.' });
+        const cancel = state.askToRecordOutcome();
+        assert.match(dialog.confirmation.message, /Mira Cruz.*\n.*Promote To Selected.*\n.*Learning Grant.*\n.*PHP 4,500\.00/);
+        dialog.cancelConfirmation(); await cancel;
+        assert.equal(writes.length, 0);
+        assert.equal(state.decisionForm.value.awarded_amount, 4500);
+        const save = state.askToRecordOutcome();
+        state.decisionForm.value.awarded_amount = 1200;
+        dialog.confirmConfirmation(); await save;
+        assert.equal(writes.length, 1);
+        assert.match(writes[0][0], /\/final-outcome$/);
+        assert.equal(writes[0][1].awarded_amount, 4500);
+        assert.equal(writes[0][1].expected_outcome, 'waitlisted');
+    } finally { unregister(); }
+});
+
+test('stage result confirmation names the configured next stage', () => {
+    const workflow = { steps: [{ key: 'screening', label: 'Pre-screening' }, { key: 'exam', label: 'Exam' }] };
+    assert.equal(stageDecisionConsequence(workflow, 'screening', true), 'The applicant will move to Exam and will be notified.');
+    assert.match(stageDecisionConsequence(workflow, 'screening', false), /closes the application/);
+});
+
 test('admin publication decision has no request before confirmation and Cancel keeps the draft', async () => {
     const dialog = useConfirmationDialog(), writes = [];
     const unregister = registerOutcomeConfirmationPresenter(dialog.requestConfirmation);
@@ -176,12 +220,16 @@ test('exam result confirmation preserves notes on Cancel and records the chosen 
         patch: async (...args) => { writes.push(args); return { data: { application: { ...application, workflow_stage: 'interview' } } }; },
     } };
     const state = harness('pages/provider/selection/SelectionActivityRecordPage.vue', {
-        window, document: { getElementById: () => ({ dataset: { applicationId: 4 } }) }, decisionReasonOptions: [],
+        window, document: { getElementById: () => ({ dataset: { applicationId: 4 } }) }, decisionReasonOptions: [], stageDecisionConsequence,
     }, 'application, readiness, resultForm, recordResult');
     state.application.value = application; state.readiness.value = { can_record_result: true };
     state.resultForm.value.notes = 'Scoring proof compared.';
     try {
-        const cancel = state.recordResult(); assert.match(dialog.confirmation.message, /Exam: Passed/);
+        await state.recordResult(); assert.equal(dialog.confirmation.open, false);
+        state.resultForm.value.result = 'passed';
+        const cancel = state.recordResult();
+        assert.equal(dialog.confirmation.title, 'Confirm exam result');
+        assert.match(dialog.confirmation.message, /Outcome: Passed/);
         dialog.cancelConfirmation(); await cancel;
         assert.equal(writes.length, 0); assert.equal(state.application.value.workflow_stage, 'exam');
         assert.equal(state.resultForm.value.notes, 'Scoring proof compared.');
@@ -212,8 +260,9 @@ test('global host uses the accessible logout-style dialog above nested outcome f
     assert.match(host, /pagehide.*cancelConfirmation/); assert.match(host, /onBeforeUnmount/);
     assert.match(read('app.js'), /mountOutcomeConfirmationHost\(\)/);
     assert.match(read('app.js'), /config.idPrefix = 'outcome-'/);
-    assert.match(read('components/DecisionReopenDialog.vue'), /event.defaultPrevented/);
-    for (const path of ['pages/provider/decisions/FinalDecisionRecordPage.vue', 'pages/provider/releases/BenefitReleaseRecordPage.vue', 'pages/provider/recipients/RecipientRecordPage.vue']) {
+    assert.match(read('components/DecisionReopenDialog.vue'), /useModalAccessibility/);
+    assert.match(read('pages/provider/decisions/FinalDecisionRecordPage.vue'), /await confirmOutcome/);
+    for (const path of ['pages/provider/releases/BenefitReleaseRecordPage.vue', 'pages/provider/recipients/RecipientRecordPage.vue']) {
         assert.match(read(path), /requestConfirmation|ConfirmationDialog/);
         assert.doesNotMatch(read(path), /await confirmOutcome/);
     }

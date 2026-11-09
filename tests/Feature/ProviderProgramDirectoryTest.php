@@ -2,8 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Models\Scholarship;
 use App\Models\RecipientMonitoringPlan;
+use App\Models\Scholarship;
+use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -164,6 +165,73 @@ class ProviderProgramDirectoryTest extends TestCase
 
         $this->actingAs($coordinator)->get("/provider/programs/{$unassigned->id}")->assertForbidden();
         $this->actingAs($coordinator)->get("/provider/programs/{$outside->id}")->assertForbidden();
+    }
+
+    public function test_program_workspace_shortcuts_open_the_existing_queues_for_the_current_program(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Current program', 'published');
+        $other = $this->program($owner, 'Other program', 'published');
+        foreach ([$program, $other] as $entry) {
+            ScholarshipApplication::query()->create([
+                'scholarship_id' => $entry->id,
+                'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
+                'status' => 'submitted',
+                'workflow_stage' => 'screening',
+                'application_state' => 'active',
+                'submitted_at' => now(),
+            ]);
+        }
+
+        $links = $this->actingAs($owner)->getJson("/provider/programs/{$program->id}/data")
+            ->assertOk()->assertJsonCount(6, 'program.workspace_links')
+            ->json('program.workspace_links');
+        $expected = [
+            'reviews' => 'reviews/all', 'selection' => 'selection/active', 'decisions' => 'decisions/pending',
+            'recipients' => 'recipients/agreements', 'monitoring' => 'monitoring/review', 'releases' => 'releases/record',
+        ];
+        foreach ($links as $link) {
+            $this->assertSame("/provider/workspaces/{$expected[$link['key']]}?program_id={$program->id}&page=1", $link['url']);
+            $this->get($link['url'])->assertOk();
+        }
+
+        $this->getJson('/provider/workspaces/reviews/data?queue=all')->assertOk()->assertJsonPath('pagination.total', 2);
+        $this->getJson("/provider/workspaces/reviews/data?queue=all&program_id={$program->id}")
+            ->assertOk()->assertJsonPath('pagination.total', 1)->assertJsonPath('applications.0.program.id', $program->id);
+    }
+
+    public function test_program_shortcuts_follow_staff_permissions_approval_and_program_status(): void
+    {
+        $owner = User::factory()->create(['role' => 'provider']);
+        $program = $this->program($owner, 'Assigned published program', 'published');
+        $other = $this->program($owner, 'Unassigned published program', 'published');
+        $draft = $this->program($owner, 'Draft program', 'draft');
+        $reviewer = User::factory()->create([
+            'role' => 'provider',
+            'parent_account_id' => $owner->id,
+            'permissions' => ['verify_applications'],
+            'assigned_program_ids' => [$program->id],
+        ]);
+
+        $this->actingAs($reviewer)->getJson("/provider/programs/{$program->id}/data")
+            ->assertOk()->assertJsonCount(1, 'program.workspace_links')->assertJsonPath('program.workspace_links.0.key', 'reviews')
+            ->assertJsonPath('program.actions.directory_url', null)->assertJsonPath('program.actions.edit_url', null)
+            ->assertJsonPath('program.actions.preview_url', null)->assertJsonPath('program.actions.monitoring_plan_url', null);
+        $this->getJson("/provider/programs/{$other->id}/data")->assertForbidden();
+        $this->getJson("/provider/workspaces/reviews/data?queue=all&program_id={$other->id}")->assertForbidden();
+        $this->get("/provider/workspaces/selection/active?program_id={$program->id}")->assertForbidden();
+
+        $coordinator = $this->coordinator($owner);
+        $this->actingAs($coordinator)->getJson("/provider/programs/{$program->id}/data")
+            ->assertOk()->assertJsonCount(0, 'program.workspace_links')
+            ->assertJsonPath('program.actions.monitoring_plan_url', "/provider/monitoring/{$program->id}/plan");
+        $this->get("/provider/monitoring/{$program->id}/plan")->assertOk();
+
+        $this->actingAs($owner)->getJson("/provider/programs/{$draft->id}/data")
+            ->assertOk()->assertJsonCount(0, 'program.workspace_links')->assertJsonPath('program.actions.monitoring_plan_url', null);
+        $owner->providerProfile()->update(['verification_status' => 'pending']);
+        $this->actingAs($owner->fresh())->getJson("/provider/programs/{$program->id}/data")
+            ->assertOk()->assertJsonCount(0, 'program.workspace_links')->assertJsonPath('program.actions.monitoring_plan_url', null);
     }
 
     public function test_program_coordinator_can_open_the_guided_builder_for_create_and_assigned_editing(): void
@@ -328,8 +396,8 @@ class ProviderProgramDirectoryTest extends TestCase
         $checkInPayload = [
             'title' => 'First semester check-in',
             'period_label' => 'First semester',
-            'opens_at' => now()->toDateString(),
-            'due_at' => now()->addMonth()->toDateString(),
+            'handoff_at' => now()->addMonth()->format('Y-m-d\TH:i'),
+            'handoff_location' => 'Learning Center, Room 2',
         ];
 
         $this->actingAs($coordinator)

@@ -108,13 +108,13 @@ onMounted(loadArea);
                     <colgroup><col><col class="w-44"><col class="w-32"><col class="w-28"><col class="w-36"><col class="w-20"></colgroup>
                     <thead><tr><th class="px-5">Admin</th><th>Assigned role</th><th>Permissions</th><th>Status</th><th>Updated</th><th class="px-5 text-right">Open</th></tr></thead>
                     <tbody>
-                        <tr v-for="member in payload.members" :key="member.id">
+                        <tr v-for="member in payload.members" :key="member.id" class="align-middle">
                             <td class="px-5"><div class="flex min-w-0 items-center gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-600"><i :class="[memberIcon(member.workspace), 'text-sm']" aria-hidden="true"></i></span><span class="min-w-0"><strong class="block break-words text-sm text-slate-950">{{ member.name }}</strong><span class="block text-xs text-slate-500 [overflow-wrap:anywhere]">{{ member.email }}</span></span></div></td>
-                            <td><p class="font-semibold text-slate-800">{{ member.title }}</p><p class="mt-0.5 text-xs text-slate-500">{{ member.workspace }}</p></td>
+                            <td><p class="font-semibold text-slate-800">{{ member.workspace }}</p><p v-if="member.title && member.title.toLowerCase() !== member.workspace.toLowerCase() && member.title !== 'Unassigned admin'" class="mt-0.5 text-xs text-slate-500">{{ member.title }}</p></td>
                             <td class="font-bold text-slate-800">{{ member.permission_count }}</td>
                             <td><span :class="['inline-flex px-2.5 py-1 text-xs font-bold', member.status === 'suspended' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700']">{{ labelFromKey(member.status) }}</span></td>
                             <td class="text-sm text-slate-500">{{ member.updated_at }}</td>
-                            <td class="px-5 text-right"><a :href="member.edit_url" class="staff-row-action h-9 w-9" :aria-label="`Open ${member.name}`" title="Open account"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                            <td class="px-5 text-right"><a :href="member.edit_url" class="staff-row-action h-10 w-10" :aria-label="`Open ${member.name}`" title="Open account"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                         </tr>
                     </tbody>
                 </table>
@@ -145,7 +145,7 @@ onMounted(loadArea);
                 <table v-if="payload.activity?.items?.length" class="portal-data-table table-fixed min-w-[56rem]">
                     <colgroup><col><col class="w-44"><col class="w-36"><col class="w-44"></colgroup>
                     <thead><tr><th class="px-5">Event</th><th>Actor</th><th>Category</th><th class="px-5">Recorded</th></tr></thead>
-                    <tbody><tr v-for="item in payload.activity.items" :key="item.id"><td class="px-5"><p class="break-words font-bold text-slate-950">{{ item.description }}</p><p class="mt-1 text-xs text-slate-500">{{ item.action_label }}</p></td><td><p class="break-words font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ labelFromKey(item.actor_role) }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ labelFromKey(item.category) }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
+                    <tbody><tr v-for="item in payload.activity.items" :key="item.id" class="align-middle"><td class="px-5 font-bold text-slate-950 [overflow-wrap:anywhere]">{{ item.description || item.action_label }}</td><td><p class="break-words font-semibold text-slate-800">{{ item.actor_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ labelFromKey(item.actor_role) }}</p></td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ labelFromKey(item.category) }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.created_at }}</td></tr></tbody>
                 </table>
                 <AdminEmptyState v-else title="No recent activity" description="No auditable platform events were recorded this week." icon="fa-solid fa-clock-rotate-left" />
             </AdminTableFrame>

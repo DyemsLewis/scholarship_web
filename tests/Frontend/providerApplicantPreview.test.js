@@ -8,6 +8,7 @@ const files = [
     ['ApplicantPreviewViewport.vue', '../../resources/js/components/ApplicantPreviewViewport.vue'],
     ['ProviderApplicantPreviewToolbar.vue', '../../resources/js/components/ProviderApplicantPreviewToolbar.vue'],
     ['UserScholarshipDetailPage.vue', '../../resources/js/pages/UserScholarshipDetailPage.vue'],
+    ['ScholarshipDetailAction.vue', '../../resources/js/components/ScholarshipDetailAction.vue'],
     ['UserProvidersPage.vue', '../../resources/js/pages/UserProvidersPage.vue'],
     ['OrganizationPublicProfilePage.vue', '../../resources/js/pages/provider/organization/OrganizationPublicProfilePage.vue'],
     ['ProgramFormPage.vue', '../../resources/js/pages/provider/programs/ProgramFormPage.vue'],
@@ -76,7 +77,8 @@ test('applicant pages switch to protected preview endpoints and disable applican
 
     assert.match(scholarship, /dataset\.providerPreview === 'true'/);
     assert.match(scholarship, /isPreview \? previewDataUrl/);
-    assert.match(scholarship, /isSaving \|\| isPreview/);
+    assert.match(scholarship, /preview: isPreview/);
+    assert.match(sources['ScholarshipDetailAction.vue'], /v-if="!preview"/);
     assert.match(scholarship, /ProviderApplicantPreviewToolbar/);
     assert.match(provider, /dataset\.providerPreview === 'true'/);
     assert.match(provider, /isPreview\s*\? previewDataUrl/);

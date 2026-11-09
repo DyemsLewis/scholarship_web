@@ -228,3 +228,111 @@ test('the review queue presents saved match as advisory and distinguishes zero f
     assert.match(row('Unavailable score'), />Not calculated<\/p>.*?>Profile not verified</s);
     assert.doesNotMatch(html, /Check required|undefined%|null%/);
 });
+
+test('provider review rows keep evidence progress and nonzero wait time without filler', async () => {
+    const html = await renderReviewQueue([
+        {
+            ...reviewRow,
+            applicant: { ...reviewRow.applicant, education: 'Senior High School' },
+            evidence: { ...reviewRow.evidence, required: 4, accepted: 2 },
+            waiting_days: 0,
+        },
+        {
+            ...reviewRow,
+            id: 2,
+            evidence: { ...reviewRow.evidence, required: 0, accepted: 0 },
+            waiting_days: 3,
+        },
+    ]);
+    assert.match(html, />2 of 4 accepted</);
+    assert.match(html, />3 days waiting</);
+    assert.doesNotMatch(html, /0 days waiting|0 of 0 accepted|Senior High School/);
+});
+
+async function renderAdminTable(path, pathname, items) {
+    const passthrough = moduleUrl('export default { inheritAttrs: false, render() { return this.$slots.default?.(); } }');
+    const blank = moduleUrl('export default { render: () => null }');
+    const resource = (name) => new URL(`../../resources/js/${name}`, import.meta.url).href;
+    const source = compile(path, {
+        '../../../components/StaffTableIdentity.vue': moduleUrl(compile('components/StaffTableIdentity.vue')),
+        '../../../components/workspace-dashboard/WorkspaceTextSummary.vue': moduleUrl(compile('components/workspace-dashboard/WorkspaceTextSummary.vue')),
+        '../components/AdminWorkspacePage.vue': passthrough,
+        '../components/AdminTableFrame.vue': passthrough,
+        '../components/AdminWorkspaceHeader.vue': blank,
+        '../components/AdminEmptyState.vue': blank,
+        '../../../composables/useAdminResource.js': resource('composables/useAdminResource.js'),
+        '../../../support/staffQueueState.js': resource('support/staffQueueState.js'),
+        '../../../support/display.js': resource('support/display.js'),
+        '../../../support/display': resource('support/display.js'),
+        '../../../support/adminReviewPresentation.js': resource('support/adminReviewPresentation.js'),
+    }).replace(/\bonMounted,\s*/, '');
+    const fixture = `
+        import { onServerPrefetch as onMounted } from ${JSON.stringify(vueUrl)};
+        const window = {
+            location: { pathname: ${JSON.stringify(pathname)}, search: '' },
+            axios: { get: async () => ({ data: { items: ${JSON.stringify(items)} } }) },
+        };
+    `;
+    const { default: Page } = await import(moduleUrl(fixture + source));
+    return renderToString(createSSRApp(Page));
+}
+
+const adminReview = 'pages/admin/reviews/ReviewQueuePage.vue';
+const renderedCells = (html) => html.match(/<td\b[^>]*>[\s\S]*?<\/td>/g);
+
+test('admin selection oversight separates session state, evidence warnings, and oversight status', async () => {
+    const html = await renderAdminTable(adminReview, '/admin/workspaces/reviews/selection-activities', [{
+        id: 5, title: 'Entrance exam', program: 'Science grant', provider: 'Provider organization',
+        stage_label: 'Exam', schedule: 'Nov 18, 2026', status: 'completed', oversight_status: 'attention',
+        primary_flag: 'Required session proof is missing.', active_assignments_count: 1, current_evidence_count: 0,
+        review_url: '/admin/workspaces/reviews/selection-activities/5',
+    }]);
+    const [identity, context, status, proof, action] = renderedCells(html);
+    assert.match(identity, /Science grant/);
+    assert.match(context, /Nov 18, 2026 · Completed/);
+    assert.match(status, />Needs attention</);
+    assert.doesNotMatch(status, /Completed|proof is missing/);
+    assert.match(proof, /1 applicant · 0 files.*Required session proof is missing/s);
+    assert.match(action, /href="\/admin\/workspaces\/reviews\/selection-activities\/5\?return_to=/);
+});
+
+test('admin monitoring rows keep the due date, action owner, and overdue wait without repeating the flag', async () => {
+    const html = await renderAdminTable(adminReview, '/admin/workspaces/reviews/monitoring', [{
+        id: 6, recipient: 'Current recipient', cycle_title: 'First check-in', due_on: 'Nov 05, 2026',
+        oversight_status: 'attention', primary_flag: 'Check-in is past due', wait_label: '3 days overdue',
+        next_action_owner: 'Provider', next_action_label: 'Resolve overdue check-in',
+        review_url: '/admin/workspaces/reviews/monitoring/7?case=6',
+    }]);
+    const [, context, status, nextAction, action] = renderedCells(html);
+    assert.match(context, /Due Nov 05, 2026/);
+    assert.match(status, />Needs attention</);
+    assert.match(nextAction, /Provider: Resolve overdue check-in.*3 days overdue/s);
+    assert.match(action, /case=6&amp;return_to=/);
+    assert.doesNotMatch(html, /Check-in is past due|Record details/);
+});
+
+test('admin benefit rows keep the receipt preview and the open issue next to it', async () => {
+    const html = await renderAdminTable(adminReview, '/admin/workspaces/reviews/benefits', [{
+        id: 7, recipient: 'Current recipient', release: 'Initial stipend', status: 'released', oversight_status: 'attention',
+        primary_flag: 'Open recipient report', receipt_url: '/admin/receipts/7', receipt_name: 'stipend-receipt.pdf',
+        recipient_url: '/admin/workspaces/reviews/applicants/7',
+    }]);
+    const [, context, status, receipt, action] = renderedCells(html);
+    assert.match(context, />Released</);
+    assert.doesNotMatch(status, /Open recipient report/);
+    assert.match(receipt, /href="\/admin\/receipts\/7" data-file-preview="true" data-file-name="stipend-receipt.pdf"/);
+    assert.match(receipt, /Open recipient report/);
+    assert.match(action, /aria-label="Open recipient profile for Current recipient"/);
+});
+
+test('admin finance exceptions make the reason available on demand, outside the status cell', async () => {
+    const html = await renderAdminTable('pages/admin/finance/FinanceExceptionsPage.vue', '/admin/workspaces/finance/exceptions', [{
+        id: 8, reference_number: 'PAY-8', provider: 'Example foundation', status: 'failed',
+        reason: 'Payment timed out. <retry>', amount: 10000, currency: 'PHP',
+    }]);
+    const [reference, , , status] = renderedCells(html);
+    assert.match(reference, /<details[^>]*>.*Read reason.*Payment timed out\. &lt;retry&gt;/s);
+    assert.doesNotMatch(reference, /<details[^>]*\bopen\b|line-clamp-2/);
+    assert.match(status, />Failed</);
+    assert.doesNotMatch(status, /Payment timed out/);
+});

@@ -87,9 +87,9 @@ onMounted(() => loadPayments(queueState.page));
                     <tr><th class="border-b border-slate-200 px-5 py-3">Receipt</th><th class="border-b border-slate-200 px-4 py-3">Provider</th><th class="border-b border-slate-200 px-4 py-3">Service</th><th class="border-b border-slate-200 px-4 py-3">Payment</th><th class="border-b border-slate-200 px-4 py-3">Amount</th><th class="border-b border-slate-200 px-5 py-3 text-right">Open</th></tr>
                 </thead>
                 <tbody class="divide-y divide-slate-200 bg-white">
-                    <tr v-for="item in items" :key="item.id" class="hover:bg-slate-50/70">
-                        <td class="px-5 py-3.5"><p class="font-mono text-xs font-bold text-slate-900">{{ item.receipt_number }}</p><p class="mt-1 text-xs text-slate-500">{{ item.livemode ? 'Live payment' : 'Test payment' }}</p></td>
-                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0"><span class="block break-words text-sm font-bold text-slate-900">{{ item.provider }}</span><span class="mt-0.5 block break-words text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td>
+                    <tr v-for="item in items" :key="item.id" class="align-middle hover:bg-slate-50/70">
+                        <td class="px-5 py-3.5"><p class="break-words font-mono text-xs font-bold text-slate-900">{{ item.receipt_number }}</p><p v-if="item.livemode === false" class="mt-0.5 text-xs font-semibold text-amber-800">Test payment</p></td>
+                        <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0 break-words text-sm font-bold text-slate-900">{{ item.provider }}</span></div></td>
                         <td class="px-4 py-3.5 text-sm font-semibold text-slate-700">{{ item.service }}</td>
                         <td class="px-4 py-3.5"><p class="text-sm font-semibold text-slate-700">{{ paymentMethod(item.payment_method) }}</p><p class="mt-0.5 text-xs text-slate-500">{{ item.paid_at }}</p></td>
                         <td class="px-4 py-3.5 text-sm font-black text-slate-950">{{ money(item.amount, item.currency) }}</td>

@@ -99,8 +99,6 @@ final class TeamAdministratorDashboardQuery
             ! $account->hasVerifiedEmail() ? 'Email verification pending' : null,
             $account->must_reset_password ? 'Password change pending' : null,
         ])->filter()->values();
-        $permissions = $account->effectivePortalPermissions();
-
         return [
             'id' => (int) $account->id,
             'title' => $account->name,
@@ -110,12 +108,9 @@ final class TeamAdministratorDashboardQuery
                 'label' => $state === 'attention' ? 'Setup incomplete' : 'Access active',
                 'tone' => $state === 'attention' ? 'attention' : 'positive',
             ],
-            'meta' => [
-                $state === 'attention' ? $setup->implode(' and ') : count($permissions).' workspace permission'.(count($permissions) === 1 ? '' : 's'),
-                $account->hasLimitedProviderProgramAccess()
-                    ? count($account->assignedProviderProgramIds()).' assigned program'.(count($account->assignedProviderProgramIds()) === 1 ? '' : 's')
-                    : 'All organization programs',
-            ],
+            'hint' => $state === 'attention'
+                ? $setup->implode(' / ')
+                : ($account->hasLimitedProviderProgramAccess() ? 'Assigned programs only' : 'All organization programs'),
             'action' => [
                 'label' => 'Manage account',
                 'url' => route('provider.team.accounts.edit', $account, false),

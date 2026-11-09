@@ -316,6 +316,10 @@ class BenefitDeliveryReportTest extends TestCase
         $unassigned = User::factory()->create(['role' => 'provider', 'parent_account_id' => $provider->id, 'permissions' => ['manage_benefit_releases'], 'assigned_program_ids' => [99999]]);
         $this->actingAs($unassigned)->getJson($this->url($report))->assertForbidden();
         $record = $this->release($provider, $application, $entitlement);
+        $this->actingAs($provider)->getJson('/provider/workspaces/releases/dashboard/data')->assertOk()
+            ->assertJsonPath('metrics.0.value', 1);
+        $this->getJson('/provider/workspaces/releases/data?queue=issues')->assertOk()
+            ->assertJsonPath('pagination.total', 1);
         $this->proposal($provider, $report, $record);
         $proof = $report->evidence()->sole();
         $this->actingAs($other)->get('/dashboard/delivery-report-evidence/'.$proof->id)->assertForbidden();

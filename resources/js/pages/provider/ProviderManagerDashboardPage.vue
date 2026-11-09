@@ -4,6 +4,7 @@ import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from './ProviderSidebar.vue';
 import WorkspaceDashboardHeader from '../../components/workspace-dashboard/WorkspaceDashboardHeader.vue';
 import WorkspaceMetricStrip from '../../components/workspace-dashboard/WorkspaceMetricStrip.vue';
+import { providerDashboardQueueLink } from '../../support/workspaceDashboard.js';
 
 const isLoading = ref(true);
 const errorMessage = ref('');
@@ -17,6 +18,10 @@ const overview = ref({
 });
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 5));
+const showAllQueues = ref(false);
+const visibleQueues = computed(() => showAllQueues.value
+    ? overview.value.attention_workspaces
+    : overview.value.attention_workspaces.slice(0, 6));
 const isManager = computed(() => user.value?.account_title === 'manager' || user.value?.permissions?.length > 1);
 const dashboardWorkspace = {
     key: 'provider',
@@ -26,10 +31,10 @@ const dashboardWorkspace = {
     icon: 'fa-solid fa-gauge-high',
 };
 const metrics = computed(() => [
-    { key: 'published', label: 'Published programs', value: overview.value.summary.published_programs, detail: `${overview.value.summary.programs} total`, icon: 'fa-solid fa-graduation-cap' },
-    { key: 'applications', label: 'Applications', value: overview.value.summary.applications, detail: 'Across all programs', icon: 'fa-solid fa-file-lines' },
+    { key: 'published', label: 'Published programs', value: overview.value.summary.published_programs, detail: `${overview.value.summary.programs} total`, icon: 'fa-solid fa-graduation-cap', url: user.value?.permissions?.includes('manage_programs') ? providerDashboardQueueLink('/provider/programs/published') : null },
+    { key: 'applications', label: 'Applications', value: overview.value.summary.applications, detail: 'Across accessible programs', icon: 'fa-solid fa-file-lines' },
     { key: 'team', label: 'Active team', value: overview.value.summary.active_team, detail: 'Managed staff accounts', icon: 'fa-solid fa-user-group' },
-    { key: 'attention', label: 'Needs attention', value: overview.value.summary.attention, detail: 'Open workflow items', icon: overview.value.summary.attention ? 'fa-solid fa-bell' : 'fa-solid fa-check', tone: overview.value.summary.attention ? 'attention' : 'neutral' },
+    { key: 'attention', label: 'Open queue items', value: overview.value.summary.attention, detail: 'Across the queues below', icon: overview.value.summary.attention ? 'fa-solid fa-bell' : 'fa-solid fa-check', tone: overview.value.summary.attention ? 'attention' : 'neutral', url: '#manager-queues' },
 ]);
 
 const workspaceIcons = {
@@ -46,14 +51,16 @@ const workspaceIcons = {
 };
 
 function workspaceIcon(key) {
-    return workspaceIcons[key] ?? 'fa-solid fa-folder-open';
+    return workspaceIcons[key.split('-')[0]] ?? 'fa-solid fa-folder-open';
 }
 
 const priorityActionIcon = computed(() => {
     if (!overview.value.priority_action?.count) return 'fa-solid fa-check';
 
     const href = overview.value.priority_action.href ?? '';
-    const workspace = Object.keys(workspaceIcons).find((key) => href.includes(`/workspaces/${key}`));
+    const workspace = href.includes('/workspaces/organization-profile')
+        ? 'profile'
+        : Object.keys(workspaceIcons).find((key) => href.includes(`/workspaces/${key}`));
 
     return workspaceIcon(workspace ?? (href.includes('/provider/programs') ? 'programs' : ''));
 });
@@ -124,14 +131,23 @@ onMounted(loadDashboard);
                         <div class="flex items-center gap-5">
                             <span class="workspace-dashboard-icon grid h-11 w-11 shrink-0 place-items-center bg-amber-100 text-amber-700"><i :class="priorityActionIcon" aria-hidden="true"></i></span>
                             <div class="min-w-0 flex-1"><p class="workspace-dashboard-label text-xs font-bold uppercase tracking-wide text-amber-700">{{ overview.priority_action.eyebrow }}</p><h2 id="manager-priority-title" class="workspace-dashboard-text mt-1 text-lg font-bold text-slate-950">{{ overview.priority_action.title }}</h2><p class="mt-1 text-sm text-slate-600"><template v-if="overview.priority_action.count">{{ overview.priority_action.count }} item{{ overview.priority_action.count === 1 ? '' : 's' }} · </template>{{ overview.priority_action.description }}</p></div>
-                            <a :href="overview.priority_action.href" class="workspace-dashboard-action inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">{{ overview.priority_action.label }} <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                            <a :href="providerDashboardQueueLink(overview.priority_action.href)" class="workspace-dashboard-action inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">{{ overview.priority_action.label }} <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
                         </div>
                     </section>
 
-                    <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="attention-workspaces-title">
+                    <section id="manager-queues" class="mt-4 scroll-mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="attention-workspaces-title">
                         <header class="workspace-dashboard-section-header flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4"><div class="workspace-dashboard-heading flex min-w-0 items-center gap-3"><span class="workspace-dashboard-icon grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-list-check text-sm" aria-hidden="true"></i></span><div class="min-w-0"><h2 id="attention-workspaces-title" class="text-base font-bold text-slate-950">Work requiring attention</h2><p class="mt-1 text-xs text-slate-600">Only operating areas with open work appear here.</p></div></div><span v-if="isManager" class="inline-flex shrink-0 items-center gap-2 text-xs font-semibold text-slate-600"><i class="fa-regular fa-compass" aria-hidden="true"></i>Use the sidebar for every workspace</span></header>
-                        <div v-if="overview.attention_workspaces.length" class="divide-y divide-slate-200"><a v-for="workspace in overview.attention_workspaces" :key="workspace.key" :href="workspace.href" class="provider-dashboard-workspace grid grid-cols-[minmax(0,1fr)_8rem_3rem] items-center gap-5 px-6 py-4 hover:bg-slate-50"><div class="flex min-w-0 items-center gap-4"><span class="workspace-dashboard-icon grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i :class="[workspaceIcon(workspace.key), 'text-sm']" aria-hidden="true"></i></span><div class="min-w-0"><h3 class="workspace-dashboard-text text-sm font-bold text-slate-950">{{ workspace.label }}</h3><p class="workspace-dashboard-text mt-1 text-xs text-slate-600">{{ workspace.detail }}</p></div></div><span class="workspace-dashboard-status inline-flex items-center justify-self-end gap-1.5 border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800"><i class="fa-solid fa-bell text-xs" aria-hidden="true"></i>{{ workspace.count }} open</span><span class="grid h-9 w-9 place-items-center bg-slate-950 text-white" aria-hidden="true"><i class="fa-solid fa-arrow-right text-xs"></i></span></a></div>
+                        <div v-if="visibleQueues.length" id="manager-queue-list" class="divide-y divide-slate-200">
+                            <a v-for="workspace in visibleQueues" :key="workspace.key" :href="providerDashboardQueueLink(workspace.href)" class="provider-dashboard-workspace grid grid-cols-[minmax(0,1fr)_8rem_3rem] items-center gap-5 px-6 py-4 hover:bg-slate-50">
+                                <div class="flex min-w-0 items-center gap-4"><span class="workspace-dashboard-icon grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i :class="[workspaceIcon(workspace.key), 'text-sm']" aria-hidden="true"></i></span><div class="min-w-0"><h3 class="workspace-dashboard-text text-sm font-bold text-slate-950">{{ workspace.label }}</h3><p class="workspace-dashboard-text mt-1 text-xs text-slate-600">{{ workspace.detail }}</p></div></div>
+                                <span class="workspace-dashboard-status inline-flex items-center justify-self-end gap-1.5 border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800"><i class="fa-solid fa-bell text-xs" aria-hidden="true"></i>{{ workspace.count }} open</span>
+                                <span class="grid h-9 w-9 place-items-center bg-slate-950 text-white" aria-hidden="true"><i class="fa-solid fa-arrow-right text-xs"></i></span>
+                            </a>
+                        </div>
                         <div v-else class="px-6 py-10 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-emerald-50 text-emerald-700" aria-hidden="true"><i class="fa-solid fa-circle-check text-sm"></i></span><p class="mt-2 text-sm font-bold text-slate-800">No workflow needs immediate attention.</p><p class="mt-1 text-xs text-slate-500">Detailed records remain available from the sidebar.</p></div>
+                        <button v-if="overview.attention_workspaces.length > 6" type="button" :aria-expanded="showAllQueues" aria-controls="manager-queue-list" class="block w-full border-t border-slate-200 px-6 py-3 text-left text-xs font-bold text-slate-700 hover:bg-slate-50" @click="showAllQueues = !showAllQueues">
+                            {{ showAllQueues ? 'Show fewer queues' : `Show all ${overview.attention_workspaces.length} queues` }}
+                        </button>
                     </section>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="program-snapshot-title">

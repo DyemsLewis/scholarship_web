@@ -63,11 +63,11 @@ source = source.slice(0, start) + String.raw`
     await client.evaluate('fixture.reopenOpen=true');
     await wait(()=>client.evaluate('!!document.querySelector("#decision-reopen-title")'),'decision correction modal');
     await input('[aria-labelledby="decision-reopen-title"] textarea','Recheck the corrected examination record.');
-    await click('Reopen decision'); await visiblePrompt(); await escape(); await closedPrompt();
+    await click('Review correction'); await visiblePrompt(); await escape(); await closedPrompt();
     assert.equal(await client.evaluate('fixture.reopenOpen'),true);
     assert.equal(await client.evaluate('document.querySelector("[aria-labelledby=decision-reopen-title] textarea").value'),'Recheck the corrected examination record.');
     assert.equal(await count(),2);
-    await click('Reopen decision'); await visiblePrompt(); await click('Reopen decision',confirmScope);
+    await click('Review correction'); await visiblePrompt(); await click('Reopen decision',confirmScope);
     await wait(async()=>await count()===3,'one confirmed reopening');
     assert.equal(await client.evaluate('fixture.reopenOpen'),false);
     assert.deepEqual(report.errors,[]); assert.deepEqual(report.serverErrors,[]); assert.deepEqual(report.blockedWrites,[]);

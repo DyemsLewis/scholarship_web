@@ -3,7 +3,8 @@ import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
-import { createStaffQueueState } from '../../../support/staffQueueState.js';
+import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
+import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
     '/provider/workspaces/decisions/pending': 'pending',
@@ -131,18 +132,19 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                         <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Decision scope</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Program access</p>
                             <p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p>
                             <p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p>
                         </div>
                     </div>
+                    <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>
 
                 <nav class="mt-4 grid grid-cols-3 border border-slate-200 bg-white shadow-sm" aria-label="Final decision queues">
                     <a
                         v-for="queue in queues"
                         :key="queue.key"
-                        :href="queue.href"
+                        :href="providerProgramQueueLink(queue.href, selectedProgram)"
                         :aria-current="activeQueue === queue.key ? 'page' : undefined"
                         :class="[
                             'flex min-h-16 items-center justify-between border-r border-slate-200 px-5 last:border-r-0',
@@ -208,9 +210,9 @@ onBeforeUnmount(() => {
                                             <div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.program.title }}</p></div>
                                         </div>
                                     </td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage_status }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education || 'Verified applicant record' }}</p></td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span><p class="mt-2 text-xs text-slate-500">{{ application.decision.reason || application.decision.recorded_at || `${application.waiting_days} days waiting` }}</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.capacity.label }}</p><p class="mt-1 text-xs text-slate-500">{{ application.capacity.remaining === null ? 'Selection is not capped' : `${application.capacity.remaining} remaining` }}</p></td>
+                                    <td class="px-5 py-4 text-sm font-bold text-slate-900">{{ application.stage_status }}</td>
+                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span></td>
+                                    <td :class="['px-5 py-4 text-sm font-bold', application.capacity.remaining === 0 ? 'text-rose-700' : 'text-slate-900']">{{ application.capacity.remaining === null ? 'No slot limit' : application.capacity.remaining === 0 ? 'No slots left' : `${application.capacity.remaining} remaining` }}</td>
                                     <td class="px-5 py-4 text-right"><a :href="recordUrl(application)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`${application.decision.action_label} for ${application.applicant.name}`">{{ application.decision.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                 </tr>
                             </tbody>

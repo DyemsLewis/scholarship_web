@@ -1,5 +1,4 @@
 <script setup>
-import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { labelFromKey } from '../../../support/display';
@@ -95,10 +94,10 @@ onMounted(loadWorkspace);
                                 <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600"><th class="px-5 py-3">Profile area</th><th class="px-5 py-3">Status</th><th class="px-5 py-3">Still needed</th><th class="px-5 py-3 text-right">Action</th></tr></thead>
                                 <tbody class="divide-y divide-slate-200">
                                     <tr v-for="section in sections" :key="section.key" class="align-middle hover:bg-slate-50/70">
-                                        <td class="px-5 py-4"><div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i :class="['fa-solid', section.icon]" aria-hidden="true"></i></span><div><p class="text-sm font-bold text-slate-950">{{ section.title }}</p><WorkspaceTextSummary  class="mt-1 text-xs text-slate-500" :text="section.description" label="details" /></div></div></td>
-                                        <td class="px-5 py-4"><p :class="['text-sm font-bold', section.is_ready ? 'text-emerald-700' : 'text-amber-700']">{{ section.status_label }}</p><p class="mt-1 text-xs text-slate-500">{{ section.complete }} of {{ section.total }} complete</p></td>
-                                        <td class="px-5 py-4"><p class="text-sm text-slate-700">{{ section.missing.length ? section.missing.join(', ') : 'No missing information' }}</p></td>
-                                        <td class="px-5 py-4 text-right"><a :href="section.action_url" class="inline-flex h-9 items-center gap-2 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white">Open<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
+                                        <td class="px-5 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-500"><i :class="['fa-solid', section.icon]" aria-hidden="true"></i></span><p class="text-sm font-bold text-slate-950">{{ section.title }}</p></div></td>
+                                        <td class="px-5 py-4"><p :class="['text-sm font-bold', section.is_ready ? 'text-emerald-700' : 'text-amber-700']">{{ section.status_label }}</p></td>
+                                        <td class="px-5 py-4"><p class="text-sm text-slate-700">{{ section.missing.length ? section.missing.join(', ') : 'None' }}</p></td>
+                                        <td class="px-5 py-4 text-right"><a :href="section.action_url" class="staff-row-action h-9 px-3 text-xs" :aria-label="`Open ${section.title}`">Open<i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
                                     </tr>
                                 </tbody>
                             </table>

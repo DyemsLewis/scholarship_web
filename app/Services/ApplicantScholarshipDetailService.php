@@ -513,6 +513,7 @@ class ApplicantScholarshipDetailService
     private function facts(Scholarship $scholarship): array
     {
         $remainingCapacity = $scholarship->remainingApplicationCapacity();
+        $awardPlaces = $scholarship->slots_available;
         return [
             [
                 'key' => 'benefit',
@@ -526,10 +527,15 @@ class ApplicantScholarshipDetailService
             ],
             [
                 'key' => 'capacity',
-                'label' => 'Application capacity',
+                'label' => 'Application intake',
                 'value' => $remainingCapacity === null
-                    ? 'No application limit'
-                    : ($remainingCapacity === 0 ? 'Full' : $remainingCapacity.' remaining'),
+                    ? 'No limit on applications'
+                    : ($remainingCapacity === 0
+                        ? 'Application limit reached'
+                        : number_format($remainingCapacity).' '.str('application')->plural($remainingCapacity).' remaining'),
+                'note' => $awardPlaces !== null
+                    ? number_format($awardPlaces).' award '.str('place')->plural($awardPlaces).' planned.'
+                    : ($remainingCapacity !== null ? 'This is not the number of awards.' : null),
             ],
         ];
     }
@@ -1013,7 +1019,7 @@ class ApplicantScholarshipDetailService
         }
 
         $amount = filled($primary['amount'] ?? null)
-            ? 'PHP '.number_format((float) $primary['amount'], 0)
+            ? 'PHP '.preg_replace('/\.00$/', '', number_format((float) $primary['amount'], 2))
             : null;
         $details = collect([$amount, $primary['frequency_label'] ?? null])
             ->filter()

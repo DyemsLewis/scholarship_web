@@ -1,10 +1,19 @@
 const queueOrigin = 'https://staff-queue.invalid';
+const providerProgramQueuePath = new RegExp('^/provider/workspaces/(?:'+[
+    'reviews/(?:all|assigned|unassigned|returned|history)',
+    'selection/(?:active|history|results|setup|unassigned)',
+    'decisions/(?:pending|waitlist|recorded)',
+    'recipients/(?:agreements|active|declined|closed)',
+    'monitoring/(?:review|follow-ups|awaiting|history)',
+    'releases/(?:issues|record|upcoming|history|schedule)',
+].join('|')+')$');
 const returnPaths = {
     accounts: /^\/admin\/workspaces\/accounts\/(directory|attention)$/,
     adminReviews: /^\/admin\/workspaces\/reviews\/(applicants|benefits|monitoring|programs|providers|selection-activities)$/,
     adminSupport: /^\/admin\/workspaces\/support\/(needs-response|waiting|resolved)$/,
     adminBilling: /^\/admin\/workspaces\/billing\/queues\/(ready|active|waiting|completed)$/,
     programs: /^\/provider\/programs(?:\/(drafts|review|published|closed))?$/,
+    programWorkspaces: providerProgramQueuePath,
     selection: /^\/provider\/workspaces\/selection\/(active|history|results|setup|unassigned)$/,
     providerSupport: /^\/provider\/workspaces\/support\/(needs-response|waiting|platform|resolved)$/,
     providerBilling: /^\/provider\/workspaces\/billing\/(requests|action|active|waiting|completed)$/,
@@ -15,6 +24,18 @@ function positivePage(value) {
     if (!/^\d+$/.test(String(value))) return null;
     const number = Number(value);
     return Number.isSafeInteger(number) && number > 0 ? number : null;
+}
+
+export function providerProgramQueueLink(href, programId) {
+    const url = new URL(href, queueOrigin);
+    if (url.origin !== queueOrigin || !providerProgramQueuePath.test(url.pathname)) return href;
+
+    const id = positivePage(programId);
+    if (id) url.searchParams.set('program_id', String(id));
+    else url.searchParams.delete('program_id');
+    url.searchParams.set('page', '1');
+
+    return url.pathname + url.search + url.hash;
 }
 
 export function staffQueueLink(href, returnTo, origin = queueOrigin) {

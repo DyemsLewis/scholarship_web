@@ -65,7 +65,7 @@ class MonitoringReminderTest extends TestCase
         $notifications = $this->notifications($applicant, 'monitoring_grace_reminder');
         $this->assertSame(2, $notifications->count());
         $this->assertSame(1, $notifications->whereNull('read_at')->count());
-        $this->assertSame('Monitoring request window closes soon', $notifications->sortByDesc('id')->first()->title);
+        $this->assertSame('Check-in request window closes soon', $notifications->sortByDesc('id')->first()->title);
     }
 
     public function test_waiting_provider_work_only_alerts_assigned_monitoring_staff(): void

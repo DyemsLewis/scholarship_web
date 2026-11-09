@@ -26,7 +26,7 @@ async function loadMonitoringRecord() {
         detail.value = response.data.detail;
     } catch (error) {
         errorMessage.value = error.response?.data?.message
-            ?? 'We could not load this monitoring record. Please try again.';
+            ?? 'We could not load this support record. Please try again.';
     } finally {
         isLoading.value = false;
     }
@@ -42,7 +42,7 @@ async function refreshMonitoringDetail() {
         detail.value = response.data.detail;
     } catch (error) {
         errorMessage.value = error.response?.data?.message
-            ?? 'We could not refresh this monitoring record. Please try again.';
+            ?? 'We could not refresh this support record. Please try again.';
     }
 }
 
@@ -52,7 +52,7 @@ onMounted(loadMonitoringRecord);
 <template>
     <main v-if="isLoading" class="student-shell">
         <ApplicantSidebar />
-        <section class="student-page" aria-busy="true" aria-label="Loading monitoring record">
+        <section class="student-page" aria-busy="true" aria-label="Loading support record">
             <div class="mx-auto w-full max-w-[90rem]">
                 <div class="h-5 w-36 animate-pulse rounded bg-slate-200"></div>
                 <div class="mt-5 h-72 animate-pulse rounded-md border border-slate-200 bg-white"></div>
@@ -68,13 +68,13 @@ onMounted(loadMonitoringRecord);
             <div class="mx-auto w-full max-w-[90rem]">
                 <a href="/dashboard/monitoring" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                    Back to monitoring
+                    Back to Scholarship Support
                 </a>
                 <section class="mt-5 rounded-md border border-rose-200 bg-white px-5 py-8 text-center shadow-sm" role="alert">
                     <span class="mx-auto grid h-11 w-11 place-items-center rounded-sm bg-rose-50 text-rose-700">
                         <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
                     </span>
-                    <h1 class="mt-3 text-lg font-bold text-slate-950">Monitoring record unavailable</h1>
+                    <h1 class="mt-3 text-lg font-bold text-slate-950">Support record unavailable</h1>
                     <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">{{ errorMessage }}</p>
                     <button type="button" class="mt-4 rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="loadMonitoringRecord">
                         Try again

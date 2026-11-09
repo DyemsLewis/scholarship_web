@@ -1,5 +1,4 @@
 <script setup>
-import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
@@ -50,6 +49,12 @@ function statusClass(state) {
 function accessLabel(account) {
     if (account.program_access_mode === 'all') return 'All organization programs';
     return `${account.assigned_program_count} assigned program${Number(account.assigned_program_count) === 1 ? '' : 's'}`;
+}
+
+function accountStateLabel(account) {
+    return account.work_state === 'attention' && !account.email_verified && account.must_reset_password
+        ? 'Email and password pending'
+        : account.work_label;
 }
 
 function requestStatusChange(account) {
@@ -168,9 +173,9 @@ onBeforeUnmount(() => {
                             <thead class="bg-slate-50"><tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600"><th class="px-5 py-3">Staff member</th><th class="px-5 py-3">Account state</th><th class="px-5 py-3">Assigned access</th><th class="px-5 py-3">Created</th><th class="px-5 py-3 text-right">Actions</th></tr></thead>
                             <tbody class="divide-y divide-slate-200">
                                 <tr v-for="account in accounts" :key="account.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-shield" aria-hidden="true"></i></span><div class="min-w-0"><p class="settings-text text-sm font-bold text-slate-950">{{ account.name }}<span v-if="account.is_current_account" class="font-normal text-slate-600"> (you)</span></p><p class="mt-1 settings-text text-xs font-semibold text-slate-600">{{ account.team_role_label }}</p><p class="mt-1 settings-text text-xs text-slate-500">{{ account.email }}</p></div></div></td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(account.work_state)]">{{ account.work_label }}</span><WorkspaceTextSummary  class="mt-2 text-xs text-slate-500" :text="account.detail" label="details" /></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-800">{{ accessLabel(account) }}</p><p class="mt-1 text-xs text-slate-500">{{ account.permission_count }} responsibility area{{ Number(account.permission_count) === 1 ? '' : 's' }}</p><p v-if="!account.can_manage" class="mt-1 text-xs font-semibold text-slate-500"><i class="fa-solid fa-lock mr-1" aria-hidden="true"></i>{{ account.protected_reason }}</p></td>
+                                    <td class="px-5 py-4"><div class="flex items-center gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-shield" aria-hidden="true"></i></span><div class="min-w-0"><p class="settings-text text-sm font-bold text-slate-950">{{ account.name }}<span v-if="account.is_current_account" class="font-normal text-slate-600"> (you)</span></p><p class="mt-1 settings-text text-xs text-slate-600">{{ account.team_role_label }}<template v-if="account.email"> &middot; {{ account.email }}</template></p></div></div></td>
+                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(account.work_state)]">{{ accountStateLabel(account) }}</span></td>
+                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-800">{{ accessLabel(account) }}</p><p v-if="!account.can_manage" class="mt-1 text-xs font-semibold text-slate-500" :title="account.protected_reason"><i class="fa-solid fa-lock mr-1" aria-hidden="true"></i>Outside your access scope</p></td>
                                     <td class="px-5 py-4 text-sm font-semibold text-slate-600">{{ account.created_at }}</td>
                                     <td class="px-5 py-4"><div class="flex justify-end gap-2"><a v-if="account.action_url" :href="queueState.link(account.action_url)" class="staff-row-action staff-row-action--primary h-9 w-9" :aria-label="`Edit staff account for ${account.name}`" title="Edit staff account"><i class="fa-solid fa-pen text-xs" aria-hidden="true"></i></a><button v-if="account.can_manage && !account.is_current_account" type="button" :disabled="updatingId === account.id" :class="['grid h-9 w-9 place-items-center border disabled:opacity-40', account.account_status === 'suspended' ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50' : 'border-rose-300 text-rose-700 hover:bg-rose-50']" :aria-label="account.account_status === 'suspended' ? 'Reactivate staff account' : 'Suspend staff account'" @click="requestStatusChange(account)"><i :class="['fa-solid text-xs', updatingId === account.id ? 'fa-circle-notch animate-spin' : account.account_status === 'suspended' ? 'fa-play' : 'fa-pause']" aria-hidden="true"></i></button><span v-if="!account.action_url" class="grid h-9 w-9 place-items-center border border-slate-200 text-slate-300" title="Protected account"><i class="fa-solid fa-lock text-xs" aria-hidden="true"></i></span></div></td>
                                 </tr>

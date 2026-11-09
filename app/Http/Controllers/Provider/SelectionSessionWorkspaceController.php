@@ -8,6 +8,7 @@ use App\Http\Resources\Provider\Applications\ApplicationStageSessionResource;
 use App\Models\ApplicationStageSession;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Queries\Provider\SelectionWorkspaceQueues;
 use App\Support\ScholarshipSelectionPlan;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,8 @@ use Illuminate\Validation\Rule;
 
 class SelectionSessionWorkspaceController extends Controller
 {
+    public function __construct(private readonly SelectionWorkspaceQueues $queues) {}
+
     public function directoryData(Request $request): JsonResponse
     {
         $actor = $this->actor($request);
@@ -37,12 +40,7 @@ class SelectionSessionWorkspaceController extends Controller
             $programIds = collect([(int) $validated['program_id']]);
         }
 
-        $sessionBase = ApplicationStageSession::query()->whereIn('scholarship_id', $programIds);
-        $applicationBase = $this->applicationBase($programIds->all());
-        $activeSessions = (clone $sessionBase)->whereIn('status', ['draft', 'scheduled', 'ongoing']);
-        $historySessions = (clone $sessionBase)->whereIn('status', ['completed', 'cancelled']);
-        $unassigned = $this->unassignedApplications(clone $applicationBase);
-        $results = $this->resultApplications(clone $applicationBase);
+        $queues = $this->queues->forProgramIds($programIds);
 
         $response = [
             'workspace' => [
@@ -50,12 +48,7 @@ class SelectionSessionWorkspaceController extends Controller
                 'organization_name' => $actor->providerOrganizationOwner()->name,
                 'program_access_mode' => $actor->hasLimitedProviderProgramAccess() ? 'selected' : 'all',
             ],
-            'summary' => [
-                'active' => $activeSessions->count(),
-                'unassigned' => $unassigned->count(),
-                'results' => $results->count(),
-                'history' => $historySessions->count(),
-            ],
+            'summary' => array_map(fn (Builder $query): int => $query->count(), $queues),
             'programs' => $programs->map(fn (Scholarship $program): array => [
                 'id' => (int) $program->id,
                 'title' => $program->title,
@@ -68,7 +61,7 @@ class SelectionSessionWorkspaceController extends Controller
         ];
 
         if (in_array($queue, ['active', 'history'], true)) {
-            $query = $queue === 'history' ? $historySessions : $activeSessions;
+            $query = $queues[$queue];
             $query
                 ->with(['scholarship'])
                 ->withCount([
@@ -95,7 +88,7 @@ class SelectionSessionWorkspaceController extends Controller
             $items = $query->paginate(8);
             $response['sessions'] = ApplicationStageSessionResource::collection($items->getCollection())->resolve($request);
         } else {
-            $query = $queue === 'results' ? $results : $unassigned;
+            $query = $queues[$queue];
             $this->applyApplicationSearch($query, $search);
             $query->when($validated['stage_key'] ?? null, fn (Builder $builder, string $stage) => $builder
                 ->where('workflow_stage', $stage));
@@ -161,62 +154,8 @@ class SelectionSessionWorkspaceController extends Controller
 
     private function programsFor($actor)
     {
-        $query = Scholarship::query()
-            ->where('provider_id', $actor->providerOrganizationId())
-            ->whereIn('status', ['published', 'closed'])
-            ->orderBy('title');
-
-        if ($actor->hasLimitedProviderProgramAccess()) {
-            $query->whereIn('id', $actor->assignedProviderProgramIds());
-        }
-
-        return $query->get(['id', 'provider_id', 'title', 'status', 'selection_stages']);
-    }
-
-    private function applicationBase(array $programIds): Builder
-    {
-        return ScholarshipApplication::query()
-            ->whereIn('scholarship_id', $programIds)
-            ->whereIn('workflow_stage', ApplicationStageCatalog::SESSION_STAGES)
-            ->whereNotIn('application_state', ['closed', 'withdrawn']);
-    }
-
-    private function unassignedApplications(Builder $query): Builder
-    {
-        return $query
-            ->whereIn('workflow_stage', [ApplicationStageCatalog::EXAM, ApplicationStageCatalog::INTERVIEW])
-            ->whereHas('stageProgresses', fn (Builder $progressQuery) => $progressQuery
-                ->where('status', 'current')
-                ->whereColumn('stage_key', 'scholarship_applications.workflow_stage')
-                ->where(function (Builder $statusQuery): void {
-                    $statusQuery
-                        ->whereNull('operational_status')
-                        ->orWhereIn('operational_status', ['not_started', 'waiting_for_schedule']);
-                }));
-    }
-
-    private function resultApplications(Builder $query): Builder
-    {
-        return $query->where(function (Builder $readyQuery): void {
-            $readyQuery
-                ->whereHas('stageProgresses', fn (Builder $progressQuery) => $progressQuery
-                    ->where('status', 'current')
-                    ->where('operational_status', 'ready_for_review')
-                    ->whereColumn('stage_key', 'scholarship_applications.workflow_stage'))
-                ->orWhereHas('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
-                    ->where('status', 'completed')
-                    ->whereColumn('type', 'scholarship_applications.workflow_stage'))
-                ->orWhere(fn (Builder $formalQuery) => $formalQuery
-                    ->where('workflow_stage', ApplicationStageCatalog::FORMAL_APPLICATION)
-                    ->whereDoesntHave('stageAssignments', fn (Builder $assignmentQuery) => $assignmentQuery
-                        ->whereIn('status', ['assigned', 'acknowledged'])
-                        ->whereHas('session', fn (Builder $sessionQuery) => $sessionQuery
-                            ->where('stage_key', ApplicationStageCatalog::FORMAL_APPLICATION)
-                            ->where('status', '!=', 'cancelled')))
-                    ->whereDoesntHave('schedules', fn (Builder $scheduleQuery) => $scheduleQuery
-                        ->where('type', ApplicationStageCatalog::FORMAL_APPLICATION)
-                        ->where('status', '!=', 'cancelled')));
-        });
+        return $this->queues->programs($actor)->orderBy('title')
+            ->get(['id', 'provider_id', 'title', 'status', 'selection_stages']);
     }
 
     private function applyApplicationSearch(Builder $query, string $search): void

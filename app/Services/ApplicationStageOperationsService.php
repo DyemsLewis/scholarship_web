@@ -429,36 +429,10 @@ class ApplicationStageOperationsService
                 ->lockForUpdate()
                 ->findOrFail($session->id);
 
-            if (! in_array($locked->status, ['scheduled', 'ongoing'], true)) {
-                throw ValidationException::withMessages([
-                    'session' => 'Only a published session can be completed.',
-                ]);
-            }
-
-            if ($locked->starts_at->isFuture()) {
-                throw ValidationException::withMessages([
-                    'session' => 'This session cannot be completed before it starts.',
-                ]);
-            }
-
             $activeAssignments = $locked->assignments->whereIn('status', self::ACTIVE_ASSIGNMENT_STATUSES);
-
-            if ($activeAssignments->isEmpty()) {
-                throw ValidationException::withMessages([
-                    'session' => 'Assign at least one applicant before completing this session.',
-                ]);
-            }
-
-            if ($activeAssignments->contains(fn (ApplicationStageAssignment $item): bool => ($item->attendance?->status ?? 'pending') === 'pending')) {
-                throw ValidationException::withMessages([
-                    'attendance' => 'Record attendance for every assigned applicant first.',
-                ]);
-            }
-
-            if ($locked->proof_required && ! $locked->evidence()->where('is_current', true)->exists()) {
-                throw ValidationException::withMessages([
-                    'evidence' => 'Upload session proof before marking this activity complete.',
-                ]);
+            $blocker = app(ApplicationStageSessionCompletion::class)->blocker($locked, $activeAssignments);
+            if ($blocker) {
+                throw ValidationException::withMessages([$blocker['field'] => $blocker['message']]);
             }
 
             $locked->update([

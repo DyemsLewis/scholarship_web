@@ -124,10 +124,10 @@ final class BillingStaffDashboardQuery
     private function requestItem(ProviderServiceRequest $serviceRequest): array
     {
         $purchase = $serviceRequest->purchase;
-        [$label, $detail] = match (true) {
-            $purchase?->status === 'failed' => ['Payment unsuccessful', 'Review the request and try payment again'],
-            $serviceRequest->status === 'checkout_started' => ['Payment pending', 'Continue checkout or confirm payment'],
-            default => ['Ready for review', 'Confirm the scope and total before payment'],
+        $label = match (true) {
+            $purchase?->status === 'failed' => 'Payment unsuccessful',
+            $serviceRequest->status === 'checkout_started' => 'Payment pending',
+            default => 'Ready for review',
         };
 
         return [
@@ -136,10 +136,6 @@ final class BillingStaffDashboardQuery
             'subtitle' => $serviceRequest->scholarship?->title ?: 'Organization-wide request',
             'image_url' => null,
             'status' => ['label' => $label, 'tone' => 'attention'],
-            'meta' => [
-                $detail,
-                $serviceRequest->updated_at ? 'Updated '.$serviceRequest->updated_at->format('M d, Y') : 'Update date unavailable',
-            ],
             'action' => [
                 'label' => 'Review request',
                 'url' => '/provider/workspaces/billing/service-requests/'.$serviceRequest->id.'/review',
@@ -150,15 +146,15 @@ final class BillingStaffDashboardQuery
     /** @return array<string, mixed> */
     private function purchaseItem(ProviderServicePurchase $purchase): array
     {
-        [$label, $detail, $actionLabel, $actionUrl, $tone] = match (true) {
-            $purchase->status === 'pending' => ['Payment pending', 'Complete or refresh payment', 'Complete payment', $purchase->checkout_url ?: '/provider/billing/'.$purchase->id, 'attention'],
-            $purchase->status === 'failed' => ['Payment failed', 'Start a new service request when ready', 'Browse services', '/provider/workspaces/billing/services', 'attention'],
-            $purchase->fulfillment_status === 'needs_information' => ['Response needed', 'Platform support requested more information', 'Respond', '/provider/billing/'.$purchase->id, 'attention'],
-            $purchase->fulfillment_status === 'provider_review' => ['Review delivery', 'Confirm the result or request changes', 'Review result', '/provider/billing/'.$purchase->id, 'attention'],
-            $purchase->fulfillment_status === 'in_progress' => ['In progress', 'Platform support is working on this request', 'Open request', '/provider/billing/'.$purchase->id, 'neutral'],
-            $purchase->fulfillment_status === 'completed' => ['Completed', 'Service delivery is closed', 'View record', '/provider/billing/'.$purchase->id, 'positive'],
-            $purchase->fulfillment_status === 'cancelled' => ['Cancelled', 'Cancellation and refund details are recorded', 'View record', '/provider/billing/'.$purchase->id.'/closeout', 'neutral'],
-            default => ['Waiting for support', 'Payment confirmed and queued', 'Open request', '/provider/billing/'.$purchase->id, 'neutral'],
+        [$label, $actionLabel, $actionUrl, $tone] = match (true) {
+            $purchase->status === 'pending' => ['Payment pending', 'Complete payment', $purchase->checkout_url ?: '/provider/billing/'.$purchase->id, 'attention'],
+            $purchase->status === 'failed' => ['Payment failed', 'Browse services', '/provider/workspaces/billing/services', 'attention'],
+            $purchase->fulfillment_status === 'needs_information' => ['Response needed', 'Respond', '/provider/billing/'.$purchase->id, 'attention'],
+            $purchase->fulfillment_status === 'provider_review' => ['Review delivery', 'Review result', '/provider/billing/'.$purchase->id, 'attention'],
+            $purchase->fulfillment_status === 'in_progress' => ['In progress', 'Open request', '/provider/billing/'.$purchase->id, 'neutral'],
+            $purchase->fulfillment_status === 'completed' => ['Completed', 'View record', '/provider/billing/'.$purchase->id, 'positive'],
+            $purchase->fulfillment_status === 'cancelled' => ['Cancelled', 'View record', '/provider/billing/'.$purchase->id.'/closeout', 'neutral'],
+            default => ['Waiting for support', 'Open request', '/provider/billing/'.$purchase->id, 'neutral'],
         };
 
         return [
@@ -167,10 +163,6 @@ final class BillingStaffDashboardQuery
             'subtitle' => $purchase->reference_number ?: 'Service request',
             'image_url' => null,
             'status' => ['label' => $label, 'tone' => $tone],
-            'meta' => [
-                $detail,
-                $purchase->updated_at ? 'Updated '.$purchase->updated_at->format('M d, Y') : 'Update date unavailable',
-            ],
             'action' => ['label' => $actionLabel, 'url' => $actionUrl],
         ];
     }

@@ -162,7 +162,13 @@
         .provider-page,
         .admin-page,
         body:has(> #app:is([data-page^='provider'], [data-page^='admin'])) :is([role='dialog'], [role='alertdialog'])
-    ) :is(button, a[class*='bg-'], a[class*='border']):not([class*='rounded-full']) {
+    ) :is(button, a[class*='bg-'], a[class*='border']):not([class*='rounded-full']),
+    /* Staff workspaces that still use the shared student-page layout. */
+    :where(#app:is([data-page^='provider'], [data-page^='admin']) .student-page:not(.provider-page, .admin-page))
+        :is(button, a):is([class~='border'], [class^='bg-'], [class*=' bg-']):not(:where(
+            nav *, [role='tablist'] *, [role='tab'], [aria-pressed], [aria-selected],
+            [class*='rounded'], [class~='bg-transparent']
+        )) {
         border-radius: 0.3125rem;
     }
 
@@ -524,6 +530,7 @@
 
     .staff-row-action {
         @apply inline-flex shrink-0 items-center justify-center gap-2 border border-slate-300 bg-white font-bold text-slate-700 transition-colors hover:border-slate-950 hover:bg-slate-950 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-700 disabled:opacity-40;
+        border-radius: 0.3125rem;
     }
 
     .staff-row-action--primary {

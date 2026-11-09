@@ -3,7 +3,8 @@ import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
-import { createStaffQueueState } from '../../../support/staffQueueState.js';
+import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
+import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
 import SelectionSessionFormModal from './components/SelectionSessionFormModal.vue';
 
 const queueByPath = {
@@ -77,17 +78,9 @@ function formatDate(value) {
     return new Intl.DateTimeFormat('en-PH', { month: 'short', day: '2-digit', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 }
 
-function applicationQueueNote(application) {
-    if (activeQueue === 'results' && application.stage.key === 'formal_application') {
-        return 'Ready for document review';
-    }
-
-    return activeQueue === 'results' ? 'Activity complete' : 'Needs a session';
-}
-
 function openSessionModal(context = {}) {
     sessionContext.value = {
-        programId: context.programId ?? '',
+        programId: context.programId ?? selectedProgram.value,
         stageKey: context.stageKey ?? '',
         applicationId: context.applicationId ?? null,
     };
@@ -172,10 +165,11 @@ onBeforeUnmount(() => {
                         </div>
                         <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800" @click="openSessionModal()"><i class="fa-solid fa-calendar-plus text-[10px]" aria-hidden="true"></i>Schedule activity</button>
                     </div>
+                    <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>
 
                 <nav class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Selection queues">
-                    <a v-for="queue in queues" :key="queue.key" :href="queue.href" :aria-current="activeQueue === queue.key ? 'page' : undefined" :class="['flex min-h-14 items-center justify-between border-r border-slate-200 px-5 last:border-r-0', activeQueue === queue.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']">
+                    <a v-for="queue in queues" :key="queue.key" :href="providerProgramQueueLink(queue.href, selectedProgram)" :aria-current="activeQueue === queue.key ? 'page' : undefined" :class="['flex min-h-14 items-center justify-between border-r border-slate-200 px-5 last:border-r-0', activeQueue === queue.key ? 'bg-slate-950 text-white' : 'text-slate-700 hover:bg-slate-50']">
                         <span class="text-sm font-bold">{{ queue.label }}</span>
                         <span :class="['min-w-7 px-2 py-1 text-center text-xs font-bold', activeQueue === queue.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-700']">{{ queue.count }}</span>
                     </a>
@@ -200,8 +194,8 @@ onBeforeUnmount(() => {
                                 <tr v-else v-for="session in sessions" :key="session.id" class="align-middle hover:bg-slate-50/70">
                                     <td class="px-5 py-4"><p class="application-text text-sm font-bold text-slate-950">{{ session.title }}</p><p class="mt-1 text-xs text-slate-500">{{ labelize(session.stage_key) }} · {{ labelize(session.mode) }}</p></td>
                                     <td class="px-5 py-4"><p class="application-text text-sm font-semibold text-slate-800">{{ session.program?.title }}</p><p v-if="session.proof_required" class="mt-1 text-xs text-slate-500">Proof required</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-semibold text-slate-800">{{ formatDate(session.starts_at) }}</p><p v-if="session.venue" class="mt-1 application-text text-xs text-slate-500">{{ session.venue }}</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ session.capacity.assigned }} assigned</p><p class="mt-1 text-xs text-slate-500">{{ session.capacity.limit ? `${session.capacity.remaining} spaces left` : 'No capacity limit' }}</p></td>
+                                    <td class="px-5 py-4 text-sm font-semibold text-slate-800">{{ formatDate(session.starts_at) }}</td>
+                                    <td class="px-5 py-4 text-sm font-bold text-slate-900">{{ session.capacity.assigned }}<template v-if="session.capacity.limit"> of {{ session.capacity.limit }}</template> assigned</td>
                                     <td class="px-5 py-4"><span :class="['inline-flex border px-2 py-1 text-xs font-bold uppercase tracking-wide', statusClass(session.status)]">{{ labelize(session.status) }}</span></td>
                                     <td class="px-5 py-4 text-right"><a :href="queueState.link(`/provider/workspaces/selection/sessions/${session.id}`)" class="staff-row-action h-9 w-9" :aria-label="`Open ${session.title}`" title="Open session"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                                 </tr>
@@ -215,9 +209,9 @@ onBeforeUnmount(() => {
                                 <tr v-if="isLoading"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading applicants...</p></td></tr>
                                 <tr v-else-if="!applications.length && !errorMessage"><td colspan="5" class="px-5 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-user-clock" aria-hidden="true"></i></span><p class="mt-3 font-semibold text-slate-800">{{ pageCopy.empty }}</p><p class="mt-1 text-sm text-slate-500">{{ search || selectedProgram || selectedStage ? 'Clear the filters to see all records.' : 'Records move here automatically as work is completed.' }}</p></td></tr>
                                 <tr v-else v-for="application in applications" :key="application.id" class="align-middle hover:bg-slate-50/70">
-                                    <td class="px-5 py-4"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity :src="application.applicant.profile_photo_url" class="h-11 w-11" /><div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.applicant.education || 'Education not provided' }}</p></div></div></td>
+                                    <td class="px-5 py-4"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity :src="application.applicant.profile_photo_url" class="h-11 w-11" /><p class="min-w-0 application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p></div></td>
                                     <td class="px-5 py-4"><p class="application-text text-sm font-semibold text-slate-800">{{ application.program.title }}</p></td>
-                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage.label }}</p><p class="mt-1 text-xs text-slate-500">{{ applicationQueueNote(application) }}</p></td>
+                                    <td class="px-5 py-4"><p class="text-sm font-bold text-slate-900">{{ application.stage.label }}</p><p v-if="activeQueue === 'results' && application.stage.key === 'formal_application'" class="mt-1 text-xs text-slate-500">Ready for document review</p></td>
                                     <td class="px-5 py-4 text-sm text-slate-600">{{ application.submitted_at || 'Not available' }}</td>
                                     <td class="px-5 py-4 text-right"><div class="flex justify-end gap-2">
                                         <button v-if="activeQueue === 'unassigned'" type="button" class="staff-row-action h-9 w-9" :aria-label="`${application.action.label} for ${application.applicant.name}`" @click="openSessionModal({ programId: application.program.id, stageKey: application.stage.key, applicationId: application.id })" title="Schedule session"><i class="fa-solid fa-calendar-plus text-xs" aria-hidden="true"></i></button>

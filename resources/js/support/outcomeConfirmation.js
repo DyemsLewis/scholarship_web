@@ -14,6 +14,7 @@ export async function confirmOutcome(options = {}, canProceed = () => true) {
         message: [
             options.record ? `Record: ${options.record}` : '',
             options.outcome ? `Outcome: ${labelFromKey(options.outcome)}` : '',
+            ...(options.details ?? []),
             options.consequence ? `\n${options.consequence}` : '\nThis outcome will be saved to the record.',
         ].filter(Boolean).join('\n'),
         confirmLabel: options.confirmLabel || 'Record outcome',

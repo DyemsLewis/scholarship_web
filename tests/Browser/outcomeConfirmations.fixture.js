@@ -33,9 +33,9 @@ createApp({
             onClose: () => { state.agreementOpen = false; },
             onRespond: (outcome) => { state.writes.push({ agreement: outcome }); state.agreementOpen = false; },
         }),
-        h(DecisionReopenDialog, { open: state.reopenOpen, decision: { stage_label: 'Exam', result_label: 'Passed' },
+        h(DecisionReopenDialog, { open: state.reopenOpen, decision: { stage_label: 'Exam', result_label: 'Passed', can_reopen: true, decision_reference: 'a'.repeat(64) },
             onCancel: () => { state.reopenOpen = false; },
-            onConfirm: (reason) => { state.writes.push({ reopened: reason }); state.reopenOpen = false; },
+            onConfirm: (payload) => { state.writes.push({ reopened: payload }); state.reopenOpen = false; },
         }),
     ]),
 }).mount('#fixture-page');

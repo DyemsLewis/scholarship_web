@@ -1,0 +1,16 @@
+{
+  "roles": [
+    "marilag",
+    "marilag.reviewer"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\provider-part-4-scheduling-blocker.png",
+    "storage\\qa\\provider-part-4-session-blocker.png",
+    "storage\\qa\\provider-part-4-agreement-handoff.png"
+  ],
+  "verified_application_ids": [],
+  "passed": true
+}

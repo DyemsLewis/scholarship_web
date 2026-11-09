@@ -20,6 +20,9 @@ use App\Models\ApplicationStageSession;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Services\ApplicationStageOperationsService;
+use App\Services\ApplicationStageResultGate;
+use App\Services\ApplicationStageSessionCompletion;
+use App\Services\ProviderApplicationNextStep;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -68,8 +71,52 @@ class ApplicationStageOperationController extends Controller
             'evidence.uploader',
         ]);
 
+        $active = $session->assignments->whereIn('status', ['assigned', 'acknowledged']);
+        $blocker = app(ApplicationStageSessionCompletion::class)->blocker($session, $active);
+        $steps = app(ProviderApplicationNextStep::class);
+        $owner = 'Selection officer';
+        $hasPendingResults = $active->contains(fn (ApplicationStageAssignment $assignment): bool =>
+            $assignment->application?->workflow_stage === $session->stage_key
+            && ! in_array($assignment->application->application_state, ['closed', 'withdrawn'], true));
+        $resultsUrl = route('provider.workspaces.selection.results', [
+            'program_id' => $scholarship->id,
+            'stage_key' => $session->stage_key,
+        ], false);
+        $nextStep = match (true) {
+            $session->status === 'cancelled' => null,
+            $session->status === 'completed' => $hasPendingResults
+                ? $steps->step('handoff', 'Record individual applicant outcomes',
+                    'Completing the session does not advance applicants. Record an outcome for each applicant still at this stage.', $owner,
+                    ['label' => 'Open result queue', 'url' => $resultsUrl])
+                : null,
+            $session->status === 'draft' && $session->starts_at->isPast() => $steps->step('blocked', 'Update the session date',
+                'Choose a future date and time before publishing.', $owner, [
+                    'label' => 'Edit session',
+                    'url' => route('provider.workspaces.selection.sessions.edit', $session, false),
+                ]),
+            $session->status === 'draft' && $active->isEmpty() => $steps->step('blocked', 'Add applicants to the draft',
+                'Add the intended applicants so they receive the schedule when it is published.', $owner,
+                ['label' => 'Open roster', 'section' => 'roster']),
+            $session->status === 'draft' => $steps->step('handoff', 'Publish the session',
+                'Publishing shares the schedule and instructions with the assigned applicants.', $owner),
+            default => match ($blocker['key'] ?? null) {
+                'not_started' => $steps->step('waiting', 'Wait for the scheduled start', $blocker['message'], 'Scheduled start'),
+                'empty_roster' => $steps->step('blocked', 'Assign applicants', $blocker['message'], $owner,
+                    ['label' => 'Open roster', 'section' => 'roster']),
+                'attendance' => $steps->step('blocked', 'Record attendance', $blocker['message'], $owner,
+                    ['label' => 'Open roster', 'section' => 'roster']),
+                'proof' => $steps->step('blocked', 'Upload session proof', $blocker['message'], $owner,
+                    ['label' => 'Open proof', 'section' => 'proof']),
+                default => null,
+            },
+        };
+
         return response()->json([
-            'session' => (new ApplicationStageSessionResource($session))->resolve($request),
+            'session' => [
+                ...(new ApplicationStageSessionResource($session))->resolve($request),
+                'completion' => ['can_complete' => $blocker === null, 'blocked_by' => $blocker['key'] ?? null],
+                'next_step' => $nextStep,
+            ],
         ]);
     }
 
@@ -152,20 +199,68 @@ class ApplicationStageOperationController extends Controller
         $assignment = $application->stageAssignments()
             ->with(['session.evidence', 'attendance'])
             ->whereIn('status', ['assigned', 'acknowledged'])
-            ->whereHas('session', fn (Builder $query) => $query->where('stage_key', $stage))
+            ->whereHas('session', fn (Builder $query) => $query->where('stage_key', $stage)->where('status', '!=', 'cancelled'))
             ->latest('assigned_at')
             ->first();
         $session = $assignment?->session;
-        $proofCount = $session?->evidence->where('is_current', true)->count() ?? 0;
+        $proofCount = $session?->evidence->where('scope', 'session')->where('is_current', true)->count() ?? 0;
+        $legacySchedule = $session ? null : $application->schedules()->where('type', $stage)
+            ->where('status', '!=', 'cancelled')->orderByRaw("CASE WHEN status = 'completed' THEN 0 ELSE 1 END")
+            ->latest('id')->first();
+        $blockedReason = match (true) {
+            ! $progress || in_array($application->application_state, ['closed', 'withdrawn'], true) => 'This application is no longer ready for a stage result.',
+            in_array($application->correction_status, ['requested', 'submitted'], true) => 'Resolve the open correction request before recording the result.',
+            ! app(ApplicationStageResultGate::class)->activityComplete($application, $stage) => 'Complete the activity and its required attendance and proof before recording a result.',
+            default => null,
+        };
+        $steps = app(ProviderApplicationNextStep::class);
+        $owner = 'Selection officer';
+        $stageLabel = str($stage)->headline()->toString();
+        $sessionAction = fn (string $label = 'Open session', string $section = 'overview'): array => [
+            'label' => $label,
+            'url' => route('provider.workspaces.selection.sessions.show', ['session' => $session, 'section' => $section], false),
+        ];
+        $queueFilters = ['program_id' => $application->scholarship_id, 'stage_key' => $stage];
+        $nextStep = match (true) {
+            $blockedReason === null => null,
+            ! $progress || in_array($application->application_state, ['closed', 'withdrawn'], true) =>
+                $steps->step('waiting', 'No result can be recorded', $blockedReason, ''),
+            $application->correction_status === 'requested' => $steps->step('waiting', 'Wait for the applicant to respond',
+                $blockedReason, 'Applicant'),
+            $application->correction_status === 'submitted' => $steps->step('blocked', 'Review the submitted correction',
+                $blockedReason, 'Application reviewer'),
+            $session?->status === 'draft' => $steps->step('blocked', 'Publish the session',
+                'The schedule is still a draft. Publish it before recording the activity result.', $owner, $sessionAction()),
+            $session?->starts_at?->isFuture() && $session->status !== 'completed' => $steps->step('waiting', 'Wait for the scheduled activity',
+                'The session has not started. Record attendance and any required proof after the activity.', 'Scheduled start', $sessionAction()),
+            $session && ($assignment->attendance?->status ?? 'pending') === 'pending' => $steps->step('blocked', 'Record attendance',
+                'This applicant has no attendance result for the session.', $owner, $sessionAction('Open roster', 'roster')),
+            $session?->proof_required && $proofCount === 0 => $steps->step('blocked', 'Upload session proof',
+                'Add the required proof to the session before recording the outcome.', $owner, $sessionAction('Open proof', 'proof')),
+            $session !== null => $steps->step('blocked', 'Complete the session',
+                'Open the session to finish the remaining checks before recording an outcome.', $owner, $sessionAction()),
+            $legacySchedule !== null => $steps->step('blocked', 'Complete the scheduled activity',
+                'Finish the existing appointment before recording an outcome.', $owner),
+            default => $steps->step('blocked', 'Schedule the '.strtolower($stageLabel),
+                'Assign this applicant to a session and complete it before recording the outcome.', $owner, [
+                    'label' => 'Schedule activity',
+                    'url' => route('provider.workspaces.selection.unassigned', [
+                        ...$queueFilters,
+                        'application_id' => $application->id,
+                        'create_session' => 1,
+                    ], false),
+                ]),
+        };
 
         return response()->json([
             'readiness' => [
                 'stage_key' => $stage,
-                'stage_label' => str($stage)->headline()->toString(),
+                'stage_label' => $stageLabel,
                 'operational_status' => $progress?->operational_status,
-                'can_record_result' => $progress?->operational_status === 'ready_for_review'
-                    || $session?->status === 'completed',
-                'attendance_status' => $assignment?->attendance?->status,
+                'can_record_result' => $blockedReason === null,
+                'blocked_reason' => $blockedReason,
+                'next_step' => $nextStep,
+                'attendance_status' => $assignment?->attendance?->status ?? $legacySchedule?->attendance_status,
                 'proof_required' => (bool) ($session?->proof_required ?? false),
                 'proof_count' => $proofCount,
                 'session' => $session ? [
@@ -174,6 +269,11 @@ class ApplicationStageOperationController extends Controller
                     'status' => $session->status,
                     'completed_at' => $session->completed_at?->toIso8601String(),
                     'record_url' => route('provider.workspaces.selection.sessions.show', $session, false),
+                ] : null,
+                'legacy_schedule' => $legacySchedule ? [
+                    'title' => $legacySchedule->title,
+                    'status' => $legacySchedule->status,
+                    'completed_at' => $legacySchedule->completed_at?->toIso8601String(),
                 ] : null,
             ],
         ]);

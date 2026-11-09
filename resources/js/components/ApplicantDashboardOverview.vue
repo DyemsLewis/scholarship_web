@@ -343,7 +343,7 @@ function statusClass(tone) {
         <section v-if="upcoming.length" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm" aria-labelledby="dashboard-upcoming">
             <header class="border-b border-slate-200 px-5 py-4 sm:px-6">
                 <h2 id="dashboard-upcoming" class="text-base font-bold text-slate-950">Coming up</h2>
-                <p class="mt-1 text-xs text-slate-500">Scheduled activities, monitoring dates, and benefit releases.</p>
+                <p class="mt-1 text-xs text-slate-500">Scheduled activities, check-in dates, and benefit releases.</p>
             </header>
 
             <div class="divide-y divide-slate-200">

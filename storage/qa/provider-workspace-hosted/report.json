@@ -1,0 +1,20 @@
+{
+  "roles": [
+    "marilag.manager",
+    "marilag.reviewer",
+    "marilag.monitoring"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\provider-workspace-hosted\\part-1-dashboard.png",
+    "storage\\qa\\provider-workspace-hosted\\part-2-outcome-confirmation.png",
+    "storage\\qa\\provider-workspace-hosted\\part-3-program-workspaces.png",
+    "storage\\qa\\provider-workspace-hosted\\part-3-filtered-review-queue.png",
+    "storage\\qa\\provider-workspace-hosted\\part-4-scheduling-blocker.png",
+    "storage\\qa\\provider-workspace-hosted\\part-4-attendance-blocker.png"
+  ],
+  "verified_application_ids": [],
+  "passed": true
+}

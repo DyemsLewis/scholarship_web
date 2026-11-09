@@ -48,6 +48,13 @@ function capacityValue(value, suffix) {
     return value === null ? 'Not set' : `${value} ${suffix}`;
 }
 
+function workspaceColumn(index) {
+    const count = program.value.workspace_links.length;
+    if (count === 1) return 'col-span-6';
+    if ([2, 4].includes(count) || (count === 5 && index >= 3)) return 'col-span-3';
+    return 'col-span-2';
+}
+
 async function loadProgram() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -64,7 +71,13 @@ async function loadProgram() {
 }
 
 onMounted(loadProgram);
-const backToQueue = staffQueueReturn(window, 'programs', '/provider/programs');
+const originatingWorkspace = staffQueueReturn(window, 'programWorkspaces');
+const canBrowsePrograms = computed(() => Boolean(program.value?.actions.directory_url)
+    || (!program.value && window.portalUser?.permissions?.includes('manage_programs')));
+const backToQueue = computed(() => originatingWorkspace || (canBrowsePrograms.value
+    ? staffQueueReturn(window, 'programs', program.value?.actions.directory_url || '/provider/programs')
+    : '/provider'));
+const backLabel = computed(() => originatingWorkspace ? 'Back to queue' : canBrowsePrograms.value ? 'Back to programs' : 'Back to dashboard');
 </script>
 
 <template>
@@ -75,7 +88,7 @@ const backToQueue = staffQueueReturn(window, 'programs', '/provider/programs');
             <div class="provider-program-workspace mx-auto max-w-[94rem]">
                 <a :href="backToQueue" class="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950">
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                    Back to programs
+                    {{ backLabel }}
                 </a>
 
                 <div v-if="isLoading" class="mt-5 border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
@@ -104,7 +117,7 @@ const backToQueue = staffQueueReturn(window, 'programs', '/provider/programs');
                                 <span :class="['program-status inline-flex border px-3 py-1.5 font-bold uppercase tracking-wide', statusClass(program.status.tone)]">
                                     {{ program.status.label }}
                                 </span>
-                                <button type="button" class="program-action inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950" @click="previewOpen = true">
+                                <button v-if="program.actions.preview_url" type="button" class="program-action inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950" @click="previewOpen = true">
                                     <i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>
                                     Applicant preview
                                 </button>
@@ -134,6 +147,26 @@ const backToQueue = staffQueueReturn(window, 'programs', '/provider/programs');
                             </div>
                         </div>
                     </header>
+
+                    <section v-if="program.workspace_links?.length" class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="program-workspaces-heading">
+                        <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-4">
+                            <span class="program-icon grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600" aria-hidden="true"><i class="fa-solid fa-table-list text-sm"></i></span>
+                            <div>
+                                <h2 id="program-workspaces-heading" class="text-lg font-bold text-slate-950">Program workspaces</h2>
+                                <p class="mt-0.5 text-sm text-slate-600">Open a queue already filtered to this program.</p>
+                            </div>
+                        </header>
+                        <nav aria-labelledby="program-workspaces-heading" class="grid grid-cols-6 gap-px bg-slate-200">
+                            <a v-for="(link, index) in program.workspace_links" :key="link.key" :href="link.url" :class="workspaceColumn(index)" class="flex min-w-0 items-center gap-3 bg-white px-6 py-4 text-slate-700 hover:bg-slate-50 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-slate-700">
+                                <span class="program-icon grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600" aria-hidden="true"><i :class="[link.icon, 'text-sm']"></i></span>
+                                <span class="min-w-0 flex-1">
+                                    <span class="program-text block text-sm font-bold text-slate-950">{{ link.label }}</span>
+                                    <span class="program-text mt-0.5 block text-xs text-slate-600">{{ link.description }}</span>
+                                </span>
+                                <i class="fa-solid fa-arrow-right shrink-0 text-xs text-slate-500" aria-hidden="true"></i>
+                            </a>
+                        </nav>
+                    </section>
 
                     <article class="mt-4 divide-y divide-slate-200 border border-slate-200 bg-white shadow-sm">
                         <section class="px-7 py-6" aria-labelledby="program-summary-heading">
@@ -194,14 +227,19 @@ const backToQueue = staffQueueReturn(window, 'programs', '/provider/programs');
                         </section>
 
                         <section class="px-7 py-6" aria-labelledby="program-support-heading">
-                            <div class="flex items-center gap-3">
-                                <span class="program-icon grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-sm text-slate-700" aria-hidden="true">
-                                    <i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i>
-                                </span>
-                                <div>
-                                    <p class="program-label font-bold uppercase text-slate-600">Award</p>
-                                    <h2 id="program-support-heading" class="text-lg font-bold text-slate-950">Scholarship support</h2>
+                            <div class="flex items-center justify-between gap-4">
+                                <div class="flex items-center gap-3">
+                                    <span class="program-icon grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-sm text-slate-700" aria-hidden="true">
+                                        <i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i>
+                                    </span>
+                                    <div>
+                                        <p class="program-label font-bold uppercase text-slate-600">Award</p>
+                                        <h2 id="program-support-heading" class="text-lg font-bold text-slate-950">Scholarship support</h2>
+                                    </div>
                                 </div>
+                                <a v-if="program.actions.monitoring_plan_url" :href="program.actions.monitoring_plan_url" class="program-action inline-flex h-9 shrink-0 items-center gap-2 rounded-[5px] border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:border-slate-600">
+                                    Monitoring plan <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i>
+                                </a>
                             </div>
                             <div class="mt-4 border-y border-slate-200 py-4">
                                 <p class="program-text text-sm font-semibold text-slate-900">{{ program.support.summary }}</p>
@@ -220,7 +258,7 @@ const backToQueue = staffQueueReturn(window, 'programs', '/provider/programs');
             :status="program?.status?.label || 'Preview'"
             :scenario="previewScenario"
             show-scenario
-            :full-page-url="`/provider/previews/programs/${programId}`"
+            :full-page-url="program?.actions?.preview_url || ''"
             @close="previewOpen = false"
             @update:scenario="previewScenario = $event"
         >
@@ -229,7 +267,7 @@ const backToQueue = staffQueueReturn(window, 'programs', '/provider/programs');
                 :key="`${programId}-${previewScenario}`"
                 embedded
                 :scholarship-id="programId"
-                :preview-data-url="`/provider/previews/programs/${programId}/data`"
+                :preview-data-url="program?.actions?.preview_data_url || ''"
                 :initial-scenario="previewScenario"
                 :preview-status="program?.status?.label || 'Preview'"
             />

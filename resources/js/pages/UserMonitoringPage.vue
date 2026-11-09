@@ -80,7 +80,7 @@ async function loadMonitoring() {
         const response = await window.axios.get('/dashboard/applications/data');
         applications.value = response.data.applications ?? [];
     } catch (error) {
-        errorMessage.value = error.response?.data?.message ?? 'Unable to load recipient monitoring.';
+        errorMessage.value = error.response?.data?.message ?? 'Unable to load your scholarship support records.';
     } finally {
         isLoading.value = false;
     }
@@ -96,9 +96,9 @@ onMounted(loadMonitoring);
         <section class="student-page">
             <div class="student-container max-w-6xl">
                 <ApplicantPageHeader
-                    eyebrow="Recipient monitoring"
-                    title="Keep your scholarship on track"
-                    description="Submit ongoing requirements and review benefit releases in one place."
+                    eyebrow="Recipient workspace"
+                    title="Scholarship Support"
+                    description="Review check-in requirements, benefit releases, and provider updates."
                     icon="fa-solid fa-heart-pulse"
                 />
 
@@ -108,7 +108,7 @@ onMounted(loadMonitoring);
 
                 <section v-if="!isLoading && monitoringApplications.length" class="mt-4 grid overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm sm:grid-cols-3">
                     <div class="border-b border-slate-200 px-4 py-3 sm:border-b-0 sm:border-r">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Scholarships monitored</p>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">Support records</p>
                         <p class="mt-1 text-xl font-bold text-slate-950">{{ monitoringApplications.length }}</p>
                     </div>
                     <div class="border-b border-slate-200 px-4 py-3 sm:border-b-0 sm:border-r">
@@ -124,7 +124,7 @@ onMounted(loadMonitoring);
                 <section class="student-card mt-4 overflow-hidden rounded-md border-slate-300">
                     <header class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:px-5">
                         <div>
-                            <h2 class="text-base font-bold text-slate-950">Your monitoring records</h2>
+                            <h2 class="text-base font-bold text-slate-950">Your support records</h2>
                             <p class="mt-1 text-xs text-slate-500">Open a scholarship to manage its current requirements and releases.</p>
                         </div>
                         <span v-if="!isLoading" class="shrink-0 rounded bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
@@ -132,14 +132,14 @@ onMounted(loadMonitoring);
                         </span>
                     </header>
 
-                    <div v-if="isLoading" class="p-6 text-sm text-slate-500">Loading monitoring records...</div>
+                    <div v-if="isLoading" class="p-6 text-sm text-slate-500">Loading support records...</div>
 
                     <div v-else-if="!monitoringApplications.length" class="p-6 text-center sm:p-8">
                         <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-slate-100 text-slate-500">
                             <i class="fa-solid fa-heart-pulse" aria-hidden="true"></i>
                         </span>
-                        <h3 class="mt-3 font-bold text-slate-950">No monitoring record yet</h3>
-                        <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-500">Monitoring becomes available after you are selected and the recipient agreement is active.</p>
+                        <h3 class="mt-3 font-bold text-slate-950">No scholarship support yet</h3>
+                        <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-500">Your support record appears here once you are selected for a scholarship.</p>
                         <a href="/dashboard/applications" class="mt-4 inline-flex rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800">View applications</a>
                     </div>
 
@@ -165,7 +165,7 @@ onMounted(loadMonitoring);
                             </div>
 
                             <a :href="`/dashboard/monitoring/${application.id}`" class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto">
-                                Open monitoring
+                                View support record
                                 <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                             </a>
                         </article>

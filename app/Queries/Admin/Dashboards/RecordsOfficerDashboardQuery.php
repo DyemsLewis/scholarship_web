@@ -91,10 +91,7 @@ final class RecordsOfficerDashboardQuery
                 'label' => $security ? 'Security event' : ($entry['action_label'] ?? 'Recorded activity'),
                 'tone' => $security ? 'attention' : 'neutral',
             ],
-            'meta' => [
-                $entry['created_at'] ?? 'Time unavailable',
-                filled($entry['ip_address'] ?? null) ? 'Source '.$entry['ip_address'] : 'Source not recorded',
-            ],
+            'hint' => $entry['created_at'] ?? null,
             'action' => [
                 'label' => 'Open record',
                 'url' => $entry['record_url'],

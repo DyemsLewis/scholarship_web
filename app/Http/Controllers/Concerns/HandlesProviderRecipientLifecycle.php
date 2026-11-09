@@ -539,15 +539,15 @@ trait HandlesProviderRecipientLifecycle
             'title' => ['required', 'string', 'max:120'],
             'period_label' => ['nullable', 'string', 'max:80'],
             'school_year' => ['nullable', 'string', 'max:30'],
-            'opens_at' => ['nullable', 'date', 'after_or_equal:today'],
-            'due_at' => ['required', 'date', 'after_or_equal:today'],
+            'handoff_at' => ['required', 'date_format:Y-m-d\TH:i'],
+            'handoff_location' => ['required', 'string', 'max:255'],
             'instructions' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        if (filled($validated['opens_at'] ?? null)
-            && CarbonImmutable::parse($validated['due_at'])->isBefore(CarbonImmutable::parse($validated['opens_at']))) {
+        $handoffAt = CarbonImmutable::parse($validated['handoff_at'], config('app.timezone'));
+        if ($handoffAt->lessThanOrEqualTo(now())) {
             throw ValidationException::withMessages([
-                'due_at' => 'The due date must be on or after the opening date.',
+                'handoff_at' => 'Schedule the document handoff for a future date and time.',
             ]);
         }
 
@@ -562,24 +562,11 @@ trait HandlesProviderRecipientLifecycle
             ]);
         }
 
-        $opensAt = filled($validated['opens_at'] ?? null)
-            ? CarbonImmutable::parse($validated['opens_at'])->startOfDay()
-            : CarbonImmutable::today();
-        if ($plan->starts_on && $opensAt->isBefore($plan->starts_on->startOfDay())) {
+        $handoffDate = $handoffAt->startOfDay();
+        if (($plan->starts_on && $handoffDate->isBefore($plan->starts_on))
+            || ($plan->ends_on && $handoffDate->isAfter($plan->ends_on))) {
             throw ValidationException::withMessages([
-                'opens_at' => 'The opening date must be within the monitoring plan period.',
-            ]);
-        }
-
-        $dueAt = CarbonImmutable::parse($validated['due_at'])->startOfDay();
-        if ($plan->starts_on && $dueAt->isBefore($plan->starts_on)) {
-            throw ValidationException::withMessages([
-                'due_at' => 'The due date must be within the monitoring plan period.',
-            ]);
-        }
-        if ($plan->ends_on && $dueAt->isAfter($plan->ends_on)) {
-            throw ValidationException::withMessages([
-                'due_at' => 'The due date must be within the monitoring plan period.',
+                'handoff_at' => 'The appointment date must be within the monitoring plan period.',
             ]);
         }
 
@@ -607,6 +594,7 @@ trait HandlesProviderRecipientLifecycle
             $plan,
             $academicRequirement,
             $periodType,
+            $handoffAt,
         ): RecipientMonitoringCycle {
             $cycle = $scholarship->monitoringCycles()->create([
                 'recipient_monitoring_plan_id' => $plan->id,
@@ -618,11 +606,13 @@ trait HandlesProviderRecipientLifecycle
                 'period_type' => $periodType,
                 'academic_period' => trim((string) ($validated['period_label'] ?? '')) ?: null,
                 'school_year' => trim((string) ($validated['school_year'] ?? '')) ?: null,
-                'opens_at' => $validated['opens_at'] ?? null,
-                'due_at' => $validated['due_at'],
+                'opens_at' => $handoffAt->toDateString(),
+                'due_at' => $handoffAt->toDateString(),
+                'handoff_at' => $handoffAt,
+                'handoff_location' => Str::squish($validated['handoff_location']),
                 'minimum_grade' => $academicRequirement?->minimum_grade ?? 0,
                 'grading_scale' => $academicRequirement?->grading_scale ?? AcademicRequirement::SCALE_PERCENTAGE,
-                'instructions' => trim((string) ($validated['instructions'] ?? '')) ?: $plan->instructions,
+                'instructions' => trim((string) ($validated['instructions'] ?? '')) ?: null,
                 'status' => 'open',
                 'published_at' => now(),
             ]);
@@ -635,8 +625,9 @@ trait HandlesProviderRecipientLifecycle
                     'description' => $requirement->description,
                     'evidence_description' => $requirement->evidence_description,
                     'required' => $requirement->required,
-                    'requires_file' => $requirement->requires_file,
-                    'requires_original_verification' => $requirement->requires_original_verification,
+                    'requires_file' => false,
+                    'requires_original_verification' => $requirement->type === RecipientMonitoringRequirementType::ACADEMIC_PROGRESS
+                        || $requirement->requires_file || $requirement->requires_original_verification,
                     'minimum_grade' => $requirement->minimum_grade,
                     'grading_scale' => $requirement->grading_scale,
                     'sort_order' => $requirement->sort_order,
@@ -645,16 +636,16 @@ trait HandlesProviderRecipientLifecycle
 
             app(RecipientMonitoringCaseService::class)->seedForCycle($cycle, $applications);
 
-            $uploadCount = $plan->requirements->where('requires_file', true)->count();
+            $handoffLabel = $cycle->handoffDetails()['scheduled_label'];
             foreach ($applications as $application) {
                 PortalNotification::query()->updateOrCreate([
                     'deduplication_key' => "recipient-monitoring-check-in:{$cycle->id}:application:{$application->id}",
                 ], [
                     'user_id' => $application->applicant_id,
                     'type' => 'recipient_monitoring_request',
-                    'title' => 'Monitoring check-in available',
-                    'message' => "{$scholarship->title}: {$uploadCount} item".($uploadCount === 1 ? ' is' : 's are')." ready by {$cycle->due_at->format('M d, Y')}.",
-                    'action_url' => route('dashboard.monitoring.show', $application, false),
+                    'title' => 'In-person check-in scheduled',
+                    'message' => "{$scholarship->title}: attend on {$handoffLabel} at {$cycle->handoff_location}. Open the check-in to see what to bring.",
+                    'action_url' => route('dashboard.monitoring.check-ins.show', ['application' => $application, 'record' => 'check-in-'.$cycle->id], false),
                     'read_at' => null,
                 ]);
             }
@@ -694,6 +685,7 @@ trait HandlesProviderRecipientLifecycle
         $submission->loadMissing(['cycle.scholarship', 'requirement', 'application.applicant']);
         $scholarship = $submission->cycle?->scholarship;
         abort_unless($request->user()->canAccessProviderProgram($scholarship), 403);
+        abort_if($submission->cycle?->isInPerson(), 422, 'Record the in-person result through the check-in record.');
 
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['met', 'not_met', 'needs_correction', 'excused'])],
@@ -746,11 +738,11 @@ trait HandlesProviderRecipientLifecycle
             'met' => 'Requirement confirmed',
             'not_met' => 'Requirement not met',
             'needs_correction' => 'Replacement record requested',
-            'excused' => 'Monitoring exception approved',
+            'excused' => 'Check-in exception approved',
         ];
         $decisionMessages = [
             'met' => "Your {$requirementTitle} record was verified and meets the listed requirement.",
-            'not_met' => "Your {$requirementTitle} record does not meet the listed requirement. Open monitoring to read the provider note.",
+            'not_met' => "Your {$requirementTitle} record does not meet the listed requirement. Open Scholarship Support to read the provider note.",
             'needs_correction' => "The provider requested a replacement or clarification for your {$requirementTitle} record.",
             'excused' => "The provider approved an exception for {$requirementTitle}.",
         ];
@@ -807,6 +799,10 @@ trait HandlesProviderRecipientLifecycle
         $applications = $this->selectedRecipientApplications($scholarship);
         abort_unless($applications->contains('id', $application->id), 422, 'This applicant is not an active recipient of the program.');
 
+        $inPerson = $cycle->isInPerson();
+        $academicHandoff = $inPerson && $requirement->type === RecipientMonitoringRequirementType::ACADEMIC_PROGRESS;
+        $scale = $requirement->grading_scale ?? $cycle->grading_scale;
+        $gradePoint = $scale === AcademicRequirement::SCALE_GRADE_POINT;
         $validated = $request->validate([
             'decision' => ['required', Rule::in(['met', 'not_met', 'excused'])],
             'notes' => [
@@ -816,9 +812,28 @@ trait HandlesProviderRecipientLifecycle
                 'min:5',
                 'max:1500',
             ],
+            'verified_grade' => $academicHandoff && $request->input('decision') !== 'excused'
+                ? [Rule::requiredIf($request->input('decision') === 'met'), 'nullable', 'numeric', $gradePoint ? 'between:1,5' : 'between:0,100']
+                : ['prohibited'],
+            'document_checked' => $inPerson && $requirement->requires_original_verification
+                && ($request->input('decision') === 'met' || $request->filled('verified_grade'))
+                ? ['accepted']
+                : ['nullable', 'boolean'],
         ]);
+        $grade = $academicHandoff && isset($validated['verified_grade']) ? (float) $validated['verified_grade'] : null;
+        if ($academicHandoff && $validated['decision'] === 'met' && $grade !== null
+            && AcademicRequirement::match($grade, $scale, $requirement->minimum_grade, $scale)['status'] === 'fail') {
+            throw ValidationException::withMessages(['verified_grade' => 'This grade does not meet the minimum for this requirement.']);
+        }
 
-        $submission = DB::transaction(function () use ($request, $requirement, $application, $cycle, $validated): RecipientMonitoringSubmission {
+        $submission = DB::transaction(function () use ($request, $requirement, $application, $cycle, $validated, $inPerson, $grade, $scale): RecipientMonitoringSubmission {
+            if ($inPerson) {
+                $case = $cycle->cases()->where('scholarship_application_id', $application->id)->lockForUpdate()->first();
+                abort_unless($case && ! $case->isClosed() && $cycle->status === 'open', 422, 'This check-in is not open for recording.');
+                abort_unless($application->student_response_status === 'accepted', 422, 'The recipient must accept the agreement before you record a result.');
+                abort_if($cycle->handoff_at->isFuture(), 422, 'Record the result only after the scheduled handoff time.');
+            }
+
             $now = now();
             $submission = RecipientMonitoringSubmission::query()->updateOrCreate([
                 'recipient_monitoring_cycle_requirement_id' => $requirement->id,
@@ -839,9 +854,9 @@ trait HandlesProviderRecipientLifecycle
                 'ocr_label' => null,
                 'ocr_message' => null,
                 'ocr_processed_at' => null,
-                'reported_grade' => null,
-                'reported_grading_scale' => null,
-                'grade_source' => null,
+                'reported_grade' => $grade,
+                'reported_grading_scale' => $grade !== null ? $scale : null,
+                'grade_source' => $grade !== null ? 'provider_verified' : null,
                 'submitted_at' => $now,
                 'review_status' => $validated['decision'],
                 'review_notes' => $validated['notes'] ?? null,
@@ -861,11 +876,11 @@ trait HandlesProviderRecipientLifecycle
         $decisionLabels = [
             'met' => 'Provider result confirmed',
             'not_met' => 'Provider follow-up required',
-            'excused' => 'Monitoring exception approved',
+            'excused' => 'Check-in exception approved',
         ];
         $decisionMessages = [
             'met' => "The provider confirmed {$requirement->title} for {$cycle->title}.",
-            'not_met' => "The provider recorded that {$requirement->title} was not completed. Open monitoring to read the note.",
+            'not_met' => "The provider recorded that {$requirement->title} was not completed. Open Scholarship Support to read the note.",
             'excused' => "The provider approved an exception for {$requirement->title}.",
         ];
         PortalNotification::query()->updateOrCreate([
@@ -891,6 +906,7 @@ trait HandlesProviderRecipientLifecycle
                 'monitoring_requirement_id' => $requirement->id,
                 'submission_id' => $submission->id,
                 'decision' => $validated['decision'],
+                'document_checked' => $inPerson && $request->boolean('document_checked'),
             ],
         );
 
@@ -997,19 +1013,19 @@ trait HandlesProviderRecipientLifecycle
 
         $application = $adjustment->application;
         $approved = $validated['decision'] === 'approved';
-        $title = $approved ? 'Monitoring request approved' : 'Monitoring request declined';
+        $title = $approved ? 'Check-in request approved' : 'Check-in request declined';
         $result = $approved
             ? ($adjustment->request_type === 'extension'
-                ? 'Your monitoring extension was approved.'
-                : 'Your monitoring exception was approved.')
-            : 'Your monitoring request was not approved.';
+                ? 'Your check-in extension was approved.'
+                : 'Your check-in exception was approved.')
+            : 'Your check-in request was not approved.';
         PortalNotification::query()->updateOrCreate([
             'deduplication_key' => "recipient-monitoring-adjustment-decision:{$adjustment->id}",
         ], [
             'user_id' => $application->applicant_id,
             'type' => 'recipient_monitoring_adjustment_decision',
             'title' => $title,
-            'message' => "{$result} Open monitoring to review the provider note.",
+            'message' => "{$result} Open Scholarship Support to review the provider note.",
             'action_url' => route('dashboard.monitoring.show', $application, false),
             'read_at' => null,
         ]);
@@ -1102,7 +1118,7 @@ trait HandlesProviderRecipientLifecycle
         PortalNotification::create([
             'user_id' => $application->applicant_id,
             'type' => 'recipient_monitoring_intervention',
-            'title' => 'Provider monitoring follow-up',
+            'title' => 'Provider check-in follow-up',
             'message' => "The provider added a follow-up for {$requirement->title}.",
             'action_url' => route('dashboard.monitoring.show', $application, false),
         ]);
@@ -1165,7 +1181,7 @@ trait HandlesProviderRecipientLifecycle
         PortalNotification::create([
             'user_id' => $intervention->applicant_id,
             'type' => 'recipient_monitoring_intervention_completed',
-            'title' => 'Monitoring follow-up completed',
+            'title' => 'Check-in follow-up completed',
             'message' => "The provider closed the follow-up for {$intervention->requirement?->title}.",
             'action_url' => route('dashboard.monitoring.show', $intervention->application, false),
         ]);
@@ -1234,7 +1250,7 @@ trait HandlesProviderRecipientLifecycle
         PortalNotification::create([
             'user_id' => $application->applicant_id,
             'type' => 'recipient_monitoring_case_closed',
-            'title' => 'Monitoring check-in closed',
+            'title' => 'Check-in closed',
             'message' => "{$cycle->title}: the provider recorded {$outcomeLabel}.",
             'action_url' => route('dashboard.monitoring.show', $application, false),
         ]);
@@ -1288,7 +1304,7 @@ trait HandlesProviderRecipientLifecycle
         PortalNotification::create([
             'user_id' => $application->applicant_id,
             'type' => 'recipient_monitoring_case_waived',
-            'title' => 'Monitoring check-in updated',
+            'title' => 'Check-in updated',
             'message' => "{$cycle->title}: the provider recorded {$outcomeLabel}.",
             'action_url' => route('dashboard.monitoring.show', $application, false),
         ]);
@@ -1332,7 +1348,7 @@ trait HandlesProviderRecipientLifecycle
         PortalNotification::create([
             'user_id' => $application->applicant_id,
             'type' => 'recipient_monitoring_case_reopened',
-            'title' => 'Monitoring check-in reopened',
+            'title' => 'Check-in reopened',
             'message' => "{$cycle->title}: the provider reopened this check-in for review.",
             'action_url' => route('dashboard.monitoring.show', $application, false),
         ]);
@@ -1728,6 +1744,8 @@ trait HandlesProviderRecipientLifecycle
 
         $record = $this->recipientSupportRecordPayload($application);
         $record['decision_reopen'] = $this->providerDecisionReopenPayload($application, $request->user());
+        $record['provider_next_step'] = app(\App\Services\ProviderApplicationNextStep::class)
+            ->forRecord($application, $request->user(), 'recipient', $record);
         $record['eligible_agreement_reviews'] = app(\App\Services\RecipientCaseReviewService::class)->eligibleReviews($application);
 
         return response()->json(['record' => $record]);
@@ -2997,6 +3015,7 @@ trait HandlesProviderRecipientLifecycle
         RecipientMonitoringCycle $cycle,
         EloquentCollection $applications,
         bool $includeCaseContext = true,
+        bool $persistCases = true,
     ): array {
         $cycle->loadMissing([
             'creator',
@@ -3020,7 +3039,7 @@ trait HandlesProviderRecipientLifecycle
         $isPastDue = ($cycle->due_at?->isBefore(now()->startOfDay()) ?? false)
             && ! $hasOpenPersonalExtension;
         $isPlanCheckIn = $cycle->requirements->isNotEmpty();
-        $recipients = $applications->map(function (ScholarshipApplication $application) use ($cycle, $caseService, $includeCaseContext): array {
+        $recipients = $applications->map(function (ScholarshipApplication $application) use ($cycle, $caseService, $includeCaseContext, $persistCases): array {
             $cycleSubmissions = $application->monitoringSubmissions
                 ->where('recipient_monitoring_cycle_id', $cycle->id);
             $submission = $cycleSubmissions
@@ -3062,7 +3081,7 @@ trait HandlesProviderRecipientLifecycle
                 );
             })->values();
             $requiredUploads = $requirements->where('required', true)->where('requires_file', true);
-            $monitoringCase = $caseService->sync($cycle, $application);
+            $monitoringCase = $caseService->sync($cycle, $application, $persistCases);
 
             return [
                 'application_id' => $application->id,
@@ -3144,6 +3163,8 @@ trait HandlesProviderRecipientLifecycle
             'opens_label' => $cycle->opens_at?->format('M d, Y'),
             'due_at' => $cycle->due_at?->format('Y-m-d'),
             'due_label' => $cycle->due_at?->format('M d, Y'),
+            'handoff' => $cycle->handoffDetails(),
+            'handoff_started' => $cycle->isInPerson() && ! $cycle->handoff_at->isFuture(),
             'minimum_grade' => $cycle->minimum_grade,
             'grading_scale' => $cycle->grading_scale,
             'requirement_label' => $isPlanCheckIn
@@ -3503,6 +3524,16 @@ trait HandlesProviderRecipientLifecycle
         ];
     }
 
+    private function benefitReleaseMethodLabel(RecipientBenefitRelease $release): string
+    {
+        return match ($release->release_method) {
+            'bank_transfer' => 'Bank transfer',
+            'e_wallet' => 'E-wallet',
+            'other' => 'Other arrangement',
+            default => 'In person',
+        };
+    }
+
     private function recipientBenefitReleasePayload(RecipientBenefitRelease $release): array
     {
         $release->loadMissing([
@@ -3533,12 +3564,9 @@ trait HandlesProviderRecipientLifecycle
                 'status' => $entitlement->status,
             ])
             ->values();
-        $deliveryReportsByRecord = $release->records->mapWithKeys(fn (RecipientBenefitReleaseRecord $record): array => [
-            $record->id => app(\App\Services\BenefitDeliveryReportService::class)->openForRecord($record)->exists(),
-        ]);
-        $openIssueCount = $release->records->filter(
-            fn (RecipientBenefitReleaseRecord $record): bool => $record->receiptResponse?->status === 'open' || $deliveryReportsByRecord[$record->id],
-        )->count();
+        $deliveryReports = app(\App\Services\BenefitDeliveryReportService::class);
+        $deliveryReportsByRecord = $deliveryReports->openReportsByReleaseRecord($release);
+        $openIssueCount = $deliveryReports->openIssueCount($release, $deliveryReportsByRecord);
         $awaitingConfirmationCount = $release->records->filter(
             fn (RecipientBenefitReleaseRecord $record): bool => $record->status === 'released'
                 && $record->receiptResponse === null && ! $deliveryReportsByRecord[$record->id],
@@ -3566,12 +3594,7 @@ trait HandlesProviderRecipientLifecycle
             'amount' => $release->amount,
             'amount_label' => $release->amount !== null ? 'PHP '.number_format((float) $release->amount, 2) : null,
             'release_method' => $release->release_method,
-            'release_method_label' => match ($release->release_method) {
-                'bank_transfer' => 'Bank transfer',
-                'e_wallet' => 'E-wallet',
-                'other' => 'Other arrangement',
-                default => 'In person',
-            },
+            'release_method_label' => $this->benefitReleaseMethodLabel($release),
             'location' => $release->location,
             'latitude' => $release->latitude,
             'longitude' => $release->longitude,

@@ -282,6 +282,8 @@ class AdminRoleWorkspaceTest extends TestCase
             ->assertOk()
             ->assertJsonPath('workspace.key', 'review-officer')
             ->assertJsonPath('metrics.0.value', 2)
+            ->assertJsonPath('sections.0.items.0.status.label', '1 open')
+            ->assertJsonMissingPath('sections.0.items.0.meta')
             ->assertJsonCount(4, 'metrics')
             ->assertJsonCount(2, 'sections');
 
