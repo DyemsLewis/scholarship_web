@@ -187,13 +187,16 @@ class RecipientCaseReviewWorkflowTest extends TestCase
         $this->actingAs($applicant)->get('/dashboard/recipient-case-evidence/'.$file->id)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
     }
 
-    public function test_funding_and_withdrawal_decisions_are_not_relabelled_as_misconduct(): void
+    public function test_funding_remains_separate_from_misconduct_and_direct_withdrawal_is_blocked(): void
     {
         [, , , $application] = $this->concern();
-        foreach (['provider_funding_ended', 'recipient_withdrew'] as $category) {
-            $this->assertNull(app(RecipientCaseReviewService::class)->authorizeSupportDecision($application, ['decision' => 'terminated', 'reason_category' => $category]));
-        }
+        $service = app(RecipientCaseReviewService::class);
+        $this->assertNull($service->authorizeSupportDecision($application, ['decision' => 'terminated', 'reason_category' => 'provider_funding_ended']));
         $this->assertDatabaseCount('recipient_case_reviews', 0);
+
+        $this->expectException(ValidationException::class);
+        $this->expectExceptionMessage(RecipientCaseReviewService::WITHDRAWAL_REQUEST_REQUIRED);
+        $service->authorizeSupportDecision($application, ['decision' => 'terminated', 'reason_category' => 'recipient_withdrew']);
     }
 
     public function test_delivery_review_cannot_penalize_the_applicant_or_overwrite_confirmed_receipt(): void

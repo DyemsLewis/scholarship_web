@@ -44,7 +44,7 @@ class BillingOfficerWorkspaceController extends Controller
     public function queue(Request $request, string $queue): View
     {
         $this->authorizeWorkspace($request);
-        abort_unless(in_array($queue, ['ready', 'active', 'waiting', 'completed'], true), 404);
+        abort_unless(in_array($queue, ['ready', 'active', 'waiting', 'completed', 'finance'], true), 404);
 
         return view('admin-billing-request-directory');
     }

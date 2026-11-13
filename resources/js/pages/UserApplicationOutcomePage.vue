@@ -48,7 +48,7 @@ const shellDetail = computed(() => {
     return { ...detail.value, decision };
 });
 
-async function loadOutcome() {
+async function loadOutcome(openLinkedAgreement = false) {
     isLoading.value = true;
     errorMessage.value = '';
 
@@ -58,8 +58,9 @@ async function loadOutcome() {
         });
         detail.value = response.data.detail;
 
-        if (new URLSearchParams(window.location.search).get('action') === 'agreement'
-            && agreement.value?.can_respond) {
+        const action = new URLSearchParams(window.location.search).get('action');
+        if (openLinkedAgreement && ((action === 'agreement' && agreement.value?.can_respond)
+            || (action === 'view-agreement' && agreement.value))) {
             showAgreement.value = true;
         }
     } catch (error) {
@@ -139,7 +140,7 @@ async function refreshAfterConcern() {
     }
 }
 
-onMounted(loadOutcome);
+onMounted(() => loadOutcome(true));
 </script>
 
 <template>
@@ -165,7 +166,7 @@ onMounted(loadOutcome);
                 <section class="mt-5 rounded-md border border-rose-200 bg-white px-5 py-8 text-center shadow-sm">
                     <h1 class="text-lg font-bold text-slate-950">Outcome unavailable</h1>
                     <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">{{ errorMessage }}</p>
-                    <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white" @click="loadOutcome">Try again</button>
+                    <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white" @click="loadOutcome(true)">Try again</button>
                 </section>
             </div>
         </section>

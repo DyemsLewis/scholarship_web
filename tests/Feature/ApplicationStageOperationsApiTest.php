@@ -76,6 +76,28 @@ class ApplicationStageOperationsApiTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_structured_session_address_is_saved_reloaded_and_cleared_for_online_delivery(): void
+    {
+        [, $officer, $program] = $this->programContext();
+        $address = ['venue' => 'Student desk', 'region' => 'Region IV-A', 'province' => 'Rizal', 'city' => 'Antipolo City', 'barangay' => 'San Isidro', 'street' => 'School Road', 'latitude' => 14.5861, 'longitude' => 121.1756];
+        $response = $this->actingAs($officer)->postJson("/provider/scholarships/{$program->id}/stage-sessions", $this->sessionPayload(['venue' => null, 'location_address' => null, 'address_details' => $address]))
+            ->assertCreated()->assertJsonPath('session.venue', 'Student desk')
+            ->assertJsonPath('session.location_address', 'School Road, San Isidro, Antipolo City, Rizal, Region IV-A')
+            ->assertJsonPath('session.address_details.city', 'Antipolo City');
+        $id = $response->json('session.id');
+        $this->getJson("/provider/workspaces/selection/sessions/{$id}/edit/data")->assertOk()->assertJsonPath('session.address_details.region', 'Region IV-A');
+        $this->patchJson("/provider/scholarships/{$program->id}/stage-sessions/{$id}", $this->sessionPayload(['mode' => 'online', 'meeting_url' => 'https://example.org/meeting', 'address_details' => $address]))
+            ->assertOk()->assertJsonPath('session.address_details', null)->assertJsonPath('session.latitude', null)->assertJsonPath('session.venue', null);
+    }
+
+    public function test_structured_session_address_requires_complete_fields_and_a_philippine_land_pin(): void
+    {
+        [, $officer, $program] = $this->programContext();
+        $this->actingAs($officer)->postJson("/provider/scholarships/{$program->id}/stage-sessions", $this->sessionPayload(['address_details' => ['venue' => 'Office', 'region' => 'NCR', 'latitude' => 0, 'longitude' => 0]]))
+            ->assertUnprocessable()->assertJsonValidationErrors(['address_details.province', 'address_details.city', 'address_details.latitude']);
+        $this->assertDatabaseCount('application_stage_sessions', 0);
+    }
+
     public function test_onsite_session_pin_can_be_saved_and_reloaded_for_editing(): void
     {
         [, $officer, $program] = $this->programContext();
@@ -458,7 +480,8 @@ class ApplicationStageOperationsApiTest extends TestCase
         $session->evidence()->update(['is_current' => false]);
         $this->getJson("/provider/applications/{$application->id}/stage-readiness")
             ->assertOk()->assertJsonPath('readiness.can_record_result', false);
-        $this->patchJson("/provider/applications/{$application->id}/stages/exam/result", ['result' => 'passed'])
+        $evaluation = ['score' => 43, 'maximum_score' => 50, 'expected_stage_revision' => 0, 'expected_revision' => 0];
+        $this->patchJson("/provider/applications/{$application->id}/stages/exam/result", ['result' => 'passed', 'evaluation' => $evaluation])
             ->assertUnprocessable()->assertJsonValidationErrors('result');
         $session->evidence()->update(['is_current' => true]);
 
@@ -466,6 +489,7 @@ class ApplicationStageOperationsApiTest extends TestCase
             ->patchJson("/provider/applications/{$application->id}/stages/exam/result", [
                 'result' => 'passed',
                 'notes' => 'Attendance and proof reviewed.',
+                'evaluation' => $evaluation,
             ])
             ->assertOk()
             ->assertJsonPath('application.provider_next_step.title', 'Continue to formal application');

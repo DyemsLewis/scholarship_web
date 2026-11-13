@@ -193,6 +193,17 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->assertJsonPath('application.recipient_monitoring.cycles.0.submission.grade_source', 'applicant_manual')
             ->assertJsonPath('application.recipient_monitoring.cycles.0.submission.grade_label', '1.75 GWA/GPA')
             ->assertJsonPath('application.recipient_monitoring.cycles.0.submission.comparison.status', 'pass');
+
+        $this->actingAs($provider)->patchJson("/provider/monitoring-submissions/{$submissionId}/review", [
+            'decision' => 'met',
+        ])->assertOk();
+        $this->actingAs($applicant)
+            ->patchJson("/dashboard/applications/{$application->id}/monitoring-cycles/{$cycleId}/manual-grade", [
+                'grade' => 1.25,
+                'grading_scale' => 'grade_point',
+            ])
+            ->assertUnprocessable()->assertJsonValidationErrors('grade');
+        $this->assertSame(1.75, (float) RecipientMonitoringSubmission::findOrFail($submissionId)->reported_grade);
     }
 
     public function test_requested_replacement_can_be_uploaded_after_the_original_deadline(): void
@@ -677,6 +688,13 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->assertOk();
         $this->assertSame('renewed', $application->fresh()->status);
         $this->assertDatabaseCount('recipient_support_decisions', 2);
+        $overview = route('dashboard.monitoring.show.data', $application, false);
+        $this->actingAs($applicant)->getJson($overview)->assertOk()
+            ->assertJsonPath('detail.status.key', 'renewed')
+            ->assertJsonPath('detail.content.closeout', null);
+        $this->getJson($overview.'?view=history&record=outcome-'.$termination->id)->assertOk()
+            ->assertJsonPath('detail.content.selected.closeout.current', false)
+            ->assertJsonPath('detail.content.selected.closeout.counts', $termination->closeout_snapshot);
         $this->assertTrue(PortalNotification::query()
             ->where('user_id', $applicant->id)
             ->where('type', 'support_decision_request_resolved')

@@ -173,6 +173,8 @@ final class RecipientBenefitEntitlementService
                 RecipientSupportCatalog::ENTITLEMENT_FULFILLED => "{$entitlement->title} was already fulfilled.",
                 RecipientSupportCatalog::ENTITLEMENT_WITHHELD => "{$entitlement->title} is withheld and must be resolved first.",
                 RecipientSupportCatalog::ENTITLEMENT_CANCELLED => "{$entitlement->title} is no longer available.",
+                RecipientSupportCatalog::ENTITLEMENT_UNCLAIMED => "{$entitlement->title} was unclaimed. The recipient must request a new arrangement before rescheduling.",
+                RecipientSupportCatalog::ENTITLEMENT_DECLINED => "{$entitlement->title} was declined by the recipient. A new recipient request is required before rescheduling.",
                 RecipientSupportCatalog::ENTITLEMENT_PENDING_AGREEMENT => "{$entitlement->title} is waiting for agreement acceptance.",
                 default => null,
             };
@@ -233,6 +235,7 @@ final class RecipientBenefitEntitlementService
                 ]);
             }
         }
+        app(RecipientBenefitFollowUpService::class)->markOneTimeReplacement($record);
     }
 
     public function syncReleaseResult(RecipientBenefitReleaseRecord $record): void
@@ -257,6 +260,10 @@ final class RecipientBenefitEntitlementService
 
             $entitlement = $allocation->entitlement;
             if (! $entitlement?->isOneTime()) {
+                continue;
+            }
+
+            if ($record->status === 'missed' && in_array($entitlement->status, ['unclaimed', 'declined'], true)) {
                 continue;
             }
 

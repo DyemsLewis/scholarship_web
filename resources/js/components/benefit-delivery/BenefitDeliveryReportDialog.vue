@@ -8,7 +8,7 @@ import { deliveryBodyValid, deliveryClass, deliveryIssues, deliveryReplies } fro
 import ConcernEvidenceList from '../agreement-concerns/ConcernEvidenceList.vue';
 import RecipientCaseReviewLauncher from '../case-reviews/RecipientCaseReviewLauncher.vue';
 
-const props = defineProps({ open: Boolean, record: Object, provider: Boolean, options: { type: Array, default: () => [] }, createUrl: String });
+const props = defineProps({ open: Boolean, record: Object, provider: Boolean, options: { type: Array, default: () => [] }, fixedSource: Object, createUrl: String });
 const emit = defineEmits(['close', 'changed']);
 const dialog = ref(null), current = ref(null), mode = ref('view'), sourceKey = ref(''), kind = ref(''), details = ref('');
 const period = ref(''), files = ref([]), confirmed = ref(false), date = ref(''), followUp = ref(''), deliveryRecord = ref('');
@@ -17,7 +17,7 @@ const titleId = `${useId()}-delivery-title`, formId = `${useId()}-delivery-form`
 const { busy, stale, error, run, reset } = useConcernMutation((method, ...args) => window.axios[method](...args));
 const creating = computed(() => !current.value);
 const editing = computed(() => creating.value || mode.value === 'respond');
-const source = computed(() => props.options.find((item) => `${item.type}:${item.id}` === sourceKey.value));
+const source = computed(() => props.fixedSource ?? props.options.find((item) => `${item.type}:${item.id}` === sourceKey.value));
 const locked = computed(() => busy.value || reloading.value);
 const dirty = computed(() => editing.value && (!!kind.value || !!sourceKey.value || !!details.value || !!period.value || files.value.length > 0 || confirmed.value || !!date.value || !!followUp.value));
 const choices = computed(() => creating.value ? deliveryIssues : props.provider ? deliveryReplies : (current.value?.response_choices || []).map((item) => [item.value, item.label]));
@@ -95,7 +95,8 @@ onBeforeUnmount(reset);
                         <fieldset :disabled="locked || stale || discard" class="space-y-4 border-t border-slate-200 pt-4">
                             <legend class="sr-only">{{ title }}</legend>
                             <template v-if="creating">
-                                <label class="block text-sm font-bold">Affected benefit<select v-model="sourceKey" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="" disabled>Choose a benefit or published release</option><option v-for="item in options" :key="`${item.type}:${item.id}`" :value="`${item.type}:${item.id}`">{{ item.title }}{{ item.scheduled_at ? ` / ${concernDate(item.scheduled_at)}` : item.period_required ? ' / Specify affected period' : ' / No release scheduled' }}</option></select></label>
+                                <p v-if="fixedSource" class="text-sm text-slate-700"><span class="block text-xs font-bold uppercase tracking-wide text-slate-500">Affected release</span><strong class="mt-1 block">{{ fixedSource.title }}</strong></p>
+                                <label v-else class="block text-sm font-bold">Affected benefit<select v-model="sourceKey" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="" disabled>Choose a benefit or published release</option><option v-for="item in options" :key="`${item.type}:${item.id}`" :value="`${item.type}:${item.id}`">{{ item.title }}{{ item.scheduled_at ? ` / ${concernDate(item.scheduled_at)}` : item.period_required ? ' / Specify affected period' : ' / No release scheduled' }}</option></select></label>
                                 <label v-if="source?.period_required" class="block text-sm font-bold">Benefit period<input v-model="period" required maxlength="120" placeholder="For example: First semester 2026-2027" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal"></label>
                                 <p v-if="source && !source.scheduled_at" class="text-xs leading-5 text-slate-500">{{ source.period_required ? 'This report covers only the period you name. Earlier schedules and confirmed receipts remain unchanged.' : 'No official release date is recorded. Ask the provider to clarify the expected delivery.' }}</p>
                             </template>

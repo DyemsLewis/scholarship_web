@@ -78,4 +78,48 @@ class RecipientMonitoringSubmission extends Model
             ->orderByDesc('decided_at')
             ->orderByDesc('id');
     }
+
+    public function evidenceSnapshot(): ?array
+    {
+        if (blank($this->path)) {
+            return null;
+        }
+
+        return [
+            'path' => $this->path,
+            'original_name' => $this->original_name,
+            'submitted_at' => $this->submitted_at?->toIso8601String(),
+            'reported_grade' => $this->reported_grade ?? $this->ocr_grade,
+            'grading_scale' => $this->reported_grading_scale ?? $this->ocr_grading_scale,
+        ];
+    }
+
+    public function allowsApplicantEdit(bool $replacingFile = true): bool
+    {
+        return in_array($this->review_status, [null, 'pending'], true)
+            || ($replacingFile && $this->review_status === 'needs_correction');
+    }
+
+    public function preserveEvidenceBeforeCorrection(): bool
+    {
+        $snapshot = $this->evidenceSnapshot();
+        if ($this->review_status !== 'needs_correction' || $snapshot === null) {
+            return false;
+        }
+
+        $review = $this->reviews()->first();
+        if ($review?->decision === 'needs_correction' && $review->evidence_snapshot === null) {
+            $review->update(['evidence_snapshot' => $snapshot]);
+        } elseif (data_get($review?->evidence_snapshot, 'path') !== $snapshot['path']) {
+            $this->reviews()->create([
+                'reviewed_by' => $this->reviewed_by,
+                'decision' => 'needs_correction',
+                'notes' => $this->review_notes,
+                'decided_at' => $this->reviewed_at ?? now(),
+                'evidence_snapshot' => $snapshot,
+            ]);
+        }
+
+        return true;
+    }
 }

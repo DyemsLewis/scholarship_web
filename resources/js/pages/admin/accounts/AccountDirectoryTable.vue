@@ -39,6 +39,7 @@ function roleIcon(role) {
 }
 
 function primaryIssue(account) {
+    if (account.pending_support_handoff) return 'Referred by Support';
     if (account.account_status === 'suspended') return 'Suspended';
     return signInLabel(account, 'No issue');
 }
@@ -51,6 +52,7 @@ function signInLabel(account, readyLabel = 'Email verified') {
 }
 
 function issueClass(account) {
+    if (account.pending_support_handoff) return 'bg-amber-100 text-amber-900';
     if (account.account_status === 'suspended') return 'bg-rose-100 text-rose-800';
     if (!account.email_verified || account.must_reset_password) return 'bg-amber-100 text-amber-900';
     return 'bg-slate-100 text-slate-700';

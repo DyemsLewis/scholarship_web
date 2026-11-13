@@ -21,6 +21,7 @@ use App\Services\ApplicationWorkflowService;
 use App\Services\DecisionSupportService;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
+use App\Services\SelectionEvaluationService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
 use App\Support\ApplicationSchedulePayload;
@@ -211,6 +212,13 @@ trait HandlesProviderApplicationWorkflow
         }
 
         $result = $validated['attendance_status'] === 'passed' ? 'passed' : 'not_passed';
+        if ($result === 'passed' && $applications->contains(fn (ScholarshipApplication $application): bool =>
+            in_array($event->type, ['exam', 'interview'], true)
+            && isset($application->selection_scoring_snapshot['weights'][$event->type]))) {
+            throw ValidationException::withMessages([
+                'application_ids' => 'Open each applicant result to record the individual evaluation score before advancing this stage.',
+            ]);
+        }
         $updatedApplications = collect();
 
         DB::transaction(function () use ($applications, $event, $request, $validated, $result, $updatedApplications): void {
@@ -329,6 +337,10 @@ trait HandlesProviderApplicationWorkflow
         abort_unless(in_array($stage, ['screening', 'formal_application', 'exam', 'interview'], true), 404);
         $this->authorizeProviderStageAction($request->user(), $stage);
 
+        $scoredStage = in_array($stage, ['exam', 'interview'], true)
+            && isset($application->selection_scoring_snapshot['weights'][$stage]);
+        $requiresEvaluation = $scoredStage && $request->input('result') === 'passed';
+
         $validated = $request->validate([
             'result' => ['required', Rule::in(ApplicationWorkflowService::RESULTS)],
             'decision_reason' => [
@@ -341,16 +353,27 @@ trait HandlesProviderApplicationWorkflow
             'review_notes' => ['nullable', 'string', 'max:1500'],
             'rubric_scores' => ['sometimes', 'array'],
             'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
-        ]);
+            'evaluation' => [Rule::requiredIf($requiresEvaluation), Rule::prohibitedIf(! $requiresEvaluation), 'array:score,maximum_score,expected_stage_revision,expected_revision'],
+            'evaluation.score' => ['required_with:evaluation', 'numeric', 'min:0', 'max:1000000', 'decimal:0,4'],
+            'evaluation.maximum_score' => ['required_with:evaluation', 'numeric', 'min:0.0001', 'max:1000000', 'decimal:0,4'],
+            'evaluation.expected_stage_revision' => ['required_with:evaluation', 'integer', 'min:0'],
+            'evaluation.expected_revision' => ['required_with:evaluation', 'integer', 'min:0'],
+        ], ['evaluation.required' => 'Enter the recorded score and maximum before passing this stage.']);
         $notes = $validated['notes'] ?? $validated['review_notes'] ?? null;
 
         $actor = $request->user();
         $updated = DB::transaction(function () use ($application, $stage, $validated, $actor, $notes): ScholarshipApplication {
+            Scholarship::query()->whereKey($application->scholarship_id)->lockForUpdate()->firstOrFail();
             $locked = ScholarshipApplication::query()->lockForUpdate()->findOrFail($application->id);
             if ($locked->workflow_stage !== null && $locked->workflow_stage !== $stage) {
                 throw ValidationException::withMessages(['result' => 'This applicant is no longer at that stage. Reload the record.']);
             }
             $this->ensureStageActivityCompleted($locked, $stage);
+            $evaluation = $validated['evaluation'] ?? null;
+            if ($evaluation && (int) $locked->stageProgresses()->where('stage_key', $stage)->value('evaluation_revision')
+                !== (int) $evaluation['expected_stage_revision']) {
+                throw ValidationException::withMessages(['evaluation' => 'The stage changed. Reload the record before saving this evaluation.']);
+            }
 
             if ($stage === 'screening') {
                 $rubric = $this->requireCompleteApplicationRubric($locked, $validated['rubric_scores'] ?? null);
@@ -369,7 +392,7 @@ trait HandlesProviderApplicationWorkflow
                 }
             }
 
-            return $this->workflowService->recordStageResult(
+            $updated = $this->workflowService->recordStageResult(
                 $locked,
                 $stage,
                 $validated['result'],
@@ -377,6 +400,14 @@ trait HandlesProviderApplicationWorkflow
                 $notes,
                 $validated['decision_reason'] ?? null,
             );
+            if ($evaluation) {
+                app(SelectionEvaluationService::class)->record(
+                    $updated, $actor, $stage, $evaluation['score'], $evaluation['maximum_score'],
+                    (int) $evaluation['expected_stage_revision'] + 1, (int) $evaluation['expected_revision'], $notes,
+                );
+            }
+
+            return $updated;
         });
         app(ScholarshipEventService::class)->syncApplication($updated);
         $updated = $updated->fresh()->load([
@@ -433,6 +464,35 @@ trait HandlesProviderApplicationWorkflow
         ]);
     }
 
+    public function recordApplicationStageEvaluation(Request $request, ScholarshipApplication $application, string $stage): JsonResponse
+    {
+        abort_unless($request->user()?->isProvider(), 403);
+        abort_unless($request->user()->canAccessProviderProgram($application->scholarship), 403);
+        abort_unless(in_array($stage, ['exam', 'interview'], true), 404);
+        $this->authorizeProviderStageAction($request->user(), $stage);
+        $validated = $request->validate([
+            'score' => ['required', 'numeric', 'min:0', 'max:1000000', 'decimal:0,4'],
+            'maximum_score' => ['required', 'numeric', 'min:0.0001', 'max:1000000', 'decimal:0,4'],
+            'expected_stage_revision' => ['required', 'integer', 'min:0'],
+            'expected_revision' => ['required', 'integer', 'min:0'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+        DB::transaction(function () use ($application, $request, $stage, $validated): void {
+            $evaluation = app(SelectionEvaluationService::class)->record(
+                $application, $request->user(), $stage, $validated['score'], $validated['maximum_score'],
+                (int) $validated['expected_stage_revision'], (int) $validated['expected_revision'], $validated['note'] ?? null,
+            );
+            ActivityLog::record($request->user(), 'application_stage_evaluation_recorded',
+                "{$request->user()->name} recorded a {$stage} evaluation.", $request,
+                ['application_id' => $application->id, 'stage' => $stage, 'evaluation_id' => $evaluation->id, 'revision' => $evaluation->revision]);
+        });
+
+        return response()->json([
+            'message' => 'Evaluation saved. The stage result and final decision have not changed.',
+            'application' => $this->applicationPayloadForProviderActor($application->fresh(), $request->user()),
+        ]);
+    }
+
     public function recordApplicationFinalOutcome(
         Request $request,
         ScholarshipApplication $application,
@@ -452,7 +512,9 @@ trait HandlesProviderApplicationWorkflow
             'notes' => ['nullable', 'string', 'max:2000'],
             'awarded_amount' => ['prohibited_unless:outcome,selected', 'nullable', 'numeric', 'min:0', 'max:999999999.99'],
             'expected_outcome' => ['sometimes', 'nullable', Rule::in(['waitlisted'])],
-        ]);
+            'comparison_reference' => [Rule::requiredIf(($application->selection_scoring_snapshot['weights'] ?? []) !== []), 'nullable', 'string', 'regex:/^[a-f0-9]{64}$/'],
+            'selection_rationale' => ['nullable', 'string', 'max:1000'],
+        ], ['comparison_reference.required' => 'Reload the decision record to review its current evaluation and available slots.']);
 
         if ($validated['outcome'] === 'selected') {
             $this->ensureScholarshipAwardSlotAvailable($application, $application->status, 'awarded', 'outcome');
@@ -464,7 +526,7 @@ trait HandlesProviderApplicationWorkflow
             $request->user(),
             $validated['notes'] ?? null,
             $validated['decision_reason'] ?? null,
-            array_intersect_key($validated, array_flip(['expected_outcome', 'awarded_amount'])),
+            array_intersect_key($validated, array_flip(['expected_outcome', 'awarded_amount', 'comparison_reference', 'selection_rationale'])),
         );
 
         $updated = $updated->fresh()->load([
@@ -494,7 +556,7 @@ trait HandlesProviderApplicationWorkflow
 
         return response()->json([
             'message' => "Final outcome recorded as {$outcomeLabel}.",
-            'application' => $this->applicationPayloadForProviderActor($updated, $request->user()),
+            'application' => $this->applicationPayloadForProviderActor($updated, $request->user(), 'decision'),
             'review_navigation' => $this->reviewNavigationPayload($updated, 'decision'),
         ]);
     }
@@ -633,8 +695,8 @@ trait HandlesProviderApplicationWorkflow
                 ->implode(', ');
             $message = match ($targetStage) {
                 'selected' => 'Only applicants at the final decision stage can be selected.',
-                'pass_stage' => 'Only applicants at an active provider stage can be advanced.',
-                default => 'Only pre-screening applications with accepted required files can be advanced.',
+                'pass_stage' => 'Only completed stages can advance in bulk. Scored stages need an individual evaluation.',
+                default => 'Only pre-screening applications with accepted required files and completed rubric reviews can be advanced.',
             };
 
             throw ValidationException::withMessages([
@@ -1404,6 +1466,8 @@ trait HandlesProviderApplicationWorkflow
         $validated = $request->validate([
             'action' => ['required', Rule::in(['waitlist', 'promote', 'restore'])],
             'note' => ['nullable', 'string', 'max:1500'],
+            'comparison_reference' => [Rule::requiredIf($request->input('action') !== 'restore' && ($application->selection_scoring_snapshot['weights'] ?? []) !== []), 'nullable', 'string', 'regex:/^[a-f0-9]{64}$/'],
+            'selection_rationale' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $workflow = $this->workflowService->payload($application);
@@ -1437,7 +1501,10 @@ trait HandlesProviderApplicationWorkflow
                 $validated['action'] === 'promote' ? 'selected' : 'waitlisted',
                 $request->user(),
                 $validated['note'] ?? null,
-                confirmed: $validated['action'] === 'promote' ? ['expected_outcome' => 'waitlisted'] : [],
+                confirmed: [
+                    ...($validated['action'] === 'promote' ? ['expected_outcome' => 'waitlisted'] : []),
+                    ...array_intersect_key($validated, array_flip(['comparison_reference', 'selection_rationale'])),
+                ],
             );
             $message = $validated['action'] === 'promote'
                 ? 'Waitlisted applicant marked as selected.'
@@ -1953,16 +2020,24 @@ trait HandlesProviderApplicationWorkflow
         $workflow = $this->workflowService->payload($application);
 
         if ($workflow['current_stage'] === 'screening') {
+            if (isset($application->selection_scoring_snapshot['weights']['screening'])
+                && ! ReviewRubric::result($application->review_rubric_snapshot ?? [], $application->rubric_scores ?? [])['is_complete']) {
+                return [];
+            }
             return ['pass_prescreening'];
         }
 
         if (ScholarshipSelectionPlan::isSchedulable($workflow['current_stage'])) {
+            if (in_array($workflow['current_stage'], ['exam', 'interview'], true)
+                && isset($application->selection_scoring_snapshot['weights'][$workflow['current_stage']])) {
+                return [];
+            }
             return $this->stageActivityIsComplete($application, $workflow['current_stage'])
                 ? ['pass_stage']
                 : [];
         }
 
-        return $workflow['current_stage'] === 'decision' ? ['selected'] : [];
+        return $workflow['current_stage'] === 'decision' && ($application->selection_scoring_snapshot['weights'] ?? []) === [] ? ['selected'] : [];
     }
 
     private function applicantProfileProofPayload(

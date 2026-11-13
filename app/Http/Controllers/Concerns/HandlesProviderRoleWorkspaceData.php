@@ -528,7 +528,11 @@ trait HandlesProviderRoleWorkspaceData
         $queueQuery = clone $decisionBase;
         $this->applyDecisionOfficerQueueFilter($queueQuery, $queue);
         $queueQuery->with($applicationRelations);
+        $queueQuery->with(['stageProgresses', 'stageEvaluations.recorder.providerProfile']);
         $this->applyProviderApplicationSearch($queueQuery, $search);
+        $comparison = $queue === 'pending' && ! empty($validated['program_id'])
+            ? app(\App\Services\SelectionComparisonService::class)->forProgram($programs->firstWhere('id', (int) $validated['program_id']))
+            : null;
 
         if ($queue === 'waitlist') {
             $queueQuery->orderBy('waitlist_position')->orderBy('waitlisted_at');
@@ -538,9 +542,29 @@ trait HandlesProviderRoleWorkspaceData
             $queueQuery->orderBy('submitted_at')->orderBy('id');
         }
 
-        $applications = $queueQuery->paginate($perPage);
+        if ($comparison !== null) {
+            $order = array_flip($comparison['ordered_ids']);
+            $ids = (clone $queueQuery)->reorder()->pluck('id')->all();
+            usort($ids, fn (int $left, int $right): int => ($order[$left] ?? PHP_INT_MAX) <=> ($order[$right] ?? PHP_INT_MAX));
+            $page = (int) ($validated['page'] ?? 1);
+            $pageIds = array_slice($ids, ($page - 1) * $perPage, $perPage);
+            $items = $queueQuery->whereIn('id', $pageIds)->get()->sortBy(fn (ScholarshipApplication $application): int => $order[$application->id] ?? PHP_INT_MAX)->values();
+            $applications = new \Illuminate\Pagination\LengthAwarePaginator($items, count($ids), $perPage, $page);
+        } else {
+            $applications = $queueQuery->paginate($perPage);
+        }
         $applications->setCollection($applications->getCollection()
-            ->map(fn (ScholarshipApplication $application): array => $this->decisionOfficerWorkspaceItem($application)));
+            ->map(function (ScholarshipApplication $application) use ($comparison, $queue): array {
+                $evaluation = $comparison['rows'][$application->id]['evaluation'] ?? app(\App\Services\SelectionEvaluationService::class)->summary($application);
+
+                return [...$this->decisionOfficerWorkspaceItem($application),
+                    'selection_evaluation' => $evaluation,
+                    'selection_comparison' => isset($comparison['rows'][$application->id]) ? array_diff_key($comparison['rows'][$application->id], ['evaluation' => true, 'reference' => true]) : [
+                        'rank' => null, 'tied' => false, 'tie_at_cutoff' => false,
+                        'state' => $evaluation['state'], 'label' => $queue === 'pending' && $evaluation['score'] !== null ? 'Choose a program to compare' : $evaluation['label'],
+                    ],
+                ];
+            }));
 
         return response()->json([
             'workspace' => [
@@ -579,6 +603,7 @@ trait HandlesProviderRoleWorkspaceData
                 'to' => $applications->lastItem(),
             ],
             'active_queue' => $queue,
+            'selection_comparison' => $comparison !== null ? app(\App\Services\SelectionComparisonService::class)->publicContext($comparison) : null,
         ]);
     }
 
@@ -1810,11 +1835,13 @@ trait HandlesProviderRoleWorkspaceData
         $dueStatuses = collect($payload['due_status_counts'] ?? []);
         $reviewRequirements = (int) $nextActions->get('review_requirements', 0);
         $providerRecords = (int) $nextActions->get('record_requirement', 0);
+        $attendanceToRecord = (int) $nextActions->get('record_attendance', 0);
+        $missedAppointments = (int) $nextActions->get('resolve_missed_appointment', 0);
         $closeCases = (int) $nextActions->get('close_check_in', 0);
         $overdueCases = (int) $nextActions->get('resolve_overdue', 0);
         $managedFollowUps = (int) $nextActions->get('manage_follow_up', 0);
         $providerActionCount = (int) $nextActions
-            ->only(['decide_adjustment', 'review_requirements', 'record_requirement', 'close_check_in'])
+            ->only(['decide_adjustment', 'review_requirements', 'record_attendance', 'record_requirement', 'close_check_in'])
             ->sum();
         $recipientActionCount = (int) $nextActions
             ->only([
@@ -1856,6 +1883,9 @@ trait HandlesProviderRoleWorkspaceData
                 1,
                 $reviewRequirements.' to review',
             ],
+            $attendanceToRecord > 0 => [
+                'review', 'Attendance needed', $attendanceToRecord.' to record', 'Record attendance', 1, $attendanceToRecord.' to record',
+            ],
             $providerRecords > 0 => [
                 'review',
                 'Provider result needed',
@@ -1879,6 +1909,9 @@ trait HandlesProviderRoleWorkspaceData
                 'Resolve overdue work',
                 2,
                 $overdueCases.' overdue',
+            ],
+            $missedAppointments > 0 => [
+                'followup', 'Missed appointments', $missedAppointments.' to follow up', 'Review appointments', 2, $missedAppointments.' missed',
             ],
             $followUpCaseCount > 0 || $managedFollowUps > 0 => [
                 'followup',

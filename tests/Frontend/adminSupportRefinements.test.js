@@ -11,7 +11,7 @@ import { normalizeWorkspaceDashboard } from '../../resources/js/support/workspac
 const read = (name) => readFileSync(new URL(`../../resources/js/pages/admin/support/${name}.vue`, import.meta.url), 'utf8');
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const casePayload = { id: 1, admin_status: 'open', admin_response: null, provider_status: 'open',
-    provider_response: null, requires_provider: true, state: 'needs_response', reporter: { name: 'Mira Cruz' } };
+    provider_response: null, requires_provider: true, state: 'needs_response', support_token: 'a'.repeat(64), reporter: { name: 'Mira Cruz' } };
 function harness(name, exposed, pathname = '/admin/workspaces/support/cases/1', search = '') {
     const script = parse(read(name)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
     const gets = [], writes = [], watchers = [], unmounts = [], timers = new Map();
@@ -137,7 +137,8 @@ test('a successful response uses refreshed mutation data without a risky second 
     assert.equal(state.report.value.state, 'waiting'); assert.equal(state.report.value.provider_status, 'open');
     assert.equal(state.canResolve.value, false); assert.equal(state.confirmation.value, 'Platform response recorded.');
     assert.equal(state.gets.length, 1); assert.equal(state.writes.length, 1);
-    assert.deepEqual(Object.keys(state.writes[0][1]).sort(), ['admin_response', 'status']);
+    assert.deepEqual(Object.keys(state.writes[0][1]).sort(), ['admin_response', 'expected_support_token', 'status']);
+    assert.equal(state.writes[0][1].expected_support_token, casePayload.support_token);
 });
 
 test('reopening stays confirmed and guarded while saving and clears only platform response', async () => {
@@ -147,7 +148,7 @@ test('reopening stays confirmed and guarded while saving and clears only platfor
     const pending = deferred(); state.window.axios.patch = (...args) => { state.writes.push(args); return pending.promise; };
     const request = state.updateStatus('open'); state.closeReopen(); await state.updateStatus('open');
     assert.equal(state.reopenOpen.value, true); assert.equal(state.writes.length, 1);
-    assert.deepEqual(state.writes[0][1], { status: 'open', admin_response: null });
+    assert.deepEqual(state.writes[0][1], { status: 'open', admin_response: null, expected_support_token: casePayload.support_token });
     pending.reject({ response: { data: { message: 'Reopen unavailable' } } }); await request;
     assert.equal(state.reopenOpen.value, true); assert.equal(state.actionError.value, 'Reopen unavailable');
     assert.equal(state.responseText.value, 'Completed platform review.');
@@ -162,6 +163,17 @@ test('loaded cases cannot submit arbitrary or already-current status changes', a
     for (const status of ['open', 'rejected', 'deleted']) await state.updateStatus(status);
     state.report.value.admin_status = 'resolved'; await state.updateStatus('resolved');
     assert.equal(state.writes.length, 0);
+});
+
+test('pending account task blocks completion without discarding the support reply draft', async () => {
+    const state = harness('SupportCaseRecordPage', 'loadCase, report, responseText, canSave, updateStatus');
+    await state.loadCase();
+    state.report.value.waiting_for_account = true;
+    state.responseText.value = 'Prepared reply waiting on the account access check.';
+    assert.equal(state.canSave.value, false);
+    await state.updateStatus('resolved');
+    assert.equal(state.writes.length, 0);
+    assert.equal(state.responseText.value, 'Prepared reply waiting on the account access check.');
 });
 
 test('provider-only cases do not offer a platform completion or reopening action', async () => {

@@ -26,7 +26,8 @@ function harness(name, props, exposed) {
         patch: async (...args) => { writes.push(args); return { data: { provider: structuredClone(provider), message: 'Saved' } }; },
     } };
     const deps = { staffQueueReturn, confirmOutcome, reviewStatusLabel, computed, ref, useAdminResource, reviewErrorMessage, window, onMounted() {},
-        defineProps: () => props, defineEmits: () => (...args) => events.push(args), watch() {}, useId: () => 'test',
+        useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/providers', load() {} }),
+        defineProps: () => ({ allowed: true, ...props }), defineEmits: () => (...args) => events.push(args), watch() {}, useId: () => 'test',
         useModalAccessibility: () => ({ handleKeydown() {} }) };
     const script = parse(read(name)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
     return { ...new Function(...Object.keys(deps), `${script}\nreturn {${exposed}};`)(...Object.values(deps)), writes, gets, events, window };

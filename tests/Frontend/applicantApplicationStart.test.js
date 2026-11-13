@@ -36,3 +36,25 @@ test('eligibility summary links to the scholarship eligibility details', () => {
     assert.match(source, /`\/dashboard\/scholarships\/\$\{selectedScholarship\.value\.id\}\/eligibility`/);
     assert.match(source, /View full eligibility/);
 });
+
+test('accepted awards retain application access separately from scholarship support', () => {
+    const start = source.indexOf('function applicationActionUrl(');
+    const end = source.indexOf('\nfunction applicationStageLabel(', start);
+    assert.ok(start > 0 && end > start);
+    const actionUrl = new Function('window', 'primarySchedule', source.slice(start, end) + '\nreturn applicationActionUrl;')(
+        { location: { origin: 'https://findscholarship.test' } },
+        application => application.schedules?.[0],
+    );
+    for (const pending of [0, 2]) {
+        const application = { id: 7, detail_url: '/dashboard/applications/7', workflow: { is_closed: true },
+            recipient_agreement: { status: 'accepted' }, recipient_monitoring: { eligible: true, pending_count: pending, support_status: 'active' } };
+        assert.equal(actionUrl(application), '/dashboard/applications/7');
+    }
+    assert.equal(actionUrl({ id: 8, detail_url: '/r/opaque-record', workflow: { is_closed: true }, recipient_agreement: { status: 'accepted' } }), '/r/opaque-record');
+    assert.equal(actionUrl({ id: 9, recipient_agreement: { can_respond: true } }), '/dashboard/applications/9?action=agreement');
+    assert.equal(actionUrl({ id: 10, workflow: { is_closed: false }, schedules: [{ status: 'scheduled' }] }), '/dashboard/applications/10?section=schedule');
+    assert.match(source, /data-application-record-link/);
+    assert.match(source, /data-application-support-link/);
+    assert.match(source, /v-if="application\.recipient_agreement\?\.status === 'accepted' && application\.recipient_monitoring\?\.eligible"/);
+    assert.match(source, /return 'View application'/);
+});

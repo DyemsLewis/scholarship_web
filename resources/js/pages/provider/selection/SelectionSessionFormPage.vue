@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
-import LocationPinField from '../../../components/LocationPinField.vue';
+import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { sessionScheduleError } from '../../../support/selectionSessionValidation';
 
 const appElement = document.getElementById('app');
@@ -23,6 +23,7 @@ const form = ref({
     mode: 'onsite',
     venue: '',
     location_address: '',
+    address_details: null,
     latitude: null,
     longitude: null,
     meeting_url: '',
@@ -87,6 +88,7 @@ function sessionPayload() {
         mode: form.value.mode,
         venue: usesVenue.value ? form.value.venue.trim() : null,
         location_address: usesVenue.value ? form.value.location_address.trim() || null : null,
+        address_details: usesVenue.value ? form.value.address_details : null,
         latitude: usesVenue.value ? form.value.latitude : null,
         longitude: usesVenue.value ? form.value.longitude : null,
         meeting_url: usesMeetingLink.value ? form.value.meeting_url.trim() : null,
@@ -118,6 +120,7 @@ async function loadForm() {
                 mode: session.mode,
                 venue: session.venue || '',
                 location_address: session.location_address || '',
+                address_details: session.address_details ?? null,
                 latitude: session.latitude ?? null,
                 longitude: session.longitude ?? null,
                 meeting_url: session.meeting_url || '',
@@ -226,9 +229,7 @@ onMounted(loadForm);
                             <div class="flex items-center gap-3 border-b border-slate-200 pb-4"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Delivery details</h2><p class="mt-1 text-sm text-slate-500">Only add information applicants need to participate.</p></div></div>
                             <div class="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
                                 <label class="text-sm font-semibold text-slate-700">Method<select v-model="form.mode" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="onsite">On-site</option><option value="online">Online</option><option value="hybrid">Hybrid</option><option value="provider_managed">Managed outside the portal</option></select></label>
-                                <label v-if="usesVenue" class="text-sm font-semibold text-slate-700">Venue<input v-model="form.venue" type="text" maxlength="500" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="Building or room"></label>
-                                <label v-if="usesVenue" class="col-span-2 text-sm font-semibold text-slate-700">Address <span class="font-normal text-slate-600">(optional)</span><input v-model="form.location_address" type="text" maxlength="1000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
-                                <LocationPinField v-if="usesVenue" v-model:latitude="form.latitude" v-model:longitude="form.longitude" class="col-span-2" :address="form.location_address || form.venue" title="Session venue" />
+                                <ProviderVenueAddress v-if="usesVenue" v-model="form.address_details" v-model:address="form.location_address" v-model:venue="form.venue" v-model:latitude="form.latitude" v-model:longitude="form.longitude" :include-venue-in-address="false" class="col-span-2" />
                                 <label v-if="usesMeetingLink" class="col-span-2 text-sm font-semibold text-slate-700">Meeting link<input v-model="form.meeting_url" type="url" maxlength="2000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="https://"></label>
                                 <label class="col-span-2 text-sm font-semibold text-slate-700">Applicant instructions <span class="font-normal text-slate-600">(optional)</span><textarea v-model="form.instructions" rows="4" maxlength="3000" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950" placeholder="What to bring or how to prepare"></textarea></label>
                                 <label class="col-span-2 flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3"><input v-model="form.proof_required" type="checkbox" class="mt-1 h-4 w-4 border-slate-300 text-slate-950 focus:ring-slate-950"><span><span class="block text-sm font-bold text-slate-900">Require provider proof before completion</span><span class="mt-1 block text-xs leading-5 text-slate-500">Useful for attendance sheets, score sheets, and interview evaluation records.</span></span></label>

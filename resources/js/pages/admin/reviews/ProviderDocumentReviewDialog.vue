@@ -5,7 +5,7 @@ import { labelFromKey } from '../../../support/display.js';
 import { reviewErrorMessage } from '../../../support/adminReviewPresentation.js';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 
-const props = defineProps({ document: { type: Object, default: null }, provider: { type: Object, required: true } });
+const props = defineProps({ document: { type: Object, default: null }, provider: { type: Object, required: true }, allowed: { type: Boolean, default: true } });
 const emit = defineEmits(['close', 'saved', 'reload', 'busy']);
 const dialog = ref(null);
 const headingId = `${useId()}-provider-document`;
@@ -17,7 +17,7 @@ const stale = ref(false);
 const error = ref('');
 const previewFailed = ref(false);
 const representativeName = computed(() => [props.provider.first_name, props.provider.middle_initial, props.provider.last_name].filter(Boolean).join(' ') || props.provider.name);
-const canSave = computed(() => !!props.document?.review_url && Number.isInteger(props.document?.revision)
+const canSave = computed(() => props.allowed && !!props.document?.review_url && Number.isInteger(props.document?.revision)
     && !saving.value && !stale.value && (outcome.value === 'rejected' ? !!notes.value.trim()
         : outcome.value === 'approved' && compared.value && props.document?.file_available !== false && !previewFailed.value));
 const previewKind = computed(() => {
@@ -71,7 +71,7 @@ async function save() {
                     <div class="space-y-5 p-6">
                         <section><h3 class="text-sm font-bold text-slate-950">Compare with organization details</h3><dl class="mt-3 space-y-3 text-sm"><div><dt class="text-xs text-slate-500">Organization</dt><dd class="mt-1 break-words font-semibold">{{ provider.legal_name || provider.provider_name }}</dd></div><div><dt class="text-xs text-slate-500">Registration</dt><dd class="mt-1 break-words font-semibold">{{ provider.registration_authority || 'Not provided' }} · {{ provider.registration_number || 'Not provided' }}</dd></div><div><dt class="text-xs text-slate-500">Representative</dt><dd class="mt-1 break-words font-semibold">{{ representativeName }}<template v-if="provider.representative_position"> · {{ provider.representative_position }}</template></dd></div></dl></section>
                         <p v-if="document.reviewed_at" class="border-t border-slate-200 pt-4 text-xs leading-5 text-slate-600">Last reviewed by {{ document.reviewed_by }} on {{ document.reviewed_at }}.<span v-if="document.review_notes" class="mt-1 block">{{ document.review_notes }}</span></p>
-                        <form id="provider-document-decision" @submit.prevent="save">
+                        <form v-if="allowed" id="provider-document-decision" @submit.prevent="save">
                             <fieldset :disabled="saving || stale" class="space-y-4 border-t border-slate-200 pt-4">
                                 <legend class="sr-only">Document decision</legend>
                                 <label class="block"><span class="mb-1.5 block text-sm font-bold">Document outcome</span><select v-model="outcome" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option value="" disabled>Choose an outcome</option><option value="approved" :disabled="document.file_available === false || previewFailed">Accept document</option><option value="rejected">Request replacement</option></select></label>

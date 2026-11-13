@@ -2304,7 +2304,10 @@ class BillingController extends Controller
 
         return [
             ...$this->purchasePayload($purchase, $includeInternal),
-            ...($includeInternal ? ['delivery_status_options' => $this->deliveryStatusOptions($purchase)] : []),
+            ...($includeInternal ? [
+                'delivery_status_options' => $this->deliveryStatusOptions($purchase),
+                'finance_coordination' => app(\App\Services\ServiceFinanceCoordination::class)->payload($purchase),
+            ] : []),
             'milestones' => $milestones,
             'plan_description' => $plan['description'] ?? null,
             'plan_features' => array_values($plan['features'] ?? []),

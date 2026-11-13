@@ -123,7 +123,7 @@ test('Cancel retains evidence outcome, comparison, notes and does not send a mut
 
 function harness(path, deps, exposed) {
     const script = parse(read(path)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
-    const bindings = { staffQueueReturn, ref, computed, confirmOutcome, onMounted() {}, ...deps };
+    const bindings = { staffQueueReturn, ref, computed, confirmOutcome, onMounted() {}, useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/programs', load() {} }), ...deps };
     return new Function(...Object.keys(bindings), `${script}\nreturn {${exposed}};`)(...Object.values(bindings));
 }
 
@@ -172,7 +172,7 @@ test('stage result confirmation names the configured next stage', () => {
 test('admin publication decision has no request before confirmation and Cancel keeps the draft', async () => {
     const dialog = useConfirmationDialog(), writes = [];
     const unregister = registerOutcomeConfirmationPresenter(dialog.requestConfirmation);
-    const program = { title: 'Learning Grant', status: 'pending_review' };
+    const program = { title: 'Learning Grant', status: 'pending_review', review_workflow: { ready: true, token: 'current-review' } };
     const window = { location: { pathname: '/admin/workspaces/reviews/programs/4' }, axios: {
         get: async () => ({ data: { scholarship: program } }),
         patch: async (...args) => { writes.push(args); return { data: { scholarship: { ...program, status: 'published' } } }; },

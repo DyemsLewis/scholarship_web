@@ -21,10 +21,12 @@ function harness(name, exposed, payload, pathname = '/admin/workspaces/reviews/a
         post: async (...args) => { writes.push(args); return { data: payload }; },
     } };
     const deps = { staffQueueReturn, confirmOutcome, profileVerificationLabel, reviewStatusLabel, ref, computed, useAdminResource, reviewErrorMessage, reviewRequirementItems, onMounted() {}, window, URLSearchParams,
+        useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/applicants', load() {} }),
         applicantProfileDetails: () => [], profileEducationSummary: () => '', evidenceRows, evidenceReviewDate };
     return { ...new Function(...Object.keys(deps), `${script}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes, gets };
 }
 const applicant = { name: 'Mira Cruz', applicant_verification_status: 'pending', grading_scale: 'percentage', gwa: 91,
+    review_workflow: { token: 'current-review', ready: true },
     can_review_evidence: true, evidence_review: { required_evidence_accepted: true, required_count: 1, accepted_count: 1 },
     profile_photo_url: '/admin/applicants/39/profile-photo', verification_documents: [{ id: 1, document_type: 'academic_record', original_name: 'current-report.pdf', view_url: '/proof' }],
     profile_evidence_requirements: [{ value: 'academic_record', label: 'Academic record', required: true }] };
@@ -104,7 +106,7 @@ test('provider review guards missing proof and reasons and retains counters afte
 
 for (const [name, payload, path] of [
     ['ProviderReviewRecordPage', { provider: { verification_status: 'pending', verification_documents: [{ id: 1 }], document_review: { can_approve: true, token: 'current-review' } } }, '/admin/workspaces/reviews/providers/11'],
-    ['ProgramReviewRecordPage', { scholarship: { status: 'pending_review' } }, '/admin/workspaces/reviews/programs/4'],
+    ['ProgramReviewRecordPage', { scholarship: { status: 'pending_review', review_workflow: { ready: true, token: 'current-review' } } }, '/admin/workspaces/reviews/programs/4'],
     ['ApplicantReviewRecordPage', { applicant: structuredClone(applicant) }, '/admin/workspaces/reviews/applicants/39'],
 ]) {
     test(`${name} blocks duplicate saves, keeps drafts and shows field errors`, async () => {

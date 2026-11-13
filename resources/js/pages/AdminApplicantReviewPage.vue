@@ -355,10 +355,7 @@ async function updateApplicant(verificationStatus) {
         const response = await window.axios.patch(`/admin/users/${applicantId}/profile-verification`, {
             verification_status: verificationStatus,
             verification_notes: verificationNote,
-            academic_grading_scale: verificationStatus === 'approved' ? reviewedAcademicScale.value : null,
-            academic_result: verificationStatus === 'approved' && reviewedAcademicResultIsNumeric.value
-                ? reviewedAcademicResult.value
-                : null,
+            expected_review_token: applicant.value.review_workflow?.token,
         });
         const updatedApplicant = response.data.applicant ?? {
             ...applicant.value,
@@ -387,6 +384,7 @@ async function updatePhotoReview(action, reason = '') {
         const response = await window.axios.patch(`/admin/applicants/${applicantId}/profile-photo-review`, {
             action,
             reason: reason || null,
+            expected_review_token: applicant.value.review_workflow?.token,
         }, { portalToast: false });
 
         applyApplicant(response.data.applicant);

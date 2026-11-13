@@ -4,6 +4,7 @@ namespace App\Queries\Admin\Dashboards;
 
 use App\Domain\Shared\Dashboard\RoleDashboardPayload;
 use App\Queries\Admin\SupportCaseQuery;
+use App\Support\AdminWorkPriority;
 
 final class SupportOfficerDashboardQuery
 {
@@ -18,7 +19,9 @@ final class SupportOfficerDashboardQuery
         $waiting = collect($this->support->directory(['queue' => 'waiting', 'per_page' => 5])['items'])
             ->map(fn (array $case): array => $this->item($case));
 
-        return RoleDashboardPayload::make(
+        $next = $summary['next_case'];
+
+        return [...RoleDashboardPayload::make(
             workspace: [
                 'key' => 'support-officer',
                 'eyebrow' => 'Platform support',
@@ -28,14 +31,14 @@ final class SupportOfficerDashboardQuery
                 'access_scope' => 'Applicant, provider, and privacy cases',
             ],
             primaryAction: [
-                'label' => 'Open cases needing response',
-                'url' => '/admin/workspaces/support/needs-response',
+                'label' => $next ? 'Open response queue' : 'View waiting cases',
+                'url' => $next ? '/admin/workspaces/support/needs-response' : '/admin/workspaces/support/waiting',
                 'icon' => 'fa-solid fa-arrow-right',
             ],
             metrics: [
                 ['key' => 'needs-response', 'label' => 'Need response', 'value' => $summary['needs_response'], 'detail' => 'Platform action', 'tone' => 'attention', 'url' => '/admin/workspaces/support/needs-response', 'icon' => 'fa-solid fa-inbox'],
-                ['key' => 'waiting', 'label' => 'Waiting for provider', 'value' => $summary['waiting'], 'detail' => 'No platform response pending', 'url' => '/admin/workspaces/support/waiting', 'icon' => 'fa-solid fa-clock'],
-                ['key' => 'privacy', 'label' => 'Privacy requests', 'value' => $summary['privacy_open'], 'detail' => 'Open cases', 'tone' => 'attention', 'url' => '/admin/workspaces/support/needs-response?category=privacy', 'icon' => 'fa-solid fa-user-shield'],
+                ['key' => 'waiting', 'label' => 'Waiting on a team', 'value' => $summary['waiting'], 'detail' => 'Account or provider follow-up', 'url' => '/admin/workspaces/support/waiting', 'icon' => 'fa-solid fa-clock'],
+                ['key' => 'privacy', 'label' => 'Privacy requests', 'value' => $summary['privacy_open'], 'detail' => 'Need platform response', 'tone' => 'attention', 'url' => '/admin/workspaces/support/needs-response?category=privacy', 'icon' => 'fa-solid fa-user-shield'],
                 ['key' => 'resolved', 'label' => 'Resolved', 'value' => $summary['resolved'], 'detail' => 'Closed cases', 'tone' => 'positive', 'url' => '/admin/workspaces/support/resolved', 'icon' => 'fa-solid fa-circle-check'],
             ],
             sections: [
@@ -52,15 +55,23 @@ final class SupportOfficerDashboardQuery
                 [
                     'key' => 'provider-follow-up',
                     'eyebrow' => 'Coordination',
-                    'title' => 'Waiting for provider follow-up',
-                    'description' => 'Cases awaiting provider action with no platform response pending.',
-                    'empty_message' => 'No case is waiting for provider follow-up.',
+                    'title' => 'Waiting on another team',
+                    'description' => 'Cases with an account task or provider response still pending.',
+                    'empty_message' => 'No case is waiting on another team.',
                     'icon' => 'fa-solid fa-clock',
                     'action' => ['label' => 'Open waiting queue', 'url' => '/admin/workspaces/support/waiting', 'icon' => 'fa-solid fa-arrow-right'],
                     'items' => $waiting,
                 ],
             ],
-        );
+        ), 'priority' => $next ? AdminWorkPriority::make(
+            $next['subject'], 'This is the oldest case still needing a platform response.', 'Support Officer',
+            ['label' => 'Open case', 'url' => $next['action_url']], 'Submitted '.$next['submitted_at'],
+        ) : AdminWorkPriority::make(
+            $summary['waiting'] > 0 ? 'Waiting on another team' : 'No response is waiting',
+            $summary['waiting'] > 0 ? 'Account Manager or provider follow-up is pending. Support replies once the account result returns.' : 'All support cases needing a platform response have been handled.',
+            $summary['waiting'] > 0 ? 'Account Manager or provider' : 'Support Officer',
+            state: $summary['waiting'] > 0 ? 'waiting' : 'clear',
+        )];
     }
 
     /** @return array<string, mixed> */

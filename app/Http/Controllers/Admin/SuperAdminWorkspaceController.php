@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Domain\Admin\Workspace\AdminRoleCatalog;
 use App\Http\Controllers\Controller;
 use App\Queries\Admin\SuperAdminWorkspaceQuery;
 use App\Support\AdminWorkspace;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 final class SuperAdminWorkspaceController extends Controller
@@ -43,7 +45,9 @@ final class SuperAdminWorkspaceController extends Controller
     {
         $this->authorizePrimaryAdmin($request);
 
-        return response()->json($this->workspace->team());
+        $filters = $request->validate(['role' => ['nullable', Rule::in(array_diff(array_keys(AdminRoleCatalog::definitions()), [AdminRoleCatalog::SUPER_ADMIN]))]]);
+
+        return response()->json($this->workspace->team($filters['role'] ?? null));
     }
 
     public function platform(Request $request): View

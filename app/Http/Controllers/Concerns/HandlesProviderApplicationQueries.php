@@ -470,6 +470,13 @@ trait HandlesProviderApplicationQueries
             $validated['workspace'] ?? null,
         );
         $payload = $this->applicationPayload($application, true);
+        if (in_array($workspace['mode'], ['review', 'selection', 'decision'], true)) {
+            $payload['selection_evaluation'] = $this->selectionEvaluationPayload($application, $request->user());
+        }
+        if ($workspace['mode'] === 'decision') {
+            $payload['selection_comparison'] = app(\App\Services\SelectionComparisonService::class)->forApplication($application);
+            $payload['selection_decision_rationale'] = $application->selection_decision_snapshot['rationale'] ?? null;
+        }
         $payload['decision_reopen'] = $this->providerDecisionReopenPayload($application, $request->user());
         $payload['provider_next_step'] = app(\App\Services\ProviderApplicationNextStep::class)
             ->forRecord($application, $request->user(), $workspace['mode'], $payload);
@@ -641,6 +648,7 @@ trait HandlesProviderApplicationQueries
     private function applicationPayloadForProviderActor(
         ScholarshipApplication $application,
         User $actor,
+        ?string $requestedWorkspace = null,
     ): array {
         $application->loadMissing([
             'applicant.studentProfile',
@@ -651,13 +659,35 @@ trait HandlesProviderApplicationQueries
             'statusHistories.actor',
             'scholarship',
         ]);
-        $workspace = $this->providerApplicationWorkspace($actor, $application);
+        $workspace = $this->providerApplicationWorkspace($actor, $application, $requestedWorkspace);
         $payload = $this->applicationPayload($application, true);
+        if (in_array($workspace['mode'], ['review', 'selection', 'decision'], true)) {
+            $payload['selection_evaluation'] = $this->selectionEvaluationPayload($application, $actor);
+        }
+        if ($workspace['mode'] === 'decision') {
+            $payload['selection_comparison'] = app(\App\Services\SelectionComparisonService::class)->forApplication($application);
+            $payload['selection_decision_rationale'] = $application->selection_decision_snapshot['rationale'] ?? null;
+        }
         $payload['decision_reopen'] = $this->providerDecisionReopenPayload($application, $actor);
         $payload['provider_next_step'] = app(\App\Services\ProviderApplicationNextStep::class)
             ->forRecord($application, $actor, $workspace['mode'], $payload);
 
         return $this->applicationDetailPayloadForWorkspace($payload, $workspace);
+    }
+
+    private function selectionEvaluationPayload(ScholarshipApplication $application, User $actor): array
+    {
+        $summary = app(\App\Services\SelectionEvaluationService::class)->summary($application);
+        $mayRecord = $actor->hasPortalPermission('manage_selection_activities');
+        foreach ($summary['stages'] as &$stage) {
+            $stage['can_edit'] = $mayRecord && $stage['can_record'];
+            $stage['save_url'] = $stage['can_edit']
+                ? route('provider.applications.stages.evaluation', [$application, $stage['key']], false)
+                : null;
+        }
+        unset($stage);
+
+        return $summary;
     }
 
     private function providerDecisionReopenPayload(

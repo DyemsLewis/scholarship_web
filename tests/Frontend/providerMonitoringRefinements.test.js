@@ -63,7 +63,12 @@ test('existing monitoring and distribution decision gates are preserved', () => 
     const plan = read('pages/provider/monitoring/MonitoringPlanPage.vue');
     for (const token of ['if (!canEdit.value || isSaving.value) return;', 'canPublishCheckIn', 'form.value.requirements.length', 'savedPlan?.ends_on']) assert.ok(plan.includes(token));
     const release = read('pages/provider/releases/BenefitReleaseRecordPage.vue');
-    for (const token of ['canMarkReleased', ':disabled="!canMarkReleased"', 'release.requires_original_verification', 'receipt_proof', 'askToSaveResult', 'openDeliveryReport', 'BenefitDeliveryReportDialog']) assert.ok(release.includes(token));
+    for (const token of ['canMarkReleased.value', 'release_readiness?.eligible !== false', ':disabled="!canReleaseSelected"', 'Release on hold', 'release.requires_original_verification', 'receipt_proof', 'askToSaveResult', 'openDeliveryReport', 'BenefitDeliveryReportDialog']) assert.ok(release.includes(token), token);
+    assert.match(release, /!isDigital\.value \|\| selectedRecord\.value\.payout\?\.status === 'approved'/);
+    assert.match(release, /'expected_payout_revision', request\.payoutRevision/);
+    assert.match(release, /data-transfer-evidence/);
+    assert.match(release, /name="transfer_proof"[^>]* required/);
+    assert.match(release, /data.append\('transfer_confirmed', '1'\)/);
 });
 
 test('new layout rules are scoped and keep desktop forms full-width', () => {

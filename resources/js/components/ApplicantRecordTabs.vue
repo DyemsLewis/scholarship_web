@@ -77,9 +77,10 @@ onBeforeUnmount(() => {
 <template>
     <nav class="mt-4 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm" :aria-label="label" data-applicant-record-tabs>
         <div :id="viewportId" ref="viewport" :class="['p-1', isGrid ? '' : 'overflow-x-auto']" :aria-describedby="overflowing ? hintId : undefined" data-record-tab-viewport @scroll.passive="measure">
-            <div :class="['grid gap-1', isGrid ? 'grid-cols-2 sm:grid-cols-4' : 'min-w-[42rem] grid-cols-5']">
+            <div :class="['grid gap-1', isGrid ? (items.length === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4') : 'min-w-[42rem] grid-cols-5']">
                 <a v-for="item in items" :key="item.key" :href="item.href" :aria-current="item.active ? 'page' : undefined"
-                    :class="['flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-sm border-b-2 px-3 py-2 text-center text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-500',
+                    :class="['flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-sm border-b-2 py-2 text-center text-sm font-bold transition focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-500',
+                        isGrid && items.length === 3 ? 'px-1 sm:px-3' : 'px-3',
                         item.active ? 'border-amber-400 bg-slate-950 text-white' : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-950']">
                     <i :class="[item.icon, 'block w-4 shrink-0 text-center text-xs leading-none']" aria-hidden="true"></i>
                     <span :class="isGrid ? 'min-w-0 break-words' : ''">{{ item.label }}</span>

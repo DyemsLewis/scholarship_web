@@ -31,7 +31,7 @@ class ApplicantIndividualEvidenceReviewTest extends TestCase
         [$reviewer, $applicant] = $this->records();
         $document = $applicant->applicantVerificationDocuments()->first();
         $this->actingAs($reviewer)->get("/admin/applicant-verification-documents/{$document->id}/view")->assertOk();
-        $this->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'approved'])
+        $this->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id), 'verification_status' => 'approved'])
             ->assertUnprocessable()->assertJsonValidationErrors('evidence_reviews');
         $this->assertSame('submitted', $document->fresh()->status);
         $this->assertSame(0, ApplicantEvidenceReview::where('action', 'accepted')->count());
@@ -94,7 +94,7 @@ class ApplicantIndividualEvidenceReviewTest extends TestCase
             $this->accept($reviewer, $document)->assertOk();
         }
         $count = ApplicantEvidenceReview::count();
-        $this->actingAs($reviewer)->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+        $this->actingAs($reviewer)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
             'verification_status' => 'approved',
         ])->assertOk()->assertJsonPath('user.is_profile_verified', true)->assertJsonPath('user.evidence_review.accepted_count', 6);
         $this->assertSame($count, ApplicantEvidenceReview::count());
@@ -218,7 +218,7 @@ class ApplicantIndividualEvidenceReviewTest extends TestCase
         $this->assertTrue($applicant->fresh()->publicPayload()['is_profile_verified']);
         $this->assertTrue($applicant->fresh()->publicPayload()['evidence_review']['legacy_profile_approval']);
         $applicant->studentProfile()->update(['verification_status' => 'pending']);
-        $this->actingAs($reviewer)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'approved'])->assertUnprocessable();
+        $this->actingAs($reviewer)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id), 'verification_status' => 'approved'])->assertUnprocessable();
         $this->assertSame(0, ApplicantEvidenceReview::where('action', 'accepted')->count());
     }
 
@@ -233,16 +233,16 @@ class ApplicantIndividualEvidenceReviewTest extends TestCase
         $this->assertSame('pending', $applicant->fresh()->studentProfile->verification_status);
     }
 
-    public function test_new_guardian_requirements_and_reopening_require_fresh_reviews(): void
+    public function test_reopening_preserves_current_acceptances_and_new_guardian_requirements_still_block_approval(): void
     {
         [$reviewer, $applicant] = $this->records();
         foreach ($applicant->applicantVerificationDocuments as $document) {
             $this->accept($reviewer, $document)->assertOk();
         }
-        $this->actingAs($reviewer)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'approved'])->assertOk();
-        $this->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'pending', 'verification_notes' => 'Please check the identity records again.'])->assertOk();
-        $this->assertSame(0, $applicant->applicantVerificationDocuments()->whereNotNull('reviewed_at')->count());
-        $this->assertSame(6, ApplicantEvidenceReview::where('action', 'review_reopened')->count());
+        $this->actingAs($reviewer)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id), 'verification_status' => 'approved'])->assertOk();
+        $this->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id), 'verification_status' => 'pending', 'verification_notes' => 'Please check the identity records again.'])->assertOk();
+        $this->assertSame(6, $applicant->applicantVerificationDocuments()->whereNotNull('reviewed_at')->count());
+        $this->assertSame(0, ApplicantEvidenceReview::where('action', 'review_reopened')->count());
         $applicant->studentProfile()->first()->update(['birthdate' => now()->subYears(17)->toDateString()]);
         $this->assertContains('guardian_record', $applicant->fresh()->publicPayload()['evidence_review']['missing_types']);
     }
@@ -395,7 +395,7 @@ class ApplicantIndividualEvidenceReviewTest extends TestCase
         ])->assertOk()->assertJsonPath('user.evidence_review.accepted_count', 5);
         $this->accept($reviewer, $income->fresh())->assertOk()->assertJsonPath('evidence_review.required_evidence_accepted', true);
         $this->actingAs($applicant->fresh())->postJson('/dashboard/applications', $application)->assertForbidden();
-        $this->actingAs($reviewer)->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+        $this->actingAs($reviewer)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
             'verification_status' => 'approved',
         ])->assertOk()->assertJsonPath('user.is_profile_verified', true);
         $this->actingAs($applicant->fresh())->postJson('/dashboard/applications', $application)->assertCreated();
@@ -425,7 +425,7 @@ class ApplicantIndividualEvidenceReviewTest extends TestCase
         foreach ($applicant->applicantVerificationDocuments()->where('document_type', '!=', 'academic_record')->get() as $document) {
             $this->accept($reviewer, $document)->assertOk();
         }
-        $this->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+        $this->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
             'verification_status' => 'approved', 'verification_notes' => 'Identity and supporting records reviewed.',
         ])->assertOk()->assertJsonPath('user.is_profile_verified', true)->assertJsonPath('user.gwa', '1.75');
         $this->assertSame('Identity and supporting records reviewed.', $applicant->fresh()->studentProfile->verification_notes);
@@ -455,7 +455,7 @@ class ApplicantIndividualEvidenceReviewTest extends TestCase
             'status' => 'approved', 'expected_revision' => $document->revision,
             'academic_grading_scale' => 'percentage', 'academic_result' => 99,
         ])->assertUnprocessable()->assertJsonValidationErrors('academic_result');
-        $this->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+        $this->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
             'verification_status' => 'approved', 'academic_grading_scale' => 'percentage', 'academic_result' => 99,
         ])->assertUnprocessable()->assertJsonValidationErrors(['academic_grading_scale', 'academic_result']);
     }

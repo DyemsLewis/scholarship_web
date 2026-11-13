@@ -1,13 +1,15 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
-import { createStaffQueueState } from '../../../support/staffQueueState.js';
+import { createStaffQueueState, staffQueueLink } from '../../../support/staffQueueState.js';
 import AdminEmptyState from '../components/AdminEmptyState.vue';
 import AdminTableFrame from '../components/AdminTableFrame.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
-const queueState = createStaffQueueState(window, ['search','category','actor_role','period','action']);
+const queueState = createStaffQueueState(window, ['search','category','actor_role','period','action','record_type','record_id']);
+const related = ref(['account', 'application', 'program', 'service', 'support'].includes(queueState.get('record_type')) && /^[1-9]\d*$/.test(queueState.get('record_id') || '')
+    ? { type: queueState.get('record_type'), id: queueState.get('record_id') } : null);
 const search = ref(queueState.get('search') ?? '');
 const categoryOptions = ['all', 'security', 'accounts', 'reviews', 'operations', 'exports'];
 const actorRoleOptions = ['all', 'admin', 'provider', 'applicant', 'system'];
@@ -43,7 +45,16 @@ function categoryClass(value) {
 
 function loadActivity(page = 1) {
     clearTimeout(searchTimer);
-    return resource.load({ page, per_page: 15, search: search.value.trim() || undefined, category: category.value, actor_role: actorRole.value, period: period.value, action: legacyAction || undefined });
+    return resource.load({ page, per_page: 15, search: search.value.trim() || undefined, category: category.value, actor_role: actorRole.value, period: period.value, action: legacyAction || undefined,
+        ...(related.value ? { record_type: related.value.type, record_id: related.value.id } : {}) });
+}
+
+function recordLink(url) {
+    const params = new URLSearchParams({ category: category.value, actor_role: actorRole.value, period: period.value, page: pagination.value.current_page });
+    if (search.value.trim()) params.set('search', search.value.trim());
+    if (legacyAction) params.set('action', legacyAction);
+    if (related.value) { params.set('record_type', related.value.type); params.set('record_id', related.value.id); }
+    return staffQueueLink(url, `/admin/workspaces/records/activity?${params}`, window.location.origin);
 }
 
 function changePage(page) {
@@ -55,7 +66,7 @@ watch(search, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => loadActivity(1), 250);
 }, { flush: 'sync' });
-watch([category, actorRole, period], () => {
+watch([category, actorRole, period, related], () => {
     resource.invalidate();
     loadActivity(1);
 }, { flush: 'sync' });
@@ -71,7 +82,7 @@ onMounted(() => loadActivity(queueState.page));
             description="Find a recorded platform action and inspect its source."
             icon="fa-solid fa-clock-rotate-left"
         >
-            <template #actions><a href="/admin/workspaces/records/exports" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">Open export desk<i class="fa-solid fa-arrow-right text-[10px] text-amber-300" aria-hidden="true"></i></a></template>
+            <template v-if="resource.data.value?.can_export && !loading && !errorMessage" #actions><a href="/admin/workspaces/records/exports" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">Open export desk<i class="fa-solid fa-arrow-right text-[10px] text-amber-300" aria-hidden="true"></i></a></template>
         </AdminWorkspaceHeader>
 
         <section v-if="!loading && !errorMessage" class="admin-panel mt-4 overflow-hidden">
@@ -85,6 +96,7 @@ onMounted(() => loadActivity(queueState.page));
 
         <AdminTableFrame title="Audit trail" :description="resultLabel" icon="fa-solid fa-clock-rotate-left" class="mt-4" :loading="loading" :error="errorMessage" @retry="resource.retry">
             <template #filters>
+                <p v-if="related" class="mb-3 flex items-center justify-between gap-4 text-sm text-slate-600"><strong class="font-semibold">Related {{ related.type }} history</strong><button type="button" class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="related = null">Clear related record</button></p>
                 <div class="grid grid-cols-[minmax(0,1fr)_11rem_10rem_10rem] gap-3">
                     <label class="relative block"><span class="sr-only">Search activity records</span><i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400" aria-hidden="true"></i><input v-model="search" type="search" maxlength="120" placeholder="Search actor, action, description, or IP" class="h-11 w-full border border-slate-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-slate-950"></label>
                     <label><span class="sr-only">Record category</span><select v-model="category" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"><option value="all">All categories</option><option value="security">Security</option><option value="accounts">Accounts</option><option value="reviews">Reviews</option><option value="operations">Operations</option><option value="exports">Exports</option></select></label>
@@ -103,7 +115,7 @@ onMounted(() => loadActivity(queueState.page));
                         <td class="px-4 py-3.5"><span :class="['inline-flex px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide', categoryClass(item.category)]">{{ categoryLabel(item.category) }}</span></td>
                         <td class="px-4 py-3.5 font-mono text-xs font-semibold text-slate-600">{{ item.ip_address || 'Not recorded' }}</td>
                         <td class="px-4 py-3.5 text-sm text-slate-600">{{ item.created_at }}</td>
-                        <td class="px-5 py-3.5 text-right"><a :href="item.record_url" class="staff-row-action h-10 w-10" :aria-label="`Open ${item.action_label}`" title="Open record"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
+                        <td class="px-5 py-3.5 text-right"><a :href="recordLink(item.record_url)" class="staff-row-action h-10 w-10" :aria-label="`Open ${item.action_label}`" title="Open record"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                     </tr>
                 </tbody>
             </table>

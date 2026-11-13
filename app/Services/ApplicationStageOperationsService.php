@@ -68,6 +68,11 @@ class ApplicationStageOperationsService
                 ]);
             }
 
+            if (! array_key_exists('address_details', $data)
+                && collect(['venue', 'location_address', 'latitude', 'longitude'])->contains(fn ($key) => array_key_exists($key, $data) && (string) $data[$key] !== (string) $locked->{$key})) {
+                $data['address_details'] = null;
+            }
+
             $locked->fill([
                 ...$this->sessionAttributes([
                     ...$locked->only([
@@ -79,6 +84,7 @@ class ApplicationStageOperationsService
                         'mode',
                         'venue',
                         'location_address',
+                        'address_details',
                         'latitude',
                         'longitude',
                         'meeting_url',
@@ -614,6 +620,7 @@ class ApplicationStageOperationsService
             'mode' => $mode,
             'venue' => $usesVenue ? ($data['venue'] ?? null) : null,
             'location_address' => $usesVenue ? ($data['location_address'] ?? null) : null,
+            'address_details' => $usesVenue ? ($data['address_details'] ?? null) : null,
             'latitude' => $usesVenue ? ($data['latitude'] ?? null) : null,
             'longitude' => $usesVenue ? ($data['longitude'] ?? null) : null,
             'meeting_url' => $usesMeetingLink ? ($data['meeting_url'] ?? null) : null,

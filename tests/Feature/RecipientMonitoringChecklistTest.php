@@ -37,6 +37,271 @@ class RecipientMonitoringChecklistTest extends TestCase
         config()->set('services.academic_ocr.max_file_size_kb', 1024);
     }
 
+    public function test_a_scheduled_release_is_rechecked_when_the_provider_records_delivery(): void
+    {
+        [$provider, , $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $release = $this->scheduleMonitoringBenefit($provider, $scholarship, $application)
+            ->assertCreated()->json('release');
+        $cycleId = $this->publishMonitoringAppointment($provider, $scholarship, $application)->json('cycle.id');
+        $this->travel(3)->days();
+
+        $this->actingAs($provider)
+            ->getJson("/provider/workspaces/releases/distributions/{$release['id']}/data")
+            ->assertOk()
+            ->assertJsonPath('release.records.0.release_readiness.eligible', false)
+            ->assertJsonPath('release.records.0.release_readiness.blocked_cycle_id', $cycleId)
+            ->assertJsonPath('release.records.0.release_readiness.hold_summary', function (string $summary): bool {
+                return substr_count($summary, 'Semester document appointment') === 1
+                    && str_contains($summary, '2 other items need attention.');
+            });
+
+        $this->recordMonitoringBenefit($provider, $release['records'][0]['id'])
+            ->assertUnprocessable()->assertJsonValidationErrors('status');
+        $this->assertDatabaseHas('recipient_benefit_release_records', [
+            'id' => $release['records'][0]['id'],
+            'status' => 'scheduled',
+        ]);
+    }
+
+    public function test_an_excused_check_in_satisfies_the_release_gate_until_reopened(): void
+    {
+        [$provider, , $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $caseId = $this->publishMonitoringAppointment($provider, $scholarship, $application)
+            ->json('cycle.recipients.0.monitoring_case.id');
+        $waive = fn () => $this->actingAs($provider)->patchJson("/provider/monitoring-cases/{$caseId}/waive", [
+            'outcome' => 'excused',
+            'reason' => 'Approved leave for the appointment.',
+        ])->assertOk()->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'waived');
+        $waive();
+
+        $release = $this->scheduleMonitoringBenefit($provider, $scholarship, $application)
+            ->assertCreated()->json('release');
+        $detailUrl = "/provider/workspaces/releases/distributions/{$release['id']}/data";
+        $this->getJson($detailUrl)->assertOk()
+            ->assertJsonPath('release.records.0.release_readiness.eligible', true);
+
+        $this->patchJson("/provider/monitoring-cases/{$caseId}/reopen", [
+            'reason' => 'The provider needs to recheck the approved leave.',
+        ])->assertOk();
+        $this->travel(3)->days();
+        $this->recordMonitoringBenefit($provider, $release['records'][0]['id'])
+            ->assertUnprocessable()->assertJsonValidationErrors('status');
+
+        $waive();
+        $this->recordMonitoringBenefit($provider, $release['records'][0]['id'])
+            ->assertOk()->assertJsonPath('release.records.0.status', 'released');
+    }
+
+    public function test_reviewed_online_evidence_can_only_be_replaced_after_a_correction_request(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $requirementId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'Existing online check-in',
+            'opens_at' => now()->toDateString(),
+            'due_at' => now()->addWeek()->toDateString(),
+        ])->json('cycle.requirements.1.id');
+        $upload = fn (string $name) => $this->actingAs($applicant)->postJson(
+            "/dashboard/applications/{$application->id}/monitoring-requirements/{$requirementId}/submission",
+            ['supporting_record' => UploadedFile::fake()->create($name, 10, 'application/pdf'), 'terms_accepted' => true],
+        );
+        $upload('original.pdf')->assertCreated();
+        $submission = RecipientMonitoringSubmission::where('recipient_monitoring_cycle_requirement_id', $requirementId)
+            ->firstOrFail();
+        $originalPath = $submission->path;
+        $reviewUrl = "/provider/monitoring-submissions/{$submission->id}/review";
+        $this->actingAs($provider)->patchJson($reviewUrl, ['decision' => 'met'])->assertOk();
+        $review = $submission->reviews()->firstOrFail();
+
+        $upload('unauthorized.pdf')->assertUnprocessable()->assertJsonValidationErrors('supporting_record');
+        $this->assertSame('met', $submission->fresh()->review_status);
+        $this->assertSame($originalPath, $submission->fresh()->path);
+
+        $this->actingAs($provider)->patchJson($reviewUrl, [
+            'decision' => 'needs_correction',
+            'notes' => 'Please provide the updated enrollment certificate.',
+        ])->assertOk();
+        $upload('replacement.pdf')->assertOk();
+        $this->assertSame('pending', $submission->fresh()->review_status);
+        $this->assertNotSame($originalPath, $submission->fresh()->path);
+        $this->assertSame($originalPath, $review->fresh()->evidence_snapshot['path']);
+        Storage::disk('local')->assertExists($originalPath);
+        $this->actingAs($provider)->get(route('provider.monitoring-submissions.view', [
+            'submission' => $submission->id,
+            'review' => $review->id,
+        ]))->assertOk();
+    }
+
+    public function test_published_roster_excludes_uninvited_and_later_accepted_recipients(): void
+    {
+        [$provider, , $scholarship, $invited] = $this->selectedRecipientWithPlan();
+        $notInvited = $this->createAppointmentRecipient($scholarship);
+        $later = $this->createAppointmentRecipient($scholarship, 'pending');
+        $url = "/provider/scholarships/{$scholarship->id}/monitoring-check-ins";
+        $payload = [
+            'title' => 'Enrollment document handoff',
+            'handoff_at' => now()->addDay()->format('Y-m-d\TH:i'),
+            'handoff_location' => 'Learning Center',
+        ];
+        $this->actingAs($provider)->postJson($url, $payload)->assertUnprocessable()->assertJsonValidationErrors('recipient_ids');
+        $this->postJson($url, $payload + ['recipient_ids' => [$later->id]])->assertUnprocessable()->assertJsonValidationErrors('recipient_ids');
+        $checkIn = $this->postJson($url, $payload + ['recipient_ids' => [$invited->id]])
+            ->assertCreated()->assertJsonCount(1, 'cycle.recipients')->json('cycle');
+        $later->update(['student_response_status' => 'accepted']);
+        app(\App\Services\RecipientMonitoringCaseService::class)->activateForAcceptedApplication($later);
+        $this->getJson("/provider/workspaces/monitoring/check-ins/{$checkIn['id']}/data")
+            ->assertOk()->assertJsonCount(1, 'cycle.recipients');
+
+        foreach ([$notInvited, $later] as $recipient) {
+            $this->actingAs($recipient->applicant)->getJson("/dashboard/applications/{$recipient->id}/data")
+                ->assertOk()->assertJsonCount(0, 'application.recipient_monitoring.check_ins');
+            $this->getJson('/dashboard/overview-data')
+                ->assertOk()->assertJsonMissing(['title' => 'Enrollment document handoff']);
+            $this->assertDatabaseMissing('recipient_monitoring_cases', ['scholarship_application_id' => $recipient->id]);
+            $this->assertDatabaseMissing('portal_notifications', ['user_id' => $recipient->applicant_id, 'type' => 'recipient_monitoring_request']);
+        }
+        $this->scheduleMonitoringBenefit($provider, $scholarship, $notInvited)->assertCreated();
+    }
+
+    public function test_only_the_missed_recipient_is_rescheduled_and_a_due_release_remains_on_hold(): void
+    {
+        [$provider, $applicant, $scholarship, $first] = $this->selectedRecipientWithPlan();
+        $second = $this->createAppointmentRecipient($scholarship);
+        $release = $this->scheduleMonitoringBenefit($provider, $scholarship, $first)->assertCreated()->json('release');
+        $time = now()->addDay()->setTime(9, 0);
+        $cycle = $this->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+            'title' => 'Enrollment document handoff',
+            'handoff_at' => $time->format('Y-m-d\TH:i'),
+            'handoff_location' => 'Learning Center',
+            'recipient_ids' => [$first->id, $second->id],
+        ])->assertCreated()->json('cycle');
+        $caseId = $cycle['recipients'][0]['monitoring_case']['id'];
+        $url = "/provider/monitoring-cases/{$caseId}/appointment";
+        $this->patchJson($url, ['action' => 'attendance', 'attendance_status' => 'no_show'])
+            ->assertUnprocessable()->assertJsonValidationErrors('attendance_status');
+
+        $this->travelTo($time->copy()->addHour());
+        $this->patchJson($url, ['action' => 'attendance', 'attendance_status' => 'no_show'])
+            ->assertOk()->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.key', 'resolve_missed_appointment');
+        $this->actingAs($applicant)->getJson("/dashboard/monitoring/{$first->id}/data")
+            ->assertOk()
+            ->assertJsonPath('detail.decision.title', 'Missed appointment')
+            ->assertJsonPath('detail.content.next_check_in.state_label', 'Missed appointment');
+        $this->getJson("/dashboard/monitoring/{$first->id}/data?view=check-ins")
+            ->assertOk()
+            ->assertJsonPath('detail.content.directory.next_appointment', null)
+            ->assertJsonPath('detail.content.directory.active.0.next_actor_label', 'Scholarship provider');
+        $replacement = now()->addWeek()->setTime(14, 0);
+        $update = [
+            'action' => 'reschedule',
+            'appointment_at' => $replacement->format('Y-m-d\TH:i'),
+            'appointment_location' => 'Main office',
+            'reason' => 'The recipient could not attend the original appointment.',
+        ];
+        $this->actingAs(User::factory()->create(['role' => 'provider', 'account_status' => 'active']))
+            ->patchJson($url, $update)->assertForbidden();
+        $this->actingAs($provider)->patchJson($url, $update)
+            ->assertOk()
+            ->assertJsonPath('cycle.recipients.0.handoff.location', 'Main office')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.attendance_status', null)
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.next_action.key', 'attend_handoff')
+            ->assertJsonPath('cycle.recipients.1.handoff.location', 'Learning Center');
+        $this->assertDatabaseHas('recipient_monitoring_case_events', ['recipient_monitoring_case_id' => $caseId, 'action' => 'appointment_rescheduled']);
+        $this->assertDatabaseHas('portal_notifications', ['user_id' => $applicant->id, 'title' => 'In-person check-in rescheduled']);
+        $this->assertDatabaseMissing('portal_notifications', ['user_id' => $second->applicant_id, 'title' => 'In-person check-in rescheduled']);
+
+        $cycleId = $cycle['id'];
+        $this->actingAs($applicant)->getJson("/dashboard/monitoring/{$first->id}/data?view=check-ins&record=check-in-{$cycleId}")
+            ->assertOk()
+            ->assertJsonPath('detail.content.selected.handoff.location', 'Main office')
+            ->assertJsonPath('detail.content.selected.handoff.rescheduled', true)
+            ->assertJsonPath('detail.content.selected.state_label', 'Rescheduled')
+            ->assertJsonPath('detail.content.directory.next_appointment.handoff.location', 'Main office')
+            ->assertJsonPath('detail.content.directory.next_appointment.state_label', 'Rescheduled')
+            ->assertJsonPath('detail.content.selected.due_at', $replacement->toDateString());
+        $this->getJson('/dashboard/overview-data')->assertOk()
+            ->assertJsonFragment(['detail' => 'Rescheduled check-in', 'date_label' => $replacement->format('M d, Y g:i A').' (Philippine time)']);
+        $this->travel(2)->days();
+        $this->recordMonitoringBenefit($provider, $release['records'][0]['id'])->assertUnprocessable()->assertJsonValidationErrors('status');
+    }
+
+    private function createAppointmentRecipient(Scholarship $scholarship, string $response = 'accepted'): ScholarshipApplication
+    {
+        return ScholarshipApplication::create([
+            'scholarship_id' => $scholarship->id,
+            'applicant_id' => User::factory()->create(['role' => 'applicant'])->id,
+            'status' => 'awarded',
+            'final_outcome' => 'selected',
+            'student_response_status' => $response,
+        ]);
+    }
+
+    private function publishMonitoringAppointment(User $provider, Scholarship $scholarship, ScholarshipApplication $application): TestResponse
+    {
+        return $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+            'title' => 'Semester document appointment',
+            'handoff_at' => now()->addDay()->setTime(10, 0)->format('Y-m-d\TH:i'),
+            'handoff_location' => 'Learning Center',
+            'recipient_ids' => [$application->id],
+        ])->assertCreated();
+    }
+
+    private function scheduleMonitoringBenefit(User $provider, Scholarship $scholarship, ScholarshipApplication $application): TestResponse
+    {
+        return $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/benefit-releases", [
+            'title' => 'Semester benefit release',
+            'release_at' => now()->addDays(2)->setTime(11, 0)->toDateTimeString(),
+            'benefit_description' => 'Learning materials',
+            'release_method' => 'in_person',
+            'location' => 'Learning Center',
+            'requires_original_verification' => false,
+            'recipient_ids' => [$application->id],
+        ]);
+    }
+
+    private function recordMonitoringBenefit(User $provider, int $recordId): TestResponse
+    {
+        return $this->actingAs($provider)->postJson("/provider/benefit-release-records/{$recordId}/result", [
+            'status' => 'released',
+            'notes' => 'Recorded delivery by the provider.',
+        ]);
+    }
+
+    public function test_check_in_and_reschedule_preserve_structured_addresses_and_their_own_pins(): void
+    {
+        [$provider, , $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $address = ['venue' => 'Learning Office', 'region' => 'Region IV-A', 'province' => 'Rizal', 'city' => 'Antipolo City', 'barangay' => 'San Isidro', 'street' => 'School Road', 'latitude' => 14.5861, 'longitude' => 121.1756];
+        $response = $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
+            'title' => 'Structured venue appointment', 'handoff_at' => now()->addDay()->setTime(10, 0)->format('Y-m-d\TH:i'),
+            'address_details' => $address, 'recipient_ids' => [$application->id],
+        ])->assertCreated();
+        $cycle = RecipientMonitoringCycle::findOrFail($response->json('cycle.id'));
+        $case = $cycle->cases()->firstOrFail();
+        $this->assertSame('Antipolo City', $cycle->address_details['city']);
+        $this->assertSame(14.5861, $cycle->handoffDetails($case)['latitude']);
+        $this->assertStringContainsString('School Road, San Isidro, Antipolo City', $cycle->handoff_location);
+        $address['venue'] = 'Registrar Office';
+        $address['latitude'] = null; $address['longitude'] = null;
+        $this->patchJson("/provider/monitoring-cases/{$case->id}/appointment", [
+            'action' => 'reschedule', 'appointment_at' => now()->addDays(2)->setTime(10, 0)->format('Y-m-d\TH:i'),
+            'address_details' => $address, 'reason' => 'Move the document check to the registrar office.',
+        ])->assertOk();
+        $updated = $case->fresh();
+        $this->assertSame('Registrar Office', $updated->address_details['venue']);
+        $this->assertNull($cycle->handoffDetails($updated)['latitude']);
+        $this->assertStringStartsWith('Registrar Office,', $updated->appointment_location);
+    }
+
+    public function test_in_person_benefit_release_formats_and_saves_the_structured_venue(): void
+    {
+        [$provider, , $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $this->actingAs($provider)->postJson("/provider/scholarships/{$scholarship->id}/benefit-releases", [
+            'title' => 'Learning session', 'release_at' => now()->addDay()->toDateTimeString(), 'benefit_description' => 'Learning materials',
+            'release_method' => 'in_person', 'requires_original_verification' => false, 'recipient_ids' => [$application->id],
+            'address_details' => ['venue' => 'Student Services', 'region' => 'NCR', 'province' => 'Metro Manila', 'city' => 'Quezon City', 'street' => 'School Road'],
+        ])->assertCreated()->assertJsonPath('release.address_details.city', 'Quezon City')
+            ->assertJsonPath('release.location', 'Student Services, School Road, Quezon City, Metro Manila, NCR');
+    }
+
     public function test_check_in_requires_an_appointment_and_a_venue(): void
     {
         [$provider, , $scholarship] = $this->selectedRecipientWithPlan();
@@ -75,6 +340,7 @@ class RecipientMonitoringChecklistTest extends TestCase
                 'handoff_at' => $appointment->format('Y-m-d\TH:i'),
                 'handoff_location' => 'Learning Center, Room 2',
                 'instructions' => 'Check in with the receptionist.',
+                'recipient_ids' => [$application->id],
             ])
             ->assertCreated()
             ->assertJsonPath('cycle.is_plan_check_in', true)
@@ -114,6 +380,12 @@ class RecipientMonitoringChecklistTest extends TestCase
         $this->getJson("/dashboard/monitoring/{$application->id}/data?view=check-ins&record=check-in-{$cycleId}")
             ->assertOk()
             ->assertJsonPath('detail.content.selected.handoff.location', 'Learning Center, Room 2')
+            ->assertJsonPath('detail.content.selected.preparation.document_ids', [
+                $response->json('cycle.requirements.0.id'),
+                $response->json('cycle.requirements.1.id'),
+            ])
+            ->assertJsonPath('detail.content.directory.next_appointment.preparation.document_count', 2)
+            ->assertJsonPath('detail.content.directory.next_appointment.preparation.preview_titles', ['Semester grades', 'Proof of current enrollment'])
             ->assertJsonPath('detail.content.selected.state', 'upcoming');
 
         $requirementId = $response->json('cycle.requirements.0.id');
@@ -141,6 +413,12 @@ class RecipientMonitoringChecklistTest extends TestCase
             ->assertUnprocessable()->assertJsonValidationErrors('document_checked');
         $this->postJson($recordPath, ['decision' => 'met', 'verified_grade' => 80, 'document_checked' => true])
             ->assertUnprocessable()->assertJsonValidationErrors('verified_grade');
+        $this->postJson($recordPath, ['decision' => 'met', 'verified_grade' => 92, 'document_checked' => true])
+            ->assertUnprocessable()->assertJsonValidationErrors('attendance_status');
+        $caseId = $response->json('cycle.recipients.0.monitoring_case.id');
+        $this->patchJson("/provider/monitoring-cases/{$caseId}/appointment", [
+            'action' => 'attendance', 'attendance_status' => 'attended',
+        ])->assertOk()->assertJsonPath('cycle.recipients.0.monitoring_case.attendance_status', 'attended');
         $this->postJson($recordPath, ['decision' => 'met', 'verified_grade' => 92, 'document_checked' => true])
             ->assertCreated()
             ->assertJsonPath('cycle.recipients.0.requirements.0.submission.grade_source', 'provider_verified');
@@ -241,12 +519,13 @@ class RecipientMonitoringChecklistTest extends TestCase
 
     public function test_checklist_snapshot_does_not_change_when_provider_edits_the_plan(): void
     {
-        [$provider, , $scholarship, , $plan] = $this->selectedRecipientWithPlan();
+        [$provider, , $scholarship, $application, $plan] = $this->selectedRecipientWithPlan();
         $cycleId = $this->actingAs($provider)
             ->postJson("/provider/scholarships/{$scholarship->id}/monitoring-check-ins", [
                 'title' => 'Locked checklist',
                 'handoff_at' => now()->addMonth()->format('Y-m-d\TH:i'),
                 'handoff_location' => 'Learning Center, Room 2',
+                'recipient_ids' => [$application->id],
             ])
             ->assertCreated()
             ->json('cycle.id');
@@ -679,8 +958,16 @@ class RecipientMonitoringChecklistTest extends TestCase
         $readyResponse = $this->actingAs($provider)
             ->getJson("/provider/scholarships/{$scholarship->id}/monitoring-cycles")
             ->assertOk()
-            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.status', 'ready_to_close');
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.status', 'ready_to_close')
+            ->assertJsonPath('cycles.0.recipients.0.monitoring_case.status_label', 'Awaiting closure');
         $caseId = $readyResponse->json('cycles.0.recipients.0.monitoring_case.id');
+        $this->actingAs($applicant)->getJson("/dashboard/monitoring/{$application->id}/data?view=check-ins")
+            ->assertOk()
+            ->assertJsonPath('detail.summary.check_ins.completed', 0)
+            ->assertJsonPath('detail.summary.check_ins.next_due_label', null)
+            ->assertJsonPath('detail.content.directory.active.0.state_label', 'Awaiting closure')
+            ->assertJsonPath('detail.decision.actor', 'provider')
+            ->assertJsonPath('detail.decision.title', 'Wait for the final check-in outcome');
 
         $otherProvider = User::factory()->create(['role' => 'provider', 'account_status' => 'active']);
         $this->actingAs($otherProvider)
@@ -742,7 +1029,7 @@ class RecipientMonitoringChecklistTest extends TestCase
 
     public function test_provider_records_an_overdue_incomplete_outcome_or_a_reasoned_waiver(): void
     {
-        [$provider, , $scholarship, $application] = $this->selectedRecipientWithPlan();
+        [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
         $response = $this->existingUploadCheckIn($provider, $scholarship, [
             'title' => 'Overdue check-in',
             'opens_at' => now()->toDateString(),
@@ -771,9 +1058,21 @@ class RecipientMonitoringChecklistTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('cycle.recipients.0.monitoring_case.outcome', 'incomplete')
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.status_label', 'Incomplete')
             ->assertJsonPath('cycle.recipients.0.monitoring_case.decision_reason', 'No required records were received after the grace period.');
+        $this->actingAs($applicant)->getJson("/dashboard/monitoring/{$application->id}/data?view=check-ins&record=check-in-{$cycleId}")
+            ->assertOk()
+            ->assertJsonPath('detail.summary.check_ins.completed', 0)
+            ->assertJsonPath('detail.content.directory.completed.0.state_label', 'Incomplete')
+            ->assertJsonPath('detail.content.selected.state_tone', 'critical')
+            ->assertJsonPath('detail.content.selected.guidance', null)
+            ->assertJsonPath('detail.content.selected.requirements.0.can_submit', false);
+        $this->getJson("/dashboard/monitoring/{$application->id}/data?view=history")
+            ->assertOk()
+            ->assertJsonPath('detail.content.timeline.0.description', 'Incomplete')
+            ->assertJsonPath('detail.content.timeline.0.tone', 'critical');
 
-        [$waiverProvider, , $waiverScholarship] = $this->selectedRecipientWithPlan();
+        [$waiverProvider, $waiverApplicant, $waiverScholarship] = $this->selectedRecipientWithPlan();
         $waiverResponse = $this->existingUploadCheckIn($waiverProvider, $waiverScholarship, [
             'title' => 'Special circumstance check-in',
             'opens_at' => now()->toDateString(),
@@ -811,7 +1110,11 @@ class RecipientMonitoringChecklistTest extends TestCase
             ->assertOk()
             ->assertJsonPath('cycle.status', 'closed')
             ->assertJsonPath('cycle.recipients.0.monitoring_case.status', 'waived')
-            ->assertJsonPath('cycle.recipients.0.monitoring_case.outcome_label', 'Excused');
+            ->assertJsonPath('cycle.recipients.0.monitoring_case.status_label', 'Excused');
+        $this->actingAs($waiverApplicant)->getJson("/dashboard/monitoring/{$waiverApplicationId}/data?view=check-ins")
+            ->assertOk()
+            ->assertJsonPath('detail.content.directory.completed.0.state_label', 'Excused')
+            ->assertJsonPath('detail.summary.check_ins.completed', 0);
 
         $this->assertDatabaseHas('recipient_monitoring_case_events', [
             'recipient_monitoring_case_id' => $waiverCaseId,

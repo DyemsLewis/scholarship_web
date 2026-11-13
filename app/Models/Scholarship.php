@@ -12,6 +12,15 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Scholarship extends Model
 {
+    protected static function booted(): void
+    {
+        static::saving(function (self $program): void {
+            if ($program->status === 'pending_review' && ($program->isDirty('status') || ! $program->exists)) {
+                $program->review_requested_at = now();
+            }
+        });
+    }
+
     protected $fillable = [
         'provider_id',
         'image_path',
@@ -109,10 +118,12 @@ class Scholarship extends Model
             'education_eligibility_policy' => 'array',
             'application_questions' => 'array',
             'selection_stages' => 'array',
+            'selection_scoring_policy' => 'array',
             'exam_duration_minutes' => 'integer',
             'exam_passing_score' => 'decimal:2',
             'views_count' => 'integer',
             'provider_terms_accepted_at' => 'datetime',
+            'review_requested_at' => 'datetime',
         ];
     }
 

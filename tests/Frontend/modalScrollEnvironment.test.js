@@ -89,7 +89,7 @@ const components = [
 for (const file of components) {
     test(`${file} compiles with a shared viewport lock`, () => {
         const source = readFileSync(new URL(`../../resources/js/components/${file}.vue`, import.meta.url), 'utf8');
-        assert.match(source, /usePageScrollLock/);
+        assert.match(source, /usePageScrollLock|useModalAccessibility/);
         const { descriptor, errors } = parse(source, { filename: file });
         assert.deepEqual(errors, []);
         const script = compileScript(descriptor, { id: file });

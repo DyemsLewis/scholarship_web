@@ -32,6 +32,7 @@ class ApplicationStageSessionResource extends JsonResource
             'mode' => $this->mode,
             'venue' => $this->venue,
             'location_address' => $this->location_address,
+            'address_details' => $this->address_details,
             'latitude' => $this->latitude,
             'longitude' => $this->longitude,
             'meeting_url' => $this->meeting_url,

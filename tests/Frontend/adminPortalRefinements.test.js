@@ -58,7 +58,7 @@ test('limited previews disclose shown rows versus the real totals', async () => 
 
 test('all portal tables use fixed columns and keep oversight distinct from specialist actions', () => {
     for (const path of paths) { const source = read(path); assert.ok(source.includes('colgroup')); assert.ok(!source.includes('truncate')); assert.ok(source.includes('@retry=')); }
-    const source = read(paths[1]); assert.equal((source.match(/<colgroup>/g) || []).length, 7);
+    const source = read(paths[1]); assert.equal((source.match(/<colgroup>/g) || []).length, 9);
     assert.match(source, /Read-only oversight/); assert.ok(source.includes('payload.summary.exceptions'));
     assert.ok(!source.includes('payload.exceptions.items.length')); assert.ok(!source.includes('window.axios.post'));
 });

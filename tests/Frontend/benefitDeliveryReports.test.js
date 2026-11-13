@@ -39,5 +39,5 @@ test('delivery forms use scoped private modals, retained stale text, and no unil
     assert.ok(queue.includes('staff-table-viewport'));
     assert.match(queue, /<StaffTableIdentity :src="row.applicant.photo_url"/);
     const panel = readFileSync(new URL('../../resources/js/components/benefit-delivery/BenefitDeliveryReportPanel.vue', import.meta.url), 'utf8');
-    assert.ok(panel.includes('provider || open || loading || options.length'), 'Keep the dialog mounted while the first report refreshes its previously empty list.');
+    assert.match(panel, /<\/section>\s*<BenefitDeliveryReportDialog :open="open"/, 'Keep the dialog outside the conditional report list so the first report can refresh it without closing the dialog.');
 });

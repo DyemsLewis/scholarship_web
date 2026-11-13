@@ -59,7 +59,7 @@ class AdminPortalRefinementTest extends TestCase
         $data = app(PortalManagerWorkspaceQuery::class)->accounts();
         $this->assertCount(12, $data['users']);
         $this->assertSame(15, $data['summary']['attention_total']);
-        $this->assertGreaterThan($data['users'][1]['id'], $data['users'][0]['id']);
+        $this->assertLessThan($data['users'][1]['id'], $data['users'][0]['id']);
     }
 
     private function purchase(User $provider, string $status, string $reference): ProviderServicePurchase

@@ -6,6 +6,7 @@ use App\Domain\Shared\Dashboard\RoleDashboardPayload;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Queries\Admin\RecordsWorkspaceQuery;
+use App\Support\AdminWorkPriority;
 
 final class RecordsOfficerDashboardQuery
 {
@@ -32,7 +33,7 @@ final class RecordsOfficerDashboardQuery
             ->take(5)
             ->map(fn (array $item): array => $this->item($item));
 
-        return RoleDashboardPayload::make(
+        return [...RoleDashboardPayload::make(
             workspace: [
                 'key' => 'records-officer',
                 'eyebrow' => 'Platform records',
@@ -44,14 +45,14 @@ final class RecordsOfficerDashboardQuery
             primaryAction: [
                 'label' => $summary['security_7_days'] > 0 ? 'Review security activity' : 'Open activity records',
                 'url' => $summary['security_7_days'] > 0
-                    ? '/admin/workspaces/records/activity?category=security&period=week'
+                    ? '/admin/workspaces/records/activity?action=login_failed&category=security&period=week'
                     : '/admin/workspaces/records/activity',
                 'icon' => 'fa-solid fa-arrow-right',
             ],
             metrics: [
                 ['key' => 'today', 'label' => 'Recorded today', 'value' => $summary['today'], 'detail' => 'New audit events', 'url' => '/admin/workspaces/records/activity?period=today', 'icon' => 'fa-regular fa-calendar'],
-                ['key' => 'security', 'label' => 'Security events', 'value' => $summary['security_7_days'], 'detail' => 'Failed sign-ins · 7 days', 'tone' => 'attention', 'url' => '/admin/workspaces/records/activity?category=security&period=week', 'icon' => 'fa-solid fa-shield-halved'],
-                ['key' => 'exports', 'label' => 'Recent exports', 'value' => $summary['exports_30_days'], 'detail' => 'Last 30 days', 'url' => '/admin/workspaces/records/exports', 'icon' => 'fa-solid fa-file-export'],
+                ['key' => 'security', 'label' => 'Failed sign-ins', 'value' => $summary['security_7_days'], 'detail' => 'Last 7 days', 'tone' => 'attention', 'url' => '/admin/workspaces/records/activity?action=login_failed&category=security&period=week', 'icon' => 'fa-solid fa-shield-halved'],
+                ['key' => 'exports', 'label' => 'Recent exports', 'value' => $summary['exports_30_days'], 'detail' => 'Last 30 days', 'url' => '/admin/workspaces/records/activity?category=exports&period=month', 'icon' => 'fa-solid fa-file-export'],
                 ['key' => 'total', 'label' => 'Audit records', 'value' => $summary['total'], 'detail' => 'All recorded activity', 'url' => '/admin/workspaces/records/activity?period=all', 'icon' => 'fa-solid fa-box-archive'],
             ],
             sections: [
@@ -62,7 +63,7 @@ final class RecordsOfficerDashboardQuery
                     'description' => 'Review the latest failed sign-in events from the past seven days.',
                     'empty_message' => 'No failed sign-in was recorded in the past seven days.',
                     'icon' => 'fa-solid fa-shield-halved',
-                    'action' => ['label' => 'Open security records', 'url' => '/admin/workspaces/records/activity?category=security&period=week', 'icon' => 'fa-solid fa-arrow-right'],
+                    'action' => ['label' => 'Open security records', 'url' => '/admin/workspaces/records/activity?action=login_failed&category=security&period=week', 'icon' => 'fa-solid fa-arrow-right'],
                     'items' => $security,
                 ],
                 [
@@ -76,7 +77,11 @@ final class RecordsOfficerDashboardQuery
                     'items' => $recent,
                 ],
             ],
-        );
+        ), 'priority' => $security->isNotEmpty() ? AdminWorkPriority::make(
+            'Inspect recent failed sign-ins', 'Review recorded events for unusual activity. An audit event is not an unresolved incident or proof of account misuse.', 'Records Officer',
+            ['label' => 'Open security records', 'url' => '/admin/workspaces/records/activity?action=login_failed&category=security&period=week'],
+            'Last 7 days', 'reference',
+        ) : AdminWorkPriority::make('Audit records are available', 'No failed sign-in was recorded in the last seven days. Browse activity or prepare an authorized export when needed.', 'Records Officer', state: 'reference')];
     }
 
     /** @return array<string, mixed> */

@@ -1,9 +1,11 @@
 <script setup>
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
+import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { showPortalToast } from '../../../support/portalToast';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
+import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 
 const scholarshipId = document.getElementById('app')?.dataset.scholarshipId;
 const scholarship = ref(null);
@@ -12,6 +14,9 @@ const frequencies = ref([]);
 const requirementTypes = ref([]);
 const canEdit = ref(false);
 const canPublishCheckIn = ref(false);
+const appointmentRecipients = ref([]);
+const rosterSearch = ref('');
+const filteredRoster = computed(() => appointmentRecipients.value.filter(recipient => recipient.name.toLowerCase().includes(rosterSearch.value.trim().toLowerCase())));
 const isLoading = ref(true);
 const isSaving = ref(false);
 const isPublishingCheckIn = ref(false);
@@ -74,7 +79,9 @@ function defaultCheckIn() {
         school_year: '',
         handoff_at: '',
         handoff_location: '',
+        address_details: null,
         instructions: '',
+        recipient_ids: [],
     };
 }
 
@@ -110,6 +117,7 @@ async function loadPlan() {
         requirementTypes.value = response.data.requirement_types ?? [];
         canEdit.value = Boolean(response.data.can_edit);
         canPublishCheckIn.value = Boolean(response.data.can_publish_check_in);
+        appointmentRecipients.value = response.data.appointment_recipients ?? [];
         hydrate(savedPlan.value);
     } catch (error) {
         errorMessage.value = firstError(error, 'The monitoring plan could not be loaded.');
@@ -238,6 +246,7 @@ async function savePlan(status) {
 }
 
 function openCheckInEditor() {
+    rosterSearch.value = '';
     checkInForm.value = {
         ...defaultCheckIn(),
         school_year: scholarship.value?.program_cycle || '',
@@ -246,7 +255,13 @@ function openCheckInEditor() {
 }
 
 async function publishCheckIn() {
-    if (!activePlan.value || isPublishingCheckIn.value) return;
+    if (!activePlan.value || isPublishingCheckIn.value || !checkInForm.value.recipient_ids.length) return;
+    const count = checkInForm.value.recipient_ids.length;
+    if (!await confirmOutcome({
+        record: checkInForm.value.title,
+        outcome: 'Publish in-person check-in',
+        consequence: `Only the ${count} selected recipient${count === 1 ? '' : 's'} will receive this appointment.`,
+    }, () => checkInEditor.value && !isPublishingCheckIn.value)) return;
 
     isPublishingCheckIn.value = true;
     errorMessage.value = '';
@@ -380,7 +395,7 @@ onMounted(loadPlan);
         <div v-if="checkInEditor" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" @click.self="closeCheckInEditor">
             <form ref="checkInDialog" class="provider-monitoring-workspace monitoring-dialog w-full max-w-2xl border border-slate-300 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="check-in-editor-title" tabindex="-1" @keydown="handleCheckInKeydown" @submit.prevent="publishCheckIn">
                 <header class="flex items-start justify-between border-b border-slate-200 px-6 py-5">
-                    <div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Document handoff</p><h2 id="check-in-editor-title" class="mt-1 text-xl font-bold text-slate-950">Schedule an in-person check-in</h2><p class="mt-1 text-sm text-slate-500">All active recipients will see when and where to bring their documents.</p></div>
+                    <div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Document handoff</p><h2 id="check-in-editor-title" class="mt-1 text-xl font-bold text-slate-950">Schedule an in-person check-in</h2><p class="mt-1 text-sm text-slate-500">Set the appointment and choose who should attend.</p></div>
                     <button type="button" :disabled="isPublishingCheckIn" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600 disabled:opacity-50" aria-label="Close" @click="closeCheckInEditor"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 </header>
                 <div class="monitoring-dialog-body grid grid-cols-2 gap-5 p-6">
@@ -388,12 +403,27 @@ onMounted(loadPlan);
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Academic period <span class="font-normal text-slate-600">(optional)</span></span><input v-model="checkInForm.period_label" maxlength="80" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester"></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">School year <span class="font-normal text-slate-600">(optional)</span></span><input v-model="checkInForm.school_year" maxlength="30" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="2026-2027"></label>
                     <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Date and time (Philippine time)</span><input v-model="checkInForm.handoff_at" required type="datetime-local" :min="(savedPlan?.starts_on && savedPlan.starts_on > localDate() ? savedPlan.starts_on : localDate()) + 'T00:00'" :max="savedPlan?.ends_on ? savedPlan.ends_on + 'T23:59' : undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
-                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Venue and address</span><input v-model="checkInForm.handoff_location" required maxlength="255" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="Office or room, building, and street address"></label>
+                    <ProviderVenueAddress v-model="checkInForm.address_details" v-model:address="checkInForm.handoff_location" class="col-span-2" />
                     <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Arrival instructions <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="checkInForm.instructions" rows="3" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm" placeholder="For example: check in at the reception desk."></textarea></label>
+                    <fieldset class="col-span-2 min-w-0 border border-slate-200 px-4 pb-3">
+                        <legend class="px-2 text-sm font-bold text-slate-900">Recipients to invite</legend>
+                        <p v-if="!appointmentRecipients.length" class="pt-2 text-sm text-slate-600">No active recipients have accepted their agreement yet.</p>
+                        <template v-else>
+                            <div class="mb-2 flex items-center justify-between gap-3 pt-2">
+                                <input v-model="rosterSearch" type="search" aria-label="Find recipient" placeholder="Find a recipient" class="h-9 min-w-0 flex-1 border border-slate-300 px-3 text-sm">
+                                <button type="button" class="shrink-0 text-xs font-bold text-slate-700 underline underline-offset-4" @click="checkInForm.recipient_ids = appointmentRecipients.map(item => item.id)">Select all eligible</button>
+                                <button v-if="checkInForm.recipient_ids.length" type="button" class="shrink-0 text-xs font-bold text-slate-700 underline underline-offset-4" @click="checkInForm.recipient_ids = []">Clear</button>
+                            </div>
+                            <div class="max-h-36 divide-y divide-slate-200 overflow-y-auto">
+                                <label v-for="recipient in filteredRoster" :key="recipient.id" class="flex cursor-pointer items-center gap-2 px-1 py-2 text-sm text-slate-800"><input v-model="checkInForm.recipient_ids" type="checkbox" :value="recipient.id">{{ recipient.name }}</label>
+                                <p v-if="!filteredRoster.length" class="py-2 text-sm text-slate-600">No matching recipients.</p>
+                            </div>
+                        </template>
+                    </fieldset>
                 </div>
                 <footer class="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-4">
-                    <p class="text-xs text-slate-500">Plan requirements are included. Recipients cannot upload files for this check-in.</p>
-                    <div class="flex shrink-0 gap-2"><button type="button" :disabled="isPublishingCheckIn" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-50" @click="closeCheckInEditor">Cancel</button><button type="submit" :disabled="isPublishingCheckIn" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50"><i :class="['fa-solid text-[10px]', isPublishingCheckIn ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>{{ isPublishingCheckIn ? 'Publishing...' : 'Publish check-in' }}</button></div>
+                    <p class="text-xs font-bold text-slate-600" aria-live="polite">{{ checkInForm.recipient_ids.length }} selected</p>
+                    <div class="flex shrink-0 gap-2"><button type="button" :disabled="isPublishingCheckIn" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-50" @click="closeCheckInEditor">Cancel</button><button type="submit" :disabled="isPublishingCheckIn || !checkInForm.recipient_ids.length" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50"><i :class="['fa-solid text-[10px]', isPublishingCheckIn ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>{{ isPublishingCheckIn ? 'Publishing...' : 'Publish check-in' }}</button></div>
                 </footer>
             </form>
         </div>

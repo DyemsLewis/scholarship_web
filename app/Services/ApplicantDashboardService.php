@@ -95,6 +95,7 @@ class ApplicantDashboardService
                 'stageProgresses',
                 'scholarship.provider.providerProfile',
                 'scholarship.monitoringCycles.requirements',
+                'monitoringCases',
                 'monitoringSubmissions',
                 'monitoringAdjustmentRequests',
                 'benefitReleaseRecords.release',
@@ -313,7 +314,8 @@ class ApplicantDashboardService
         $today = now()->startOfDay();
 
         foreach ($application->scholarship?->monitoringCycles ?? collect() as $cycle) {
-            if ($cycle->status !== 'open') {
+            if ($cycle->status !== 'open' || $cycle->isInPerson()
+                || $application->monitoringCases->firstWhere('recipient_monitoring_cycle_id', $cycle->id)?->isClosed()) {
                 continue;
             }
 
@@ -650,20 +652,25 @@ class ApplicantDashboardService
             }
 
             foreach ($application->scholarship?->monitoringCycles ?? collect() as $cycle) {
-                if ($cycle->status !== 'open' || ! $cycle->opens_at?->isAfter($today)) {
+                $case = $application->monitoringCases->firstWhere('recipient_monitoring_cycle_id', $cycle->id);
+                $appointment = $cycle->isInPerson() && $case ? $cycle->handoffTime($case) : null;
+                $scheduledFor = $cycle->isInPerson() ? $appointment : $cycle->opens_at;
+                if ($cycle->status !== 'open' || $case?->isClosed()
+                    || ! ($cycle->isInPerson() ? $scheduledFor?->isFuture() : $scheduledFor?->isAfter($today))) {
                     continue;
                 }
+                $recordKey = ($cycle->requirements->isNotEmpty() ? 'check-in-' : 'academic-').$cycle->id;
 
                 $items->push([
                     'key' => "monitoring-opens-{$application->id}-{$cycle->id}",
                     'kind' => 'monitoring',
                     'title' => $cycle->title,
-                    'detail' => 'Check-in opens',
+                    'detail' => $appointment ? ($case->appointment_at ? 'Rescheduled check-in' : 'In-person check-in') : 'Check-in opens',
                     'context' => $title,
-                    'date_label' => $cycle->opens_at->format('M d, Y'),
-                    'href' => $monitoringUrl,
+                    'date_label' => $appointment ? $cycle->handoffDetails($case)['scheduled_label'] : $scheduledFor->format('M d, Y'),
+                    'href' => route('dashboard.monitoring.check-ins.show', ['application' => $application, 'record' => $recordKey], false),
                     'resource_key' => "monitoring-{$application->id}-{$cycle->id}",
-                    '_sort_at' => $cycle->opens_at->getTimestamp(),
+                    '_sort_at' => $scheduledFor->getTimestamp(),
                 ]);
             }
 

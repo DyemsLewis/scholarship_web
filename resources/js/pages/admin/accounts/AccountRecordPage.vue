@@ -7,6 +7,7 @@ import AdminDialog from '../components/AdminDialog.vue';
 import AdminLoadState from '../components/AdminLoadState.vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
 import { showPortalToast } from '../../../support/portalToast';
+import AccountSupportHandoffs from '../../../components/admin/AccountSupportHandoffs.vue';
 
 const accountId = (window.portalPathname?.() ?? window.location.pathname).match(/\/admin\/workspaces\/accounts\/(\d+)$/)?.[1];
 const resource = useAdminResource(async ({ signal }) => {
@@ -21,6 +22,8 @@ const account = ref(null);
 const roleContext = ref({ label: 'Records', count: 0 });
 const statusDialogOpen = ref(false);
 const suspensionReason = ref('');
+const accountHandoffs = ref([]);
+const handoffBusy = ref(false);
 
 const roleLabel = computed(() => ({
     applicant: 'Applicant',
@@ -54,11 +57,12 @@ async function loadAccount() {
     if (payload) {
         account.value = payload.user;
         roleContext.value = payload.role_context ?? { label: 'Records', count: 0 };
+        accountHandoffs.value = payload.account_handoffs ?? [];
     }
 }
 
 async function runAction(key, request, successTitle) {
-    if (actionBusy.value || loading.value || errorMessage.value || !account.value) return;
+    if (actionBusy.value || handoffBusy.value || loading.value || errorMessage.value || !account.value) return;
     actionBusy.value = key;
     actionError.value = '';
 
@@ -161,9 +165,11 @@ const backToQueue = staffQueueReturn(window, 'accounts', '/admin/workspaces/acco
                 </dl>
             </section>
 
-            <section class="admin-panel mt-4 overflow-hidden">
+            <AccountSupportHandoffs :account-id="account.id" :handoffs="accountHandoffs" :disabled="Boolean(actionBusy)" @busy="handoffBusy = $event" @updated="accountHandoffs = $event.account_handoffs" />
+
+            <section class="admin-panel mt-4 overflow-hidden" :inert="handoffBusy || undefined">
                 <header class="border-b border-slate-200 px-6 py-4">
-                    <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Sign-in controls</h2><p class="mt-0.5 text-sm text-slate-500">Use only the action needed for this account.</p></div></div>
+                    <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Sign-in controls</h2><p class="mt-0.5 text-sm text-slate-500">These actions affect sign-in only. Profile and provider verification stay with the Review Officer.</p></div></div>
                 </header>
 
                 <p v-if="actionError && !statusDialogOpen" class="border-b border-rose-200 bg-rose-50 px-6 py-3 text-sm font-semibold text-rose-800" role="alert">{{ actionError }}</p>

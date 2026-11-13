@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ProfileMatchDialog from '../components/ProfileMatchDialog.vue';
 import { labelFromKey } from '../support/display';
 import { eligibilityOverview } from '../support/applicantEligibility';
 import { programPathListMatches } from '../support/learnerProgramPaths';
@@ -26,6 +27,7 @@ const locationFilter = ref('');
 const savedOnly = ref(false);
 const showAdvancedFilters = ref(false);
 const previewScholarship = ref(null);
+const matchExplanation = ref(null);
 const showComparisonModal = ref(false);
 const comparisonStep = ref('select');
 const comparisonSelection = ref([]);
@@ -885,6 +887,7 @@ function returnToComparisonSelection() {
 
 function handlePreviewKeydown(event) {
     if (event.key !== 'Escape') return;
+    if (matchExplanation.value) return;
 
     if (showComparisonModal.value) {
         closeComparisonModal();
@@ -1103,9 +1106,9 @@ onBeforeUnmount(() => {
                                                 :href="`/dashboard/providers/${scholarship.provider.id}`"
                                                 class="mt-1 block truncate text-sm font-semibold text-slate-300 transition hover:text-amber-200"
                                             >
-                                                {{ scholarship.provider.name || 'Scholarship Provider' }}
+                                                By {{ scholarship.provider.name || 'Scholarship provider' }}
                                             </a>
-                                            <p v-else class="mt-1 truncate text-sm font-semibold text-slate-300">Scholarship Provider</p>
+                                            <p v-else class="mt-1 truncate text-sm font-semibold text-slate-300">By scholarship provider</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1116,9 +1119,9 @@ onBeforeUnmount(() => {
                                             <i class="fa-regular fa-clock mr-1"></i>
                                             Upcoming
                                         </p>
-                                        <p class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
-                                            {{ scholarship.eligibility_match?.score ?? 0 }}% profile match
-                                        </p>
+                                        <button type="button" class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900 hover:bg-amber-200" aria-label="How your profile match is calculated" @click="matchExplanation = scholarship">
+                                            {{ scholarship.eligibility_match?.match_calculation?.compared ? `${scholarship.eligibility_match.score}% profile match` : 'Open eligibility' }}<i class="fa-solid fa-circle-info ml-1.5" aria-hidden="true"></i>
+                                        </button>
                                         <p class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                             <i class="fa-regular fa-calendar mr-1"></i>
                                             {{ compactDeadlineLabel(scholarship) }}
@@ -1257,7 +1260,7 @@ onBeforeUnmount(() => {
                                             {{ previewScholarship.title }}
                                         </h2>
                                         <p class="mt-1 truncate text-sm font-semibold text-slate-300">
-                                            {{ previewScholarship.provider?.name || 'Scholarship Provider' }}
+                                            By {{ previewScholarship.provider?.name || 'Scholarship provider' }}
                                         </p>
                                     </div>
                                 </div>
@@ -1275,9 +1278,9 @@ onBeforeUnmount(() => {
 
                     <div class="overflow-y-auto p-5">
                         <div class="flex flex-wrap gap-2">
-                            <span class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900">
-                                {{ previewScholarship.eligibility_match?.score ?? 0 }}% profile match
-                            </span>
+                            <button type="button" class="rounded-md bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900" @click="matchExplanation = previewScholarship">
+                                {{ previewScholarship.eligibility_match?.match_calculation?.compared ? `${previewScholarship.eligibility_match.score}% profile match` : 'Open eligibility' }}<i class="fa-solid fa-circle-info ml-1.5" aria-hidden="true"></i>
+                            </button>
                             <span class="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
                                 <i class="fa-regular fa-calendar mr-1"></i>
                                 {{ compactDeadlineLabel(previewScholarship) }}
@@ -1561,11 +1564,11 @@ onBeforeUnmount(() => {
                                         </span>
                                     </span>
                                     <span :class="['mt-1 block truncate text-xs', isComparisonSelected(scholarship.id) ? 'text-slate-300' : 'text-slate-500']">
-                                        {{ scholarship.provider?.name || 'Scholarship provider' }}
+                                        By {{ scholarship.provider?.name || 'Scholarship provider' }}
                                     </span>
                                     <span class="mt-3 flex flex-wrap gap-2">
                                         <span :class="['rounded px-2 py-1 text-[10px] font-bold', isComparisonSelected(scholarship.id) ? 'bg-white/10 text-amber-300' : 'bg-emerald-100 text-emerald-800']">
-                                            {{ scholarship.eligibility_match?.score ?? 0 }}% profile match
+                                            {{ scholarship.eligibility_match?.match_calculation?.compared ? `${scholarship.eligibility_match.score}% profile match` : 'Open eligibility' }}
                                         </span>
                                         <span :class="['rounded px-2 py-1 text-[10px] font-bold', isComparisonSelected(scholarship.id) ? 'bg-white/10 text-slate-200' : 'bg-slate-100 text-slate-600']">
                                             {{ compactDeadlineLabel(scholarship) }}
@@ -1605,7 +1608,7 @@ onBeforeUnmount(() => {
                                         >
                                         <div class="min-w-0">
                                             <h3 class="line-clamp-2 text-sm font-bold leading-5 text-slate-950">{{ scholarship.title }}</h3>
-                                            <p class="mt-0.5 truncate text-[11px] text-slate-500">{{ scholarship.provider?.name || 'Scholarship provider' }}</p>
+                                            <p class="mt-0.5 truncate text-[11px] text-slate-500">By {{ scholarship.provider?.name || 'Scholarship provider' }}</p>
                                         </div>
                                     </div>
                                     <a :href="`/dashboard/scholarships/${scholarship.id}`" class="mt-3 inline-flex items-center gap-1 text-xs font-bold text-slate-700 hover:text-slate-950">
@@ -1656,6 +1659,7 @@ onBeforeUnmount(() => {
             </div>
         </div>
     </Teleport>
+    <ProfileMatchDialog :scholarship="matchExplanation" @close="matchExplanation = null" />
 </template>
 
 <style scoped>

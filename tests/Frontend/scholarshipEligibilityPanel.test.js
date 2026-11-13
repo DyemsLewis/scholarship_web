@@ -73,13 +73,38 @@ test('the checklist distinguishes required failures, preferences, missing values
     assert.doesNotMatch(html, /% profile match|You can apply/);
 });
 
-test('matched explanations start collapsed while attention explanations remain visible', async () => {
+test('comparison explanations start collapsed while important rule values and actions stay visible', async () => {
     const html = await render([criterion('education_level', 'pass'), criterion('income', 'fail')]);
     assert.match(html, /<details[^>]+data-eligibility-group="matched"(?![^>]*open)/);
     assert.match(html, /<details[^>]+data-eligibility-explanation(?![^>]*open)/);
-    assert.match(html, /<div[^>]+data-eligibility-explanation/);
-    assert.match(source, /md:grid-cols-\[minmax\(0,1.4fr\)_minmax\(0,1fr\)_11rem\]/);
+    assert.doesNotMatch(html, /<details[^>]+data-eligibility-explanation[^>]*\bopen/);
+    assert.match(html, /Why this needs attention/);
+    assert.match(html, /data-eligibility-profile-action/);
+    assert.match(html, /data-eligibility-values/);
+    assert.doesNotMatch(source, /grid-cols-/);
     assert.match(source, /data-eligibility-result/);
+});
+
+test('the scan-first layout has one rule row with a compact status and vertically stacked values', async () => {
+    const html = await render([criterion('income', 'fail', { label: 'Household income', requirement: 'Below PHP 20,000', student_value: 'PHP 25,000' })]);
+    assert.match(html, /data-eligibility-row-heading/);
+    assert.match(html, /aria-label="Required rule not met"/);
+    assert.match(html, />Not met<\/span>/);
+    assert.match(html, /Required: <\/dt><dd[^>]*>Below PHP 20,000/);
+    assert.match(html, /Your profile: <\/dt><dd[^>]*>PHP 25,000/);
+    assert.doesNotMatch(source, /md:grid|line-clamp|truncate/);
+    assert.match(html, /<details[^>]+data-eligibility-verdict-details(?![^>]*open)/);
+    assert.match(html, /Comparison guidance/);
+});
+
+test('review and preferences remain distinct from a confirmed required failure', async () => {
+    const html = await render([criterion('academic', 'info', { comparison_mode: 'scale_mismatch', student_value: '1.75', requirement: '85%' }), criterion('course', 'fail', { rule_mode: 'preferred' })]);
+    assert.match(html, />Needs review<\/span>/);
+    assert.match(html, />Preference differs<\/span>/);
+    assert.doesNotMatch(html, />Not met<\/span>/);
+    assert.match(html, /1.75/);
+    assert.match(html, /85%/);
+    assert.match(html, /These differences do not block an application/);
 });
 
 test('unrestricted criteria remain available without being counted as successful comparisons', async () => {

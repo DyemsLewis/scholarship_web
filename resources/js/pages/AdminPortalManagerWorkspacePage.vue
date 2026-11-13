@@ -15,11 +15,10 @@ const resource = useAdminResource(async ({ signal }) => {
 const { isLoading, errorMessage } = resource;
 const summary = computed(() => resource.data.value?.summary ?? {});
 const priorities = computed(() => resource.data.value?.priorities ?? []);
-const stableAreas = computed(() => priorities.value.filter((item) => Number(item.count) === 0).length);
 const metrics = computed(() => [
-    { key: 'attention', label: 'Needs attention', value: summary.value.total_attention, detail: 'Queue items across teams', tone: 'attention', icon: 'fa-solid fa-triangle-exclamation' },
-    { key: 'revenue', label: 'Monthly revenue', value: money(summary.value.month_revenue), detail: 'Confirmed payments', icon: 'fa-solid fa-peso-sign' },
-    { key: 'stable', label: 'Stable areas', value: `${stableAreas.value} of ${priorities.value.length}`, detail: 'No open attention item', icon: 'fa-solid fa-shield-check' },
+    { key: 'attention', label: 'Team action', value: summary.value.total_attention, detail: 'Staff-owned work items', tone: 'attention', icon: 'fa-solid fa-triangle-exclamation' },
+    { key: 'revenue', label: 'Payments this month', value: money(summary.value.month_revenue), detail: 'Confirmed gross receipts', icon: 'fa-solid fa-peso-sign' },
+    { key: 'waiting', label: 'Waiting steps', value: summary.value.waiting_total, detail: 'Account-holder or other-team action', icon: 'fa-solid fa-clock' },
 ]);
 
 function money(amount) {
@@ -42,18 +41,20 @@ onMounted(loadOverview);
 
         <AdminTableFrame v-if="!isLoading && !errorMessage" title="Team workload" :description="`${summary.activity_today} platform events today`" icon="fa-solid fa-list-check" class="mt-4">
             <table v-if="priorities.length" class="portal-data-table portal-oversight-table">
-                <colgroup><col style="width: 31%"><col style="width: 31%"><col style="width: 20%"><col style="width: 18%"></colgroup>
-                <thead><tr><th class="px-6">Area</th><th>Owner</th><th>Open items</th><th class="px-6 text-right">Workspace</th></tr></thead>
+                <colgroup><col style="width: 28%"><col style="width: 24%"><col style="width: 18%"><col style="width: 18%"><col style="width: 12%"></colgroup>
+                <thead><tr><th class="px-6">Area</th><th>Owner</th><th>Team action</th><th>Waiting</th><th class="px-6 text-right">Workspace</th></tr></thead>
                 <tbody>
                     <tr v-for="item in priorities" :key="item.key">
-                        <td class="px-6 font-bold text-slate-950">{{ item.label }}</td>
+                        <td class="px-6 font-bold text-slate-950" :title="item.description">{{ item.label }}</td>
                         <td class="text-slate-600">{{ item.owner }}</td>
-                        <td><span :class="['inline-flex min-w-10 justify-center px-2.5 py-1 text-xs font-black', item.count ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600']">{{ item.count }}</span></td>
+                        <td><span :class="['inline-flex min-w-10 justify-center px-2.5 py-1 text-xs font-black', item.count ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600']">{{ item.state === 'reference' ? 'History only' : item.count }}</span></td>
+                        <td class="font-bold text-slate-700">{{ item.waiting }}</td>
                         <td class="px-6 text-right"><a :href="item.url" class="inline-grid h-10 w-10 place-items-center border border-slate-300 bg-white text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white" :aria-label="`Open ${item.label}`" title="Open overview"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>
                     </tr>
                 </tbody>
             </table>
             <AdminEmptyState v-else title="No workload summary available" description="Refresh to check for the latest team workload." />
+            <template #footer><p class="text-xs leading-5 text-slate-500">{{ summary.workload_note }}</p></template>
         </AdminTableFrame>
     </AdminWorkspacePage>
 </template>

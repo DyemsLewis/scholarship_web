@@ -247,7 +247,7 @@ class EducationEligibilityPolicyTest extends TestCase
         }
         $admin = User::factory()->create(['role' => 'admin']);
         $this->acceptProfileEvidence($applicant, $admin);
-        $this->actingAs($admin)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'approved'])->assertOk();
+        $this->actingAs($admin)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id), 'verification_status' => 'approved'])->assertOk();
     }
 
     private function submit(string $channel, User $applicant, Scholarship $program, array $extra = [])

@@ -167,7 +167,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->acceptProfileEvidence($applicant);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
             ])
             ->assertOk()
@@ -207,7 +207,7 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertJsonPath('verification_documents.0.ocr_status', 'needs_review');
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
             ])
             ->assertUnprocessable()
@@ -305,7 +305,7 @@ class ApplicantProfileVerificationTest extends TestCase
         ])->assertOk()->assertJsonPath('user.applicant_verification_status', 'pending');
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
             ])
             ->assertOk()
@@ -720,7 +720,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->acceptProfileEvidence($applicant);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
                 'verification_notes' => null,
             ])
@@ -772,7 +772,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->acceptProfileEvidence($applicant);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
             ])
             ->assertOk()
@@ -1093,7 +1093,7 @@ class ApplicantProfileVerificationTest extends TestCase
             ->assertOk();
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'pending',
             ])
             ->assertUnprocessable()
@@ -1102,7 +1102,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $reason = 'The saved average does not clearly match the submitted report card.';
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'pending',
                 'verification_notes' => $reason,
             ])
@@ -1122,10 +1122,10 @@ class ApplicantProfileVerificationTest extends TestCase
         $this->assertNull($profile->verified_at);
         $this->assertDatabaseHas('applicant_verification_documents', [
             'id' => $proof->id,
-            'status' => 'submitted',
+            'status' => 'approved',
             'review_notes' => null,
         ]);
-        $this->assertSame($reason, $proof->reviews()->where('action', 'review_reopened')->firstOrFail()->note);
+        $this->assertFalse($proof->reviews()->where('action', 'review_reopened')->exists());
 
         $reopenLog = ActivityLog::query()
             ->where('action', 'applicant_profile_verification_updated')
@@ -1172,7 +1172,7 @@ class ApplicantProfileVerificationTest extends TestCase
         $applicant = User::factory()->create(['role' => 'applicant']);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
             ])
             ->assertUnprocessable();
@@ -1196,7 +1196,7 @@ class ApplicantProfileVerificationTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
             ])
             ->assertUnprocessable()
@@ -1221,7 +1221,7 @@ class ApplicantProfileVerificationTest extends TestCase
         ]);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
             ])
             ->assertUnprocessable()

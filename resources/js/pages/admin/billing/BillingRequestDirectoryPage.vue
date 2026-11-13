@@ -11,6 +11,7 @@ import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
 const queueKey = (window.portalPathname?.() ?? window.location.pathname).split('/').filter(Boolean).pop();
 const configs = {
+    finance: { title: 'Finance follow-up', description: 'Check financial record questions and return a response to Finance. Service delivery stays separate.', empty: 'No financial record question is waiting', icon: 'fa-solid fa-receipt' },
     ready: { title: 'Ready to start', description: 'Assign and prepare paid service requests.', empty: 'No requests are ready', icon: 'fa-solid fa-play' },
     active: { title: 'Active delivery', description: 'Continue work already in progress.', empty: 'No services are in progress', icon: 'fa-solid fa-list-check' },
     waiting: { title: 'Waiting on provider', description: 'Track requested information and provider review.', empty: 'No requests are waiting', icon: 'fa-solid fa-clock' },
@@ -65,7 +66,7 @@ onMounted(() => loadItems(queueState.page));
                 <tbody class="divide-y divide-slate-200 bg-white"><tr v-for="item in items" :key="item.id" class="align-middle hover:bg-slate-50/70">
                     <td class="px-5 py-3.5"><p class="billing-text text-sm font-bold text-slate-950">{{ item.plan_name }}</p><p class="mt-0.5 billing-text text-xs text-slate-500">{{ item.reference_number }} · {{ money(item.amount, item.currency) }}</p><p v-if="item.meeting_requested" class="mt-0.5 text-xs font-semibold text-amber-800"><i class="fa-solid fa-calendar-check mr-1" aria-hidden="true"></i>Meeting decision needed</p></td>
                     <td class="px-4 py-3.5"><div class="flex min-w-0 items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span class="min-w-0 billing-text text-sm font-semibold text-slate-800">{{ item.provider }}</span></div></td>
-                    <td class="px-4 py-3.5"><span :class="['inline-flex px-2 py-1 text-xs font-bold', stateClass(item.state)]">{{ item.state_label }}</span></td>
+                    <td class="px-4 py-3.5"><span :class="['inline-flex px-2 py-1 text-xs font-bold', stateClass(item.state)]">{{ queueKey === 'finance' ? 'Finance follow-up' : item.state_label }}</span></td>
                     <td class="px-4 py-3.5"><p class="billing-text text-sm font-semibold text-slate-700">{{ item.assigned_to || 'Unassigned' }}</p><p v-if="assignmentHint(item)" :class="['mt-0.5 text-xs font-semibold', item.action_overdue ? 'text-rose-700' : ['urgent', 'high'].includes(item.priority) ? 'text-amber-800' : 'text-slate-600']">{{ assignmentHint(item) }}</p></td>
                     <td class="px-4 py-3.5 text-sm text-slate-600">{{ item.paid_at }}</td>
                     <td class="px-5 py-3.5 text-right"><a :href="queueState.link(item.action_url)" class="staff-row-action h-10 w-10" :aria-label="`Open ${item.plan_name}`" title="Open request"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></td>

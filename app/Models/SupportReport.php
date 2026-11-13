@@ -4,9 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SupportReport extends Model
 {
+    public function accountHandoffs(): HasMany
+    {
+        return $this->hasMany(SupportAccountHandoff::class);
+    }
+
     public const CATEGORIES = [
         'program' => 'Program concern',
         'account' => 'Account concern',

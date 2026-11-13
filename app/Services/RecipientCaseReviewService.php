@@ -29,6 +29,8 @@ final class RecipientCaseReviewService
 
     public const ADVERSE_REASONS = ['requirement_not_met', 'document_noncompliance', 'misrepresentation'];
 
+    public const WITHDRAWAL_REQUEST_REQUIRED = 'Approve a withdrawal request from the recipient in Scholarship withdrawal instead.';
+
     public function __construct(private readonly RecipientAgreementCaseAccess $access, private readonly RecipientCaseEvidenceStore $files, private readonly RecipientCaseHistory $history) {}
 
     public function authorizeAdmin(User $actor): void
@@ -167,11 +169,15 @@ final class RecipientCaseReviewService
 
     public function authorizeSupportDecision(ScholarshipApplication $application, array $input): ?RecipientCaseReview
     {
+        $category = $input['reason_category'] ?? '';
+        if ($category === 'recipient_withdrew') {
+            throw ValidationException::withMessages(['reason_category' => self::WITHDRAWAL_REQUEST_REQUIRED]);
+        }
         if (($input['decision'] ?? '') !== 'terminated') {
             return null;
         }
-        // Funding and voluntary withdrawal are not misconduct. "Other" must not bypass review.
-        if (in_array($input['reason_category'] ?? '', ['provider_funding_ended', 'recipient_withdrew'], true)) {
+        // Funding is not misconduct. "Other" must not bypass review.
+        if ($category === 'provider_funding_ended') {
             return null;
         }
         $application = ScholarshipApplication::query()->findOrFail($application->id);

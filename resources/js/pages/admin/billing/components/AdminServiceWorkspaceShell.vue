@@ -91,7 +91,7 @@ function serviceRecordLink(href) {
         <div v-if="recordReady" class="grid grid-cols-3 divide-x divide-slate-200 border border-t-0 border-slate-200 bg-white shadow-sm">
             <div class="px-5 py-3.5"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Assigned to</p><p class="billing-text mt-1 text-sm font-bold text-slate-900">{{ purchase.assigned_to_name || 'Unassigned' }}</p></div>
             <div class="px-5 py-3.5"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Target</p><p class="mt-1 text-sm font-bold text-slate-900">{{ formatAdminServiceDateTime(purchase.target_due_at) }}</p></div>
-            <div class="px-5 py-3.5"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Next owner</p><p class="mt-1 text-sm font-bold text-slate-900">{{ purchase.current_action_owner === 'provider' ? 'Provider' : (purchase.current_action_owner === 'platform' ? 'Platform team' : 'No action') }}</p></div>
+            <div class="px-5 py-3.5"><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Delivery owner</p><p class="mt-1 text-sm font-bold text-slate-900">{{ purchase.current_action_owner === 'provider' ? 'Provider' : (purchase.current_action_owner === 'platform' ? 'Platform team' : 'No action') }}</p></div>
         </div>
 
         <div v-if="recordReady && purchase.current_action" class="flex min-h-12 items-center gap-3 border border-t-0 border-slate-200 bg-white px-5 py-3 text-sm shadow-sm">

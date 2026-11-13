@@ -17,6 +17,7 @@ class RecipientBenefitRelease extends Model
         'amount',
         'release_method',
         'location',
+        'address_details',
         'latitude',
         'longitude',
         'instructions',
@@ -29,6 +30,7 @@ class RecipientBenefitRelease extends Model
     {
         return [
             'latitude' => 'decimal:7',
+            'address_details' => 'array',
             'longitude' => 'decimal:7',
             'release_at' => 'datetime',
             'amount' => 'decimal:2',

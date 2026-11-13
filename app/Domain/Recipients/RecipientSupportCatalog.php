@@ -105,6 +105,10 @@ final class RecipientSupportCatalog
 
     public const ENTITLEMENT_CANCELLED = 'cancelled';
 
+    public const ENTITLEMENT_UNCLAIMED = 'unclaimed';
+
+    public const ENTITLEMENT_DECLINED = 'declined';
+
     public const ENTITLEMENT_STATUSES = [
         self::ENTITLEMENT_PENDING_AGREEMENT,
         self::ENTITLEMENT_READY,
@@ -115,6 +119,8 @@ final class RecipientSupportCatalog
         self::ENTITLEMENT_FULFILLED,
         self::ENTITLEMENT_WITHHELD,
         self::ENTITLEMENT_CANCELLED,
+        self::ENTITLEMENT_UNCLAIMED,
+        self::ENTITLEMENT_DECLINED,
     ];
 
     public const ALLOCATION_STATUSES = [

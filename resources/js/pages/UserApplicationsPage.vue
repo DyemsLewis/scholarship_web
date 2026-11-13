@@ -492,11 +492,6 @@ function applicationCardAction(application) {
 }
 
 function applicationActionUrl(application) {
-    if (application?.recipient_monitoring?.eligible
-        && (Number(application.recipient_monitoring.pending_count ?? 0) > 0 || applicationHasOngoingSupport(application))) {
-        return `/dashboard/monitoring/${application.id}`;
-    }
-
     const url = new URL(
         application?.detail_url || `/dashboard/applications/${application?.id}`,
         window.location.origin,
@@ -536,12 +531,8 @@ function applicationActionLabel(application) {
         return 'Review agreement';
     }
 
-    if (Number(application?.recipient_monitoring?.pending_count ?? 0) > 0) {
-        return 'Submit update';
-    }
-
-    if (applicationHasOngoingSupport(application)) {
-        return 'Open support';
+    if (application?.recipient_agreement?.status === 'accepted') {
+        return 'View application';
     }
 
     if (application?.workflow?.is_closed) {
@@ -1644,10 +1635,20 @@ watch(selectedScholarship, (scholarship) => {
                                             </div>
                                             <a
                                                 :href="applicationActionUrl(application)"
+                                                data-application-record-link
                                                 class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
                                             >
                                                 {{ applicationActionLabel(application) }}
                                                 <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                                            </a>
+                                            <a
+                                                v-if="application.recipient_agreement?.status === 'accepted' && application.recipient_monitoring?.eligible"
+                                                :href="`/dashboard/monitoring/${application.id}`"
+                                                data-application-support-link
+                                                class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
+                                            >
+                                                Scholarship Support
+                                                <i class="fa-solid fa-hand-holding-heart text-xs" aria-hidden="true"></i>
                                             </a>
                                         </div>
                                     </div>

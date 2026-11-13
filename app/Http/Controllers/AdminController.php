@@ -20,6 +20,7 @@ use App\Models\StudentProfile;
 use App\Models\User;
 use App\Rules\PhoneNumber;
 use App\Services\AcademicRecordOcrService;
+use App\Services\AdminReviewWorkflowService;
 use App\Services\ApplicantEvidenceReviewService;
 use App\Services\DecisionSupportService;
 use App\Services\PasswordResetLinkService;
@@ -571,6 +572,8 @@ class AdminController extends Controller
 
         return response()->json([
             'user' => $user->loadMissing(['studentProfile', 'providerProfile', 'adminProfile'])->publicPayload(),
+            'review_workflow' => $user->isApplicant() && $request->user()->hasPortalPermission('manage_reviews')
+                ? app(AdminReviewWorkflowService::class)->context('applicant', $user) : null,
             'verification_documents' => $user->isApplicant()
                 ? $user->applicantVerificationDocuments()
                     ->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)
@@ -651,7 +654,7 @@ class AdminController extends Controller
         ]);
 
         return response()->json([
-            'provider' => $this->providerReviewPayload($provider),
+            'provider' => $this->providerReviewPayload($provider, true),
         ]);
     }
 
@@ -934,17 +937,19 @@ class AdminController extends Controller
         $scholarship->loadCount('bookmarks');
 
         return response()->json([
-            'scholarship' => $this->scholarshipReviewPayload($scholarship),
+            'scholarship' => $this->scholarshipReviewPayload($scholarship, true),
         ]);
     }
 
     public function updateScholarshipReview(Request $request, Scholarship $scholarship): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        abort_if(AdminWorkspace::usesPortalManagerWorkspace($request->user()), 403);
 
         $validated = $request->validate([
             'status' => ['required', Rule::in(['pending_review', 'published', 'rejected'])],
             'review_notes' => [Rule::requiredIf($request->input('status') === 'rejected'), 'nullable', 'string', 'max:1500'],
+            'expected_review_token' => ['required', 'string', 'size:64'],
         ]);
 
         $allowedFrom = match ($validated['status']) {
@@ -953,11 +958,13 @@ class AdminController extends Controller
             'pending_review' => ['pending_review', 'published', 'rejected'],
         };
 
-        [$scholarship, $previousStatus] = DB::transaction(function () use ($scholarship, $validated, $allowedFrom): array {
+        [$scholarship, $previousStatus] = DB::transaction(function () use ($request, $scholarship, $validated, $allowedFrom): array {
             $lockedScholarship = Scholarship::query()
                 ->whereKey($scholarship->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            app(AdminReviewWorkflowService::class)->assertCurrent('program', $lockedScholarship, $validated['expected_review_token']);
 
             if (! in_array($lockedScholarship->status, $allowedFrom, true)) {
                 throw ValidationException::withMessages([
@@ -972,21 +979,15 @@ class AdminController extends Controller
             $previousStatus = $lockedScholarship->status;
             $lockedScholarship->update(['status' => $validated['status']]);
 
+            ActivityLog::record($request->user(), 'scholarship_review_updated',
+                "{$request->user()->name} recorded a publication decision for {$lockedScholarship->title}.", $request, [
+                    'scholarship_id' => $lockedScholarship->id, 'from_status' => $previousStatus,
+                    'to_status' => $validated['status'], 'review_notes' => $validated['review_notes'] ?? null,
+                    'review_fingerprint' => app(AdminReviewWorkflowService::class)->fingerprint('program', $lockedScholarship),
+                ]);
+
             return [$lockedScholarship, $previousStatus];
         });
-
-        ActivityLog::record(
-            $request->user(),
-            'scholarship_review_updated',
-            "{$request->user()->name} marked scholarship {$scholarship->title} as {$this->labelFromKey($validated['status'])}.",
-            $request,
-            [
-                'scholarship_id' => $scholarship->id,
-                'from_status' => $previousStatus,
-                'to_status' => $validated['status'],
-                'review_notes' => $validated['review_notes'] ?? null,
-            ],
-        );
 
         $reviewMessage = "Your scholarship {$scholarship->title} is now {$this->labelFromKey($validated['status'])}.";
 
@@ -1007,6 +1008,7 @@ class AdminController extends Controller
             'message' => 'Scholarship review updated.',
             'scholarship' => $this->scholarshipReviewPayload(
                 $scholarship->fresh(['provider.providerProfile', 'events']),
+                true,
             ),
         ]);
     }
@@ -1014,6 +1016,7 @@ class AdminController extends Controller
     public function updateProviderVerification(Request $request, User $provider): JsonResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
+        abort_if(AdminWorkspace::usesPortalManagerWorkspace($request->user()), 403);
         abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
 
         if (is_string($request->input('verification_notes'))) {
@@ -1029,7 +1032,7 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Provider verification updated.',
-            'provider' => $this->providerReviewPayload($provider),
+            'provider' => $this->providerReviewPayload($provider, true),
         ]);
     }
 
@@ -1039,6 +1042,8 @@ class AdminController extends Controller
             $applicant = User::query()->lockForUpdate()->findOrFail($applicant->id);
             abort_unless($request->user()?->isAdmin(), 403);
             abort_unless($applicant->isApplicant(), 404);
+
+            abort_if(AdminWorkspace::usesPortalManagerWorkspace($request->user()), 403);
 
             $applicant->loadMissing(['studentProfile', 'applicantVerificationDocuments']);
             $previousStatus = $applicant->applicantAcademicVerificationStatus();
@@ -1055,7 +1060,10 @@ class AdminController extends Controller
                 ],
                 'academic_grading_scale' => ['prohibited'],
                 'academic_result' => ['prohibited'],
+                'expected_review_token' => ['required', 'string', 'size:64'],
             ]);
+
+            app(AdminReviewWorkflowService::class)->assertCurrent('applicant', $applicant, $validated['expected_review_token']);
 
             $academicRecord = $applicant->applicantVerificationDocuments
                 ->firstWhere('document_type', 'academic_record');
@@ -1110,9 +1118,8 @@ class AdminController extends Controller
                         ? ['required', 'numeric', 'gt:0', $scale === 'grade_point' ? 'max:5' : 'max:100'] : ['nullable'],
                 ], ['*.required' => 'Complete the Academic results review in the academic evidence first.'])->validate();
             }
-            if ($isReopening) {
-                app(ApplicantEvidenceReviewService::class)->resetReviews($applicant, trim($validated['verification_notes']));
-            }
+            // Reopening the overall result does not invalidate unchanged document reviews.
+            // Claim and file changes already invalidate their affected evidence revisions.
 
             $notes = filled($validated['verification_notes'] ?? null)
                 ? trim($validated['verification_notes'])
@@ -1141,6 +1148,7 @@ class AdminController extends Controller
                     'verification_status' => $validated['verification_status'],
                     'verification_notes' => $notes,
                     'verification_source' => 'admin',
+                    'review_fingerprint' => app(AdminReviewWorkflowService::class)->fingerprint('applicant', $applicant->fresh(['studentProfile', 'applicantVerificationDocuments'])),
                 ],
             );
 
@@ -1215,77 +1223,83 @@ class AdminController extends Controller
 
     public function reviewApplicantProfilePhoto(Request $request, User $applicant): JsonResponse
     {
-        abort_unless($request->user()?->isAdmin(), 403);
-        abort_unless($applicant->isApplicant(), 404);
+        return DB::transaction(function () use ($request, $applicant): JsonResponse {
+            abort_unless($request->user()?->isAdmin(), 403);
+            abort_if(AdminWorkspace::usesPortalManagerWorkspace($request->user()), 403);
+            $applicant = User::query()->lockForUpdate()->findOrFail($applicant->id);
+            abort_unless($applicant->isApplicant(), 404);
 
-        $validated = $request->validate([
-            'action' => ['required', Rule::in(['approve', 'request_replacement'])],
-            'reason' => [
-                Rule::requiredIf($request->input('action') === 'request_replacement'),
-                'nullable',
-                'string',
-                'min:5',
-                'max:1000',
-            ],
-        ]);
-        $profile = $applicant->studentProfile()->firstOrCreate(['user_id' => $applicant->id]);
+            $validated = $request->validate([
+                'action' => ['required', Rule::in(['approve', 'request_replacement'])],
+                'expected_review_token' => ['required', 'string', 'size:64'],
+                'reason' => [
+                    Rule::requiredIf($request->input('action') === 'request_replacement'),
+                    'nullable',
+                    'string',
+                    'min:5',
+                    'max:1000',
+                ],
+            ]);
+            $profile = $applicant->studentProfile()->firstOrCreate(['user_id' => $applicant->id]);
 
-        if ($validated['action'] === 'approve' && blank($profile->profile_photo_path)) {
-            return response()->json(['message' => 'The applicant has not uploaded a 2x2 photo yet.'], 422);
-        }
+            if ($validated['action'] === 'approve' && blank($profile->profile_photo_path)) {
+                return response()->json(['message' => 'The applicant has not uploaded a 2x2 photo yet.'], 422);
+            }
 
-        $needsReplacement = $validated['action'] === 'request_replacement';
-        $profile->update([
-            'profile_photo_review_status' => $needsReplacement ? 'needs_replacement' : 'approved',
-            'profile_photo_review_note' => $needsReplacement ? $validated['reason'] : null,
-            'profile_photo_reviewed_by' => $request->user()->id,
-            'profile_photo_reviewed_at' => now(),
-            'profile_photo_review_application_id' => null,
-        ]);
+            app(AdminReviewWorkflowService::class)->assertCurrent('applicant', $applicant, $validated['expected_review_token']);
+            $needsReplacement = $validated['action'] === 'request_replacement';
+            $profile->update([
+                'profile_photo_review_status' => $needsReplacement ? 'needs_replacement' : 'approved',
+                'profile_photo_review_note' => $needsReplacement ? $validated['reason'] : null,
+                'profile_photo_reviewed_by' => $request->user()->id,
+                'profile_photo_reviewed_at' => now(),
+                'profile_photo_review_application_id' => null,
+            ]);
 
-        PortalNotification::updateOrCreate(
-            [
-                'user_id' => $applicant->id,
-                'deduplication_key' => "profile-photo-review:{$applicant->id}",
-            ],
-            [
-                'type' => 'profile_photo_review',
-                'title' => $needsReplacement ? 'Replace your applicant photo' : 'Applicant photo reviewed',
+            PortalNotification::updateOrCreate(
+                [
+                    'user_id' => $applicant->id,
+                    'deduplication_key' => "profile-photo-review:{$applicant->id}",
+                ],
+                [
+                    'type' => 'profile_photo_review',
+                    'title' => $needsReplacement ? 'Replace your applicant photo' : 'Applicant photo reviewed',
+                    'message' => $needsReplacement
+                        ? "An administrator requested a new 2x2 photo. Reason: {$validated['reason']}"
+                        : 'An administrator checked your applicant photo.',
+                    'action_url' => $needsReplacement ? '/dashboard/profile?section=personal&photo=replace' : '/dashboard/profile',
+                    'read_at' => null,
+                ],
+            );
+
+            ActivityLog::record(
+                $request->user(),
+                $needsReplacement ? 'applicant_profile_photo_replacement_requested' : 'applicant_profile_photo_approved',
+                $needsReplacement
+                    ? "{$request->user()->name} requested a replacement 2x2 photo from {$applicant->name}."
+                    : "{$request->user()->name} approved the 2x2 photo for {$applicant->name}.",
+                $request,
+                [
+                    'applicant_id' => $applicant->id,
+                    'photo_review_status' => $profile->profile_photo_review_status,
+                    'reason' => $profile->profile_photo_review_note,
+                ],
+            );
+
+            $freshApplicant = $applicant->fresh([
+                'studentProfile.verifier.adminProfile',
+                'studentProfile.verifier.providerProfile',
+                'studentProfile.verifier.parentAccount.providerProfile',
+                'applicantVerificationDocuments',
+            ]);
+
+            return response()->json([
                 'message' => $needsReplacement
-                    ? "An administrator requested a new 2x2 photo. Reason: {$validated['reason']}"
-                    : 'An administrator checked your applicant photo.',
-                'action_url' => $needsReplacement ? '/dashboard/profile?section=personal&photo=replace' : '/dashboard/profile',
-                'read_at' => null,
-            ],
-        );
-
-        ActivityLog::record(
-            $request->user(),
-            $needsReplacement ? 'applicant_profile_photo_replacement_requested' : 'applicant_profile_photo_approved',
-            $needsReplacement
-                ? "{$request->user()->name} requested a replacement 2x2 photo from {$applicant->name}."
-                : "{$request->user()->name} approved the 2x2 photo for {$applicant->name}.",
-            $request,
-            [
-                'applicant_id' => $applicant->id,
-                'photo_review_status' => $profile->profile_photo_review_status,
-                'reason' => $profile->profile_photo_review_note,
-            ],
-        );
-
-        $freshApplicant = $applicant->fresh([
-            'studentProfile.verifier.adminProfile',
-            'studentProfile.verifier.providerProfile',
-            'studentProfile.verifier.parentAccount.providerProfile',
-            'applicantVerificationDocuments',
-        ]);
-
-        return response()->json([
-            'message' => $needsReplacement
-                ? 'The applicant was asked to upload a new 2x2 photo.'
-                : 'The applicant photo was marked as acceptable.',
-            'applicant' => $this->applicantReviewPayload($freshApplicant, true),
-        ]);
+                    ? 'The applicant was asked to upload a new 2x2 photo.'
+                    : 'The applicant photo was marked as acceptable.',
+                'applicant' => $this->applicantReviewPayload($freshApplicant, true),
+            ]);
+        });
     }
 
     public function downloadProviderVerificationDocument(Request $request, ProviderVerificationDocument $document)
@@ -2212,7 +2226,7 @@ class AdminController extends Controller
             ->implode(' | ');
     }
 
-    private function scholarshipReviewPayload(Scholarship $scholarship): array
+    private function scholarshipReviewPayload(Scholarship $scholarship, bool $includeWorkflow = false): array
     {
         return [
             'id' => $scholarship->id,
@@ -2297,6 +2311,11 @@ class AdminController extends Controller
             'updated_at' => $scholarship->updated_at?->format('M d, Y h:i A'),
             'provider_terms_accepted_at' => $scholarship->provider_terms_accepted_at?->format('M d, Y h:i A'),
             'provider_terms_version' => $scholarship->provider_terms_version,
+            ...($includeWorkflow ? [
+                'review_workflow' => app(AdminReviewWorkflowService::class)->context('program', $scholarship),
+                'can_review' => auth()->user()?->isAdmin() && auth()->user()->hasPortalPermission('manage_reviews')
+                    && ! AdminWorkspace::usesPortalManagerWorkspace(auth()->user()),
+            ] : []),
         ];
     }
 
@@ -2334,7 +2353,7 @@ class AdminController extends Controller
         ];
     }
 
-    private function providerReviewPayload(User $provider): array
+    private function providerReviewPayload(User $provider, bool $includeWorkflow = false): array
     {
         $profile = $provider->providerProfile;
 
@@ -2346,6 +2365,9 @@ class AdminController extends Controller
             'registration_date' => $profile?->registration_date?->format('M d, Y'),
             'representative_position' => $profile?->representative_position,
             'document_review' => app(ProviderVerificationReviewService::class)->summary($provider),
+            'can_review_evidence' => auth()->user()?->isAdmin() && auth()->user()->hasPortalPermission('manage_reviews')
+                && ! AdminWorkspace::usesPortalManagerWorkspace(auth()->user()),
+            ...($includeWorkflow ? ['review_workflow' => app(AdminReviewWorkflowService::class)->context('provider', $provider)] : []),
             'verification_documents' => $provider->providerVerificationDocuments
                 ->sortByDesc('created_at')
                 ->map(fn (ProviderVerificationDocument $document) => $this->verificationDocumentPayload($document))
@@ -2376,6 +2398,7 @@ class AdminController extends Controller
                 && auth()->user()->hasPortalPermission('manage_reviews')
                 && ! AdminWorkspace::usesPortalManagerWorkspace(auth()->user()),
             'evidence_review_history_url' => route('admin.applicants.evidence-review-history', $applicant, false),
+            ...($includeOversightHistory ? ['review_workflow' => app(AdminReviewWorkflowService::class)->context('applicant', $applicant)] : []),
             'created_at' => $applicant->created_at?->format('M d, Y'),
         ];
     }

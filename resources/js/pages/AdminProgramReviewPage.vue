@@ -504,6 +504,7 @@ async function updateReview() {
         const response = await window.axios.patch(`/admin/scholarships/${scholarship.value.id}/review`, {
             status: reviewStatus.value,
             review_notes: reviewNote,
+            expected_review_token: scholarship.value.review_workflow?.token,
         });
 
         applyScholarship(response.data.scholarship);

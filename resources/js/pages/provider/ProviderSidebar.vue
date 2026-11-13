@@ -120,7 +120,7 @@ if (permissions.has('manage_benefit_releases')) {
         key: 'releases',
         children: [
             { href: '/provider/workspaces/releases/delivery-reports', label: 'Delivery reports', exact: true },
-            { href: '/provider/workspaces/releases/issues', label: 'Reported issues', exact: true },
+            { href: '/provider/workspaces/releases/issues', label: 'Issues & follow-up', exact: true },
             { href: '/provider/workspaces/releases/record', label: 'Record distribution', exact: true },
             { href: '/provider/workspaces/releases/upcoming', label: 'Upcoming releases', exact: true },
             { href: '/provider/workspaces/releases/history', label: 'Release history', exact: true },

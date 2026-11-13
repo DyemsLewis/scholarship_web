@@ -4,6 +4,7 @@ namespace App\Queries\Provider;
 
 use App\Models\RecipientBenefitRelease;
 use App\Services\BenefitDeliveryReportService;
+use App\Services\RecipientBenefitFollowUpService;
 use Illuminate\Database\Eloquent\Builder;
 
 final class BenefitReleaseWorkspaceQueues
@@ -14,7 +15,7 @@ final class BenefitReleaseWorkspaceQueues
     {
         return RecipientBenefitRelease::query()
             ->whereIn('scholarship_id', $programIds)
-            ->with(['scholarship', 'records.receiptResponse', 'records.allocations.entitlement'])
+            ->with(['scholarship', 'records.receiptResponse', 'records.allocations.entitlement', 'records.followUp'])
             ->orderBy('release_at')
             ->orderBy('id');
     }
@@ -23,6 +24,8 @@ final class BenefitReleaseWorkspaceQueues
     public function classify(RecipientBenefitRelease $release): array
     {
         $issues = $this->deliveryReports->openIssueCount($release, $this->deliveryReports->openReportsByReleaseRecord($release));
+        $followUps = app(RecipientBenefitFollowUpService::class);
+        $issues += $release->records->filter(fn ($record) => $followUps->requiresAttention($record))->count();
         $pending = $release->records->whereIn('status', ['scheduled', 'prepared'])->count();
 
         return [

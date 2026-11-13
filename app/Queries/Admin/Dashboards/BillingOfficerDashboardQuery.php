@@ -4,6 +4,7 @@ namespace App\Queries\Admin\Dashboards;
 
 use App\Domain\Shared\Dashboard\RoleDashboardPayload;
 use App\Queries\Admin\BillingWorkQueue;
+use App\Support\AdminWorkPriority;
 
 final class BillingOfficerDashboardQuery
 {
@@ -18,7 +19,9 @@ final class BillingOfficerDashboardQuery
         $active = collect($this->billing->directory(['queue' => 'active', 'per_page' => 5])['items'])
             ->map(fn (array $request): array => $this->item($request));
 
-        return RoleDashboardPayload::make(
+        $next = $summary['next_request'];
+
+        return [...RoleDashboardPayload::make(
             workspace: [
                 'key' => 'billing-officer',
                 'eyebrow' => 'Service delivery',
@@ -28,14 +31,14 @@ final class BillingOfficerDashboardQuery
                 'access_scope' => 'Paid provider service requests',
             ],
             primaryAction: [
-                'label' => $summary['ready'] > 0 ? 'Open ready requests' : 'Open active delivery',
-                'url' => $summary['ready'] > 0 ? '/admin/workspaces/billing/queues/ready' : '/admin/workspaces/billing/queues/active',
+                'label' => $next ? 'Continue priority request' : ($summary['waiting'] > 0 ? 'View waiting requests' : 'Browse service requests'),
+                'url' => $next['action_url'] ?? ($summary['waiting'] > 0 ? '/admin/workspaces/billing/queues/waiting' : '/admin/workspaces/billing/queues/ready'),
                 'icon' => 'fa-solid fa-arrow-right',
             ],
             metrics: [
                 ['key' => 'ready', 'label' => 'Ready to start', 'value' => $summary['ready'], 'detail' => 'Paid requests', 'tone' => 'attention', 'url' => '/admin/workspaces/billing/queues/ready', 'icon' => 'fa-solid fa-play'],
                 ['key' => 'active', 'label' => 'Active delivery', 'value' => $summary['active'], 'detail' => 'In progress', 'url' => '/admin/workspaces/billing/queues/active', 'icon' => 'fa-solid fa-list-check'],
-                ['key' => 'waiting', 'label' => 'Waiting on provider', 'value' => $summary['waiting'], 'detail' => 'Information or review', 'tone' => 'attention', 'url' => '/admin/workspaces/billing/queues/waiting', 'icon' => 'fa-solid fa-clock'],
+                ['key' => 'waiting', 'label' => 'Waiting on provider', 'value' => $summary['waiting'], 'detail' => 'Information or review', 'url' => '/admin/workspaces/billing/queues/waiting', 'icon' => 'fa-solid fa-clock'],
                 ['key' => 'completed', 'label' => 'Closed', 'value' => $summary['completed'], 'detail' => 'Completed or cancelled', 'tone' => 'positive', 'url' => '/admin/workspaces/billing/queues/completed', 'icon' => 'fa-solid fa-circle-check'],
             ],
             sections: [
@@ -43,7 +46,7 @@ final class BillingOfficerDashboardQuery
                     'key' => 'ready-requests',
                     'eyebrow' => 'Current focus',
                     'title' => 'Paid requests ready to start',
-                    'description' => 'Oldest requests appear first, with meeting requests prioritized.',
+                    'description' => 'Overdue work first, then requested actions, priority, and payment date.',
                     'empty_message' => 'No paid request is waiting to start.',
                     'icon' => 'fa-solid fa-play',
                     'action' => ['label' => 'Open ready queue', 'url' => '/admin/workspaces/billing/queues/ready', 'icon' => 'fa-solid fa-arrow-right'],
@@ -60,7 +63,24 @@ final class BillingOfficerDashboardQuery
                     'items' => $active,
                 ],
             ],
-        );
+        ), 'priority' => $next ? AdminWorkPriority::make(
+            $next['plan_name'].' - '.$next['provider'],
+            match (true) {
+                $next['finance_follow_up'] => 'Finance requested a record check. Return a Billing response; payment and delivery decisions remain separate.',
+                $next['action_overdue'] => 'The next service action is overdue. Continue this request before starting routine work.',
+                $next['cancellation_requested'] => 'The provider requested cancellation. Review it before continuing delivery.',
+                $next['meeting_requested'] => 'The provider requested a meeting. Record the response in this request.',
+                default => 'Continue the next admin-owned service action. Provider-only waiting steps are kept separate.',
+            },
+            $next['finance_follow_up'] ? 'Billing Officer' : ($next['assigned_to'] ?: 'Billing Officer'),
+            ['label' => 'Open request', 'url' => $next['action_url']],
+            $next['action_due_label'] ?: 'Paid '.$next['paid_at'],
+        ) : AdminWorkPriority::make(
+            $summary['waiting'] > 0 ? 'Waiting for provider information or review' : 'No service action is waiting',
+            $summary['waiting'] > 0 ? 'These requests need the provider to respond before delivery can continue.' : 'There is no outstanding admin-owned service action.',
+            $summary['waiting'] > 0 ? 'Provider' : 'Billing Officer',
+            state: $summary['waiting'] > 0 ? 'waiting' : 'clear',
+        )];
     }
 
     /** @return array<string, mixed> */

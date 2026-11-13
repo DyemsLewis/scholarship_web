@@ -9,6 +9,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Queries\Admin\AccountDirectoryQuery;
 use App\Queries\Admin\Dashboards\AccountManagerDashboardQuery;
+use App\Services\SupportAccountHandoffService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -83,6 +84,7 @@ class AccountManagerWorkspaceController extends Controller
                 'updated_at' => $user->updated_at?->format('M d, Y h:i A'),
             ],
             'role_context' => $this->roleContext($user),
+            'account_handoffs' => app(SupportAccountHandoffService::class)->forAccount($user),
         ]);
     }
 

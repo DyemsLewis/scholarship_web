@@ -7,9 +7,15 @@ use Illuminate\Validation\Rule;
 
 class StoreStageSessionRequest extends ProviderStageOperationRequest
 {
+    protected function prepareForValidation(): void
+    {
+        \App\Support\VenueAddress::prepare($this, 'location_address', 'venue', in_array($this->input('mode'), ['onsite', 'hybrid'], true));
+    }
+
     public function rules(): array
     {
         return [
+            ...\App\Support\VenueAddress::rules(),
             'stage_key' => ['required', Rule::in(ApplicationStageCatalog::SESSION_STAGES)],
             'title' => ['required', 'string', 'max:255'],
             'starts_at' => ['required', 'date', 'after_or_equal:now'],

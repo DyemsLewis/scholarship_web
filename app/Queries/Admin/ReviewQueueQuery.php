@@ -13,10 +13,21 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 
 class ReviewQueueQuery
 {
+    public function oversightWorkload(array $summary): array
+    {
+        $waiting = User::where('role', 'provider')->whereNull('parent_account_id')
+            ->where(fn (Builder $query) => $query->whereDoesntHave('providerProfile')
+                ->orWhereHas('providerProfile', fn (Builder $profile) => $profile->where('verification_status', 'pending')))
+            ->whereDoesntHave('providerVerificationDocuments')->count();
+
+        return ['actionable' => array_sum($summary) - $waiting, 'waiting' => $waiting];
+    }
+
     public function summary(): array
     {
         $providers = User::query()->where('role', 'provider')->whereNull('parent_account_id');
@@ -44,6 +55,7 @@ class ReviewQueueQuery
         $query = User::query()
             ->with('providerProfile')
             ->withCount(['providerVerificationDocuments', 'providerScholarships'])
+            ->withMax('providerVerificationDocuments as review_received_at', 'uploaded_at')
             ->where('role', 'provider')
             ->whereNull('parent_account_id');
 
@@ -60,7 +72,11 @@ class ReviewQueueQuery
             ['providerProfile', ['provider_name', 'legal_name', 'registration_number']],
         ]);
 
-        return $this->page($query->latest('updated_at'), $filters, function (User $provider): array {
+        $status === 'pending'
+            ? $query->orderByRaw('CASE WHEN review_received_at IS NULL THEN 1 ELSE 0 END')->orderBy('review_received_at')->oldest('users.created_at')->orderBy('users.id')
+            : $query->latest('users.updated_at')->latest('users.id');
+
+        return $this->page($query, $filters, function (User $provider): array {
             $profile = $provider->providerProfile;
 
             return [
@@ -74,6 +90,12 @@ class ReviewQueueQuery
                 'proof_count' => (int) $provider->provider_verification_documents_count,
                 'program_count' => (int) $provider->provider_scholarships_count,
                 'updated_at' => $provider->updated_at?->format('M d, Y'),
+                'priority_at' => $provider->review_received_at ?: $provider->created_at?->toISOString(),
+                'priority_timing' => $this->receivedLabel($provider->review_received_at, 'Evidence received'),
+                'priority_level' => $provider->provider_verification_documents_count > 0 ? 20 : 30,
+                'priority_reason' => $provider->provider_verification_documents_count > 0
+                    ? 'The oldest submitted organization evidence is ready for verification.'
+                    : 'This organization has not uploaded legal proof. The provider needs to submit evidence first.',
                 'review_url' => route('admin.workspaces.reviews.providers.show', $provider),
             ];
         });
@@ -99,7 +121,14 @@ class ReviewQueueQuery
             });
         }
 
-        return $this->page($query->latest('updated_at'), $filters, fn (Scholarship $program): array => [
+        if ($status === 'pending_review') {
+            $query->orderByRaw('CASE WHEN deadline <= ? OR application_opens_at <= ? THEN 0 ELSE 1 END', [today()->toDateString(), today()->toDateString()])
+                ->orderByRaw('COALESCE(review_requested_at, created_at)')->orderBy('id');
+        } else {
+            $query->latest('updated_at')->latest('id');
+        }
+
+        return $this->page($query, $filters, fn (Scholarship $program): array => [
             'id' => $program->id,
             'title' => $program->title,
             'provider' => $program->provider?->providerProfile?->provider_name ?: $program->provider?->name,
@@ -108,6 +137,16 @@ class ReviewQueueQuery
             'application_count' => (int) $program->applications_count,
             'deadline' => $program->deadline?->format('M d, Y'),
             'updated_at' => $program->updated_at?->format('M d, Y'),
+            'priority_at' => ($program->review_requested_at ?: $program->created_at)?->toISOString(),
+            'priority_timing' => $program->review_requested_at
+                ? $this->receivedLabel($program->review_requested_at, 'Review requested')
+                : 'Submission time unavailable; created '.$program->created_at?->format('M d, Y'),
+            'priority_level' => ($program->deadline?->lte(today()) || $program->application_opens_at?->lte(today())) ? 10 : 20,
+            'priority_reason' => match (true) {
+                $program->deadline?->lte(today()) => 'The application deadline is today or has passed. Check the dates before deciding publication.',
+                $program->application_opens_at?->lte(today()) => 'The application opening date has arrived, but publication review is still pending.',
+                default => 'This program is waiting for a publication decision, ordered by review request time.',
+            },
             'logo_url' => $program->logoUrl(),
             'image_url' => $program->logoUrl(),
             'cover_image_url' => $program->coverImageUrl(),
@@ -121,6 +160,7 @@ class ReviewQueueQuery
         $query = User::query()
             ->with('studentProfile')
             ->withCount(['applicantVerificationDocuments as evidence_count' => fn (Builder $documents) => $documents->whereIn('document_type', ApplicantVerificationDocument::PROFILE_EVIDENCE_TYPES)])
+            ->withMax(['applicantVerificationDocuments as review_received_at' => fn (Builder $documents) => $documents->whereIn('document_type', ApplicantVerificationDocument::PROFILE_UPLOAD_TYPES)], 'uploaded_at')
             ->where('role', 'applicant');
 
         if ($status === 'unsubmitted') {
@@ -136,7 +176,11 @@ class ReviewQueueQuery
             ['studentProfile', ['first_name', 'last_name', 'school', 'learner_reference_number']],
         ]);
 
-        return $this->page($query->latest('updated_at'), $filters, fn (User $applicant): array => [
+        $status === 'pending'
+            ? $query->orderBy('review_received_at')->oldest('users.created_at')->orderBy('users.id')
+            : $query->latest('users.updated_at')->latest('users.id');
+
+        return $this->page($query, $filters, fn (User $applicant): array => [
             'id' => $applicant->id,
             'name' => $applicant->name,
             'email' => $applicant->email,
@@ -154,6 +198,10 @@ class ReviewQueueQuery
                 ? route('admin.applicants.profile-photo.view', $applicant)
                 : null,
             'updated_at' => $applicant->updated_at?->format('M d, Y'),
+            'priority_at' => $applicant->review_received_at ?: $applicant->created_at?->toISOString(),
+            'priority_timing' => $this->receivedLabel($applicant->review_received_at, 'Evidence received'),
+            'priority_level' => 20,
+            'priority_reason' => 'This applicant is waiting for profile verification. Older submitted evidence is reviewed first.',
             'review_url' => route('admin.workspaces.reviews.applicants.show', $applicant),
         ]);
     }
@@ -178,7 +226,9 @@ class ReviewQueueQuery
             });
         }
 
-        return $this->page($query->latest('updated_at'), $filters, function (RecipientBenefitReleaseRecord $record): array {
+        $status === 'attention' ? $query->oldest('updated_at')->orderBy('id') : $query->latest('updated_at')->latest('id');
+
+        return $this->page($query, $filters, function (RecipientBenefitReleaseRecord $record): array {
             $release = $record->release;
             $program = $release?->scholarship;
             $flags = $this->benefitFlags($record);
@@ -200,6 +250,10 @@ class ReviewQueueQuery
                 'receipt_url' => $hasReceipt ? route('admin.benefit-release-records.receipt', $record) : null,
                 'receipt_name' => $hasReceipt ? $record->receipt_original_name : null,
                 'recipient_url' => $record->applicant ? route('admin.workspaces.reviews.applicants.show', $record->applicant) : null,
+                'priority_at' => $record->updated_at?->toISOString(),
+                'priority_timing' => $this->receivedLabel($record->updated_at, 'Release updated'),
+                'priority_level' => 10,
+                'priority_reason' => $flags[0] ?? 'Review the benefit release evidence.',
             ];
         });
     }
@@ -271,6 +325,10 @@ class ReviewQueueQuery
                         ? 'Resolve overdue check-in'
                         : $this->monitoringNextActionLabel($case->next_action),
                     'last_reviewed_at' => $latestReview?->reviewed_at?->format('M d, Y'),
+                    'priority_at' => ($case->effective_due_at ?: $case->updated_at)?->toISOString(),
+                    'priority_timing' => $state['wait_label'],
+                    'priority_level' => $state['severity'] === 'high' ? 0 : 10,
+                    'priority_reason' => $state['issue'] ?: 'Review the monitoring exception.',
                     'review_url' => route('admin.workspaces.reviews.monitoring.show', [
                         'application' => $application,
                         'case' => $case->id,
@@ -309,7 +367,9 @@ class ReviewQueueQuery
             });
         }
 
-        return $this->page($query->latest('starts_at'), $filters, function (ApplicationStageSession $session): array {
+        $status === 'attention' ? $query->oldest('starts_at')->orderBy('id') : $query->latest('starts_at')->latest('id');
+
+        return $this->page($query, $filters, function (ApplicationStageSession $session): array {
             $state = $this->selectionActivityState($session);
             $program = $session->scholarship;
 
@@ -334,6 +394,10 @@ class ReviewQueueQuery
                 'current_evidence_count' => (int) $session->current_evidence_count,
                 'proof_required' => (bool) $session->proof_required,
                 'review_url' => route('admin.workspaces.reviews.selection-activities.show', $session),
+                'priority_at' => ($session->ends_at ?: $session->starts_at ?: $session->created_at)?->toISOString(),
+                'priority_timing' => $this->receivedLabel($session->starts_at, 'Session date'),
+                'priority_level' => 10,
+                'priority_reason' => $state['flag'] ?: 'Review the selection activity exception.',
             ];
         });
     }
@@ -708,6 +772,22 @@ class ReviewQueueQuery
         }
 
         return ['status' => 'stable', 'flag' => null];
+    }
+
+    private function receivedLabel(mixed $date, string $label): ?string
+    {
+        if (! $date) {
+            return null;
+        }
+
+        $received = Carbon::parse($date);
+        $days = (int) $received->copy()->startOfDay()->diffInDays(today(), false);
+
+        if ($days < 0) {
+            return $label.' '.$received->format('M d, Y');
+        }
+
+        return $label.' '.$received->format('M d, Y').' ('.($days === 0 ? 'today' : $days.'d ago').')';
     }
 
     private function search(Builder $query, ?string $search, array $columns, array $relations): void

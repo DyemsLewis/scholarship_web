@@ -3,6 +3,8 @@
 namespace App\Queries\Admin;
 
 use App\Models\ProviderServicePurchase;
+use App\Services\ServiceFinanceCoordination;
+use App\Support\AdminWorkspace;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -49,7 +51,10 @@ class FinanceRecordQuery
             'successful_payments' => (int) (clone $paid)->count(),
             'pending_payments' => ProviderServicePurchase::query()->where('status', 'pending')->count(),
             'failed_payments' => ProviderServicePurchase::query()->where('status', 'failed')->count(),
-            'exceptions' => ProviderServicePurchase::query()->whereIn('status', ['pending', 'failed'])->count(),
+            'exceptions' => $this->exceptionQuery()->count(),
+            'pending_refunds' => ProviderServicePurchase::where('status', 'paid')->where('refund_status', 'manual_refund_pending')->count(),
+            'needs_review' => $this->staffActionQuery()->count(),
+            'waiting' => $this->exceptionQuery()->whereNotIn('id', $this->staffActionQuery()->select('id'))->count(),
             'trend' => $trend,
             'services' => $services,
         ];
@@ -72,15 +77,20 @@ class FinanceRecordQuery
     public function exceptions(array $filters): array
     {
         $status = $filters['status'] ?? 'all';
-        $query = ProviderServicePurchase::query()
-            ->with(['provider.providerProfile', 'creator.providerProfile'])
-            ->whereIn('status', ['pending', 'failed']);
+        $query = $this->exceptionQuery()
+            ->with(['provider.providerProfile', 'creator.providerProfile', 'financeReviews' => fn ($query) => $query->where('state', '!=', 'checked')]);
 
-        if ($status !== 'all') {
-            $query->where('status', $status);
-        }
+        match ($status) {
+            'needs_review' => $query->whereIn('id', $this->staffActionQuery()->select('id')),
+            'pending', 'failed' => $query->where('status', $status),
+            'refund' => $query->where('status', 'paid')->where('refund_status', 'manual_refund_pending'),
+            'unconfirmed' => $query->where('status', 'paid')->whereNull('paid_at'),
+            'follow_up' => $query->whereHas('financeReviews', fn ($query) => $query->where('state', '!=', 'checked')),
+            default => null,
+        };
         $this->applySearch($query, $filters['search'] ?? null);
-        $paginator = $query->latest()->latest('id')->paginate((int) ($filters['per_page'] ?? 15))->withQueryString();
+        $paginator = $query->orderByRaw("CASE WHEN status = 'failed' THEN 0 ELSE 1 END")
+            ->oldest('created_at')->orderBy('id')->paginate((int) ($filters['per_page'] ?? 15))->withQueryString();
 
         return $this->page($paginator, fn (ProviderServicePurchase $purchase): array => [
             'id' => $purchase->id,
@@ -92,10 +102,56 @@ class FinanceRecordQuery
             'amount' => $purchase->amount,
             'currency' => $purchase->currency,
             'status' => $purchase->status,
+            'exception_label' => $this->exceptionLabel($purchase),
             'reason' => $purchase->failure_message,
             'created_at' => $purchase->created_at?->format('M d, Y h:i A'),
             'failed_at' => $purchase->failed_at?->format('M d, Y h:i A'),
         ]);
+    }
+
+    private function staffActionQuery(): Builder
+    {
+        return $this->exceptionQuery()->where('status', '!=', 'pending')
+            ->whereDoesntHave('financeReviews', fn (Builder $review) => $review->where('state', 'with_billing'));
+    }
+
+    private function exceptionQuery(): Builder
+    {
+        return ProviderServicePurchase::query()->where(function (Builder $query): void {
+            $query->whereIn('status', ['pending', 'failed'])
+                ->orWhere(fn (Builder $paid) => $paid->where('status', 'paid')->where(fn (Builder $issue) => $issue
+                    ->whereNull('paid_at')->orWhere('refund_status', 'manual_refund_pending')))
+                ->orWhereHas('financeReviews', fn (Builder $review) => $review->where('state', '!=', 'checked'));
+        });
+    }
+
+    private function exceptionLabel(ProviderServicePurchase $purchase): string
+    {
+        $review = $purchase->financeReviews->first(fn ($item) => $item->state !== 'checked');
+
+        return match (true) {
+            $review?->state === 'with_billing' => 'With Billing',
+            $review?->state === 'with_finance' => 'Returned to Finance',
+            $purchase->status === 'paid' && ! $purchase->paid_at => 'Confirmation incomplete',
+            $purchase->status === 'paid' && $purchase->refund_status === 'manual_refund_pending' => 'Refund pending',
+            default => ucfirst($purchase->status),
+        };
+    }
+
+    public function reviewRecord(ProviderServicePurchase $purchase): array
+    {
+        $purchase->loadMissing(['provider.providerProfile', 'creator.providerProfile']);
+
+        return [...$this->payment($purchase),
+            'reference_number' => $purchase->reference_number,
+            'payment_status' => $purchase->status,
+            'failure_message' => $purchase->failure_message,
+            'created_at' => $purchase->created_at?->format('M d, Y h:i A'),
+            'receipt_url' => $purchase->status === 'paid' && $purchase->paid_at ? route('admin.workspaces.finance.receipts.show', $purchase, false) : null,
+            'coordination' => app(ServiceFinanceCoordination::class)->payload($purchase),
+            'can_review' => auth()->user()?->isAdmin() && auth()->user()->hasPortalPermission('view_finance')
+                && (AdminWorkspace::usesFinanceOfficerWorkspace(auth()->user()) || ! auth()->user()->isManagedAccount()),
+        ];
     }
 
     public function receipt(ProviderServicePurchase $purchase): array

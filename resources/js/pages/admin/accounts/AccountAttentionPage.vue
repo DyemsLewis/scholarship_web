@@ -12,6 +12,7 @@ const issueOptions = [
     { value: 'unverified', label: 'Email unverified' },
     { value: 'password_reset', label: 'Password reset' },
     { value: 'suspended', label: 'Suspended' },
+    { value: 'support_handoff', label: 'Support referrals' },
 ];
 const queueState = createStaffQueueState(window, {'search':'search','issue':'attention'});
 const requestedIssue = queueState.get('issue');
@@ -32,6 +33,7 @@ const issueCounts = computed(() => ({
     unverified: stats.value.unverified_users,
     password_reset: stats.value.password_resets_required,
     suspended: stats.value.suspended_users,
+    support_handoff: stats.value.support_handoffs,
 }));
 
 function loadAccounts(page = 1) {
@@ -73,7 +75,7 @@ onMounted(() => loadAccounts(queueState.page));
         <AdminTableFrame title="Access queue" :description="loading ? 'Updating results...' : errorMessage ? 'Results unavailable' : `${pagination.total} account${pagination.total === 1 ? '' : 's'} in this view`" :loading="loading" :error="errorMessage" loading-message="Loading accounts..." icon="fa-solid fa-shield-halved" class="mt-4" @retry="resource.retry">
             <template #filters>
                 <div class="grid gap-3">
-                    <div class="grid grid-cols-4 overflow-hidden border border-slate-300 bg-white">
+                    <div class="grid grid-cols-5 overflow-hidden border border-slate-300 bg-white">
                         <button
                             v-for="option in issueOptions"
                             :key="option.value"

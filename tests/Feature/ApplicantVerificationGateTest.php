@@ -125,7 +125,7 @@ class ApplicantVerificationGateTest extends TestCase
 
         $admin = User::factory()->create(['role' => 'admin']);
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'pending',
                 'verification_notes' => 'The updated academic record requires another review.',
             ])

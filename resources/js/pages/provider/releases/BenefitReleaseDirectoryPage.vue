@@ -13,7 +13,7 @@ const queueByPath = {
     '/provider/workspaces/releases/history': 'history',
 };
 const queueCopy = {
-    issues: { title: 'Reported release issues', description: 'Resolve recipient reports about missing or incorrect benefits.', empty: 'No release issues need a response.' },
+    issues: { title: 'Issues & follow-up', description: 'Resolve delivery reports and follow up missed releases.', empty: 'No release issues or follow-ups need attention.' },
     record: { title: 'Record distribution', description: 'Record results and proof for distributions that are due.', empty: 'No distributions are ready to record.' },
     upcoming: { title: 'Upcoming releases', description: 'Review scheduled distributions before their release date.', empty: 'No upcoming benefit releases are scheduled.' },
     history: { title: 'Release history', description: 'Reference completed benefit distributions and recipient receipts.', empty: 'No completed benefit releases are recorded.' },
@@ -37,7 +37,7 @@ let requestVersion = 0;
 let requestedPage = 1;
 
 const queues = computed(() => [
-    { key: 'issues', label: 'Reported issues', count: summary.value.issues, href: '/provider/workspaces/releases/issues' },
+    { key: 'issues', label: 'Issues & follow-up', count: summary.value.issues, href: '/provider/workspaces/releases/issues' },
     { key: 'record', label: 'Ready to record', count: summary.value.record, href: '/provider/workspaces/releases/record' },
     { key: 'upcoming', label: 'Upcoming', count: summary.value.upcoming, href: '/provider/workspaces/releases/upcoming' },
     { key: 'history', label: 'History', count: summary.value.history, href: '/provider/workspaces/releases/history' },

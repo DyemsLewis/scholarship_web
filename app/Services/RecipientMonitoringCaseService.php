@@ -49,6 +49,7 @@ final class RecipientMonitoringCaseService
 
         $cycles = RecipientMonitoringCycle::query()
             ->where('scholarship_id', $application->scholarship_id)
+            ->whereNull('handoff_at')
             ->whereNotIn('status', ['closed', 'cancelled'])
             ->get();
 
@@ -199,6 +200,11 @@ final class RecipientMonitoringCaseService
         }
 
         return DB::transaction(function () use ($case, $actor, $outcome, $reason): RecipientMonitoringCase {
+            ScholarshipApplication::query()->lockForUpdate()->findOrFail($case->scholarship_application_id);
+            $case->refresh();
+            if ($case->isClosed()) {
+                throw ValidationException::withMessages(['case' => 'This check-in is already closed.']);
+            }
             $fromStatus = $case->status;
             $now = now();
             $case->forceFill([
@@ -237,6 +243,12 @@ final class RecipientMonitoringCaseService
         $this->ensureNoOpenCaseWork($case);
 
         return DB::transaction(function () use ($case, $actor, $outcome, $reason): RecipientMonitoringCase {
+            ScholarshipApplication::query()->lockForUpdate()->findOrFail($case->scholarship_application_id);
+            $case->refresh();
+            if ($case->isClosed()) {
+                throw ValidationException::withMessages(['case' => 'This check-in is already closed.']);
+            }
+            $this->ensureNoOpenCaseWork($case);
             $fromStatus = $case->status;
             $case->forceFill([
                 'status' => RecipientSupportCatalog::CASE_WAIVED,
@@ -272,6 +284,11 @@ final class RecipientMonitoringCaseService
         }
 
         return DB::transaction(function () use ($case, $actor, $reason): RecipientMonitoringCase {
+            ScholarshipApplication::query()->lockForUpdate()->findOrFail($case->scholarship_application_id);
+            $case->refresh();
+            if (! in_array($case->status, [RecipientSupportCatalog::CASE_CLOSED, RecipientSupportCatalog::CASE_WAIVED], true)) {
+                throw ValidationException::withMessages(['case' => 'Only a closed or waived check-in can be reopened.']);
+            }
             $fromStatus = $case->status;
             $previousOutcome = $case->outcome;
             if ($case->cycle->status === 'closed') {
@@ -325,12 +342,18 @@ final class RecipientMonitoringCaseService
             'status' => $this->initialStatus($cycle, $application),
             'opened_at' => $cycle->published_at ?? now(),
         ];
-        $case = $persist
-            ? RecipientMonitoringCase::query()->firstOrCreate($identity, $defaults)
-            : ($cycle->relationLoaded('cases')
-                ? $cycle->cases->firstWhere('scholarship_application_id', $application->id)
-                    ?? new RecipientMonitoringCase($identity + $defaults)
-                : RecipientMonitoringCase::query()->firstOrNew($identity, $defaults));
+        $cachedCase = ! $persist && $application->relationLoaded('monitoringCases')
+            ? $application->monitoringCases->firstWhere('recipient_monitoring_cycle_id', $cycle->id)
+            : null;
+        if (! $persist && $cycle->relationLoaded('cases')) {
+            $cachedCase ??= $cycle->cases->firstWhere('scholarship_application_id', $application->id);
+        }
+        $case = $cachedCase ?? match (true) {
+            $cycle->isInPerson() => RecipientMonitoringCase::query()->where($identity)->firstOrFail(),
+            $persist => RecipientMonitoringCase::query()->firstOrCreate($identity, $defaults),
+            $application->relationLoaded('monitoringCases') || $cycle->relationLoaded('cases') => new RecipientMonitoringCase($identity + $defaults),
+            default => RecipientMonitoringCase::query()->firstOrNew($identity, $defaults),
+        };
         $cycle->loadMissing('requirements');
         $today = CarbonImmutable::today();
         $cycleRecords = fn (string $relation): Collection => ! $persist && $application->relationLoaded($relation)
@@ -346,7 +369,7 @@ final class RecipientMonitoringCaseService
             ->max('approved_due_at');
         $effectiveDueAt = $approvedDueAt
             ? CarbonImmutable::parse($approvedDueAt)
-            : CarbonImmutable::parse($cycle->due_at);
+            : CarbonImmutable::parse($case->appointment_at ?? $cycle->due_at)->startOfDay();
         $dueStatus = $this->dueStatus($case, $cycle, $effectiveDueAt, $today);
         $required = $cycle->requirements->where('required', true)->values();
         $requiredSubmissions = $required->isEmpty()
@@ -404,6 +427,7 @@ final class RecipientMonitoringCaseService
             $missingApplicantCount,
             $missingProviderCount,
             $openInterventions,
+            $case->attendance_status,
         );
         $now = now();
         $attributes = [
@@ -443,7 +467,7 @@ final class RecipientMonitoringCaseService
             $attributes['ready_to_close_at'] = $case->ready_to_close_at ?? $now;
         }
         if (in_array($status, [RecipientSupportCatalog::CASE_CLOSED, RecipientSupportCatalog::CASE_CANCELLED], true)) {
-            $attributes['closed_at'] = $case->closed_at ?? $now;
+            $attributes['closed_at'] = $case->closed_at ?? $cycle->closed_at ?? ($persist ? $now : null);
         }
 
         $case->forceFill($attributes);
@@ -467,23 +491,15 @@ final class RecipientMonitoringCaseService
     ): array {
         $adjustments ??= collect();
         $interventions ??= collect();
+        [$displayStatus, $statusLabel, $statusTone] = $this->displayStatus($case);
 
         return [
             'id' => $case->id,
             'status' => $case->status,
-            'status_label' => match ($case->status) {
-                RecipientSupportCatalog::CASE_AWAITING_AGREEMENT => 'Agreement needed',
-                RecipientSupportCatalog::CASE_AWAITING_SUBMISSION => 'Waiting for records',
-                RecipientSupportCatalog::CASE_SUBMITTED => 'Ready for review',
-                RecipientSupportCatalog::CASE_UNDER_REVIEW => 'Review in progress',
-                RecipientSupportCatalog::CASE_CORRECTION_REQUESTED => 'Replacement requested',
-                RecipientSupportCatalog::CASE_EXTENSION_PENDING => 'Request pending',
-                RecipientSupportCatalog::CASE_FOLLOW_UP => 'Follow-up needed',
-                RecipientSupportCatalog::CASE_READY_TO_CLOSE => 'Requirements complete',
-                RecipientSupportCatalog::CASE_CLOSED => 'Check-in closed',
-                RecipientSupportCatalog::CASE_WAIVED => 'Check-in waived',
-                default => 'Check-in cancelled',
-            },
+            'display_status' => $displayStatus,
+            'status_label' => $statusLabel,
+            'status_tone' => $statusTone,
+            'is_final' => $case->isClosed(),
             'due_status' => $case->due_status,
             'due_status_label' => match ($case->due_status) {
                 'upcoming' => 'Opens later',
@@ -495,6 +511,12 @@ final class RecipientMonitoringCaseService
             },
             'effective_due_at' => $case->effective_due_at?->format('Y-m-d'),
             'effective_due_label' => $case->effective_due_at?->format('M d, Y'),
+            'attendance_status' => $case->attendance_status,
+            'attendance_label' => match ($case->attendance_status) {
+                'attended' => 'Attended',
+                'no_show' => 'Missed appointment',
+                default => 'Not recorded',
+            },
             'status_reason' => $case->status_reason,
             'next_action' => $case->next_action ? [
                 'key' => $case->next_action,
@@ -510,6 +532,7 @@ final class RecipientMonitoringCaseService
             'outcome_label' => RecipientSupportCatalog::outcomeLabel($case->outcome),
             'decision_reason' => $case->isClosed() ? $case->status_reason : null,
             'closed_at' => $case->closed_at?->format('M d, Y h:i A'),
+            'closed_at_iso' => $case->closed_at?->toIso8601String(),
             'reopened_at' => $case->reopened_at?->format('M d, Y h:i A'),
             'exception_context' => $includeContext
                 ? $this->exceptionContextPayload($adjustments)
@@ -518,6 +541,43 @@ final class RecipientMonitoringCaseService
                 ? $this->historyPayload($case, $adjustments, $interventions, $audience)
                 : [],
         ];
+    }
+
+    /** @return array{string, string, string} */
+    private function displayStatus(RecipientMonitoringCase $case): array
+    {
+        if ($case->isClosed()) {
+            return match (true) {
+                $case->status === RecipientSupportCatalog::CASE_CANCELLED => ['cancelled', 'Cancelled', 'neutral'],
+                $case->outcome === RecipientSupportCatalog::OUTCOME_EXCUSED => ['excused', 'Excused', 'neutral'],
+                $case->status === RecipientSupportCatalog::CASE_WAIVED => ['waived', 'Waived', 'neutral'],
+                $case->outcome === RecipientSupportCatalog::OUTCOME_INCOMPLETE => ['incomplete', 'Incomplete', 'critical'],
+                in_array($case->outcome, [RecipientSupportCatalog::OUTCOME_COMPLETED, RecipientSupportCatalog::OUTCOME_COMPLETED_WITH_SUPPORT], true)
+                    => ['completed', RecipientSupportCatalog::outcomeLabel($case->outcome), 'positive'],
+                default => ['closed', 'Closed', 'neutral'],
+            };
+        }
+
+        return match ($case->next_action) {
+            'attend_handoff' => ['scheduled', $case->appointment_at ? 'Rescheduled' : 'Appointment scheduled', 'neutral'],
+            'record_attendance' => ['attendance_needed', 'Attendance needed', 'attention'],
+            'resolve_missed_appointment' => ['missed', 'Missed appointment', 'critical'],
+            'resolve_overdue' => $case->attendance_status === 'no_show'
+                ? ['missed', 'Missed appointment', 'critical']
+                : ['overdue', 'Overdue', 'critical'],
+            'close_check_in' => ['ready_to_close', 'Awaiting closure', 'attention'],
+            'record_requirement' => ['provider_recording', 'Verification pending', 'info'],
+            default => match ($case->status) {
+                RecipientSupportCatalog::CASE_AWAITING_AGREEMENT => ['agreement_needed', 'Agreement needed', 'attention'],
+                RecipientSupportCatalog::CASE_SUBMITTED, RecipientSupportCatalog::CASE_UNDER_REVIEW => ['under_review', 'Waiting for review', 'info'],
+                RecipientSupportCatalog::CASE_CORRECTION_REQUESTED => ['correction_requested', 'Replacement requested', 'attention'],
+                RecipientSupportCatalog::CASE_EXTENSION_PENDING => ['request_pending', 'Request pending', 'info'],
+                RecipientSupportCatalog::CASE_FOLLOW_UP => ['follow_up', 'Follow-up needed', 'attention'],
+                default => $case->due_status === 'upcoming'
+                    ? ['upcoming', 'Upcoming', 'neutral']
+                    : ['awaiting_records', 'Waiting for records', 'attention'],
+            },
+        };
     }
 
     private function exceptionContextPayload(Collection $adjustments): ?array
@@ -587,6 +647,8 @@ final class RecipientMonitoringCaseService
                     'closed' => 'Check-in closed',
                     'waived' => 'Check-in waived',
                     'reopened' => 'Check-in reopened',
+                    'appointment_rescheduled' => 'Appointment rescheduled',
+                    'attendance_recorded' => 'Attendance recorded',
                     default => Str::headline($event->action),
                 };
 
@@ -594,8 +656,12 @@ final class RecipientMonitoringCaseService
                     'id' => 'case-'.$event->id,
                     'kind' => 'case_decision',
                     'title' => $title,
-                    'detail' => RecipientSupportCatalog::outcomeLabel($event->outcome),
-                    'reason' => $event->reason,
+                    'detail' => match ($event->action) {
+                        'appointment_rescheduled' => data_get($event->metadata, 'appointment.scheduled_label').' at '.data_get($event->metadata, 'appointment.location'),
+                        'attendance_recorded' => data_get($event->metadata, 'attendance') === 'attended' ? 'Attended' : 'Missed appointment',
+                        default => RecipientSupportCatalog::outcomeLabel($event->outcome),
+                    },
+                    'reason' => ! $providerAudience && in_array($event->action, ['appointment_rescheduled', 'attendance_recorded'], true) ? null : $event->reason,
                     'tone' => $event->action === 'reopened'
                         ? 'amber'
                         : ($event->outcome === RecipientSupportCatalog::OUTCOME_INCOMPLETE ? 'rose' : 'emerald'),
@@ -681,11 +747,11 @@ final class RecipientMonitoringCaseService
             || in_array($cycle->status, ['closed', 'cancelled'], true)) {
             return 'closed';
         }
-        if ($cycle->opens_at?->isAfter($today) || $cycle->handoff_at?->isFuture()) {
+        if ($cycle->isInPerson() ? $cycle->handoffTime($case)->isFuture() : $cycle->opens_at?->isAfter($today)) {
             return 'upcoming';
         }
         if ($today->lessThanOrEqualTo($effectiveDueAt)) {
-            return $cycle->due_at && $effectiveDueAt->isAfter($cycle->due_at)
+            return ! $cycle->isInPerson() && $cycle->due_at && $effectiveDueAt->isAfter($cycle->due_at)
                 ? 'extended'
                 : 'open';
         }
@@ -703,6 +769,7 @@ final class RecipientMonitoringCaseService
         int $missingApplicantCount,
         int $missingProviderCount,
         Collection $openInterventions,
+        ?string $attendance,
     ): array {
         if (in_array($status, [RecipientSupportCatalog::CASE_CLOSED, RecipientSupportCatalog::CASE_CANCELLED], true)) {
             return [null, null];
@@ -725,6 +792,8 @@ final class RecipientMonitoringCaseService
                 $dueStatus === 'upcoming' && $cycle->isInPerson() => ['applicant', 'attend_handoff'],
                 $dueStatus === 'upcoming' => [null, 'wait_for_opening'],
                 $dueStatus === 'overdue' => ['provider', 'resolve_overdue'],
+                $cycle->isInPerson() && $attendance === null => ['provider', 'record_attendance'],
+                $cycle->isInPerson() && $attendance === 'no_show' => ['provider', 'resolve_missed_appointment'],
                 $cycle->isInPerson() && $missingProviderCount > 0 => ['provider', 'record_requirement'],
                 $dueStatus === 'grace_period' && $cycle->allow_exception_requests => ['applicant', 'request_adjustment'],
                 $missingApplicantCount > 0 => ['applicant', 'submit_requirements'],
@@ -763,6 +832,8 @@ final class RecipientMonitoringCaseService
             'submit_requirements' => 'Submit the remaining records',
             'attend_handoff' => 'Bring your documents to the scheduled check-in',
             'record_requirement' => 'Record the provider-confirmed item',
+            'record_attendance' => 'Record whether the recipient attended',
+            'resolve_missed_appointment' => 'Follow up or reschedule the missed appointment',
             'decide_adjustment' => 'Review the recipient request',
             'review_requirements' => 'Review submitted records',
             'replace_record' => 'Upload the requested replacement',

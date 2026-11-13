@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 
 const guide = await readFile('docs/fresh-workflow-demo.md', 'utf8');
-const accounts = [...new Set([...guide.matchAll(/^\| `(marilag(?:\.[a-z]+)?|silayan(?:\.[a-z]+)?|dalisay)` \|/gm)].map(match => match[1]))];
+const accounts = [...new Set([...guide.matchAll(/^\| `(talunaw(?:\.[a-z]+)?|sidlakbay(?:\.[a-z]+)?|hirayalon)` \|/gm)].map(match => match[1]))];
 if (accounts.length !== 29) throw new Error('Review the expected provider demo account list.');
 let source = await readFile('tests/Browser/recipientAccountabilityHostedSmoke.mjs', 'utf8');
 source = source.replace("accountability-hosted-part6';", "provider-role-access-hosted';")
@@ -29,7 +29,7 @@ source = source.slice(0, start) + '    const accounts='+JSON.stringify(accounts)
             assert.equal(await client.evaluate("location.pathname"),'/account/setup');
             report.results.push({name,state:'expected_first_login_setup'});console.log('PASS_SETUP '+name);continue;
         }
-        if(name==='dalisay') {
+        if(name==='hirayalon') {
             const profile=await get('/provider/workspaces/organization-profile/data');assert.equal(profile.status,200);
             const restricted=await get('/provider/workspaces/reviews/data');assert.equal(restricted.status,403);
             report.results.push({name,state:'expected_pending_organization_verification'});console.log('PASS_PENDING '+name);continue;

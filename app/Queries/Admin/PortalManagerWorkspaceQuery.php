@@ -3,7 +3,6 @@
 namespace App\Queries\Admin;
 
 use App\Models\User;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
 final class PortalManagerWorkspaceQuery
@@ -25,15 +24,16 @@ final class PortalManagerWorkspaceQuery
         $finance = $this->finance->summary();
         $records = $this->records->activity(['period' => 'today', 'per_page' => 1])['summary'];
         $reviewTotal = collect($reviews)->sum();
+        $reviewWork = $this->reviews->oversightWorkload($reviews);
 
         $priorities = collect([
-            $this->priority('accounts', 'Account access', $accounts['attention_total'], 'Account Manager', '/admin/workspaces/portal/accounts'),
-            $this->priority('reviews', 'Verification queues', $reviewTotal, 'Review Officer', '/admin/workspaces/portal/reviews'),
-            $this->priority('support', 'Support responses', $support['needs_response'], 'Support Officer', '/admin/workspaces/portal/support'),
-            $this->priority('services', 'Service delivery', $services['ready'] + $services['waiting'], 'Billing Officer', '/admin/workspaces/portal/billing'),
-            $this->priority('finance', 'Payment exceptions', $finance['exceptions'], 'Finance Officer', '/admin/workspaces/portal/finance'),
-            $this->priority('records', 'Security events', $records['security_7_days'], 'Records Officer', '/admin/workspaces/portal/records/activity'),
-        ])->sortByDesc('count')->values();
+            $this->priority('accounts', 'Account access', $accounts['actionable'], 'Account Manager', '/admin/workspaces/portal/accounts', $accounts['waiting'], 'Account-holder steps are separate from restrictions and Support referrals.'),
+            $this->priority('reviews', 'Verification queues', $reviewWork['actionable'], 'Review Officer', '/admin/workspaces/portal/reviews', $reviewWork['waiting'], 'Providers without any legal proof are waiting to submit evidence.'),
+            $this->priority('support', 'Support responses', $support['needs_response'], 'Support Officer', '/admin/workspaces/portal/support', $support['waiting'], 'Cases with another team are not counted as unanswered Support work.'),
+            $this->priority('services', 'Service delivery and follow-up', $services['actionable'], 'Billing Officer', '/admin/workspaces/portal/billing', $services['waiting_on_provider'], 'Includes active staff-owned delivery and Finance questions, even after service closeout.'),
+            $this->priority('finance', 'Payment and refund review', $finance['needs_review'], 'Finance Officer', '/admin/workspaces/portal/finance', $finance['waiting'], 'Gateway confirmation and Billing responses are waiting steps, not Finance-owned actions.'),
+            $this->priority('records', 'Audit and security history', 0, 'Records Officer', '/admin/workspaces/portal/records/activity', 0, 'Failed sign-ins are recorded events, not automatically unresolved incidents.', $records['security_7_days']),
+        ])->sortBy([['count', 'desc'], ['waiting', 'desc'], ['key', 'asc']])->values();
 
         return [
             'summary' => [
@@ -44,6 +44,9 @@ final class PortalManagerWorkspaceQuery
                 'month_revenue' => $finance['month'],
                 'activity_today' => $records['today'],
                 'total_attention' => $priorities->sum('count'),
+                'waiting_total' => $priorities->sum('waiting'),
+                'reference_events' => $records['security_7_days'],
+                'workload_note' => 'Counts are work items by team, not unique people. Waiting steps and audit history are not added to team action.',
             ],
             'priorities' => $priorities,
         ];
@@ -52,15 +55,9 @@ final class PortalManagerWorkspaceQuery
     public function accounts(): array
     {
         $summary = $this->accountSummary();
-        $users = User::query()
+        $users = AccountDirectoryQuery::prioritize(AccountDirectoryQuery::needsAttention(User::query()
             ->with(['studentProfile', 'providerProfile', 'parentAccount.providerProfile', 'adminProfile'])
-            ->where(function (Builder $query): void {
-                $query->whereNull('email_verified_at')
-                    ->orWhere('must_reset_password', true)
-                    ->orWhere('account_status', 'suspended');
-            })
-            ->latest('updated_at')
-            ->latest('id')
+            ->where('role', '!=', 'admin')))
             ->limit(12)
             ->get()
             ->map(fn (User $user): array => [
@@ -74,11 +71,12 @@ final class PortalManagerWorkspaceQuery
                     default => null,
                 },
                 'image_fit' => $user->isProvider() ? 'contain' : 'cover',
-                'issue' => collect([
-                    $user->email_verified_at ? null : 'Email not verified',
-                    $user->must_reset_password ? 'Password reset required' : null,
-                    $user->account_status === 'suspended' ? 'Account suspended' : null,
-                ])->filter()->implode(' · '),
+                'issue' => match (true) {
+                    (bool) $user->pending_support_handoff => 'Referred by Support',
+                    $user->isSuspended() => 'Access restricted',
+                    ! $user->hasVerifiedEmail() => 'Email verification needed',
+                    default => 'Password reset required',
+                },
                 'updated_at' => $user->updated_at?->format('M d, Y'),
             ])->values();
 
@@ -114,14 +112,10 @@ final class PortalManagerWorkspaceQuery
         if (isset($summary['next_case'])) {
             unset($summary['next_case']['action_url']);
         }
-        $cases = $this->support->directory(['queue' => 'needs_response', 'per_page' => 10]);
-        $cases['items'] = collect($cases['items'])->map(function (array $item): array {
-            unset($item['action_url']);
+        $cases = $this->readOnlyCases('needs_response');
+        $waiting = $this->readOnlyCases('waiting');
 
-            return $item;
-        })->values();
-
-        return compact('summary', 'cases');
+        return compact('summary', 'cases', 'waiting');
     }
 
     public function services(): array
@@ -130,7 +124,7 @@ final class PortalManagerWorkspaceQuery
         if (isset($summary['next_request'])) {
             unset($summary['next_request']['action_url']);
         }
-        $queues = collect(['ready', 'active', 'waiting'])->mapWithKeys(function (string $queue): array {
+        $queues = collect(['ready', 'active', 'waiting', 'actionable', 'provider_waiting', 'finance'])->mapWithKeys(function (string $queue): array {
             $payload = $this->services->directory(['queue' => $queue, 'per_page' => 5]);
             $payload['items'] = collect($payload['items'])->map(function (array $item): array {
                 unset($item['action_url']);
@@ -184,22 +178,36 @@ final class PortalManagerWorkspaceQuery
     private function accountSummary(): array
     {
         $accounts = User::query();
+        $operationalAccounts = (clone $accounts)->where('role', '!=', 'admin');
+        $flags = AccountDirectoryQuery::needsAttention(clone $operationalAccounts);
+        $actionable = AccountDirectoryQuery::needsStaffAction(clone $operationalAccounts)->count();
 
         return [
             'total' => (clone $accounts)->count(),
-            'unverified' => (clone $accounts)->whereNull('email_verified_at')->count(),
-            'password_reset' => (clone $accounts)->where('must_reset_password', true)->count(),
-            'suspended' => (clone $accounts)->where('account_status', 'suspended')->count(),
-            'attention_total' => (clone $accounts)->where(function (Builder $query): void {
-                $query->whereNull('email_verified_at')
-                    ->orWhere('must_reset_password', true)
-                    ->orWhere('account_status', 'suspended');
-            })->count(),
+            'unverified' => (clone $operationalAccounts)->whereNull('email_verified_at')->count(),
+            'password_reset' => (clone $operationalAccounts)->where('must_reset_password', true)->count(),
+            'suspended' => (clone $operationalAccounts)->where('account_status', 'suspended')->count(),
+            'attention_total' => (clone $flags)->count(),
+            'actionable' => $actionable,
+            'waiting' => (clone $flags)->count() - $actionable,
         ];
     }
 
-    private function priority(string $key, string $label, int $count, string $owner, string $url): array
+    private function readOnlyCases(string $queue): array
     {
-        return compact('key', 'label', 'count', 'owner', 'url');
+        $cases = $this->support->directory(['queue' => $queue, 'per_page' => 10]);
+        $cases['items'] = collect($cases['items'])->map(function (array $item): array {
+            unset($item['action_url']);
+
+            return $item;
+        })->values();
+
+        return $cases;
+    }
+
+    private function priority(string $key, string $label, int $count, string $owner, string $url, int $waiting, string $description, int $reference = 0): array
+    {
+        return [...compact('key', 'label', 'count', 'owner', 'url', 'waiting', 'description', 'reference'),
+            'state' => $count > 0 ? 'actionable' : ($waiting > 0 ? 'waiting' : ($reference > 0 ? 'reference' : 'clear'))];
     }
 }

@@ -358,6 +358,65 @@ class ApplicantScholarshipDetailContractTest extends TestCase
             ->assertJsonPath('detail.content.guidance.label', 'Profile information needed');
     }
 
+    public function test_how_to_apply_exposes_published_formal_instructions_without_assigned_session_details(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship([
+            'application_mode' => 'hybrid',
+            'handoff_mode' => 'onsite',
+            'handoff_deadline' => '2027-01-15',
+            'handoff_instructions' => 'Present the original enrollment records.',
+            'handoff_location_name' => 'Student desk',
+            'handoff_location_address' => 'Antipolo City',
+            'handoff_latitude' => 14.5861,
+            'handoff_longitude' => 121.1756,
+            'post_qualification_requirements' => "School ID\nOriginal enrollment record",
+        ]);
+
+        $this->actingAs($applicant)->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=application')
+            ->assertOk()
+            ->assertJsonPath('detail.content.process.formal_application.deadline_label', 'Jan 15, 2027')
+            ->assertJsonPath('detail.content.process.formal_application.mode_label', 'In person')
+            ->assertJsonPath('detail.content.process.formal_application.instructions', 'Present the original enrollment records.')
+            ->assertJsonPath('detail.content.process.formal_application.location.name', 'Student desk')
+            ->assertJsonCount(2, 'detail.content.process.formal_application.requirements')
+            ->assertJsonPath('detail.content.process.formal_application.is_assigned_appointment', false)
+            ->assertJsonMissingPath('detail.content.process.formal_application.meeting_url')
+            ->assertJsonMissingPath('detail.content.process.formal_application.applicants');
+    }
+
+    public function test_online_formal_instructions_do_not_expose_stale_onsite_details_or_unsafe_links(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship([
+            'application_mode' => 'hybrid', 'handoff_mode' => 'online',
+            'handoff_url' => 'javascript:alert(1)', 'handoff_location_name' => 'Stale location',
+        ]);
+
+        $this->actingAs($applicant)->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=application')
+            ->assertOk()
+            ->assertJsonPath('detail.content.process.formal_application.location', null)
+            ->assertJsonPath('detail.content.process.formal_application.url', null)
+            ->assertJsonPath('detail.content.process.formal_application.deadline_label', null);
+
+        $scholarship->update(['handoff_url' => 'https://example.org/official-application']);
+        $this->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=application')
+            ->assertOk()->assertJsonPath('detail.content.process.formal_application.url', 'https://example.org/official-application');
+    }
+
+    public function test_missing_published_formal_details_do_not_invent_an_appointment(): void
+    {
+        $applicant = $this->completeApplicant();
+        $scholarship = $this->publishedScholarship(['selection_stages' => ['screening', 'decision']]);
+        $this->actingAs($applicant)->getJson(route('dashboard.scholarships.show.data', $scholarship).'?section=application')
+            ->assertOk()
+            ->assertJsonPath('detail.content.process.formal_application.deadline_label', null)
+            ->assertJsonPath('detail.content.process.formal_application.location', null)
+            ->assertJsonPath('detail.content.process.formal_application.instructions', null)
+            ->assertJsonCount(0, 'detail.content.process.formal_application.requirements')
+            ->assertJsonPath('detail.content.process.formal_application.is_assigned_appointment', false);
+    }
+
     private function completeApplicant(): User
     {
         $applicant = User::factory()->verifiedProfile()->create();

@@ -23,6 +23,7 @@ class RecipientBenefitReleaseRecord extends Model
         'recorded_by',
         'recorded_at',
         'released_at',
+        'transfer_sent_on',
     ];
 
     protected function casts(): array
@@ -31,6 +32,7 @@ class RecipientBenefitReleaseRecord extends Model
             'originals_verified' => 'boolean',
             'recorded_at' => 'datetime',
             'released_at' => 'datetime',
+            'transfer_sent_on' => 'date',
         ];
     }
 
@@ -57,6 +59,16 @@ class RecipientBenefitReleaseRecord extends Model
     public function receiptResponse(): HasOne
     {
         return $this->hasOne(RecipientBenefitReceiptResponse::class);
+    }
+
+    public function payoutDetails(): HasOne
+    {
+        return $this->hasOne(RecipientBenefitPayoutDetails::class, 'release_record_id');
+    }
+
+    public function followUp(): HasOne
+    {
+        return $this->hasOne(RecipientBenefitFollowUp::class, 'release_record_id');
     }
 
     public function allocations(): HasMany

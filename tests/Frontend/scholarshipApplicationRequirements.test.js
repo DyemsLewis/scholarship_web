@@ -77,8 +77,22 @@ test('provider previews never show applicant file availability or live applicant
 
 test('existing applications show published requirements, not personal library readiness or a duplicate action', async () => {
     const html = await render({ preparation: { has_applied: true } });
-    assert.match(html, /published requirements, not your submitted attachments/);
+    assert.match(html, /Published requirements, not your submitted files/);
     assert.doesNotMatch(html, /Saved file|Upload needed|My Documents|data-provider-questions|href="\/dashboard\//);
+});
+
+test('the checklist keeps document names and statuses visible with concise supporting guidance', async () => {
+    const html = await render();
+    assert.match(html, /Upload files in the application form/);
+    assert.match(html, /Attach saved files or upload missing ones in the application form/);
+    assert.match(html, /School ID/);
+    assert.match(html, /Provider essay/);
+    assert.match(html, /<details[^>]+data-file-guidance(?![^>]*open)/);
+    assert.match(html, /Application questions/);
+    assert.match(html, /Only after qualification/);
+    const hybrid = await render({ requirements: { ...requirements(), review_method: 'hybrid' } });
+    assert.match(hybrid, /keep originals for in-person checks/);
+    assert.doesNotMatch(html, /Saved files can be attached in the form\. Upload any missing/);
 });
 
 test('return context accepts canonical positive IDs and known sections, never arbitrary redirect URLs', () => {

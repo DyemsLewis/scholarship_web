@@ -4,6 +4,8 @@ namespace App\Queries\Admin\Dashboards;
 
 use App\Domain\Shared\Dashboard\RoleDashboardPayload;
 use App\Queries\Admin\ReviewQueueQuery;
+use App\Support\AdminWorkPriority;
+use Illuminate\Support\Carbon;
 
 final class ReviewOfficerDashboardQuery
 {
@@ -12,45 +14,66 @@ final class ReviewOfficerDashboardQuery
     /** @return array<string, mixed> */
     public function get(): array
     {
-        $summary = $this->reviews->summary();
+        // Counts and recommendations come from the same filtered queues as the directory.
+        $queues = [
+            'providers' => $this->reviews->providers(['per_page' => 1]),
+            'programs' => $this->reviews->programs(['per_page' => 1]),
+            'applicants' => $this->reviews->applicants(['per_page' => 1]),
+            'selection-activities' => $this->reviews->selectionActivities(['per_page' => 1]),
+            'benefits' => $this->reviews->benefits(['per_page' => 1]),
+            'monitoring' => $this->reviews->monitoring(['per_page' => 1]),
+        ];
+        $counts = collect($queues)->map(fn (array $queue): int => $queue['pagination']['total']);
         $verification = collect([
-            $this->queue('providers', 'Provider verification', 'Organization identity and legal proof', $summary['provider_pending'], '/admin/workspaces/reviews/providers'),
-            $this->queue('programs', 'Program review', 'Programs waiting for publication review', $summary['program_pending'], '/admin/workspaces/reviews/programs'),
-            $this->queue('applicants', 'Applicant verification', 'Academic profiles with submitted evidence', $summary['applicant_pending'], '/admin/workspaces/reviews/applicants'),
+            $this->queue('providers', 'Provider verification', 'Organization identity and legal proof', $counts['providers'], '/admin/workspaces/reviews/providers'),
+            $this->queue('programs', 'Program review', 'Programs waiting for publication review', $counts['programs'], '/admin/workspaces/reviews/programs'),
+            $this->queue('applicants', 'Applicant verification', 'Profiles with submitted evidence', $counts['applicants'], '/admin/workspaces/reviews/applicants'),
         ]);
         $oversight = collect([
-            $this->queue('selection', 'Selection activities', 'Attendance and session proof exceptions', $summary['selection_activity_attention'], '/admin/workspaces/reviews/selection-activities'),
-            $this->queue('benefits', 'Benefit evidence', 'Missing or disputed release evidence', $summary['benefit_attention'], '/admin/workspaces/reviews/benefits'),
-            $this->queue('monitoring', 'Monitoring oversight', 'Unresolved recipient monitoring records', $summary['monitoring_attention'], '/admin/workspaces/reviews/monitoring'),
+            $this->queue('selection', 'Selection activities', 'Attendance and session proof exceptions', $counts['selection-activities'], '/admin/workspaces/reviews/selection-activities'),
+            $this->queue('benefits', 'Benefit evidence', 'Missing or disputed release evidence', $counts['benefits'], '/admin/workspaces/reviews/benefits'),
+            $this->queue('monitoring', 'Monitoring oversight', 'Unresolved recipient monitoring records', $counts['monitoring'], '/admin/workspaces/reviews/monitoring'),
         ]);
-        $priority = $verification->concat($oversight)->sortByDesc('count')->first();
+        $next = collect($queues)->map(function (array $queue, string $key): ?array {
+            $item = collect($queue['items'])->first();
 
-        return RoleDashboardPayload::make(
+            return $item ? [...$item, 'queue_key' => $key] : null;
+        })->filter()->sortBy([
+            ['priority_level', 'asc'],
+            fn (array $a, array $b): int => Carbon::parse($a['priority_at'])->getTimestamp() <=> Carbon::parse($b['priority_at'])->getTimestamp(),
+            ['queue_key', 'asc'],
+        ])->first();
+        $nextAction = $next ? [
+            'label' => match (true) {
+                $next['priority_level'] === 30 => 'View provider record',
+                empty($next['review_url']) => 'Open exception queue',
+                default => 'Open recommended record',
+            },
+            'url' => $next['review_url'] ?? '/admin/workspaces/reviews/'.$next['queue_key'].'?status=attention',
+        ] : null;
+
+        return [...RoleDashboardPayload::make(
             workspace: [
                 'key' => 'review-officer',
                 'eyebrow' => 'Platform verification',
                 'title' => 'Review dashboard',
-                'description' => 'Work through verification and oversight queues separately.',
+                'description' => 'Start with a time-sensitive exception, then the oldest submitted review.',
                 'icon' => 'fa-solid fa-clipboard-check',
                 'access_scope' => 'Provider, program, applicant, and recipient review',
             ],
-            primaryAction: [
-                'label' => ($priority['count'] ?? 0) > 0 ? 'Open highest-priority queue' : 'Open provider reviews',
-                'url' => ($priority['count'] ?? 0) > 0 ? $priority['action']['url'] : '/admin/workspaces/reviews/providers',
-                'icon' => 'fa-solid fa-arrow-right',
-            ],
+            primaryAction: null,
             metrics: [
-                ['key' => 'organizations', 'label' => 'Organization review', 'value' => $summary['provider_pending'] + $summary['program_pending'], 'detail' => 'Providers and programs', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/providers', 'icon' => 'fa-solid fa-building-shield'],
-                ['key' => 'applicants', 'label' => 'Applicant review', 'value' => $summary['applicant_pending'], 'detail' => 'Academic verification', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/applicants', 'icon' => 'fa-solid fa-user-check'],
-                ['key' => 'selection', 'label' => 'Selection activity', 'value' => $summary['selection_activity_attention'], 'detail' => 'Session exceptions', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/selection-activities', 'icon' => 'fa-solid fa-calendar-check'],
-                ['key' => 'recipients', 'label' => 'Recipient oversight', 'value' => $summary['benefit_attention'] + $summary['monitoring_attention'], 'detail' => 'Benefits and monitoring', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/monitoring', 'icon' => 'fa-solid fa-chart-line'],
+                ['key' => 'providers', 'label' => 'Provider verification', 'value' => $counts['providers'], 'detail' => 'Pending organizations', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/providers?status=pending'],
+                ['key' => 'programs', 'label' => 'Program publication', 'value' => $counts['programs'], 'detail' => 'Waiting for a decision', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/programs?status=pending_review'],
+                ['key' => 'applicants', 'label' => 'Applicant verification', 'value' => $counts['applicants'], 'detail' => 'Submitted profile evidence', 'tone' => 'attention', 'url' => '/admin/workspaces/reviews/applicants?status=pending'],
+                ['key' => 'oversight', 'label' => 'Oversight exceptions', 'value' => $counts['benefits'] + $counts['monitoring'] + $counts['selection-activities'], 'detail' => 'Breakdown in the three queues below', 'tone' => 'attention'],
             ],
             sections: [
                 [
                     'key' => 'verification-queues',
                     'eyebrow' => 'Verification',
                     'title' => 'Identity and program review',
-                    'description' => 'Choose the record type you are ready to verify.',
+                    'description' => 'Evidence received first is reviewed first. Program dates can raise priority.',
                     'empty_message' => 'All verification queues are clear.',
                     'icon' => 'fa-solid fa-clipboard-check',
                     'items' => $verification,
@@ -65,7 +88,14 @@ final class ReviewOfficerDashboardQuery
                     'items' => $oversight,
                 ],
             ],
-        );
+        ), 'priority' => $next ? AdminWorkPriority::make(
+            title: $next['name'] ?? $next['title'] ?? $next['recipient'],
+            reason: $next['priority_reason'],
+            owner: $next['priority_level'] === 30 ? 'Provider' : 'Review Officer',
+            action: $nextAction,
+            timing: $next['priority_timing'],
+            state: $next['priority_level'] === 30 ? 'waiting' : 'actionable',
+        ) : AdminWorkPriority::make('No reviews are waiting', 'All verification and oversight queues are clear.', 'Review Officer', state: 'clear')];
     }
 
     /** @return array<string, mixed> */

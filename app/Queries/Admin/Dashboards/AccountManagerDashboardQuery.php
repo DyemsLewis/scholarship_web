@@ -4,6 +4,8 @@ namespace App\Queries\Admin\Dashboards;
 
 use App\Domain\Shared\Dashboard\RoleDashboardPayload;
 use App\Models\User;
+use App\Queries\Admin\AccountDirectoryQuery;
+use App\Support\AdminWorkPriority;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 
@@ -17,12 +19,11 @@ final class AccountManagerDashboardQuery
             $query
                 ->whereNull('email_verified_at')
                 ->orWhere('must_reset_password', true)
-                ->orWhere('account_status', 'suspended');
+                ->orWhere('account_status', 'suspended')
+                ->orWhereHas('supportAccountHandoffs', fn (Builder $handoff) => $handoff->where('status', 'pending'));
         });
-        $attention = (clone $attentionQuery)
+        $attention = AccountDirectoryQuery::prioritize(clone $attentionQuery)
             ->with(['studentProfile', 'providerProfile', 'adminProfile'])
-            ->orderByRaw("case when account_status = 'suspended' then 0 when email_verified_at is null then 1 when must_reset_password = 1 then 2 else 3 end")
-            ->latest('updated_at')
             ->limit(5)
             ->get()
             ->map(fn (User $user): array => $this->item($user));
@@ -34,8 +35,11 @@ final class AccountManagerDashboardQuery
             ->get()
             ->map(fn (User $user): array => $this->item($user));
         $attentionCount = (clone $attentionQuery)->count();
+        $next = $attention->first();
+        $suspended = ($next['status']['label'] ?? null) === 'Suspended';
+        $referred = ($next['status']['label'] ?? null) === 'Referred by Support';
 
-        return RoleDashboardPayload::make(
+        return [...RoleDashboardPayload::make(
             workspace: [
                 'key' => 'account-manager',
                 'eyebrow' => 'Account access',
@@ -50,8 +54,8 @@ final class AccountManagerDashboardQuery
                 'icon' => $attentionCount > 0 ? 'fa-solid fa-arrow-right' : 'fa-solid fa-user-plus',
             ],
             metrics: [
-                ['key' => 'attention', 'label' => 'Need attention', 'value' => $attentionCount, 'detail' => 'Access issues', 'tone' => 'attention', 'url' => '/admin/workspaces/accounts/attention', 'icon' => 'fa-solid fa-triangle-exclamation'],
-                ['key' => 'active', 'label' => 'Active accounts', 'value' => (clone $visibleUsers)->where('account_status', '!=', 'suspended')->count(), 'detail' => 'Sign-in enabled', 'tone' => 'positive', 'url' => '/admin/workspaces/accounts/directory', 'icon' => 'fa-solid fa-user-check'],
+                ['key' => 'attention', 'label' => 'Access flags', 'value' => $attentionCount, 'detail' => 'Restrictions and account-holder steps', 'tone' => 'attention', 'url' => '/admin/workspaces/accounts/attention', 'icon' => 'fa-solid fa-triangle-exclamation'],
+                ['key' => 'active', 'label' => 'All accounts', 'value' => (clone $visibleUsers)->count(), 'detail' => 'Within your access scope', 'url' => '/admin/workspaces/accounts/directory', 'icon' => 'fa-solid fa-users'],
                 ['key' => 'applicants', 'label' => 'Applicants', 'value' => (clone $visibleUsers)->where('role', 'applicant')->count(), 'detail' => 'Learner accounts', 'url' => '/admin/workspaces/accounts/directory?role=applicant', 'icon' => 'fa-solid fa-user-graduate'],
                 ['key' => 'providers', 'label' => 'Providers', 'value' => (clone $visibleUsers)->where('role', 'provider')->count(), 'detail' => 'Organization accounts', 'url' => '/admin/workspaces/accounts/directory?role=provider', 'icon' => 'fa-solid fa-building-columns'],
             ],
@@ -59,8 +63,8 @@ final class AccountManagerDashboardQuery
                 [
                     'key' => 'access-priorities',
                     'eyebrow' => 'Current focus',
-                    'title' => 'Access issues to resolve',
-                    'description' => 'Suspended, unverified, and password-reset accounts appear here.',
+                    'title' => 'Account access follow-up',
+                    'description' => 'Support referrals first, then restrictions and account-holder steps.',
                     'empty_message' => 'No account access issue needs attention.',
                     'icon' => 'fa-solid fa-shield-halved',
                     'action' => ['label' => 'Open attention queue', 'url' => '/admin/workspaces/accounts/attention', 'icon' => 'fa-solid fa-arrow-right'],
@@ -77,7 +81,15 @@ final class AccountManagerDashboardQuery
                     'items' => $recent,
                 ],
             ],
-        );
+        ), 'priority' => $next ? AdminWorkPriority::make(
+            $next['title'],
+            $referred ? 'Support needs an access check. Review the task in the account record and return a result; this does not approve a profile.' : ($suspended
+                ? 'Review the restriction and its recorded reason before making an access change. Suspension is not automatically an error.'
+                : 'The account holder needs to verify their email or change their password. Offer assistance if they report an access problem.'),
+            $suspended || $referred ? 'Account Manager' : 'Account holder',
+            $next['action'],
+            state: $suspended || $referred ? 'actionable' : 'waiting',
+        ) : AdminWorkPriority::make('No account access flags', 'There are no restrictions or account-holder steps in the attention queue.', 'Account Manager', state: 'clear')];
     }
 
     private function visibleUsers(User $manager): Builder
@@ -90,6 +102,7 @@ final class AccountManagerDashboardQuery
     private function item(User $user): array
     {
         [$status, $tone] = match (true) {
+            (bool) $user->pending_support_handoff => ['Referred by Support', 'attention'],
             $user->isSuspended() => ['Suspended', 'attention'],
             ! $user->hasVerifiedEmail() => ['Email unverified', 'attention'],
             $user->must_reset_password => ['Password reset due', 'attention'],

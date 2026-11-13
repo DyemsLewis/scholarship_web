@@ -3,6 +3,7 @@
 namespace App\Queries\Admin;
 
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 
 final class AccountDirectoryQuery
 {
@@ -23,8 +24,7 @@ final class AccountDirectoryQuery
             ->pluck('total', 'role');
 
         $query = (clone $visibleUsers)
-            ->with(['studentProfile', 'providerProfile', 'adminProfile'])
-            ->latest();
+            ->with(['studentProfile', 'providerProfile', 'adminProfile']);
 
         if ($role !== 'all') {
             $query->where('role', $role);
@@ -34,14 +34,14 @@ final class AccountDirectoryQuery
             'unverified' => $query->whereNull('email_verified_at'),
             'password_reset' => $query->where('must_reset_password', true),
             'suspended' => $query->where('account_status', 'suspended'),
-            'needs_attention' => $query->where(function ($query): void {
-                $query
-                    ->whereNull('email_verified_at')
-                    ->orWhere('must_reset_password', true)
-                    ->orWhere('account_status', 'suspended');
-            }),
+            'support_handoff' => $query->whereHas('supportAccountHandoffs', fn (Builder $query) => $query->where('status', 'pending')),
+            'needs_attention' => self::needsAttention($query),
             default => null,
         };
+
+        $attention !== 'all' ? self::prioritize($query) : $query
+            ->withExists(['supportAccountHandoffs as pending_support_handoff' => fn (Builder $query) => $query->where('status', 'pending')])
+            ->latest()->latest('id');
 
         if ($search !== '') {
             $likeSearch = '%'.$search.'%';
@@ -85,18 +85,13 @@ final class AccountDirectoryQuery
                 'unverified_users' => (clone $visibleUsers)->whereNull('email_verified_at')->count(),
                 'suspended_users' => (clone $visibleUsers)->where('account_status', 'suspended')->count(),
                 'password_resets_required' => (clone $visibleUsers)->where('must_reset_password', true)->count(),
-                'attention_total' => (clone $visibleUsers)
-                    ->where(function ($query): void {
-                        $query
-                            ->whereNull('email_verified_at')
-                            ->orWhere('must_reset_password', true)
-                            ->orWhere('account_status', 'suspended');
-                    })
-                    ->count(),
+                'support_handoffs' => (clone $visibleUsers)->whereHas('supportAccountHandoffs', fn (Builder $query) => $query->where('status', 'pending'))->count(),
+                'attention_total' => self::needsAttention(clone $visibleUsers)->count(),
             ],
             'users' => $users->getCollection()->map(fn (User $user) => [
                 ...$user->publicPayload(),
                 'avatar_url' => $this->avatarUrl($user),
+                'pending_support_handoff' => (bool) $user->pending_support_handoff,
                 'created_at' => $user->created_at?->format('M d, Y'),
             ])->values(),
             'pagination' => [
@@ -117,5 +112,26 @@ final class AccountDirectoryQuery
         }
 
         return $user->isProvider() ? $user->publicPayload()['provider_logo_url'] : null;
+    }
+
+    public static function needsAttention(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $flags) => $flags->whereNull('email_verified_at')
+            ->orWhere('must_reset_password', true)->orWhere('account_status', 'suspended')
+            ->orWhereHas('supportAccountHandoffs', fn (Builder $handoff) => $handoff->where('status', 'pending')));
+    }
+
+    public static function needsStaffAction(Builder $query): Builder
+    {
+        return $query->where(fn (Builder $flags) => $flags->where('account_status', 'suspended')
+            ->orWhereHas('supportAccountHandoffs', fn (Builder $handoff) => $handoff->where('status', 'pending')));
+    }
+
+    public static function prioritize(Builder $query): Builder
+    {
+        return $query->withExists(['supportAccountHandoffs as pending_support_handoff' => fn (Builder $query) => $query->where('status', 'pending')])
+            ->orderByDesc('pending_support_handoff')
+            ->orderByRaw("CASE WHEN account_status = 'suspended' THEN 0 WHEN email_verified_at IS NULL THEN 1 WHEN must_reset_password = 1 THEN 2 ELSE 3 END")
+            ->oldest('created_at')->orderBy('id');
     }
 }

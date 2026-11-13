@@ -281,7 +281,8 @@ class AdminRoleWorkspaceTest extends TestCase
             ->getJson('/admin/workspaces/reviews/dashboard/data')
             ->assertOk()
             ->assertJsonPath('workspace.key', 'review-officer')
-            ->assertJsonPath('metrics.0.value', 2)
+            ->assertJsonPath('metrics.0.value', 1)
+            ->assertJsonPath('metrics.1.value', 1)
             ->assertJsonPath('sections.0.items.0.status.label', '1 open')
             ->assertJsonMissingPath('sections.0.items.0.meta')
             ->assertJsonCount(4, 'metrics')
@@ -352,7 +353,7 @@ class AdminRoleWorkspaceTest extends TestCase
             ->assertJsonPath('provider.verification_status', 'rejected');
 
         $this->actingAs($reviewOfficer)
-            ->patchJson("/admin/scholarships/{$program->id}/review", [
+            ->patchJson("/admin/scholarships/{$program->id}/review", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($program->id),
                 'status' => 'rejected',
                 'review_notes' => 'Applicant terms need clarification.',
             ])
@@ -360,7 +361,7 @@ class AdminRoleWorkspaceTest extends TestCase
             ->assertJsonPath('scholarship.status', 'rejected');
 
         $this->actingAs($reviewOfficer)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'rejected',
                 'verification_notes' => 'A readable academic record is required.',
             ])

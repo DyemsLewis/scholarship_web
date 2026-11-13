@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\PortalNotification;
 use App\Models\ProviderVerificationDocument;
 use App\Models\User;
+use App\Support\AdminWorkspace;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -55,11 +56,15 @@ class ProviderVerificationReviewService
 
         return hash_hmac('sha256', json_encode([
             $provider->id, $profile?->getAttributes(), $documents,
+            ActivityLog::query()->where('action', 'provider_verification_updated')->where('metadata->provider_id', $provider->id)->max('id'),
         ], JSON_THROW_ON_ERROR), (string) config('app.key'));
     }
 
     public function reviewDocument(Request $request, ProviderVerificationDocument $document, array $data): ProviderVerificationDocument
     {
+        abort_unless($request->user()?->isAdmin() && $request->user()->hasPortalPermission('manage_reviews')
+            && ! AdminWorkspace::usesPortalManagerWorkspace($request->user()), 403);
+
         return DB::transaction(function () use ($request, $document, $data) {
             $provider = User::query()->lockForUpdate()->findOrFail($document->provider_id);
             abort_unless($provider->isProvider() && ! $provider->isManagedAccount(), 404);
@@ -100,6 +105,9 @@ class ProviderVerificationReviewService
 
     public function decide(Request $request, User $provider, array $data): User
     {
+        abort_unless($request->user()?->isAdmin() && $request->user()->hasPortalPermission('manage_reviews')
+            && ! AdminWorkspace::usesPortalManagerWorkspace($request->user()), 403);
+
         return DB::transaction(function () use ($request, $provider, $data) {
             $current = User::query()->lockForUpdate()->findOrFail($provider->id);
             $profile = $current->providerProfile()->lockForUpdate()->firstOrFail();
@@ -129,6 +137,8 @@ class ProviderVerificationReviewService
             ActivityLog::record($request->user(), 'provider_verification_updated',
                 "{$request->user()->name} marked provider {$current->name} as {$status}.", $request, [
                     'provider_id' => $current->id, 'verification_status' => $status,
+                    'verification_notes' => $notes,
+                    'review_fingerprint' => app(AdminReviewWorkflowService::class)->fingerprint('provider', $current),
                     'document_reviews' => $current->providerVerificationDocuments->map(fn ($document) => [
                         'id' => $document->id, 'revision' => $document->revision, 'status' => $document->reviewStatus(),
                     ])->all(),

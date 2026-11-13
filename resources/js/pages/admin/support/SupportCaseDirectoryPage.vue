@@ -11,7 +11,7 @@ import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 const slug = (window.portalPathname?.() ?? window.location.pathname).split('/').filter(Boolean).pop();
 const configs = {
     'needs-response': { queue: 'needs_response', eyebrow: 'Support inbox', title: 'Needs response', description: 'Cases waiting for a platform response.', empty: 'No cases need a response', icon: 'fa-solid fa-inbox' },
-    waiting: { queue: 'waiting', eyebrow: 'Coordination', title: 'Waiting for provider', description: 'Provider follow-up remains; no platform response is pending.', empty: 'No cases are waiting for a provider', icon: 'fa-solid fa-clock' },
+    waiting: { queue: 'waiting', eyebrow: 'Coordination', title: 'Waiting on a team', description: 'Account Manager or provider follow-up is pending.', empty: 'No cases are waiting on another team', icon: 'fa-solid fa-clock' },
     resolved: { queue: 'resolved', eyebrow: 'Case history', title: 'Resolved cases', description: 'Completed support records.', empty: 'No resolved cases yet', icon: 'fa-solid fa-circle-check' },
 };
 const config = configs[slug] ?? configs['needs-response'];

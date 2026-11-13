@@ -296,6 +296,7 @@ final class BenefitDeliveryReportService
             if ($data['response_kind'] === 'receipt_confirmed') {
                 abort_unless($case->status === 'awaiting_recipient' && $proposal?->response_kind === 'delivery_proposed', 409, 'A current, evidenced delivery proposal is required before confirming receipt.');
                 $record = $this->matchingDeliveryRecord($case, $proposal->delivery_record_id);
+                app(RecipientBenefitPayoutService::class)->requireValidReceiptDate($record, $data['received_on']);
                 foreach ($proposal->evidence as $proof) {
                     if (! Storage::disk('local')->exists($proof->path) || ! hash_equals($proof->sha256, hash('sha256', Storage::disk('local')->get($proof->path)))) {
                         throw ValidationException::withMessages(['evidence' => 'The delivery proof is missing or changed. Ask the provider to supply it again.']);

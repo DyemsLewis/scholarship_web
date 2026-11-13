@@ -114,7 +114,7 @@ class ProgramConfigurationValidationTest extends TestCase
         $program = $this->program($provider);
         $program->update(['status' => 'pending_review', 'application_limit' => 10, 'expected_results_at' => '2027-06-29']);
         $admin = User::factory()->create(['role' => 'admin']);
-        $this->actingAs($admin)->patchJson('/admin/scholarships/'.$program->id.'/review', ['status' => 'published'])
+        $this->actingAs($admin)->patchJson('/admin/scholarships/'.$program->id.'/review', ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($program->id), 'status' => 'published'])
             ->assertUnprocessable()->assertJsonValidationErrors(['application_limit', 'expected_results_at']);
         $this->assertSame('pending_review', $program->fresh()->status);
     }

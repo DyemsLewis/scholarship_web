@@ -1,13 +1,15 @@
 <script setup>
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import BenefitDeliveryReportDialog from './BenefitDeliveryReportDialog.vue';
 import { concernError } from '../../support/agreementConcerns.js';
 import { deliveryClass } from '../../support/benefitDeliveryReports.js';
 
-const props = defineProps({ historyUrl: { type: String, required: true }, provider: Boolean });
+const props = defineProps({ historyUrl: { type: String, required: true }, provider: Boolean, releaseId: { type: [String, Number], default: null }, receiptSaved: Boolean });
 const emit = defineEmits(['status-change']);
 const root = ref(null), rows = ref([]), legacy = ref([]), options = ref([]), createUrl = ref(''), pagination = ref({}), legacyPagination = ref({});
 const loading = ref(false), opening = ref(false), error = ref(''), message = ref(''), selected = ref(null), open = ref(false);
+const releaseOption = computed(() => options.value.find((item) => item.type === 'release' && String(item.id) === String(props.releaseId)));
+const canReportRelease = computed(() => !!releaseOption.value && !!createUrl.value && !props.provider && !props.receiptSaved && !loading.value && !opening.value);
 let version = 0;
 async function load(page = 1, legacyPage = 1) {
     const token = ++version; loading.value = true; error.value = '';
@@ -37,12 +39,14 @@ async function show(row = null, importUrl = null) {
 }
 async function changed(data) { message.value = data.message || ''; await load(pagination.value.current_page || 1, legacyPagination.value.current_page || 1); emit('status-change', data); }
 function close() { open.value = false; load(pagination.value.current_page || 1, legacyPagination.value.current_page || 1); }
+function reportRelease() { if (canReportRelease.value) show(); }
 onBeforeUnmount(() => { version++; });
 </script>
 
 <template>
-    <section v-if="provider || open || loading || options.length || rows.length || legacy.length || error" id="benefit-delivery-reports" ref="root" tabindex="-1" data-delivery-panel class="mt-4 scroll-mt-5 overflow-hidden rounded-sm border border-slate-300 bg-white shadow-sm" aria-label="Benefit delivery reports">
-        <header class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span><div><h2 class="text-base font-bold text-slate-950">Benefit delivery reports</h2><p class="mt-1 text-sm leading-5 text-slate-600">{{ provider ? 'Respond to delivery concerns without assuming receipt.' : 'Missing, incomplete, or unclear delivery? Ask the provider here, even before a release is recorded.' }}</p></div></div><button v-if="!provider && options.length && createUrl" type="button" :disabled="loading || opening" class="min-h-10 shrink-0 border border-slate-300 px-4 text-sm font-bold text-slate-700 disabled:opacity-40" @click="show()">Report a benefit issue</button></header>
+    <slot :can-report="canReportRelease" :report-release="reportRelease" />
+    <section v-if="provider || (!releaseId && (loading || options.length)) || rows.length || legacy.length || error" id="benefit-delivery-reports" ref="root" tabindex="-1" data-delivery-panel class="mt-4 scroll-mt-5 overflow-hidden rounded-sm border border-slate-300 bg-white shadow-sm" aria-label="Benefit delivery reports">
+        <header class="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div class="flex items-start gap-3"><span class="grid h-10 w-10 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span><div><h2 class="text-base font-bold text-slate-950">Benefit delivery reports</h2><p class="mt-1 text-sm leading-5 text-slate-600">{{ provider ? 'Respond to delivery concerns without assuming receipt.' : releaseId ? 'Review replies and follow-up for your scholarship.' : 'Report a delivery problem, even if there is no release schedule yet.' }}</p></div></div><button v-if="!provider && !releaseId && options.length && createUrl" type="button" :disabled="loading || opening" class="min-h-10 shrink-0 border border-slate-300 px-4 text-sm font-bold text-slate-700 disabled:opacity-40" @click="show()">Report a benefit issue</button></header>
         <p v-if="message" role="status" class="border-t border-slate-200 bg-slate-50 px-5 py-3 text-sm text-slate-600">{{ message }}</p>
         <p v-if="error" role="alert" class="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-950">{{ error }} <button type="button" :disabled="loading" class="ml-2 font-bold underline" @click="load()">Try again</button></p>
         <p v-else-if="loading || opening" role="status" class="border-t border-slate-200 px-5 py-4 text-sm text-slate-500">{{ opening ? 'Opening report...' : 'Loading reports...' }}</p>
@@ -52,6 +56,6 @@ onBeforeUnmount(() => { version++; });
             <p v-if="!rows.length && !legacy.length" class="border-t border-slate-200 px-5 py-3 text-sm text-slate-500">No delivery reports are recorded. Use normal receipt confirmation when you receive a benefit without a problem.</p>
         </template>
         <footer v-for="[key, pager] in [['reports', pagination], ['legacy', legacyPagination]]" v-show="pager.last_page > 1" :key="key" class="flex items-center justify-between gap-3 border-t border-slate-200 px-5 py-3 text-xs"><span>{{ key === 'legacy' ? 'Earlier issues' : 'Reports' }}: {{ pager.current_page }} of {{ pager.last_page }}</span><div class="flex gap-2"><button v-for="direction in [-1, 1]" :key="direction" type="button" :disabled="loading || opening || (direction < 0 ? pager.current_page <= 1 : pager.current_page >= pager.last_page)" class="border px-3 py-2 disabled:opacity-40" @click="load(key === 'reports' ? pager.current_page + direction : pagination.current_page, key === 'legacy' ? pager.current_page + direction : legacyPagination.current_page)">{{ direction < 0 ? 'Previous' : 'Next' }}</button></div></footer>
-        <BenefitDeliveryReportDialog :open="open" :record="selected" :provider="provider" :options="options" :create-url="createUrl" @close="close" @changed="changed" />
     </section>
+    <BenefitDeliveryReportDialog :open="open" :record="selected" :provider="provider" :options="options" :fixed-source="releaseOption" :create-url="createUrl" @close="close" @changed="changed" />
 </template>

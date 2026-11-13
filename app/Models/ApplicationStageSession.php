@@ -19,6 +19,7 @@ class ApplicationStageSession extends Model
         'mode',
         'venue',
         'location_address',
+        'address_details',
         'latitude',
         'longitude',
         'meeting_url',
@@ -37,6 +38,7 @@ class ApplicationStageSession extends Model
     {
         return [
             'starts_at' => 'datetime',
+            'address_details' => 'array',
             'ends_at' => 'datetime',
             'latitude' => 'decimal:7',
             'longitude' => 'decimal:7',

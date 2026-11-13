@@ -8,6 +8,7 @@ use App\Models\Scholarship;
 use App\Models\SupportReport;
 use App\Models\User;
 use App\Queries\Admin\SupportCaseQuery;
+use App\Services\SupportAccountHandoffService;
 use App\Support\AdminWorkspace;
 use App\Support\ProviderWorkspace;
 use Illuminate\Database\Eloquent\Builder;
@@ -595,6 +596,9 @@ class SupportReportController extends Controller
     {
         $user = $request->user();
         abort_unless($user?->isProvider() || $user?->isAdmin(), 403);
+        if ($user->isAdmin()) {
+            app(SupportAccountHandoffService::class)->authorize($user, 'manage_reports');
+        }
 
         if ($user->isProvider()) {
             abort_unless(
@@ -605,6 +609,7 @@ class SupportReportController extends Controller
         }
 
         $validated = $request->validate([
+            'expected_support_token' => ['sometimes', 'required', 'string', 'size:64'],
             'status' => ['required', Rule::in(['open', 'resolved'])],
             'admin_response' => [
                 'nullable',
@@ -640,6 +645,14 @@ class SupportReportController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
             $previousOverallStatus = $lockedReport->status;
+            if ($viewerRole === 'admin') {
+                if (isset($validated['expected_support_token'])) {
+                    app(SupportAccountHandoffService::class)->assertCaseToken($lockedReport, $validated['expected_support_token']);
+                }
+                abort_if($lockedReport->admin_status === 'not_required', 409, 'A platform response is not required.');
+                abort_if($validated['status'] === 'resolved' && $lockedReport->accountHandoffs()->where('status', 'pending')->exists(),
+                    409, 'Wait for the Account Manager result, or cancel the account task before completing your response.');
+            }
             $roleStatusChanged = $lockedReport->{$roleStatusColumn} !== $validated['status'];
 
             $lockedReport->{$roleStatusColumn} = $validated['status'];

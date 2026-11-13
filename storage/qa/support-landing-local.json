@@ -1,0 +1,14 @@
+{
+  "roles": [
+    "learner.release.confirm",
+    "learner.agreement"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\applicant-support-part-1-landing.png"
+  ],
+  "verified_application_ids": [],
+  "passed": true
+}

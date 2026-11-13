@@ -269,6 +269,18 @@ class ApplicantApplicationDetailContractTest extends TestCase
             ->assertOk()
             ->assertJsonPath('detail.decision.state', 'recipient_support')
             ->assertJsonPath('detail.decision.action.href', route('dashboard.monitoring.show', $application, false));
+
+        $this->get(route('dashboard.applications.show', $application))
+            ->assertOk()->assertViewIs('dashboard-application-detail')
+            ->assertSee('data-page="dashboardApplicationOverview"', false);
+        foreach (['submission', 'activities', 'outcome', 'history'] as $section) {
+            $this->get(route('dashboard.applications.show.section', [$application, $section]))
+                ->assertOk()->assertViewIs('dashboard-application-detail')
+                ->assertSee('data-application-section="'.$section.'"', false);
+        }
+        $this->get(route('dashboard.monitoring.show', $application))->assertOk();
+        $otherApplicant = User::factory()->create(['role' => 'applicant']);
+        $this->actingAs($otherApplicant)->get(route('dashboard.applications.show', $application))->assertForbidden();
     }
 
     public function test_outcome_view_shows_only_one_pending_state_before_a_final_result(): void

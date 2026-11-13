@@ -1,0 +1,13 @@
+{
+  "roles": [
+    "marilag.manager"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\monitoring-part-1-release-hold.png"
+  ],
+  "verified_application_ids": [],
+  "passed": true
+}

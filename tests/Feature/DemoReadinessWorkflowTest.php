@@ -49,7 +49,7 @@ class DemoReadinessWorkflowTest extends TestCase
         }
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", [
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'verification_status' => 'approved',
             ])
             ->assertOk();
@@ -188,7 +188,7 @@ class DemoReadinessWorkflowTest extends TestCase
         $this->assertNotNull($adminReviewResponse->json('scholarship.provider_terms_accepted_at'));
 
         $this->actingAs($admin)
-            ->patchJson("/admin/scholarships/{$scholarshipId}/review", [
+            ->patchJson("/admin/scholarships/{$scholarshipId}/review", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($scholarshipId),
                 'status' => 'published',
                 'review_notes' => 'Program details are ready for applicants.',
             ])
@@ -337,10 +337,16 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertOk()
             ->assertJsonPath('application.workflow.current_stage', 'decision');
 
+        $comparison = $this->actingAs($provider)
+            ->getJson("/provider/applications/{$applicationId}/data?workspace=decision")
+            ->assertOk()->json('application.selection_comparison');
+
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$applicationId}/final-outcome", [
                 'outcome' => 'selected',
                 'notes' => 'The applicant was selected after the provider review.',
+                'comparison_reference' => $comparison['reference'],
+                'selection_rationale' => 'The provider reviewed the completed screening and formal application.',
             ])
             ->assertOk()
             ->assertJsonPath('application.workflow.final_outcome', 'selected');
@@ -416,7 +422,7 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonPath('document_review_queue.data.0.documents.0.view_url', route('documents.view', $document));
 
         $this->actingAs($admin)
-            ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['status' => 'rejected'])
+            ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($scholarship->id), 'status' => 'rejected'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('review_notes');
 
@@ -436,7 +442,7 @@ class DemoReadinessWorkflowTest extends TestCase
             ->assertJsonValidationErrors('review_notes');
 
         $this->actingAs($admin)
-            ->patchJson("/admin/scholarships/{$scholarship->id}/review", [
+            ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($scholarship->id),
                 'status' => 'rejected',
                 'review_notes' => 'Clarify the eligibility criteria before resubmitting.',
             ])

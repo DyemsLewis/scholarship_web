@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
 import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
+import SelectionBreakdownDialog from '../../../components/SelectionBreakdownDialog.vue';
 import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
 
 const queueByPath = {
@@ -37,6 +38,8 @@ const workspace = ref(null);
 const summary = ref({ pending: 0, waitlist: 0, recorded: 0 });
 const programs = ref([]);
 const applications = ref([]);
+const comparison = ref(null);
+const breakdownRecord = ref(null);
 const pagination = ref({ current_page: 1, last_page: 1, total: 0, from: null, to: null });
 const queueState = createStaffQueueState(window, ['search','program_id'], { path: `/provider/workspaces/decisions/${activeQueue}` });
 const search = ref(queueState.get('search') ?? '');
@@ -91,6 +94,7 @@ async function loadApplications(page = 1) {
         summary.value = response.data.summary ?? summary.value;
         programs.value = response.data.programs ?? [];
         applications.value = response.data.applications ?? [];
+        comparison.value = response.data.selection_comparison;
         pagination.value = response.data.pagination ?? pagination.value;
     } catch (error) {
         if (version !== requestVersion) return;
@@ -180,6 +184,14 @@ onBeforeUnmount(() => {
                     </div>
 
 
+                    <div v-if="activeQueue === 'pending' && comparison && comparison.pending > 0 && !isLoading && !errorMessage" class="border-b border-slate-200 bg-slate-50 px-5 py-4" data-selection-comparison>
+                        <div class="flex items-center justify-between gap-6"><p class="text-sm font-bold text-slate-950"><i class="fa-solid fa-scale-balanced mr-2 text-slate-500" aria-hidden="true"></i>{{ comparison.label }}</p><p class="text-xs font-semibold text-slate-600">{{ comparison.ranked }} of {{ comparison.pending }} pending evaluations complete<span v-if="comparison.awaiting_selection"> | {{ comparison.awaiting_selection }} still in selection</span></p></div>
+                        <p v-if="comparison.provisional && comparison.reasons.length" class="mt-2 text-xs text-slate-600">{{ comparison.reasons[0] }}<span v-if="comparison.scoring_enabled"> Suggestions are withheld until the comparison is ready.</span></p>
+                        <details class="mt-2 text-xs text-slate-500"><summary class="cursor-pointer font-semibold">How this comparison works</summary><p class="mt-2 leading-5">{{ comparison.notice }} Ranks use the whole program, even when you search or move between pages. Incomplete records are not scored as zero.</p><ul v-if="comparison.provisional" class="mt-2 list-disc space-y-1 pl-4"><li v-for="reason in comparison.reasons" :key="reason">{{ reason }}</li></ul></details>
+                    </div>
+                    <p v-else-if="activeQueue === 'pending' && !selectedProgram && !isLoading && !errorMessage" class="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-600">Choose a program to compare its complete evaluations and available slots. Applicants from different programs are never ranked together.</p>
+                    <p v-if="activeQueue === 'waitlist'" class="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs text-slate-600">Official waitlist order is preserved. Evaluation scores do not change assigned waitlist positions.</p>
+
                     <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadApplications(requestedPage)" />
                     <div v-else-if="isLoading" class="px-6 py-16 text-center">
                         <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
@@ -192,13 +204,13 @@ onBeforeUnmount(() => {
                     </div>
 
                     <div v-else class="staff-table-viewport">
-                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-36"><col class="w-36"><col class="w-36"><col class="w-44"></colgroup>
+                        <table class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-28"><col v-if="activeQueue === 'pending'" class="w-20"><col class="w-52"><col class="w-56"></colgroup>
                             <thead class="bg-slate-50">
                                 <tr class="border-b border-slate-200 text-xs font-bold uppercase tracking-[0.16em] text-slate-600">
                                     <th class="px-5 py-3">Applicant</th>
-                                    <th class="px-5 py-3">Review status</th>
-                                    <th class="px-5 py-3">Outcome</th>
-                                    <th class="px-5 py-3">Program capacity</th>
+                                    <th class="px-5 py-3">Score</th>
+                                    <th v-if="activeQueue === 'pending'" class="px-5 py-3">Rank</th>
+                                    <th class="px-5 py-3">{{ activeQueue === 'pending' ? 'Review guidance' : 'Outcome' }}</th>
                                     <th class="px-5 py-3 text-right">Action</th>
                                 </tr>
                             </thead>
@@ -207,13 +219,13 @@ onBeforeUnmount(() => {
                                     <td class="px-5 py-4">
                                         <div class="flex items-center gap-3">
                                             <StaffTableIdentity :src="application.applicant.profile_photo_url" class="h-11 w-11" />
-                                            <div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ application.program.title }}</p></div>
+                                            <div class="min-w-0"><p class="application-text text-sm font-bold text-slate-950">{{ application.applicant.name }}</p><p v-if="!selectedProgram" class="mt-1 application-text text-xs text-slate-500">{{ application.program.title }}</p></div>
                                         </div>
                                     </td>
-                                    <td class="px-5 py-4 text-sm font-bold text-slate-900">{{ application.stage_status }}</td>
-                                    <td class="px-5 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span></td>
-                                    <td :class="['px-5 py-4 text-sm font-bold', application.capacity.remaining === 0 ? 'text-rose-700' : 'text-slate-900']">{{ application.capacity.remaining === null ? 'No slot limit' : application.capacity.remaining === 0 ? 'No slots left' : `${application.capacity.remaining} remaining` }}</td>
-                                    <td class="px-5 py-4 text-right"><a :href="recordUrl(application)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`${application.decision.action_label} for ${application.applicant.name}`">{{ application.decision.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></td>
+                                    <td class="px-5 py-4 text-sm font-bold tabular-nums text-slate-900">{{ application.selection_evaluation?.score === null || application.selection_evaluation?.score === undefined ? '-' : Number(application.selection_evaluation.score).toLocaleString(undefined, { maximumFractionDigits: 2 }) }}</td>
+                                    <td v-if="activeQueue === 'pending'" class="px-5 py-4 text-sm font-bold tabular-nums text-slate-900">{{ application.selection_comparison.rank ?? '-' }}<span v-if="application.selection_comparison.tied" class="ml-1 text-[10px] font-normal text-slate-500" title="Equal scores share a rank">tied</span></td>
+                                    <td class="px-5 py-4"><span v-if="activeQueue === 'pending'" :class="['inline-flex border px-2.5 py-1.5 text-xs font-semibold', application.selection_comparison.tie_at_cutoff ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-700']">{{ application.selection_comparison.label }}</span><span v-else :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', decisionClass(application.decision.state)]">{{ application.decision.label }}</span></td>
+                                    <td class="px-5 py-4 text-right"><div class="flex items-center justify-end gap-2"><button type="button" class="grid h-9 w-9 shrink-0 place-items-center rounded-[5px] border border-slate-300 text-slate-600 hover:border-slate-950" :aria-label="`View evaluation breakdown for ${application.applicant.name}`" @click="breakdownRecord = application"><i class="fa-solid fa-chart-simple text-xs" aria-hidden="true"></i></button><a :href="recordUrl(application)" class="staff-row-action staff-row-action--primary h-9 px-3 text-xs" :aria-label="`${application.decision.action_label} for ${application.applicant.name}`">{{ application.decision.action_label }} <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></div></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -229,5 +241,6 @@ onBeforeUnmount(() => {
                 </section>
             </div>
         </section>
+        <SelectionBreakdownDialog :record="breakdownRecord" :record-href="breakdownRecord ? recordUrl(breakdownRecord) : ''" @close="breakdownRecord = null" />
     </main>
 </template>

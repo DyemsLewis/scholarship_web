@@ -4,7 +4,10 @@ import WorkspaceTextSummary from '../../../components/workspace-dashboard/Worksp
 import { computed, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
+import { checkInStatusClass } from '../../../support/checkInStatus';
 import MonitoringCaseHistoryModal from '../../../components/MonitoringCaseHistoryModal.vue';
+import RecipientCheckInAppointment from '../../../components/RecipientCheckInAppointment.vue';
+import LocationMapLink from '../../../components/LocationMapLink.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 
@@ -49,13 +52,14 @@ const selectedRequirement = computed(() => selectedRecipient.value?.requirements
 const totalRequirements = computed(() => recipients.value.reduce((total, recipient) => total + recipient.requirements.length, 0));
 const reviewedRequirements = computed(() => recipients.value.reduce((total, recipient) => total + recipient.requirements.filter((requirement) => requirement.submission?.reviewed_at).length, 0));
 const receivedFiles = computed(() => recipients.value.reduce((total, recipient) => total + Number(recipient.submitted_item_count ?? 0), 0));
+const attendedCount = computed(() => recipients.value.filter(recipient => recipient.monitoring_case?.attendance_status === 'attended').length);
 
 function requirementState(requirement) {
     if (requirement.adjustment_request?.status === 'pending') return 'request';
     if (requirement.interventions?.some((item) => item.status === 'open')) return 'followup';
     if (requirement.submission && !requirement.submission.reviewed_at) return 'review';
     if (['not_met', 'needs_correction'].includes(requirement.submission?.review_status)) return 'followup';
-    if (!requirement.requires_file && !requirement.submission) return cycle.value?.handoff && !cycle.value.handoff_started ? 'waiting' : 'record';
+    if (!requirement.requires_file && !requirement.submission) return canRecordResult(requirement) ? 'record' : 'waiting';
     if (requirement.requires_file && !requirement.submission) return 'waiting';
     return 'complete';
 }
@@ -69,22 +73,28 @@ function recipientState(recipient) {
         if (states.includes('waiting')) return 'waiting';
         return 'complete';
     }
-    if (monitoringCase.status === 'follow_up') return 'followup';
-    if (['ready_to_close', 'closed', 'waived', 'cancelled'].includes(monitoringCase.status)) return 'complete';
+    if (isTerminalCase(recipient)) return 'complete';
+    if (monitoringCase.next_action?.key === 'decide_adjustment') return 'action';
+    if (monitoringCase.status === 'follow_up' || ['missed', 'overdue'].includes(monitoringCase.display_status)) return 'followup';
     if (monitoringCase.next_action?.role === 'provider') return 'action';
     return 'waiting';
 }
 
 function recipientStatusLabel(recipient) {
-    if (recipient.monitoring_case?.next_action?.key === 'attend_handoff') return 'Handoff scheduled';
     return recipient.monitoring_case?.status_label ?? stateLabel(recipientState(recipient));
+}
+
+function canEditAppointment() {
+    return cycle.value?.status === 'open' && selectedRecipient.value?.handoff
+        && !isTerminalCase(selectedRecipient.value)
+        && selectedRecipient.value.agreement_status === 'accepted'
+        && selectedRecipient.value.benefits_active;
 }
 
 function canRecordResult(requirement) {
     return !requirement.requires_file && (!cycle.value?.handoff
-        || (cycle.value.handoff_started && !isTerminalCase(selectedRecipient.value)
-            && selectedRecipient.value?.agreement_status === 'accepted'
-            && selectedRecipient.value?.benefits_active));
+        || (canEditAppointment() && selectedRecipient.value.handoff.started
+            && selectedRecipient.value.monitoring_case?.attendance_status === 'attended'));
 }
 
 function primaryRequirement(recipient) {
@@ -224,6 +234,21 @@ function selectRequirement(requirement) {
     followUpForm.value = { type: 'reminder', summary: '', action_required: '', follow_up_on: '' };
 }
 
+function requestReplacement() {
+    reviewForm.value = { decision: 'needs_correction', notes: '' };
+    actionMode.value = 'review';
+}
+
+function appointmentUpdated(data) {
+    const recipientId = selectedRecipientId.value;
+    recipientFilter.value = 'all';
+    cycle.value = data.cycle;
+    errorMessage.value = '';
+    successMessage.value = data.message;
+    const refreshed = recipients.value.find((recipient) => recipient.application_id === recipientId);
+    if (refreshed) selectRecipient(refreshed);
+}
+
 watch(filteredRecipients, (items) => {
     if (!items.length) {
         selectedRecipientId.value = null;
@@ -239,9 +264,13 @@ async function loadRecord() {
     try {
         const response = await window.axios.get(`/provider/workspaces/monitoring/check-ins/${cycleId}/data`);
         program.value = response.data.program;
-        if (!cycle.value && response.data.cycle?.handoff && !response.data.cycle.handoff_started) recipientFilter.value = 'all';
+        const firstLoad = !cycle.value;
         cycle.value = response.data.cycle;
-        const first = recipients.value.find((recipient) => recipientState(recipient) !== 'complete') ?? recipients.value[0];
+        if (firstLoad && cycle.value.handoff) recipientFilter.value = 'all';
+        else if (firstLoad && recipients.value.length && !recipientCounts.value.action) {
+            recipientFilter.value = recipientCounts.value.complete === recipients.value.length ? 'complete' : 'all';
+        }
+        const first = filteredRecipients.value.find((recipient) => recipientState(recipient) !== 'complete') ?? filteredRecipients.value[0];
         if (first) selectRecipient(first);
     } catch (error) {
         errorMessage.value = firstError(error, 'The monitoring check-in could not be loaded.');
@@ -335,22 +364,22 @@ onMounted(loadRecord);
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <div class="flex items-center justify-between gap-8 border-b border-slate-200 px-6 py-5">
                             <div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">{{ program.title }}</p><h2 class="mt-1 monitoring-text text-xl font-bold text-slate-950">{{ cycle.title }}</h2><p class="mt-1 text-sm text-slate-500">{{ [cycle.academic_period, cycle.school_year].filter(Boolean).join(' · ') || cycle.period_type }}</p></div>
-                            <div class="min-w-0 max-w-sm text-right"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">{{ cycle.handoff ? 'In-person appointment' : 'Deadline' }}</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.handoff?.scheduled_label || cycle.due_label || 'Not set' }}</p><p v-if="cycle.handoff" class="mt-1 monitoring-text text-sm text-slate-600">{{ cycle.handoff.location }}</p></div>
+                            <div class="min-w-0 max-w-sm text-right"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">{{ cycle.handoff ? 'Original group appointment' : 'Deadline' }}</p><p class="mt-1 text-sm font-bold text-slate-950">{{ cycle.handoff?.scheduled_label || cycle.due_label || 'Not set' }}</p><p v-if="cycle.handoff" class="mt-1 monitoring-text text-sm text-slate-600">{{ cycle.handoff.location }}</p><LocationMapLink v-if="cycle.handoff" :address="cycle.handoff.location || ''" :latitude="cycle.handoff.latitude" :longitude="cycle.handoff.longitude" :title="cycle.title" /></div>
                         </div>
                         <dl class="grid grid-cols-4 bg-slate-50">
                             <div class="border-r border-slate-200 px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Recipients</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ recipients.length }}</dd></div>
                             <div class="border-r border-slate-200 px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Requirements</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ reviewedRequirements }} of {{ totalRequirements }} reviewed</dd></div>
-                            <div class="border-r border-slate-200 px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">{{ cycle.handoff ? 'Handoff' : 'Files received' }}</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.handoff ? (cycle.status === 'closed' ? 'Closed' : cycle.handoff_started ? 'In-person review' : 'Scheduled') : `${receivedFiles} of ${cycle.item_expected_count}` }}</dd></div>
+                            <div class="border-r border-slate-200 px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">{{ cycle.handoff ? 'Attendance' : 'Files received' }}</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.handoff ? `${attendedCount} of ${recipients.length} attended` : `${receivedFiles} of ${cycle.item_expected_count}` }}</dd></div>
                             <div class="px-5 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Open follow-ups</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ cycle.open_intervention_count }}</dd></div>
                         </dl>
                     </section>
 
                     <nav class="mt-4 flex border border-slate-200 bg-white shadow-sm" aria-label="Recipient filters">
-                        <button v-for="filter in [{ key: 'action', label: 'Needs decision', count: recipientCounts.action }, { key: 'followup', label: 'Follow-up', count: recipientCounts.followup }, { key: 'waiting', label: 'Waiting', count: recipientCounts.waiting }, { key: 'complete', label: 'Complete', count: recipientCounts.complete }, { key: 'all', label: 'All recipients', count: recipients.length }]" :key="filter.key" type="button" :class="['flex h-14 flex-1 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', recipientFilter === filter.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50']" @click="recipientFilter = filter.key"><span>{{ filter.label }}</span><span :class="['px-2 py-0.5 text-xs', recipientFilter === filter.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-600']">{{ filter.count }}</span></button>
+                        <button v-for="filter in [{ key: 'action', label: 'Needs action', count: recipientCounts.action }, { key: 'followup', label: 'Follow-up', count: recipientCounts.followup }, { key: 'waiting', label: 'Waiting', count: recipientCounts.waiting }, { key: 'complete', label: 'Closed', count: recipientCounts.complete }, { key: 'all', label: 'All recipients', count: recipients.length }]" :key="filter.key" type="button" :class="['flex h-14 flex-1 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', recipientFilter === filter.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50']" @click="recipientFilter = filter.key"><span>{{ filter.label }}</span><span :class="['px-2 py-0.5 text-xs', recipientFilter === filter.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-600']">{{ filter.count }}</span></button>
                     </nav>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
-                        <header class="flex items-start gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-users-gear text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Recipient checklist</h2><p class="mt-1 text-sm text-slate-500">Select a recipient, then open only the requirement you need to handle.</p></div></header>
+                        <header class="flex items-start gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-users-gear text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">{{ cycle.handoff ? 'Check-in roster' : 'Recipient checklist' }}</h2><p class="mt-1 text-sm text-slate-500">{{ cycle.handoff ? 'Select a recipient to record attendance, reschedule, or verify documents.' : 'Select a recipient, then open only the requirement you need to handle.' }}</p></div></header>
                         <div v-if="!filteredRecipients.length" class="px-6 py-14 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-user-slash text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">No recipients match this work state.</p></div>
                         <template v-else>
                             <div class="monitoring-recipient-picker gap-2 border-b border-slate-200 bg-slate-50 px-5 py-3" role="group" aria-label="Choose a recipient">
@@ -366,13 +395,12 @@ onMounted(loadRecord);
                                         <p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Selected recipient</p>
                                         <h3 class="monitoring-text mt-1 text-lg font-bold text-slate-950">{{ selectedRecipient.name }}</h3>
                                         <p class="mt-1 text-sm text-slate-500">{{ selectedRecipient.monitoring_case?.status_reason || selectedRecipient.email }}</p>
-                                        <p v-if="selectedRecipient.monitoring_case?.outcome_label" class="mt-2 text-xs font-bold text-slate-700">Outcome: {{ selectedRecipient.monitoring_case.outcome_label }}</p>
                                         <button v-if="selectedRecipient.monitoring_case?.history?.length || selectedRecipient.monitoring_case?.exception_context" type="button" class="mt-2 inline-flex items-center gap-2 text-xs font-bold text-slate-600 underline underline-offset-4 hover:text-slate-950" @click="historyOpen = true"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>View history</button>
                                     </div>
                                     <div class="shrink-0 text-right">
-                                        <span :class="['border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', stateClass(recipientState(selectedRecipient))]">{{ recipientStatusLabel(selectedRecipient) }}</span>
-                                        <p v-if="selectedRecipient.monitoring_case?.next_action" class="mt-2 max-w-xs text-xs font-bold text-slate-700">{{ selectedRecipient.monitoring_case.next_action.label }}</p>
-                                        <p v-if="selectedRecipient.monitoring_case?.effective_due_label" class="mt-1 text-xs font-semibold text-slate-500">Due {{ selectedRecipient.monitoring_case.effective_due_label }}</p>
+                                        <span :class="['border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', checkInStatusClass(selectedRecipient.monitoring_case?.status_tone)]">{{ recipientStatusLabel(selectedRecipient) }}</span>
+                                        <p v-if="selectedRecipient.monitoring_case?.next_action" class="mt-2 max-w-xs text-xs font-bold text-slate-700"><span v-if="selectedRecipient.monitoring_case.next_action.role_label" class="text-slate-500">{{ selectedRecipient.monitoring_case.next_action.role_label }}: </span>{{ selectedRecipient.monitoring_case.next_action.label }}</p>
+                                        <p v-if="!isTerminalCase(selectedRecipient) && !selectedRecipient.handoff && selectedRecipient.monitoring_case?.effective_due_label" class="mt-1 text-xs font-semibold text-slate-500">Due {{ selectedRecipient.monitoring_case.effective_due_label }}</p>
                                         <div class="mt-3 flex justify-end gap-2">
                                             <button v-if="selectedRecipient.monitoring_case?.status === 'ready_to_close'" type="button" class="inline-flex items-center gap-2 bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openCaseDecision('close')"><i class="fa-solid fa-circle-check text-[9px]" aria-hidden="true"></i>Close check-in</button>
                                             <button v-else-if="selectedRecipient.monitoring_case?.next_action?.key === 'resolve_overdue'" type="button" class="inline-flex items-center gap-2 bg-slate-950 px-3 py-2 text-xs font-bold text-white" @click="openCaseDecision('close')"><i class="fa-solid fa-circle-check text-[9px]" aria-hidden="true"></i>Resolve overdue</button>
@@ -381,6 +409,8 @@ onMounted(loadRecord);
                                         </div>
                                     </div>
                                 </div>
+
+                                <RecipientCheckInAppointment v-if="selectedRecipient.handoff" :key="selectedRecipientId" :recipient="selectedRecipient" :editable="Boolean(canEditAppointment())" @updated="appointmentUpdated" />
 
                                 <div class="divide-y divide-slate-200 border-b border-slate-200">
                                     <article v-for="requirement in selectedRecipient.requirements" :key="requirement.id">
@@ -395,6 +425,16 @@ onMounted(loadRecord);
                                             <div class="flex items-start justify-between gap-6"><div><WorkspaceTextSummary class="text-sm font-semibold leading-6 text-slate-700" :text="requirement.description || requirement.evidence_description || 'Review this requirement against the saved monitoring plan.'" label="details" /><p class="mt-1 text-xs text-slate-500">Effective deadline: {{ requirement.effective_due_label || cycle.due_label }}</p></div><a v-if="requirement.submission?.view_url" :href="requirement.submission.view_url" target="_blank" rel="noopener" class="shrink-0 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:border-slate-950">Open file <i class="fa-solid fa-arrow-up-right-from-square ml-1" aria-hidden="true"></i></a></div>
 
                                             <div v-if="requirement.submission" class="mt-4 grid grid-cols-4 border border-slate-200 bg-white"><div class="border-r border-slate-200 px-4 py-3"><p class="text-xs font-bold uppercase tracking-wide text-slate-600">Submitted</p><p class="mt-1 text-xs font-bold text-slate-900">{{ requirement.submission.submitted_at }}</p></div><div class="border-r border-slate-200 px-4 py-3"><p class="text-xs font-bold uppercase tracking-wide text-slate-600">Recorded result</p><p class="mt-1 text-xs font-bold text-slate-900">{{ requirement.submission.grade_label || 'Not applicable' }}</p></div><div class="border-r border-slate-200 px-4 py-3"><p class="text-xs font-bold uppercase tracking-wide text-slate-600">Review</p><p class="mt-1 text-xs font-bold text-slate-900">{{ requirement.submission.review_status_label }}</p></div><div class="px-4 py-3"><p class="text-xs font-bold uppercase tracking-wide text-slate-600">Reviewed by</p><p class="mt-1 text-xs font-bold text-slate-900">{{ requirement.submission.reviewed_by || 'Pending' }}</p></div></div>
+
+                                            <details v-if="requirement.submission?.reviews?.some(review => review.evidence)" class="mt-4 border border-slate-200 bg-white px-4 py-3">
+                                                <summary class="cursor-pointer text-sm font-bold text-slate-800">Reviewed files</summary>
+                                                <ul class="mt-2 divide-y divide-slate-200">
+                                                    <li v-for="review in requirement.submission.reviews.filter(item => item.evidence)" :key="review.id" class="flex items-center justify-between gap-4 py-2 text-xs">
+                                                        <span class="min-w-0 break-words text-slate-700">{{ review.decision_label }} <span class="text-slate-500">{{ review.decided_at }}</span></span>
+                                                        <a :href="review.evidence.view_url" data-file-preview="true" :data-file-name="review.evidence.original_name" class="shrink-0 font-bold text-slate-800 underline">View reviewed file</a>
+                                                    </li>
+                                                </ul>
+                                            </details>
 
                                             <div v-if="requirement.adjustment_request?.status === 'pending'" class="mt-4 border-l-4 border-amber-400 bg-amber-50 px-4 py-3"><p class="text-xs font-bold uppercase tracking-wide text-amber-800">{{ requirement.adjustment_request.request_type_label }}</p><WorkspaceTextSummary class="mt-1 text-sm font-semibold text-amber-950" :text="requirement.adjustment_request.explanation" label="details" /><p v-if="requirement.adjustment_request.requested_due_label" class="mt-1 text-xs text-amber-800">Requested deadline: {{ requirement.adjustment_request.requested_due_label }}</p><a v-if="requirement.adjustment_request.attachment" :href="requirement.adjustment_request.attachment.view_url" target="_blank" rel="noopener" class="mt-2 inline-flex text-xs font-bold text-amber-950 underline">Open attachment</a></div>
 
@@ -422,6 +462,7 @@ onMounted(loadRecord);
                                             <div v-else-if="!actionMode" class="mt-5 flex items-center justify-between border border-slate-200 bg-white px-4 py-3"><p class="text-sm text-slate-600">{{ requirementState(requirement) === 'complete' ? 'This requirement is complete.' : 'Add a follow-up if the recipient needs guidance.' }}</p><button v-if="requirementState(requirement) !== 'complete'" type="button" class="border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700" @click="actionMode = 'followup'">Add follow-up</button></div>
 
                                             <button v-if="['not_met', 'needs_correction'].includes(requirement.submission?.review_status) && actionMode !== 'followup'" type="button" class="mt-4 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="actionMode = 'followup'">Add recipient follow-up</button>
+                                            <button v-if="!cycle.handoff && cycle.status === 'open' && requirement.submission?.view_url && ['met', 'not_met'].includes(requirement.submission.review_status) && !['closed', 'waived', 'cancelled'].includes(selectedRecipient.monitoring_case?.status) && actionMode !== 'review'" type="button" class="mt-4 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="requestReplacement">Request replacement</button>
                                             <button v-if="cycle.handoff && requirement.submission?.review_status === 'not_met' && actionMode !== 'record' && canRecordResult(requirement)" type="button" class="mt-4 border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="actionMode = 'record'">Record updated result</button>
                                         </div>
                                     </article>

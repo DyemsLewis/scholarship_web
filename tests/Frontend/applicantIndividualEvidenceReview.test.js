@@ -103,10 +103,11 @@ test('history and fallback labels hide internal underscores and handle invalid d
 });
 
 function pageHarness(payload) {
+    payload = { review_workflow: { token: 'current-review', ready: true }, ...payload };
     const source = readFileSync(new URL('../../resources/js/pages/admin/reviews/ApplicantReviewRecordPage.vue', import.meta.url), 'utf8');
     const script = parse(source).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
     const window = { location: { pathname: '/admin/workspaces/reviews/applicants/39' }, axios: { get: async () => ({ data: { applicant: payload } }) } };
-    const deps = { staffQueueReturn, confirmOutcome, profileVerificationLabel, ref, computed, useAdminResource, reviewErrorMessage, evidenceRows, evidenceReviewDate, onMounted() {}, window, applicantProfileDetails: () => [], profileEducationSummary: () => '' };
+    const deps = { staffQueueReturn, confirmOutcome, profileVerificationLabel, ref, computed, useAdminResource, reviewErrorMessage, evidenceRows, evidenceReviewDate, onMounted() {}, window, applicantProfileDetails: () => [], profileEducationSummary: () => '', useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/applicants', load() {} }) };
     return new Function(...Object.keys(deps), `${script}\nreturn { loadRecord, applicant, canSave, notes, decision, evidenceSaved, selectedDocumentId, saveDecision, reloadEvidence, recordStale, window };`)(...Object.values(deps));
 }
 
@@ -120,7 +121,7 @@ test('page uses server evidence readiness, not upload counts or legacy approval,
 test('a document decision updates current evidence and profile state without overwriting final-decision drafts', async () => {
     const state = pageHarness({ can_review_evidence: true, gwa: 91, verification_documents: [record], evidence_review: { required_evidence_accepted: false } });
     await state.loadRecord(); state.notes.value = 'Unsaved final explanation'; state.selectedDocumentId.value = 8;
-    state.evidenceSaved({ document: { id: 8, has_current_acceptance: true, revision: 3 }, user: { gwa: 91, applicant_verification_status: 'pending' }, evidence_review: { required_evidence_accepted: true }, message: 'Accepted.' });
+    state.evidenceSaved({ document: { id: 8, has_current_acceptance: true, revision: 3 }, user: { gwa: 91, applicant_verification_status: 'pending' }, evidence_review: { required_evidence_accepted: true }, review_workflow: { token: 'updated-review', ready: true }, message: 'Accepted.' });
     assert.equal(state.applicant.value.verification_documents[0].revision, 3);
     assert.equal(state.applicant.value.verification_oversight.status, 'pending');
     assert.equal(state.canSave.value, true); assert.equal(state.notes.value, 'Unsaved final explanation'); assert.equal(state.applicant.value.gwa, 91);
@@ -145,7 +146,7 @@ test('an unsubmitted profile has a valid outcome selected but cannot be verified
     let sent;
     state.window.axios.patch = async (url, body) => { sent = body; return { data: { applicant: payload } }; };
     await state.saveDecision();
-    assert.deepEqual(sent, { verification_status: 'rejected', verification_notes: 'Please add supporting evidence.' });
+    assert.deepEqual(sent, { verification_status: 'rejected', verification_notes: 'Please add supporting evidence.', expected_review_token: 'current-review' });
 });
 
 test('review and history use accessible bounded dialogs and collapsed secondary information', () => {
@@ -168,7 +169,7 @@ test('grade controls belong only to the academic evidence decision, not the fina
     let sent;
     state.window.axios.patch = async (url, body) => { sent = body; return { data: { applicant: state.applicant.value } }; };
     await state.saveDecision();
-    assert.deepEqual(sent, { verification_status: 'approved', verification_notes: null });
+    assert.deepEqual(sent, { verification_status: 'approved', verification_notes: null, expected_review_token: 'current-review' });
     const page = readFileSync(new URL('../../resources/js/pages/admin/reviews/ApplicantReviewRecordPage.vue', import.meta.url), 'utf8');
     assert.doesNotMatch(page, /v-model="gradingScale"|v-model="academicResult"|Confirm the academic result/);
 });

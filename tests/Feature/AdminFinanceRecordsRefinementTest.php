@@ -68,7 +68,7 @@ class AdminFinanceRecordsRefinementTest extends TestCase
         $provider = User::factory()->create(['role' => 'provider']);
         $provider->providerProfile()->update(['first_name' => 'UniqueRepresentative', 'last_name' => 'UniqueSurname']);
         $paid = $this->purchase($provider, 'paid', now());
-        $this->purchase($provider, 'paid');
+        $incomplete = $this->purchase($provider, 'paid');
         $this->purchase($provider, 'pending');
         $this->purchase($provider, 'failed');
         $query = app(FinanceRecordQuery::class);
@@ -78,7 +78,8 @@ class AdminFinanceRecordsRefinementTest extends TestCase
             $this->assertSame($paid->id, $items[0]['id']);
         }
         $exceptions = $query->exceptions(['search' => 'UniqueRepresentative'])['items'];
-        $this->assertCount(2, $exceptions);
+        $this->assertCount(3, $exceptions);
+        $this->assertSame('Confirmation incomplete', $exceptions->firstWhere('id', $incomplete->id)['exception_label']);
     }
 
     public function test_incomplete_payments_never_have_a_finance_receipt(): void

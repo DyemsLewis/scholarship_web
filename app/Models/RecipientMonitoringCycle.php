@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -35,6 +36,7 @@ class RecipientMonitoringCycle extends Model
         'due_at',
         'handoff_at',
         'handoff_location',
+        'address_details',
         'minimum_grade',
         'grading_scale',
         'instructions',
@@ -52,6 +54,7 @@ class RecipientMonitoringCycle extends Model
             'opens_at' => 'date',
             'due_at' => 'date',
             'handoff_at' => 'datetime',
+            'address_details' => 'array',
             'minimum_grade' => 'decimal:2',
             'monitoring_plan_version' => 'integer',
             'grace_period_days' => 'integer',
@@ -67,13 +70,29 @@ class RecipientMonitoringCycle extends Model
         return $this->handoff_at !== null;
     }
 
-    /** @return array{scheduled_label: string, location: string}|null */
-    public function handoffDetails(): ?array
+    public function handoffTime(?RecipientMonitoringCase $case = null): ?CarbonInterface
     {
-        return $this->isInPerson() ? [
-            'scheduled_label' => $this->handoff_at->format('M d, Y g:i A').' (Philippine time)',
-            'location' => (string) $this->handoff_location,
-        ] : null;
+        return $case?->appointment_at ?? $this->handoff_at;
+    }
+
+    public function handoffDetails(?RecipientMonitoringCase $case = null): ?array
+    {
+        if (! $this->isInPerson()) {
+            return null;
+        }
+
+        $time = $this->handoffTime($case);
+        $address = $case?->appointment_at !== null ? $case->address_details : $this->address_details;
+
+        return [
+            'scheduled_label' => $time->format('M d, Y g:i A').' (Philippine time)',
+            'location' => $case?->appointment_location ?? (string) $this->handoff_location,
+            'address_details' => $address,
+            'latitude' => $address['latitude'] ?? null,
+            'longitude' => $address['longitude'] ?? null,
+            'started' => ! $time->isFuture(),
+            'rescheduled' => $case?->appointment_at !== null,
+        ];
     }
 
     public function scholarship(): BelongsTo

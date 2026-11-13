@@ -6,6 +6,8 @@ use App\Models\ActivityLog;
 use App\Models\RecipientMonitoringCase;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Support\AdminAuditTrail;
+use App\Support\AdminWorkspace;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
@@ -28,11 +30,16 @@ class RecordsWorkspaceQuery
         $this->applyActorRole($query, $filters['actor_role'] ?? 'all');
         $this->applyPeriod($query, $filters['period'] ?? 'month');
         $this->applySearch($query, $filters['search'] ?? null);
+        if (isset($filters['record_type'], $filters['record_id']) && isset(AdminAuditTrail::RECORDS[$filters['record_type']])) {
+            AdminAuditTrail::apply($query, $filters['record_type'], (int) $filters['record_id']);
+        }
 
         $paginator = $query->paginate((int) ($filters['per_page'] ?? 15))->withQueryString();
 
         return [
             ...$this->page($paginator),
+            'can_export' => auth()->user()?->isAdmin() && auth()->user()->hasPortalPermission('export_data')
+                && ! AdminWorkspace::usesPortalManagerWorkspace(auth()->user()),
             'summary' => [
                 'total' => ActivityLog::query()->count(),
                 'today' => ActivityLog::query()->whereDate('created_at', today())->count(),
@@ -53,7 +60,9 @@ class RecordsWorkspaceQuery
         return [
             ...$this->activityItem($entry),
             'user_agent' => $entry->user_agent,
+            'related_trails' => AdminAuditTrail::links($entry->metadata ?? []),
             'metadata' => collect($entry->metadata ?? [])
+                ->except('review_fingerprint')
                 ->map(fn (mixed $value, string $key): array => [
                     'label' => Str::headline($key),
                     'value' => $this->metadataValue($value, $key),

@@ -55,9 +55,9 @@ onMounted(loadMonitoringRecord);
         <section class="student-page" aria-busy="true" aria-label="Loading support record">
             <div class="mx-auto w-full max-w-[90rem]">
                 <div class="h-5 w-36 animate-pulse rounded bg-slate-200"></div>
-                <div class="mt-5 h-72 animate-pulse rounded-md border border-slate-200 bg-white"></div>
-                <div class="mt-4 h-24 animate-pulse rounded-md border border-slate-200 bg-white"></div>
-                <div class="mt-4 h-64 animate-pulse rounded-md border border-slate-200 bg-white"></div>
+                    <div class="mt-5 h-28 animate-pulse rounded-md border border-slate-200 bg-white"></div>
+                    <div class="mt-4 h-14 animate-pulse rounded-md border border-slate-200 bg-white"></div>
+                    <div class="mt-4 h-60 animate-pulse rounded-md border border-slate-200 bg-white"></div>
             </div>
         </section>
     </main>
@@ -88,7 +88,6 @@ onMounted(loadMonitoringRecord);
         <MonitoringOverviewRecord
             v-if="detail.view === 'overview'"
             :content="detail.content"
-            :navigation="detail.navigation"
         />
 
         <MonitoringCheckIns

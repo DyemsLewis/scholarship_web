@@ -29,14 +29,14 @@ class PlatformIntegritySafeguardsTest extends TestCase
         $scholarship = $this->scholarship($provider, ['status' => 'pending_review']);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['status' => 'published'])
+            ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($scholarship->id), 'status' => 'published'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('status');
 
         $this->providerProof($provider, 'approved');
 
         $this->actingAs($admin)
-            ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['status' => 'published'])
+            ->patchJson("/admin/scholarships/{$scholarship->id}/review", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($scholarship->id), 'status' => 'published'])
             ->assertOk()
             ->assertJsonPath('scholarship.status', 'published');
     }

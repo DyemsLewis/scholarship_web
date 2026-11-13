@@ -61,7 +61,7 @@ export const adminWorkspaceDefinitions = {
         navLinks: [
             { key: 'support-overview', href: '/admin/workspaces/support', label: 'Support dashboard', icon: 'fa-solid fa-gauge-high', exact: true },
             { key: 'support-inbox', href: '/admin/workspaces/support/needs-response', label: 'Needs response', icon: 'fa-solid fa-inbox', exact: true },
-            { key: 'support-waiting', href: '/admin/workspaces/support/waiting', label: 'Waiting for provider', icon: 'fa-solid fa-clock', exact: true },
+            { key: 'support-waiting', href: '/admin/workspaces/support/waiting', label: 'Waiting on a team', icon: 'fa-solid fa-clock', exact: true },
             { key: 'support-resolved', href: '/admin/workspaces/support/resolved', label: 'Resolved cases', icon: 'fa-solid fa-circle-check', exact: true },
             sharedProfileLink,
         ],
@@ -78,6 +78,7 @@ export const adminWorkspaceDefinitions = {
             { key: 'billing-active', href: '/admin/workspaces/billing/queues/active', label: 'Active delivery', icon: 'fa-solid fa-list-check', exact: true },
             { key: 'billing-waiting', href: '/admin/workspaces/billing/queues/waiting', label: 'Waiting on provider', icon: 'fa-solid fa-clock', exact: true },
             { key: 'billing-completed', href: '/admin/workspaces/billing/queues/completed', label: 'Closed requests', icon: 'fa-solid fa-circle-check', exact: true },
+            { key: 'billing-finance', href: '/admin/workspaces/billing/queues/finance', label: 'Finance follow-up', icon: 'fa-solid fa-receipt', exact: true },
             sharedProfileLink,
         ],
     },

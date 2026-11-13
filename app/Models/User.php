@@ -126,6 +126,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->belongsTo(self::class, 'parent_account_id');
     }
 
+    public function supportAccountHandoffs(): HasMany
+    {
+        return $this->hasMany(SupportAccountHandoff::class);
+    }
+
     public function managedAccounts(): HasMany
     {
         return $this->hasMany(self::class, 'parent_account_id');

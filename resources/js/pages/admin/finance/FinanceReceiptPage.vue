@@ -1,11 +1,13 @@
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import FinanceRecordReviewDialog from '../../../components/admin/FinanceRecordReviewDialog.vue';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
 import AdminLoadState from '../components/AdminLoadState.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
 const purchaseId = document.getElementById('app')?.dataset.purchaseId;
+const reviewOpen = ref(false);
 const resource = useAdminResource(async ({ signal }) => {
     const response = await window.axios.get(`/admin/workspaces/finance/receipts/${purchaseId}/data`, { signal });
     if (!response.data.receipt) throw new Error('Missing record');
@@ -44,6 +46,7 @@ onMounted(loadReceipt);
             icon="fa-solid fa-receipt"
         >
             <template v-if="ready" #actions>
+                <button type="button" class="inline-flex h-11 items-center gap-2 rounded-sm border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700" @click="reviewOpen = true"><i class="fa-solid fa-clipboard-check text-xs" aria-hidden="true"></i>Review record</button>
                 <button type="button" class="inline-flex h-11 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950" @click="printReceipt"><i class="fa-solid fa-print text-xs" aria-hidden="true"></i>Print receipt</button>
             </template>
         </AdminWorkspaceHeader>
@@ -83,4 +86,5 @@ onMounted(loadReceipt);
             </details>
         </section>
     </AdminWorkspacePage>
+    <FinanceRecordReviewDialog :open="reviewOpen" :purchase-id="purchaseId" @close="reviewOpen = false" />
 </template>

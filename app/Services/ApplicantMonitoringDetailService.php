@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Domain\Recipients\RecipientSupportCatalog;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -12,6 +14,10 @@ class ApplicantMonitoringDetailService
 {
     private const VIEWS = ['overview', 'check-ins', 'benefits', 'history'];
 
+    private const ACTIVE_CHECK_INS = ['action_required', 'under_review', 'open'];
+
+    private const PAST_CHECK_INS = ['completed', 'incomplete', 'waived', 'excused', 'closed', 'cancelled'];
+
     public function build(
         ScholarshipApplication $application,
         User $applicant,
@@ -19,23 +25,9 @@ class ApplicantMonitoringDetailService
         string $view = 'overview',
         ?string $recordKey = null,
     ): array {
-        if ((int) $application->applicant_id !== (int) $applicant->id) {
-            throw new InvalidArgumentException('The monitoring record does not belong to this applicant.');
-        }
-
         $view = in_array($view, self::VIEWS, true) ? $view : 'overview';
-        $application->loadMissing([
-            'scholarship.provider.providerProfile',
-            'scholarship.monitoringPlan',
-        ]);
-
-        $checkIns = $this->normalizeCheckIns($monitoring);
-        $releases = collect($monitoring['benefit_releases'] ?? [])->values();
-        $decisions = $this->supportDecisions(
-            $application,
-            collect($monitoring['support_decisions'] ?? [])->values(),
-        );
-        $releaseGroups = $this->releaseGroups($application, $releases);
+        [$checkIns, $releases, $decisions] = $this->supportContext($application, $applicant, $monitoring);
+        $releaseGroups = $this->releaseGroups($application, $releases, $this->canShowSchedule($application, $monitoring));
         $decision = $this->nextAction($application, $monitoring, $checkIns, $releases, $decisions);
 
         return [
@@ -43,10 +35,10 @@ class ApplicantMonitoringDetailService
             'view' => $view,
             'page' => $this->page($view),
             'identity' => $this->identity($application),
-            'status' => $this->status($monitoring, $checkIns, $releases),
+            'status' => $this->status($application, $monitoring, $checkIns, $releases),
             'decision' => $decision,
             'summary' => $this->summary($monitoring, $checkIns, $releases),
-            'navigation' => $this->navigation($application, $view, $monitoring, $checkIns, $releases, $decisions),
+            'navigation' => $this->navigation($application, $view, $checkIns, $releases, $decisions),
             'content' => $this->content(
                 $view,
                 $application,
@@ -73,6 +65,103 @@ class ApplicantMonitoringDetailService
         ];
     }
 
+    public function landing(User $applicant, Collection $applications, callable $monitoringPayload): array
+    {
+        $records = $applications->map(function (ScholarshipApplication $application) use ($applicant, $monitoringPayload): array {
+            $monitoring = $monitoringPayload($application);
+            [$checkIns, $releases, $decisions] = $this->supportContext($application, $applicant, $monitoring);
+            $identity = $this->identity($application);
+            $status = $this->status($application, $monitoring, $checkIns, $releases);
+            $past = in_array($status['key'], ['declined', 'completed', 'terminated'], true);
+
+            return [
+                'title' => $identity['program']['title'],
+                'logo_url' => $identity['program']['logo_url'],
+                'provider_name' => $identity['provider']['name'],
+                'href' => $identity['monitoring_href'],
+                'history_href' => $this->viewUrl($application, 'history'),
+                'status' => $status,
+                'decision' => $this->nextAction($application, $monitoring, $checkIns, $releases, $decisions),
+                'past' => $past,
+                'schedule' => $this->canShowSchedule($application, $monitoring)
+                    ? $this->upcomingSchedule($application, $checkIns, $releases)->all()
+                    : [],
+            ];
+        });
+        $active = $records->where('past', false)->values();
+        $past = $records->where('past', true)->values();
+        $focus = $records->filter(fn (array $record): bool => $record['decision']['action'] !== null)
+            ->sortBy([
+                fn (array $left, array $right): int => $left['decision']['priority'] <=> $right['decision']['priority'],
+                fn (array $left, array $right): int => ($left['decision']['sort_at'] ?? '9999-12-31') <=> ($right['decision']['sort_at'] ?? '9999-12-31'),
+            ])->first() ?? $active->first();
+        $focusedHref = $focus['decision']['action']['href'] ?? null;
+        $schedule = $records->flatMap(function (array $record): array {
+            return array_map(fn (array $item): array => [...$item, 'program_title' => $record['title']], $record['schedule']);
+        })->reject(fn (array $item): bool => $item['href'] === $focusedHref)
+            ->sortBy('scheduled_at')->take(2)->values();
+        $presentRecord = fn (array $record): array => collect($record)->except(['schedule', 'past'])->all();
+
+        return [
+            'focus' => $focus ? $presentRecord($focus) : null,
+            'schedule' => $schedule,
+            'active' => $active->map($presentRecord),
+            'past' => $past->map($presentRecord),
+        ];
+    }
+
+    private function supportContext(ScholarshipApplication $application, User $applicant, array $monitoring): array
+    {
+        if ((int) $application->applicant_id !== (int) $applicant->id) {
+            throw new InvalidArgumentException('The monitoring record does not belong to this applicant.');
+        }
+
+        $application->loadMissing(['scholarship.provider.providerProfile', 'scholarship.monitoringPlan']);
+
+        return [
+            $this->normalizeCheckIns($monitoring),
+            collect($monitoring['benefit_releases'] ?? [])->values(),
+            $this->supportDecisions($application, collect($monitoring['support_decisions'] ?? [])->values()),
+        ];
+    }
+
+    private function canShowSchedule(ScholarshipApplication $application, array $monitoring): bool
+    {
+        return ($monitoring['eligible'] ?? false)
+            && ($monitoring['agreement_accepted'] ?? false)
+            && $application->student_response_status !== 'declined'
+            && ! in_array($monitoring['support_status'] ?? null, ['completed', 'terminated'], true);
+    }
+
+    private function upcomingSchedule(ScholarshipApplication $application, Collection $checkIns, Collection $releases): Collection
+    {
+        $dates = $this->scheduledCheckIns($checkIns)
+            ->take(2)
+            ->map(fn (array $item): array => [
+                'section' => 'check-ins',
+                'kind' => match (true) {
+                    ($item['handoff']['rescheduled'] ?? false) => 'Rescheduled appointment',
+                    isset($item['handoff']) => 'Appointment',
+                    default => 'Check-in deadline',
+                },
+                'title' => $item['title'],
+                'date_label' => $item['handoff']['scheduled_label'] ?? $item['effective_due_label'] ?? $item['due_label'],
+                'scheduled_at' => $this->checkInDate($item),
+                'context' => $item['handoff']['location'] ?? null,
+                'href' => $this->checkInUrl($application, $item['record_key']),
+            ]);
+
+        return $dates->concat($this->scheduledReleases($releases)->take(2)->map(fn (array $item): array => [
+            'section' => 'benefits',
+            'kind' => 'Benefit release',
+            'title' => $item['title'],
+            'date_label' => $item['release_label'],
+            'scheduled_at' => $item['release_at'],
+            'context' => $item['release_method_label'] ?? null,
+            'href' => $this->benefitUrl($application, 'release-'.$item['record_id']),
+        ]))->sortBy('scheduled_at')->values();
+    }
+
     private function page(string $view): array
     {
         return match ($view) {
@@ -84,12 +173,12 @@ class ApplicantMonitoringDetailService
             'benefits' => [
                 'eyebrow' => 'Scholarship Support',
                 'title' => 'Benefit releases',
-                'description' => 'Review release schedules and confirm completed benefits.',
+                'description' => 'See what your award covers, how it is delivered, and what you need to do.',
             ],
             'history' => [
                 'eyebrow' => 'Support record',
                 'title' => 'Support history',
-                'description' => 'Review completed check-ins and provider outcomes.',
+                'description' => 'Review past check-ins and provider outcomes.',
             ],
             default => [
                 'eyebrow' => 'Support record',
@@ -121,7 +210,7 @@ class ApplicantMonitoringDetailService
         ];
     }
 
-    private function status(array $monitoring, Collection $checkIns, Collection $releases): array
+    private function status(ScholarshipApplication $application, array $monitoring, Collection $checkIns, Collection $releases): array
     {
         if (! ($monitoring['eligible'] ?? false)) {
             return [
@@ -133,25 +222,31 @@ class ApplicantMonitoringDetailService
             ];
         }
 
-        $supportStatus = $monitoring['support_status'] ?? 'active';
+        $supportStatus = $application->student_response_status === 'declined' ? 'declined' : ($monitoring['support_status'] ?? 'active');
         $mode = match (true) {
-            $checkIns->isNotEmpty() => 'recurring',
-            $releases->isNotEmpty() => 'one_time',
+            $this->hasRecurringCheckIns($application, $checkIns) => 'recurring',
+            $application->scholarship?->monitoring_policy === RecipientSupportCatalog::MONITORING_ONE_TIME_FOLLOW_UP => 'follow_up',
+            $this->isOneTimeBenefit($application, $checkIns, $releases) => 'one_time',
             default => 'support_only',
         };
 
         return [
             'key' => $supportStatus,
-            'label' => $monitoring['support_status_label'] ?? 'Scholarship support active',
+            'label' => match (true) {
+                $supportStatus === 'declined' => 'Award declined',
+                $supportStatus === 'active' && ! ($monitoring['agreement_accepted'] ?? false) => 'Agreement needed',
+                default => $monitoring['support_status_label'] ?? 'Scholarship support active',
+            },
             'tone' => match ($supportStatus) {
-                'terminated' => 'critical',
-                'completed' => 'neutral',
+                'terminated' => ($monitoring['support_withdrawal_approved'] ?? false) ? 'neutral' : 'critical',
+                'declined', 'completed' => 'neutral',
                 'renewed' => 'positive',
-                default => 'positive',
+                default => ($monitoring['agreement_accepted'] ?? false) ? 'positive' : 'attention',
             },
             'mode' => $mode,
             'mode_label' => match ($mode) {
                 'recurring' => 'Ongoing support',
+                'follow_up' => 'One-time follow-up',
                 'one_time' => 'One-time benefit',
                 default => 'Support record',
             },
@@ -160,20 +255,10 @@ class ApplicantMonitoringDetailService
 
     private function summary(array $monitoring, Collection $checkIns, Collection $releases): array
     {
-        $openCheckIns = $checkIns->whereIn('state', ['action_required', 'under_review', 'open']);
+        $openCheckIns = $checkIns->whereIn('state', self::ACTIVE_CHECK_INS);
         $completedCheckIns = $checkIns->where('state', 'completed');
-        $nextCheckIn = $checkIns
-            ->whereNotIn('state', ['completed', 'cancelled'])
-            ->sortBy(fn (array $checkIn): string => $checkIn['due_at'] ?? '9999-12-31')
-            ->first();
-        $nextRelease = $releases
-            ->filter(fn (array $release): bool => in_array(
-                $release['lifecycle_status'] ?? $release['status'] ?? null,
-                ['scheduled', 'prepared', 'confirmation_needed'],
-                true,
-            ))
-            ->sortBy(fn (array $release): string => $release['release_at'] ?? '9999-12-31T23:59')
-            ->first();
+        $nextCheckIn = $this->scheduledCheckIns($checkIns)->first();
+        $nextRelease = $this->scheduledReleases($releases)->first();
 
         return [
             'pending_actions' => (int) ($monitoring['pending_count'] ?? 0),
@@ -181,20 +266,46 @@ class ApplicantMonitoringDetailService
                 'total' => $checkIns->count(),
                 'open' => $openCheckIns->count(),
                 'completed' => $completedCheckIns->count(),
-                'next_due_label' => $nextCheckIn['handoff']['scheduled_label'] ?? $nextCheckIn['due_label'] ?? null,
+                'next_due_label' => $nextCheckIn['handoff']['scheduled_label'] ?? $nextCheckIn['effective_due_label'] ?? $nextCheckIn['due_label'] ?? null,
             ],
             'benefits' => [
                 'total' => $releases->count(),
                 'confirmation_needed' => $releases->where('can_respond', true)->count(),
+                'payout_details_needed' => $releases->whereIn('payout.status', RecipientBenefitPayoutService::APPLICANT_ACTIONS)->count(),
                 'next_release_label' => $nextRelease['release_label'] ?? null,
             ],
         ];
     }
 
+    private function scheduledCheckIns(Collection $checkIns): Collection
+    {
+        return $checkIns
+            ->whereIn('state', ['action_required', 'upcoming'])
+            ->filter(fn (array $checkIn): bool => isset($checkIn['handoff'])
+                ? ! $checkIn['handoff']['started']
+                : ($checkIn['effective_due_at'] ?? $checkIn['due_at'] ?? '') >= now()->toDateString())
+            ->sortBy($this->checkInDate(...));
+    }
+
+    private function checkInDate(array $checkIn): string
+    {
+        return $checkIn['handoff']['scheduled_at'] ?? ($checkIn['effective_due_at'] ?? $checkIn['due_at'] ?? '9999-12-31').'T23:59';
+    }
+
+    private function scheduledReleases(Collection $releases): Collection
+    {
+        return $releases
+            ->filter(fn (array $release): bool => in_array(
+                $release['lifecycle_status'] ?? $release['status'] ?? null,
+                ['scheduled', 'prepared'],
+                true,
+            ) && ($release['release_at'] ?? '') >= now()->format('Y-m-d\TH:i'))
+            ->sortBy('release_at');
+    }
+
     private function navigation(
         ScholarshipApplication $application,
         string $view,
-        array $monitoring,
         Collection $checkIns,
         Collection $releases,
         Collection $decisions,
@@ -205,7 +316,7 @@ class ApplicantMonitoringDetailService
                 'label' => 'Overview',
                 'icon' => 'fa-regular fa-compass',
                 'href' => route('dashboard.monitoring.show', $application, false),
-                'badge' => (int) ($monitoring['pending_count'] ?? 0),
+                'badge' => 0,
             ],
             [
                 'key' => 'check-ins',
@@ -219,7 +330,7 @@ class ApplicantMonitoringDetailService
                 'label' => 'Benefit releases',
                 'icon' => 'fa-solid fa-hand-holding-heart',
                 'href' => $this->viewUrl($application, 'benefits'),
-                'badge' => $releases->where('can_respond', true)->count(),
+                'badge' => $releases->where('can_respond', true)->count() + $releases->whereIn('payout.status', RecipientBenefitPayoutService::APPLICANT_ACTIONS)->count(),
             ],
             [
                 'key' => 'history',
@@ -231,6 +342,9 @@ class ApplicantMonitoringDetailService
         ];
 
         return collect($items)
+            ->reject(fn (array $item): bool => $item['key'] === 'check-ins'
+                && $view !== 'check-ins'
+                && $this->isOneTimeBenefit($application, $checkIns, $releases))
             ->map(fn (array $item): array => [
                 ...$item,
                 'active' => $item['key'] === $view,
@@ -252,13 +366,16 @@ class ApplicantMonitoringDetailService
         return match ($view) {
             'check-ins' => [
                 'type' => 'check_ins',
-                'active' => $checkIns->whereIn('state', ['action_required', 'under_review', 'open'])->values(),
+                'active' => $checkIns->whereIn('state', self::ACTIVE_CHECK_INS)->values(),
                 'upcoming' => $checkIns->where('state', 'upcoming')->values(),
-                'completed' => $checkIns->whereIn('state', ['completed', 'cancelled'])->values(),
+                'completed' => $checkIns->whereIn('state', self::PAST_CHECK_INS)->values(),
                 'directory' => [
+                    'next_appointment' => $this->canShowSchedule($application, $monitoring)
+                        ? $this->nextAppointment($application, $checkIns)
+                        : null,
                     'active' => $this->checkInDirectory(
                         $application,
-                        $checkIns->whereIn('state', ['action_required', 'under_review', 'open']),
+                        $checkIns->whereIn('state', self::ACTIVE_CHECK_INS),
                     ),
                     'upcoming' => $this->checkInDirectory(
                         $application,
@@ -266,20 +383,23 @@ class ApplicantMonitoringDetailService
                     ),
                     'completed' => $this->checkInDirectory(
                         $application,
-                        $checkIns->whereIn('state', ['completed', 'cancelled']),
+                        $checkIns->whereIn('state', self::PAST_CHECK_INS),
                     ),
                 ],
-                'selected' => $this->selectedCheckIn($application, $checkIns, $recordKey),
+                'selected' => $this->selectedCheckIn($application, $checkIns, $recordKey, $this->canShowSchedule($application, $monitoring)),
                 'return_href' => $this->viewUrl($application, 'check-ins'),
-                'empty' => $this->checkInEmptyState($monitoring, $checkIns),
+                'empty' => $this->checkInEmptyState($application, $monitoring, $checkIns),
             ],
             'benefits' => [
                 'type' => 'benefits',
                 ...$releaseGroups,
+                'one_time' => $this->isOneTimeBenefit($application, $checkIns, $releaseGroups['all']),
                 'directory' => [
-                    'action_required' => $this->benefitDirectory($releaseGroups['action_required']),
-                    'upcoming' => $this->benefitDirectory($releaseGroups['upcoming']),
-                    'in_progress' => $this->benefitDirectory($releaseGroups['in_progress']),
+                    'action_required' => $this->benefitDirectory($releaseGroups['action_required']->where('can_respond', true)),
+                    'follow_up' => $this->benefitDirectory($releaseGroups['action_required']->where('follow_up.can_reply', true)),
+                    'payout_required' => $this->benefitDirectory($releaseGroups['all']->whereIn('payout.status', RecipientBenefitPayoutService::APPLICANT_ACTIONS)),
+                    'upcoming' => $this->benefitDirectory($releaseGroups['upcoming']->whereNotIn('payout.status', RecipientBenefitPayoutService::APPLICANT_ACTIONS)),
+                    'in_progress' => $this->benefitDirectory($releaseGroups['in_progress']->whereNotIn('payout.status', RecipientBenefitPayoutService::APPLICANT_ACTIONS)),
                     'completed' => $this->benefitDirectory($releaseGroups['completed']),
                 ],
                 'selected' => $this->selectedBenefit($application, $releaseGroups['all'], $recordKey),
@@ -288,21 +408,29 @@ class ApplicantMonitoringDetailService
             'history' => $this->historyContent(
                 $application,
                 $checkIns,
-                $releaseGroups['completed'],
+                $releaseGroups['completed']->reject(fn (array $release): bool => $release['delivery']['key'] === 'inactive'),
                 $decisions,
                 $recordKey,
             ),
             default => [
                 'type' => 'overview',
                 'next_action' => $decision,
+                'closeout' => in_array($monitoring['support_status'] ?? null, ['completed', 'terminated'], true)
+                    && $application->student_response_status !== 'declined'
+                    ? $this->closeoutRecord($application, $decisions->first() ?? ['decision' => $monitoring['support_status']])
+                    : null,
                 'plan' => $this->plan($application, $monitoring, $checkIns, $releaseGroups),
-                'next_check_in' => $checkIns
-                    ->whereNotIn('state', ['completed', 'cancelled'])
-                    ->sortBy(fn (array $checkIn): string => $checkIn['due_at'] ?? '9999-12-31')
+                'schedule' => $this->canShowSchedule($application, $monitoring)
+                    ? $this->upcomingSchedule($application, $checkIns, $releaseGroups['upcoming'])
+                        ->reject(fn (array $item): bool => $item['href'] === ($decision['action']['href'] ?? null))
+                        ->unique('section')->values()
+                    : [],
+                'next_check_in' => $this->canShowSchedule($application, $monitoring) ? $checkIns
+                    ->whereNotIn('state', self::PAST_CHECK_INS)
                     ->pipe(fn (Collection $records): ?array => $this->withCheckInHref(
                         $application,
                         $records->first(),
-                    )),
+                    )) : null,
                 'next_release' => $releaseGroups['action_required']->first()
                     ?? $releaseGroups['upcoming']->first(),
                 'latest_support_decision' => $decisions->first(),
@@ -316,10 +444,12 @@ class ApplicantMonitoringDetailService
         Collection $checkIns,
         array $releaseGroups,
     ): array {
-        $plan = $application->scholarship?->monitoringPlan;
+        $savedPlan = $application->scholarship?->monitoringPlan;
+        $plan = $savedPlan?->status === 'active' ? $savedPlan : null;
         $mode = match (true) {
-            $checkIns->isNotEmpty() => 'recurring',
-            $releaseGroups['all']->isNotEmpty() => 'one_time',
+            $this->hasRecurringCheckIns($application, $checkIns) => 'recurring',
+            $application->scholarship?->monitoring_policy === RecipientSupportCatalog::MONITORING_ONE_TIME_FOLLOW_UP => 'follow_up',
+            $this->isOneTimeBenefit($application, $checkIns, $releaseGroups['all']) => 'one_time',
             default => 'not_scheduled',
         };
 
@@ -327,6 +457,7 @@ class ApplicantMonitoringDetailService
             'mode' => $mode,
             'mode_label' => match ($mode) {
                 'recurring' => 'Recurring check-ins',
+                'follow_up' => 'One-time follow-up',
                 'one_time' => 'One-time benefit only',
                 default => 'No schedule published',
             },
@@ -336,7 +467,35 @@ class ApplicantMonitoringDetailService
             'ends_label' => $plan?->ends_on?->format('M d, Y'),
             'instructions' => $plan?->instructions,
             'agreement_accepted' => (bool) ($monitoring['agreement_accepted'] ?? false),
+            'agreement' => [
+                'label' => match ($application->student_response_status) {
+                    'accepted' => 'Accepted',
+                    'declined' => 'Declined',
+                    default => filled($application->provider_contract_terms_snapshot) ? 'Awaiting response' : 'No agreement on file',
+                },
+                'href' => filled($application->provider_contract_terms_snapshot)
+                    ? route('dashboard.applications.show.section', ['application' => $application, 'section' => 'outcome'], false).'?action=view-agreement'
+                    : null,
+            ],
         ];
+    }
+
+    private function hasRecurringCheckIns(ScholarshipApplication $application, Collection $checkIns): bool
+    {
+        return match ($application->scholarship?->monitoring_policy) {
+            RecipientSupportCatalog::MONITORING_RECURRING => true,
+            RecipientSupportCatalog::MONITORING_ONE_TIME_FOLLOW_UP => false,
+            default => $checkIns->isNotEmpty() || $application->scholarship?->monitoringPlan?->status === 'active',
+        };
+    }
+
+    private function isOneTimeBenefit(ScholarshipApplication $application, Collection $checkIns, Collection $releases): bool
+    {
+        return $checkIns->isEmpty()
+            && ! $this->hasRecurringCheckIns($application, $checkIns)
+            && $application->scholarship?->monitoring_policy !== RecipientSupportCatalog::MONITORING_ONE_TIME_FOLLOW_UP
+            && ($application->scholarship?->support_mode === RecipientSupportCatalog::SUPPORT_ONE_TIME
+                || (blank($application->scholarship?->support_mode) && $releases->isNotEmpty()));
     }
 
     private function nextAction(
@@ -356,7 +515,12 @@ class ApplicantMonitoringDetailService
             );
         }
 
-        if (! ($monitoring['agreement_accepted'] ?? false)) {
+        if ($application->student_response_status === 'declined') {
+            return $this->decisionRecord('no_action', 'neutral', 'Award declined', 'You declined this award. The record is available in past support.', 'provider');
+        }
+
+        $supportEnded = in_array($monitoring['support_status'] ?? null, ['completed', 'terminated'], true);
+        if (! $supportEnded && ! ($monitoring['agreement_accepted'] ?? false)) {
             return $this->decisionRecord(
                 'agreement_required',
                 'attention',
@@ -371,12 +535,13 @@ class ApplicantMonitoringDetailService
             );
         }
 
-        $requiredCheckIn = $checkIns->first(
-            fn (array $checkIn): bool => collect($checkIn['requirements'] ?? [])->contains(
-                fn (array $requirement): bool => (bool) ($requirement['can_submit'] ?? false)
-                    && (($requirement['submission'] ?? null) === null
-                        || (bool) ($requirement['correction_requested'] ?? false)),
-            ),
+        $requiredCheckIn = $supportEnded ? null : $checkIns->first(
+            fn (array $checkIn): bool => ! in_array($checkIn['state'], self::PAST_CHECK_INS, true)
+                && collect($checkIn['requirements'] ?? [])->contains(
+                    fn (array $requirement): bool => (bool) ($requirement['can_submit'] ?? false)
+                        && (($requirement['submission'] ?? null) === null
+                            || (bool) ($requirement['correction_requested'] ?? false)),
+                ),
         );
 
         if ($requiredCheckIn) {
@@ -394,8 +559,17 @@ class ApplicantMonitoringDetailService
                 'applicant',
                 'Open check-in',
                 $this->checkInUrl($application, $requiredCheckIn['record_key']),
-                $requiredCheckIn['due_label'] ?? null,
+                $requiredCheckIn['effective_due_label'] ?? $requiredCheckIn['due_label'] ?? null,
+                $this->checkInDate($requiredCheckIn),
             );
+        }
+
+        $followUp = $releases->first(fn (array $release): bool => ($release['follow_up']['status'] ?? null) === 'awaiting_response' && ($release['follow_up']['can_reply'] ?? false));
+        if ($followUp) {
+            return $this->decisionRecord('benefit_follow_up', 'attention', 'Reply about your missed benefit',
+                'Ask the provider for a new arrangement, or decline only this benefit. Your scholarship stays unchanged.',
+                'applicant', 'Open benefit follow-up', $this->benefitUrl($application, 'release-'.$followUp['record_id']),
+                $followUp['follow_up']['deadline_label'] ?? null);
         }
 
         $releaseToConfirm = $releases->first(
@@ -411,7 +585,7 @@ class ApplicantMonitoringDetailService
                 'applicant',
                 'Review benefit',
                 $this->benefitUrl($application, 'release-'.$releaseToConfirm['record_id']),
-                $releaseToConfirm['release_label'] ?? null,
+                $releaseToConfirm['transfer_sent_label'] ?? $releaseToConfirm['release_label'] ?? null,
             );
         }
 
@@ -424,7 +598,9 @@ class ApplicantMonitoringDetailService
                 'outcome_response_required',
                 'attention',
                 'Review the latest support outcome',
-                'Acknowledge the decision or ask the provider for clarification.',
+                ($decisionToAnswer['case_review_url'] ?? null)
+                    ? 'Acknowledge the decision or open the independent case review for response and appeal options.'
+                    : 'Acknowledge the decision or ask the provider for clarification.',
                 'applicant',
                 'Review outcome',
                 $decisionToAnswer['href'],
@@ -432,46 +608,82 @@ class ApplicantMonitoringDetailService
             );
         }
 
-        $appointment = $checkIns->first(fn (array $checkIn): bool => isset($checkIn['handoff']) && $checkIn['state'] === 'upcoming');
+        $payoutNeeded = $supportEnded ? null : $releases->whereIn('payout.status', RecipientBenefitPayoutService::APPLICANT_ACTIONS)->sortBy('release_at')->first();
+        if ($payoutNeeded) {
+            $correctionRequested = $payoutNeeded['payout']['status'] === 'correction_requested';
+
+            return $this->decisionRecord(
+                'benefit_payout_required',
+                'attention',
+                $correctionRequested ? 'Correct your payout details' : 'Provide your payout details',
+                $correctionRequested
+                    ? 'The provider requested a correction. Open the release to see what to update.'
+                    : 'The provider scheduled a transfer. Enter your bank or e-wallet details privately on the release record.',
+                'applicant',
+                'Open benefit release',
+                $this->benefitUrl($application, 'release-'.$payoutNeeded['record_id']),
+                $payoutNeeded['release_label'] ?? null,
+                $payoutNeeded['release_at'] ?? null,
+            );
+        }
+
+        $appointment = $supportEnded ? null : $this->scheduledCheckIns($checkIns)
+            ->first(fn (array $checkIn): bool => isset($checkIn['handoff']) && $checkIn['state'] === 'upcoming');
         if ($appointment) {
             return $this->decisionRecord(
                 'check_in_scheduled',
                 'scheduled',
-                'Attend your scheduled check-in',
+                ($appointment['handoff']['rescheduled'] ?? false) ? 'Attend your rescheduled check-in' : 'Attend your scheduled check-in',
                 'Bring the listed documents to the provider in person. Do not upload them here.',
                 'applicant',
                 'View appointment',
                 $this->checkInUrl($application, $appointment['record_key']),
                 $appointment['handoff']['scheduled_label'],
+                $this->checkInDate($appointment),
             );
         }
 
-        $underReview = $checkIns->firstWhere('state', 'under_review');
+        $current = $supportEnded ? null : $checkIns->first(fn (array $checkIn): bool => in_array($checkIn['state'], self::ACTIVE_CHECK_INS, true)
+            && filled($checkIn['guidance']));
 
-        if ($underReview) {
+        if ($current) {
+            $guidance = $current['guidance'];
             return $this->decisionRecord(
-                'provider_review',
-                'waiting',
-                'Wait for the provider review',
-                isset($underReview['handoff'])
-                    ? 'The provider will post the results of the in-person check-in here.'
-                    : 'Your records were submitted. The provider will post the result here.',
-                'provider',
+                $guidance['key'],
+                $guidance['actor'] === 'applicant' ? 'attention' : 'waiting',
+                $guidance['title'],
+                $guidance['description'],
+                $guidance['actor'],
                 'View check-in',
-                $this->checkInUrl($application, $underReview['record_key']),
-                $underReview['handoff']['scheduled_label'] ?? $underReview['due_label'] ?? null,
+                $this->checkInUrl($application, $current['record_key']),
+                $current['handoff']['scheduled_label'] ?? $current['due_label'] ?? null,
             );
         }
 
-        $upcomingRelease = $releases
-            ->filter(fn (array $release): bool => in_array(
-                $release['lifecycle_status'] ?? $release['status'] ?? null,
-                ['scheduled', 'prepared'],
-                true,
-            ))
-            ->sortBy(fn (array $release): string => $release['release_at'] ?? '9999-12-31T23:59')
-            ->first();
+        if ($reported = $releases->firstWhere('lifecycle_status', 'issue_open')) {
+            return $this->decisionRecord(
+                'benefit_issue_open',
+                'waiting',
+                'Check the reported benefit issue',
+                'Open the release to see the latest update and whether a reply is needed.',
+                'provider',
+                'View release',
+                $this->benefitUrl($application, 'release-'.$reported['record_id']),
+            );
+        }
 
+        if ($supportEnded) {
+            $latest = $decisions->first();
+            if (($latest['response_status'] ?? null) === 'open') {
+                return $this->decisionRecord('outcome_response_pending', 'waiting', 'Your response is with the provider',
+                    'The provider will post its reply on the outcome record.', 'provider', 'View your response', $latest['href']);
+            }
+
+            return $this->decisionRecord('support_closed', 'neutral', 'No response needed right now',
+                'Your decision, benefit records, and support history remain available.', 'provider');
+        }
+
+        $upcomingRelease = $this->scheduledReleases($releases)->first();
         if ($upcomingRelease) {
             return $this->decisionRecord(
                 'benefit_scheduled',
@@ -481,7 +693,23 @@ class ApplicantMonitoringDetailService
                 'applicant',
                 'View release',
                 $this->benefitUrl($application, 'release-'.$upcomingRelease['record_id']),
-                $upcomingRelease['release_label'] ?? null,
+                $upcomingRelease['release_label'],
+                $upcomingRelease['release_at'],
+            );
+        }
+
+        $pendingRelease = $supportEnded ? null : $releases->first(fn (array $release): bool => in_array(
+            $release['lifecycle_status'] ?? $release['status'] ?? null, ['scheduled', 'prepared'], true,
+        ));
+        if ($pendingRelease) {
+            return $this->decisionRecord(
+                'benefit_pending',
+                'waiting',
+                'Check for a benefit release update',
+                'The release has not been marked received. Open the record for the latest provider update.',
+                'provider',
+                'View release',
+                $this->benefitUrl($application, 'release-'.$pendingRelease['record_id']),
             );
         }
 
@@ -503,6 +731,7 @@ class ApplicantMonitoringDetailService
         ?string $actionLabel = null,
         ?string $actionHref = null,
         ?string $dueLabel = null,
+        ?string $sortAt = null,
     ): array {
         return [
             'state' => $state,
@@ -513,6 +742,13 @@ class ApplicantMonitoringDetailService
             'actor' => $actor,
             'actor_label' => $actor === 'applicant' ? 'You' : 'Scholarship provider',
             'due_label' => $dueLabel,
+            'sort_at' => $sortAt,
+            'priority' => match ($tone) {
+                'attention' => 0,
+                'scheduled' => 1,
+                'waiting' => 2,
+                default => 3,
+            },
             'action' => $actionLabel && $actionHref ? [
                 'kind' => 'link',
                 'label' => $actionLabel,
@@ -523,31 +759,29 @@ class ApplicantMonitoringDetailService
 
     private function normalizeCheckIns(array $monitoring): Collection
     {
+        $supportEnded = in_array($monitoring['support_status'] ?? null, ['completed', 'terminated'], true);
         $structured = collect($monitoring['check_ins'] ?? [])
-            ->map(function (array $checkIn): array {
-                $state = $this->structuredCheckInState($checkIn);
-
-                return [
-                    ...$checkIn,
-                    'record_key' => 'check-in-'.$checkIn['id'],
-                    'record_type' => 'checklist',
-                    'record_type_label' => 'Check-in',
-                    'state' => $state,
-                    'state_label' => $this->checkInStateLabel($state),
-                ];
-            });
+            ->map(fn (array $checkIn): array => [
+                ...$checkIn,
+                ...$this->checkInPresentation($checkIn, $supportEnded),
+                'record_key' => 'check-in-'.$checkIn['id'],
+                'record_type' => 'checklist',
+                'record_type_label' => 'Check-in',
+            ]);
 
         $legacy = collect($monitoring['cycles'] ?? [])
-            ->map(function (array $cycle): array {
+            ->map(function (array $cycle) use ($supportEnded): array {
                 $submission = $cycle['submission'] ?? null;
-                $state = match (true) {
-                    ($cycle['status'] ?? null) === 'upcoming' => 'upcoming',
-                    in_array($cycle['status'] ?? null, ['closed', 'cancelled'], true) => 'completed',
-                    (bool) ($cycle['can_submit'] ?? false) => 'action_required',
-                    $submission !== null && ($submission['review_status'] ?? 'pending') === 'pending' => 'under_review',
-                    $submission !== null => 'completed',
-                    default => 'open',
+                $requirementStatus = match ($submission['review_status'] ?? null) {
+                    'met', 'excused' => 'completed',
+                    'not_met' => 'not_met',
+                    'needs_correction' => 'action_needed',
+                    'pending' => 'submitted',
+                    default => $cycle['monitoring_case']['is_final'] ? 'closed' : $cycle['status'],
                 };
+                if (in_array($requirementStatus, ['action_needed', 'submitted'], true) && $cycle['monitoring_case']['is_final']) {
+                    $requirementStatus = 'closed';
+                }
                 $requirement = [
                     'id' => null,
                     'type' => 'academic_progress',
@@ -557,17 +791,20 @@ class ApplicantMonitoringDetailService
                     'description' => $cycle['requirement_label'] ?? null,
                     'required' => true,
                     'requires_file' => true,
-                    'status' => $cycle['status'] ?? 'open',
-                    'status_label' => $cycle['correction_requested'] ?? false
-                        ? 'Replacement requested'
-                        : ($submission ? ($submission['review_status_label'] ?? 'Submitted') : 'To submit'),
+                    'status' => $requirementStatus,
+                    'status_label' => match ($requirementStatus) {
+                        'closed' => 'Submission closed',
+                        'action_needed' => 'Replacement requested',
+                        'upcoming' => 'Opens later',
+                        default => $submission['review_status_label'] ?? 'To submit',
+                    },
                     'can_submit' => (bool) ($cycle['can_submit'] ?? false),
                     'correction_requested' => (bool) ($cycle['correction_requested'] ?? false),
                     'locked_reason' => $cycle['locked_reason'] ?? null,
                     'submission' => $submission,
                 ];
 
-                return [
+                $record = [
                     ...$cycle,
                     'record_key' => 'academic-'.$cycle['id'],
                     'record_type' => 'academic_record',
@@ -576,14 +813,14 @@ class ApplicantMonitoringDetailService
                         $cycle['academic_period'] ?? null,
                         $cycle['school_year'] ?? null,
                     ])->filter()->implode(' - '),
-                    'state' => $state,
-                    'state_label' => $this->checkInStateLabel($state),
                     'requirements' => [$requirement],
                     'required_count' => 1,
                     'submitted_count' => $submission ? 1 : 0,
                     'pending_count' => ($cycle['can_submit'] ?? false)
                         && (! $submission || ($cycle['correction_requested'] ?? false)) ? 1 : 0,
                 ];
+
+                return [...$record, ...$this->checkInPresentation($record, $supportEnded)];
             });
 
         return $structured
@@ -597,50 +834,64 @@ class ApplicantMonitoringDetailService
             ->values();
     }
 
-    private function structuredCheckInState(array $checkIn): string
+    private function checkInPresentation(array $record, bool $supportEnded): array
     {
-        if (($checkIn['status'] ?? null) === 'upcoming') {
-            return 'upcoming';
-        }
+        $case = $record['monitoring_case'];
+        $status = $case['display_status'];
+        $action = $case['next_action'];
+        $isUpcoming = in_array($status, ['scheduled', 'upcoming'], true);
+        $needsApplicant = $action && $action['role'] === 'applicant' && $action['key'] !== 'accept_agreement';
+        $state = match (true) {
+            $case['is_final'] => $status,
+            $supportEnded => 'closed',
+            $isUpcoming => 'upcoming',
+            $needsApplicant => 'action_required',
+            ($action['role'] ?? null) === 'provider' => 'under_review',
+            default => 'open',
+        };
 
-        if (in_array($checkIn['status'] ?? null, ['closed', 'cancelled'], true)) {
-            return ($checkIn['status'] ?? null) === 'cancelled' ? 'cancelled' : 'completed';
-        }
-
-        if ((int) ($checkIn['pending_count'] ?? 0) > 0) {
-            return 'action_required';
-        }
-
-        $requirements = collect($checkIn['requirements'] ?? []);
-        if ($requirements->contains(fn (array $requirement): bool => in_array(
-            $requirement['status'] ?? null,
-            ['submitted', 'not_met'],
-            true,
-        ))) {
-            return 'under_review';
-        }
-
-        if ($requirements->isNotEmpty() && $requirements->every(fn (array $requirement): bool => in_array(
-            $requirement['status'] ?? null,
-            ['completed', 'provider_recorded'],
-            true,
-        ))) {
-            return 'completed';
-        }
-
-        return isset($checkIn['handoff']) ? 'under_review' : 'open';
+        return [
+            'state' => $state,
+            'state_label' => $supportEnded && ! $case['is_final'] ? 'Support ended' : $case['status_label'],
+            'state_tone' => $supportEnded && ! $case['is_final'] ? 'neutral' : $case['status_tone'],
+            'guidance' => in_array($state, self::PAST_CHECK_INS, true) ? null : $this->checkInGuidance($record, $action),
+        ];
     }
 
-    private function checkInStateLabel(string $state): string
+    private function checkInGuidance(array $record, ?array $action): ?array
     {
-        return match ($state) {
-            'action_required' => 'Action needed',
-            'under_review' => 'Waiting for review',
-            'upcoming' => 'Upcoming',
-            'completed' => 'Completed',
-            'cancelled' => 'Cancelled',
-            default => 'Open',
+        if (! $action) {
+            return null;
+        }
+
+        [$title, $description] = match ($action['key']) {
+            'accept_agreement' => ['Review your recipient agreement', 'Accept the terms before completing this check-in.'],
+            'submit_requirements' => ['Submit the remaining records', 'Open the required items to add the requested files.'],
+            'replace_record' => ['Replace a check-in record', 'Read the provider feedback and upload the requested replacement.'],
+            'attend_handoff' => ['Attend your check-in', 'Bring the listed documents to the appointment. No online upload is needed.'],
+            'record_attendance' => ['Wait for attendance to be recorded', 'The provider will confirm whether you attended. No upload is needed.'],
+            'record_requirement' => ['Wait for the provider to verify your records', 'The provider will record the result here. No upload is needed.'],
+            'resolve_missed_appointment' => ['Missed appointment', 'Contact the provider if you need to arrange another visit. Any new appointment will appear here.'],
+            'decide_adjustment' => ['Wait for a decision on your request', 'The provider will post the decision here.'],
+            'review_requirements' => ['Wait for the provider review', 'The provider will post the review result here.'],
+            'close_check_in' => ['Wait for the final check-in outcome', 'The required items have been verified. The provider still needs to close the check-in.'],
+            'resolve_overdue' => ($record['monitoring_case']['attendance_status'] ?? null) === 'no_show'
+                ? ['Missed appointment', 'Contact the provider if you need to arrange another visit. Any new appointment will appear here.']
+                : ['Overdue check-in', 'The provider will review the overdue record. Contact the provider if you still need help.'],
+            'complete_follow_up' => ['Complete the provider follow-up', 'Open the relevant item to read the provider’s instructions.'],
+            'manage_follow_up' => ['Wait for the provider follow-up', 'The provider will record the next step here.'],
+            'request_adjustment' => ['Request more time or an exception', 'Open an outstanding item to see whether you can still send a request.'],
+            'wait_for_opening' => ['Check back when this period opens', 'The check-in will show the requirements you can submit.'],
+            default => ['Review your check-in', 'Open the record to see what still needs attention.'],
         };
+
+        return [
+            'key' => $action['key'] === 'review_requirements' ? 'provider_review' : $action['key'],
+            'title' => $title,
+            'description' => $description,
+            'actor' => $action['role'] === 'applicant' ? 'applicant' : 'provider',
+            'actor_label' => $action['role'] === 'applicant' ? 'You' : 'Scholarship provider',
+        ];
     }
 
     private function checkInStateRank(string $state): int
@@ -650,42 +901,35 @@ class ApplicantMonitoringDetailService
             'under_review' => 1,
             'open' => 2,
             'upcoming' => 3,
-            'completed' => 4,
-            default => 5,
+            default => 4,
         };
     }
 
     private function releaseGroups(
         ScholarshipApplication $application,
         Collection $releases,
+        bool $canShowSchedule,
     ): array {
+        $scheduled = $canShowSchedule ? $this->scheduledReleases($releases)->keyBy('record_id') : collect();
         $sorted = $releases
             ->map(fn (array $release): array => [
                 ...$release,
                 'record_key' => 'release-'.$release['record_id'],
                 'href' => $this->benefitUrl($application, 'release-'.$release['record_id']),
+                'delivery' => $this->releasePresentation($release, $scheduled->has($release['record_id']), $canShowSchedule),
             ])
             ->sortBy(fn (array $release): string => $release['release_at'] ?? '9999-12-31T23:59')
             ->values();
         $actionRequired = $sorted->filter(
-            fn (array $release): bool => (bool) ($release['can_respond'] ?? false),
+            fn (array $release): bool => ($release['can_respond'] ?? false) || (($release['follow_up']['status'] ?? null) === 'awaiting_response' && ($release['follow_up']['can_reply'] ?? false)),
         )->values();
-        $upcoming = $sorted->filter(fn (array $release): bool => ! ($release['can_respond'] ?? false)
-            && in_array(
-                $release['lifecycle_status'] ?? $release['status'] ?? null,
-                ['scheduled', 'prepared'],
-                true,
-            ))->values();
-        $inProgress = $sorted->filter(fn (array $release): bool => (
-            ($release['lifecycle_status'] ?? null) === 'issue_open'
+        $upcoming = $sorted->filter(fn (array $release): bool => $scheduled->has($release['record_id']))->values();
+        $inProgress = $sorted->filter(fn (array $release): bool => in_array(
+            $release['delivery']['key'], ['ready', 'waiting', 'issue_open', 'responded'], true,
         ))->values();
-        $completed = $sorted->reject(fn (array $release): bool => $actionRequired->contains(
-            fn (array $item): bool => ($item['record_id'] ?? null) === ($release['record_id'] ?? null),
-        ) || $upcoming->contains(
-            fn (array $item): bool => ($item['record_id'] ?? null) === ($release['record_id'] ?? null),
-        ) || $inProgress->contains(
-            fn (array $item): bool => ($item['record_id'] ?? null) === ($release['record_id'] ?? null),
-        ))->sortByDesc(fn (array $release): string => $release['release_at'] ?? '')->values();
+        $completed = $sorted->filter(fn (array $release): bool => in_array(
+            $release['delivery']['key'], ['fulfilled', 'resolved', 'missed', 'withheld', 'inactive', 'unclaimed', 'declined', 'rescheduled'], true,
+        ))->whereNotIn('record_id', $actionRequired->pluck('record_id'))->sortByDesc(fn (array $release): string => $release['release_at'] ?? '')->values();
 
         return [
             'all' => $sorted,
@@ -694,6 +938,64 @@ class ApplicantMonitoringDetailService
             'in_progress' => $inProgress,
             'completed' => $completed,
             'empty' => $sorted->isEmpty(),
+        ];
+    }
+
+    private function releasePresentation(array $release, bool $upcoming, bool $canShowSchedule): array
+    {
+        $followUp = $release['follow_up'] ?? null;
+        if ($followUp && $followUp['status'] !== 'not_started' && ($release['lifecycle_status'] ?? '') === 'missed') {
+            return [
+                'key' => $followUp['status'] === 'awaiting_response' ? 'missed' : $followUp['status'],
+                'label' => $followUp['label'], 'tone' => 'attention',
+                'title' => ($followUp['can_reply'] ?? false) ? 'Reply about this benefit' : 'Review the follow-up',
+                'description' => $followUp['resolution_note'] ?: ($followUp['instructions'] ?: 'The benefit has not been confirmed as received.'),
+                'date_label' => $followUp['deadline_label'],
+                'date_caption' => 'Reply deadline on record',
+            ];
+        }
+        $lifecycle = $release['lifecycle_status'] ?? $release['status'] ?? 'scheduled';
+        $inPerson = ($release['release_method'] ?? null) === 'in_person';
+        $sent = $release['transfer_sent_label'] ?? null;
+        $key = match (true) {
+            ! in_array($lifecycle, ['scheduled', 'prepared'], true) => $lifecycle,
+            ! $canShowSchedule => 'inactive',
+            $upcoming => 'scheduled',
+            $lifecycle === 'prepared' && $inPerson && filled($release['release_at'] ?? null) => 'ready',
+            default => 'waiting',
+        };
+
+        [$label, $tone, $title, $description] = match ($key) {
+            'confirmation_needed' => $sent
+                ? ['Sent - awaiting receipt', 'attention', 'Check your account before confirming', 'The provider recorded a transfer. If it did not arrive, or the amount is different, report a problem instead.']
+                : ['Confirmation needed', 'attention', 'Confirm only after you receive it', 'The provider recorded this release. If it is missing, incomplete, or different from what is listed, report a problem instead.'],
+            'fulfilled' => ['Received', 'positive', 'No action needed', 'Receipt has been confirmed for this release.'],
+            'issue_open' => ['Report open', 'info', 'Check your report', 'Open the delivery report below to see the latest update and whether you need to reply.'],
+            'resolved' => ['Issue resolved', 'positive', 'Review the resolution', 'The provider recorded an outcome. Read the resolution for details.'],
+            'ready' => ['Ready for collection', 'info', 'Check the collection instructions', 'Follow the provider’s instructions before going to the collection venue.'],
+            'missed' => [$release['status_label'] ?? 'Appointment missed', 'critical', 'Ask about a new arrangement', 'Check the provider’s note for any follow-up. The benefit is not recorded as received.'],
+            'withheld' => ['Release withheld', 'critical', 'Review the provider’s update', 'Check the provider’s note for the reason and any next step.'],
+            'scheduled' => ['Scheduled', 'neutral', $inPerson ? 'Prepare for collection' : 'Check the delivery instructions', $inPerson ? 'Review the date, venue, and any documents to bring.' : 'Review how the benefit will be sent. Confirm receipt only after it arrives.'],
+            'inactive' => ['No active release', 'neutral', 'No action needed', 'This is a previous schedule, not an active collection or delivery instruction.'],
+            default => ['Awaiting release update', 'neutral', 'Wait for a release update', 'The provider has not recorded delivery. Check for new instructions or report a delivery problem if needed.'],
+        };
+        $received = $key === 'fulfilled' ? ($release['receipt_response']['received_label'] ?? null) : null;
+        $released = $release['released_at'] ?? null;
+
+        return [
+            'key' => $key,
+            'label' => $label,
+            'tone' => $tone,
+            'title' => $title,
+            'description' => $description,
+            'date_label' => $received ?? $sent ?? $released ?? $release['release_label'] ?? null,
+            'date_caption' => match (true) {
+                $received !== null => 'Received on',
+                $sent !== null => 'Sent on',
+                $released !== null => 'Provider recorded release',
+                in_array($key, ['scheduled', 'ready'], true) => 'Scheduled for',
+                default => 'Scheduled date on record',
+            },
         ];
     }
 
@@ -706,20 +1008,12 @@ class ApplicantMonitoringDetailService
                 'record_key' => $release['record_key'],
                 'title' => $release['title'],
                 'status' => $lifecycle,
-                'status_label' => $release['status_label'],
+                'status_label' => $release['delivery']['label'],
                 'release_label' => $release['release_label'] ?? null,
                 'amount_label' => $release['amount_label'] ?? null,
                 'method_label' => $release['release_method_label'] ?? null,
-                'progress_label' => match ($lifecycle) {
-                    'confirmation_needed' => 'Your confirmation is required',
-                    'issue_open' => 'Waiting for the provider to resolve your report',
-                    'fulfilled' => 'Receipt confirmed',
-                    'resolved' => 'Reported issue resolved',
-                    'prepared' => 'Prepared by the provider',
-                    'missed' => 'Release was not completed',
-                    'withheld' => 'Release is currently withheld',
-                    default => 'Scheduled by the provider',
-                },
+                'delivery' => $release['delivery'],
+                'payout_status' => $release['payout']['status'] ?? null,
                 'href' => $release['href'],
             ];
         });
@@ -752,11 +1046,18 @@ class ApplicantMonitoringDetailService
     ): Collection {
         return $decisions->values()->map(function (array $decision, int $index) use ($application): array {
             $recordKey = 'outcome-'.$decision['id'];
+            $canRespond = $index === 0 && (bool) ($decision['can_respond'] ?? false);
 
             return [
                 ...$decision,
                 'record_key' => $recordKey,
-                'can_respond' => $index === 0 && (bool) ($decision['can_respond'] ?? false),
+                'can_respond' => $canRespond,
+                'response_status_label' => match ($decision['response_status'] ?? null) {
+                    'open' => 'Awaiting provider reply',
+                    'resolved' => 'Response resolved',
+                    'acknowledged' => 'Acknowledged',
+                    default => $canRespond ? 'Response needed' : 'No response recorded',
+                },
                 'href' => $this->outcomeUrl($application, $recordKey),
             ];
         });
@@ -774,7 +1075,7 @@ class ApplicantMonitoringDetailService
             ->values();
         $timeline = $this->historyTimeline(
             $application,
-            $checkIns->whereIn('state', ['completed', 'cancelled'])->values(),
+            $checkIns->whereIn('state', self::PAST_CHECK_INS)->where('monitoring_case.is_final', true)->values(),
             $completedReleases,
             $decisions->where('can_respond', false)->values(),
         );
@@ -800,11 +1101,17 @@ class ApplicantMonitoringDetailService
             'kind' => 'support_outcome',
             'kind_label' => 'Support outcome',
             'title' => $decision['decision_label'],
-            'description' => $decision['reason_category_label']
-                ?? $decision['response_status_label']
-                ?? 'Provider decision recorded',
-            'date_label' => $decision['decided_at'] ?? $decision['effective_label'] ?? null,
-            'sort_at' => $decision['decided_at_iso'] ?? $decision['effective_on'] ?? '',
+            'description' => $decision['reason_category_label'] ?? null,
+            'status_label' => $decision['response_status_label'],
+            'status_tone' => match ($decision['response_status'] ?? null) {
+                'open' => 'info',
+                'resolved', 'acknowledged' => 'positive',
+                default => 'neutral',
+            },
+            ...$this->historyDate(
+                $decision['decided_at_iso'] ?? $decision['effective_on'] ?? null,
+                filled($decision['decided_at_iso'] ?? null) ? 'Decided' : 'Effective',
+            ),
             'icon' => match ($decision['decision'] ?? null) {
                 'terminated' => 'fa-solid fa-circle-exclamation',
                 'completed' => 'fa-solid fa-flag-checkered',
@@ -814,20 +1121,22 @@ class ApplicantMonitoringDetailService
             'href' => $decision['href'],
         ]);
 
-        $completedCheckIns = $checkIns->map(fn (array $checkIn): array => [
+        $pastCheckIns = $checkIns->map(fn (array $checkIn): array => [
             'record_key' => $checkIn['record_key'],
             'kind' => 'check_in',
             'kind_label' => $checkIn['record_type_label'] ?? 'Check-in',
             'title' => $checkIn['title'],
-            'description' => $checkIn['state'] === 'cancelled'
-                ? 'No submission was required.'
-                : ($checkIn['period_label'] ?? 'Provider review completed'),
-            'date_label' => $checkIn['effective_due_label'] ?? $checkIn['due_label'] ?? null,
-            'sort_at' => $checkIn['due_at'] ?? '',
-            'icon' => $checkIn['state'] === 'cancelled'
-                ? 'fa-solid fa-ban'
-                : 'fa-solid fa-list-check',
-            'tone' => $checkIn['state'] === 'cancelled' ? 'neutral' : 'positive',
+            'description' => $checkIn['state_label'],
+            'period_label' => $checkIn['period_label'] ?? null,
+            'status_label' => $checkIn['state_label'],
+            'status_tone' => $checkIn['state_tone'],
+            ...$this->historyDate($checkIn['monitoring_case']['closed_at_iso'] ?? null, 'Closed'),
+            'icon' => match ($checkIn['state']) {
+                'incomplete' => 'fa-solid fa-circle-exclamation',
+                'cancelled' => 'fa-solid fa-ban',
+                default => 'fa-solid fa-list-check',
+            },
+            'tone' => $checkIn['state_tone'],
             'href' => $this->checkInUrl($application, $checkIn['record_key']),
         ]);
 
@@ -836,12 +1145,10 @@ class ApplicantMonitoringDetailService
             'kind' => 'benefit_release',
             'kind_label' => 'Benefit release',
             'title' => $release['title'],
-            'description' => collect([
-                $release['status_label'] ?? null,
-                $release['amount_label'] ?? null,
-            ])->filter()->implode(' - '),
-            'date_label' => $release['release_label'] ?? null,
-            'sort_at' => $release['release_at'] ?? '',
+            'description' => $release['amount_label'] ?? null,
+            'status_label' => $release['delivery']['label'],
+            'status_tone' => $release['delivery']['tone'],
+            ...$this->releaseHistoryDate($release),
             'icon' => 'fa-solid fa-hand-holding-heart',
             'tone' => in_array($release['lifecycle_status'] ?? null, ['missed', 'withheld'], true)
                 ? 'critical'
@@ -850,10 +1157,36 @@ class ApplicantMonitoringDetailService
         ]);
 
         return $outcomes
-            ->concat($completedCheckIns)
+            ->concat($pastCheckIns)
             ->concat($completedBenefits)
-            ->sortByDesc('sort_at')
+            ->sortByDesc(fn (array $item): string => $item['sort_at'] ?? '')
             ->values();
+    }
+
+    private function releaseHistoryDate(array $release): array
+    {
+        if ($release['delivery']['key'] === 'fulfilled' && filled($release['receipt_response']['received_on'] ?? null)) {
+            return $this->historyDate($release['receipt_response']['received_on'], 'Received');
+        }
+
+        if ($release['delivery']['key'] === 'resolved' && filled($release['receipt_response']['resolved_at_iso'] ?? null)) {
+            return $this->historyDate($release['receipt_response']['resolved_at_iso'], 'Resolved');
+        }
+
+        return $this->historyDate($release['recorded_at_iso'] ?? $release['released_at_iso'] ?? null, 'Recorded');
+    }
+
+    private function historyDate(?string $value, string $caption): array
+    {
+        $date = $value ? Carbon::parse($value, config('app.timezone'))->setTimezone(config('app.timezone')) : null;
+
+        return [
+            'sort_at' => $date?->format('Y-m-d\TH:i:s'),
+            'date_label' => $date?->format('M d, Y'),
+            'date_caption' => $date ? $caption : null,
+            'month_key' => $date?->format('Y-m'),
+            'month_label' => $date?->format('F Y'),
+        ];
     }
 
     private function selectedOutcome(
@@ -874,23 +1207,55 @@ class ApplicantMonitoringDetailService
         return [
             ...$decision,
             'return_href' => $this->viewUrl($application, 'history'),
+            'closeout' => $this->closeoutRecord($application, $decision, current: $decision['id'] === $decisions->first()['id']),
         ];
     }
 
-    private function checkInEmptyState(array $monitoring, Collection $checkIns): ?array
+    private function closeoutRecord(ScholarshipApplication $application, array $decision, bool $current = true): ?array
+    {
+        if (! in_array($decision['decision'] ?? null, ['completed', 'terminated'], true)) {
+            return null;
+        }
+
+        $withdrawn = (bool) ($decision['withdrawal_approved'] ?? false);
+        [$kind, $title, $description] = match (true) {
+            $withdrawn => ['withdrawn', 'Withdrawal approved', 'Your withdrawal request was approved. Earlier benefits and check-ins remain on record.'],
+            $decision['decision'] === 'completed' => ['completed', 'Support period completed', 'The provider recorded completion of your scholarship support period.'],
+            default => ['ended_early', 'Support ended early', 'The provider recorded an early end to your scholarship support.'],
+        };
+
+        return [
+            'kind' => $kind,
+            'title' => $title,
+            'description' => $description,
+            'current' => $current,
+            'effective_label' => $decision['effective_label'] ?? null,
+            'reason_label' => $decision['reason_category_label'] ?? null,
+            'note' => $decision['reason'] ?? null,
+            'counts' => $decision['closeout_counts'] ?? null,
+            'benefits_href' => $this->viewUrl($application, 'benefits'),
+            'outcome_href' => $decision['href'] ?? null,
+            'withdrawal_href' => $withdrawn ? route('dashboard.applications.show.section', [
+                'application' => $application,
+                'section' => 'outcome',
+            ], false).'#scholarship-withdrawal' : null,
+        ];
+    }
+
+    private function checkInEmptyState(ScholarshipApplication $application, array $monitoring, Collection $checkIns): ?array
     {
         if ($checkIns->isNotEmpty()) {
             return null;
         }
 
-        $hasBenefits = collect($monitoring['benefit_releases'] ?? [])->isNotEmpty();
+        $isOneTime = $this->isOneTimeBenefit($application, $checkIns, collect($monitoring['benefit_releases'] ?? []));
 
         return [
-            'key' => $hasBenefits ? 'one_time_benefit' : 'not_scheduled',
-            'title' => $hasBenefits ? 'No recurring check-ins required' : 'No check-in scheduled',
-            'description' => $hasBenefits
+            'key' => $isOneTime ? 'one_time_benefit' : 'not_scheduled',
+            'title' => $isOneTime ? 'No recurring check-ins required' : 'No check-in scheduled',
+            'description' => $isOneTime
                 ? 'This scholarship currently uses a one-time benefit record instead of recurring check-ins.'
-                : 'The provider has not published a check-in yet.',
+                : 'The provider has not scheduled a check-in for you yet.',
         ];
     }
 
@@ -901,7 +1266,7 @@ class ApplicantMonitoringDetailService
         return $checkIns->values()->map(function (array $checkIn) use ($application): array {
             $requirements = collect($checkIn['requirements'] ?? []);
             $totalItems = $requirements->count();
-            $completedItems = $requirements->whereIn('status', ['completed', 'provider_recorded'])->count();
+            $completedItems = $requirements->where('status', 'completed')->count();
             $pendingItems = (int) ($checkIn['pending_count'] ?? 0);
 
             return [
@@ -914,12 +1279,17 @@ class ApplicantMonitoringDetailService
                 'handoff' => $checkIn['handoff'] ?? null,
                 'state' => $checkIn['state'],
                 'state_label' => $checkIn['state_label'],
+                'state_tone' => $checkIn['state_tone'],
+                'next_actor_label' => $checkIn['guidance']['actor_label'] ?? null,
+                'closed_at' => $checkIn['monitoring_case']['closed_at'] ?? null,
                 'total_items' => $totalItems,
                 'completed_items' => $completedItems,
                 'pending_items' => $pendingItems,
                 'progress_label' => match ($checkIn['state']) {
-                    'action_required' => trans_choice(':count item needs action|:count items need action', $pendingItems, ['count' => $pendingItems]),
-                    'under_review' => 'Submitted for provider review',
+                    'action_required' => $pendingItems > 0
+                        ? trans_choice(':count item needs action|:count items need action', $pendingItems, ['count' => $pendingItems])
+                        : ($checkIn['guidance']['title'] ?? 'Review the next step'),
+                    'under_review' => $checkIn['guidance']['description'] ?? 'Waiting for the provider.',
                     'completed' => $totalItems > 0 ? "{$completedItems} of {$totalItems} complete" : 'Completed',
                     'upcoming' => isset($checkIn['handoff']) ? 'In-person appointment' : ($checkIn['opens_label'] ?? 'Opens later'),
                     'cancelled' => 'No action required',
@@ -928,6 +1298,39 @@ class ApplicantMonitoringDetailService
                 'href' => $this->checkInUrl($application, $checkIn['record_key']),
             ];
         });
+    }
+
+    private function nextAppointment(ScholarshipApplication $application, Collection $checkIns): ?array
+    {
+        $appointment = $checkIns->whereNotIn('state', self::PAST_CHECK_INS)
+            ->filter(fn (array $record): bool => isset($record['handoff']) && ! $record['handoff']['started'])
+            ->sortBy($this->checkInDate(...))->first();
+        if (! $appointment) {
+            return null;
+        }
+
+        return [
+            ...$this->checkInDirectory($application, collect([$appointment]))->first(),
+            'preparation' => $this->appointmentPreparation($appointment),
+        ];
+    }
+
+    private function appointmentPreparation(array $record): ?array
+    {
+        if (! isset($record['handoff']) || $record['handoff']['started'] || in_array($record['state'], self::PAST_CHECK_INS, true)) {
+            return null;
+        }
+
+        $documents = collect($record['requirements'])
+            ->filter(fn (array $requirement): bool => $requirement['requires_original_verification']
+                && $requirement['status'] !== 'completed')
+            ->values();
+
+        return [
+            'document_ids' => $documents->pluck('id')->all(),
+            'document_count' => $documents->count(),
+            'preview_titles' => $documents->take(2)->pluck('title')->all(),
+        ];
     }
 
     private function withCheckInHref(
@@ -948,6 +1351,7 @@ class ApplicantMonitoringDetailService
         ScholarshipApplication $application,
         Collection $checkIns,
         ?string $recordKey,
+        bool $canPrepare,
     ): ?array {
         if (blank($recordKey)) {
             return null;
@@ -961,6 +1365,7 @@ class ApplicantMonitoringDetailService
 
         return [
             ...$record,
+            'preparation' => $canPrepare ? $this->appointmentPreparation($record) : null,
             'return_href' => $this->viewUrl($application, 'check-ins'),
         ];
     }

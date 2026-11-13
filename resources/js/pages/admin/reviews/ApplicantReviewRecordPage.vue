@@ -1,5 +1,7 @@
 <script setup>
-import { staffQueueReturn } from '../../../support/staffQueueState.js';
+import AdminReviewGuide from '../../../components/admin/AdminReviewGuide.vue';
+import AdminReviewNavigation from '../../../components/admin/AdminReviewNavigation.vue';
+import { useAdminReviewNavigation } from '../../../composables/useAdminReviewNavigation.js';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
@@ -16,6 +18,7 @@ import { reviewErrorMessage } from '../../../support/adminReviewPresentation';
 import { evidenceRows, evidenceReviewDate } from '../../../support/applicantEvidenceReview.js';
 
 const applicantId = (window.portalPathname?.() ?? window.location.pathname).match(/applicants\/(\d+)/)?.[1];
+const navigation = useAdminReviewNavigation('applicants', applicantId);
 const resource = useAdminResource(async ({ signal }) => {
     const response = await window.axios.get(`/admin/applicants/${applicantId}/review/data`, { signal });
     if (!response.data?.applicant) throw new Error('Applicant record unavailable.');
@@ -35,7 +38,10 @@ const selectedDocumentId = ref(null);
 const evidenceSaving = ref(false);
 const historyVersion = ref(0);
 const recordStale = ref(false);
+const evidenceFilter = ref('attention');
 const reviewRows = computed(() => evidenceRows(applicant.value));
+const outstandingRows = computed(() => reviewRows.value.filter((row) => !row.retired && row.state.key !== 'accepted'));
+const visibleRows = computed(() => evidenceFilter.value === 'all' ? reviewRows.value : outstandingRows.value);
 const selectedDocument = computed(() => applicant.value?.verification_documents?.find((document) => document.id === selectedDocumentId.value) ?? null);
 const evidenceReady = computed(() => applicant.value?.evidence_review?.required_evidence_accepted === true);
 const canReviewEvidence = computed(() => applicant.value?.can_review_evidence === true);
@@ -48,6 +54,7 @@ const missingEvidence = computed(() => (applicant.value?.profile_evidence_requir
 const noteRequired = computed(() => decision.value === 'rejected'
     || (decision.value === 'pending' && verificationStatus.value === 'approved'));
 const canSave = computed(() => ready.value && canReviewEvidence.value && !busy.value && !recordStale.value
+    && Boolean(applicant.value.review_workflow?.token)
     && ['approved', 'rejected', 'pending'].includes(decision.value)
     && (!noteRequired.value || notes.value.trim().length > 0)
     && (decision.value !== 'approved' || (evidenceReady.value && !missingEvidence.value.length)));
@@ -63,6 +70,7 @@ async function loadRecord({ preserveDraft = false } = {}) {
     const payload = await resource.load();
     if (!payload) return;
     applicant.value = payload;
+    navigation.load();
     recordStale.value = false;
     if (preserveDraft) return;
     decision.value = ['approved', 'rejected'].includes(verificationStatus.value) ? verificationStatus.value : 'approved';
@@ -82,10 +90,12 @@ async function saveDecision() {
         const response = await window.axios.patch(`/admin/users/${applicantId}/profile-verification`, {
             verification_status: decision.value,
             verification_notes: notes.value.trim() || null,
+            expected_review_token: applicant.value.review_workflow.token,
         }, { portalToast: false });
         applicant.value = response.data.applicant;
         successMessage.value = response.data.message;
         historyVersion.value++;
+        navigation.load();
     } catch (error) {
         errorMessage.value = reviewErrorMessage(error, 'The decision could not be saved.');
         recordStale.value = error.response?.status === 409 || !!error.response?.data?.errors?.evidence_reviews || !!error.response?.data?.missing_evidence;
@@ -104,6 +114,7 @@ function handleDecisionChange() {
 function evidenceSaved(payload) {
     const user = payload.user;
     applicant.value = { ...applicant.value, ...user,
+        review_workflow: payload.review_workflow,
         evidence_review: payload.evidence_review,
         verification_documents: applicant.value.verification_documents.map((document) => document.id === payload.document.id ? { ...document, ...payload.document } : document),
         verification_oversight: { ...applicant.value.verification_oversight, status: user.applicant_verification_status,
@@ -123,8 +134,16 @@ async function reloadEvidence() {
     historyVersion.value++;
 }
 
+function continueReview() {
+    if (busy.value) return;
+    const row = applicant.value?.review_workflow?.review_count
+        ? outstandingRows.value.find((item) => item.required && item.document && ['pending', 'unavailable'].includes(item.state.key)) : null;
+    if (row) openEvidence(row.document);
+    else document.getElementById('final-profile-verification')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 async function reviewPhoto(action) {
-    if (!ready.value || !canReviewEvidence.value || busy.value || !['approve', 'request_replacement'].includes(action)) return;
+    if (!ready.value || !canReviewEvidence.value || busy.value || recordStale.value || !['approve', 'request_replacement'].includes(action)) return;
     if (action === 'approve' && !applicant.value.profile_photo_url) return;
     if (action === 'request_replacement' && !photoReason.value.trim()) return;
     if (!await confirmOutcome({
@@ -136,13 +155,14 @@ async function reviewPhoto(action) {
         && (action === 'approve' ? !!applicant.value.profile_photo_url : !!photoReason.value.trim()))) return;
     photoSaving.value = true; photoError.value = ''; successMessage.value = '';
     try {
-        const response = await window.axios.patch(`/admin/applicants/${applicantId}/profile-photo-review`, { action, reason: action === 'request_replacement' ? photoReason.value.trim() : null }, { portalToast: false });
+        const response = await window.axios.patch(`/admin/applicants/${applicantId}/profile-photo-review`, { action, reason: action === 'request_replacement' ? photoReason.value.trim() : null, expected_review_token: applicant.value.review_workflow?.token }, { portalToast: false });
         applicant.value = { ...applicant.value, ...response.data.applicant,
             profile_photo_review_status: response.data.photo_review_status,
             profile_photo_review_note: response.data.reason };
         successMessage.value = response.data.message;
     } catch (error) {
         photoError.value = reviewErrorMessage(error, 'The photo review could not be saved.');
+        if (error.response?.status === 409) recordStale.value = true;
     } finally { photoSaving.value = false; }
 }
 
@@ -157,16 +177,16 @@ function documentLabel(type) {
     return String(type).replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 onMounted(loadRecord);
-const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/reviews/applicants');
 </script>
 
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
-        <a :href="backToQueue" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs"></i>Back to review queue</a>
+        <AdminReviewNavigation :back-url="navigation.backUrl" :next="navigation.next.value" :loading="navigation.loading.value" :error="navigation.error.value" @retry="navigation.load" />
         <AdminWorkspaceHeader eyebrow="Applicant verification" title="Applicant profile record" description="Compare identity, school, household, and residence details with supporting evidence." icon="fa-solid fa-user-check" />
         <section v-if="loading || loadError" class="admin-panel mt-4"><AdminLoadState :loading="loading" :error="loadError" loading-message="Loading applicant record..." @retry="loadRecord" /></section>
         <template v-else-if="applicant">
             <p v-if="successMessage" role="status" class="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{{ successMessage }}</p>
+            <AdminReviewGuide :workflow="applicant.review_workflow" kind="applicant" @continue="continueReview" />
             <ApplicantProfileRecord
                 class="mt-4"
                 :record="applicantProfileRecord"
@@ -183,15 +203,16 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
 
             <section id="supporting-evidence" class="admin-panel mt-4 scroll-mt-5 overflow-hidden">
                 <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Step 1 · Check the evidence</p><h2 class="mt-0.5 font-black text-slate-950">Supporting evidence</h2><p class="mt-0.5 text-sm text-slate-500">Check each saved claim against its file. OCR results are not verified values.</p></div></div><div class="shrink-0 text-right"><p class="text-sm font-black text-slate-950">{{ applicant.evidence_review?.accepted_count ?? 0 }} of {{ applicant.evidence_review?.required_count ?? 0 }} accepted</p><p class="mt-1 text-xs text-slate-500">Required documents</p></div></header>
-                <div v-if="reviewRows.length" class="staff-table-viewport staff-table-viewport--compact"><table class="portal-data-table table-fixed min-w-[56rem]">
+                <div class="flex items-center gap-2 border-b border-slate-200 px-6 py-3" aria-label="Evidence filter"><button type="button" :aria-pressed="evidenceFilter === 'attention'" class="staff-row-action px-3 py-2 text-xs" @click="evidenceFilter = 'attention'">Needs attention ({{ outstandingRows.length }})</button><button type="button" :aria-pressed="evidenceFilter === 'all'" class="staff-row-action px-3 py-2 text-xs" @click="evidenceFilter = 'all'">All evidence ({{ reviewRows.length }})</button></div>
+                <div v-if="visibleRows.length" class="staff-table-viewport staff-table-viewport--compact"><table class="portal-data-table table-fixed min-w-[56rem]">
                     <colgroup><col><col class="w-64"><col class="w-44"></colgroup>
                     <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><tr><th class="px-6 py-3">Evidence</th><th class="px-4 py-3">Document decision</th><th class="px-6 py-3 text-right">Action</th></tr></thead>
-                    <tbody class="divide-y divide-slate-200"><tr v-for="row in reviewRows" :key="row.type" class="align-middle">
+                    <tbody class="divide-y divide-slate-200"><tr v-for="row in visibleRows" :key="row.type" class="align-middle">
                         <td class="px-6 py-4"><p class="text-sm font-bold text-slate-950">{{ row.label }} <span class="ml-1 text-[10px] font-normal text-slate-500">{{ row.retired ? 'Retired' : row.required ? 'Required' : 'Optional' }}</span></p><p v-if="row.document?.original_name" class="review-text mt-0.5 text-xs text-slate-500" data-file-name>{{ row.document.original_name }}</p></td>
-                        <td class="px-4 py-4"><span :class="['inline-block px-2 py-1 text-xs font-bold', row.state.class]">{{ row.state.label }}</span><p v-if="row.document?.reviewed_at" class="mt-1 text-xs text-slate-500">{{ row.document.reviewed_by || 'Reviewer' }} · {{ evidenceReviewDate(row.document.reviewed_at) }}</p></td>
+                        <td class="px-4 py-4"><span :class="['inline-block px-2 py-1 text-xs font-bold', row.state.class]">{{ row.state.label }}</span><p v-if="applicant.review_workflow?.changed_keys?.includes('evidence:' + row.type)" class="mt-1 text-xs font-bold text-amber-800">Updated since last decision</p><p v-else-if="row.document?.reviewed_at" class="mt-1 text-xs text-slate-500">{{ row.document.reviewed_by || 'Reviewer' }} · {{ evidenceReviewDate(row.document.reviewed_at) }}</p></td>
                         <td class="px-6 py-4 text-right"><div v-if="row.document" class="flex justify-end gap-2"><a v-if="row.document.file_available !== false" :href="row.document.view_url" data-file-preview="true" :data-file-name="row.document.original_name" class="staff-row-action h-10 w-10" :aria-label="`Preview ${row.label}`" title="Preview evidence"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><button type="button" :disabled="busy" class="staff-row-action h-10 px-3 text-xs" @click="openEvidence(row.document)">{{ row.retired || !canReviewEvidence || row.state.key === 'accepted' ? 'Details' : 'Review' }}</button></div></td>
                     </tr></tbody>
-                </table></div><p v-else class="px-6 py-10 text-center text-sm font-semibold text-slate-500">No supporting evidence has been uploaded.</p>
+                </table></div><p v-else class="px-6 py-8 text-center text-sm font-semibold text-slate-500">{{ evidenceFilter === 'attention' && reviewRows.length ? 'No outstanding evidence in this view. Current acceptances are kept in All evidence.' : 'No supporting evidence has been uploaded.' }}</p>
                 <p class="border-t border-slate-200 bg-slate-50 px-6 py-3 text-xs text-slate-500">Accepting a document does not verify the profile. Finish the separate profile decision after reviewing every required record.</p>
             </section>
 
@@ -206,7 +227,7 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
                     <button type="button" :disabled="busy || !photoReason.trim()" class="h-11 border border-slate-300 bg-white px-4 text-sm font-bold disabled:opacity-40" @click="reviewPhoto('request_replacement')">Request replacement</button>
                     <button type="button" :disabled="busy || !applicant.profile_photo_url" class="h-11 bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-40" @click="reviewPhoto('approve')">{{ photoSaving ? 'Saving...' : 'Approve photo' }}</button>
                 </fieldset>
-                <p v-if="photoError" role="alert" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">{{ photoError }}</p>
+                <div v-if="photoError" role="alert" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800"><p>{{ photoError }}</p><button v-if="recordStale" type="button" class="mt-2 underline" @click="reloadEvidence">Reload current record</button></div>
                 </div>
             </details>
 

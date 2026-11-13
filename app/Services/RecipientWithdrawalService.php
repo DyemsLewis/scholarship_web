@@ -103,6 +103,7 @@ class RecipientWithdrawalService
                 $decision = $application->supportDecisions()->create([
                     'applicant_id' => $application->applicant_id,
                     'decision' => 'terminated', 'reason_category' => 'recipient_withdrew',
+                    'closeout_snapshot' => app(RecipientSupportSettlementService::class)->closeoutSnapshot($application),
                     'effective_on' => now()->toDateString(), 'notice_given_on' => now()->toDateString(),
                     'reason' => $data['review_note'], 'decided_by' => $actor->id, 'decided_at' => now(),
                 ]);

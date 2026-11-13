@@ -14,8 +14,10 @@ use App\Services\ApplicantApplicationDetailService;
 use App\Services\RecipientBenefitEntitlementService;
 use App\Support\OpaqueRecordUrl;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
@@ -142,6 +144,12 @@ class RecipientWithdrawalRequestTest extends TestCase
         $this->assertDatabaseHas('portal_notifications', ['user_id' => $applicant->id, 'type' => 'recipient_withdrawal_reviewed']);
         $this->assertSame('active', $applicant->fresh()->account_status);
         $this->assertSame('approved', $applicant->fresh()->studentProfile->verification_status);
+        $this->actingAs($applicant)->getJson(route('dashboard.monitoring.show.data', $application, false))
+            ->assertOk()->assertJsonPath('detail.status.label', 'Scholarship withdrawal approved')
+            ->assertJsonPath('detail.status.tone', 'neutral')
+            ->assertJsonPath('detail.content.closeout.kind', 'withdrawn')
+            ->assertJsonPath('detail.content.closeout.reason_label', 'Approved withdrawal request')
+            ->assertJsonPath('detail.content.closeout.counts.received', 0);
     }
 
     public function test_declining_preserves_support_and_allows_a_new_request_with_separate_history(): void
@@ -294,13 +302,37 @@ class RecipientWithdrawalRequestTest extends TestCase
             ->assertOk()->assertJsonPath('request.review_note', 'Please contact the scholarship office to clarify the requested exit.');
     }
 
+    public function test_support_outcome_cannot_record_voluntary_withdrawal_without_an_approved_request(): void
+    {
+        [$provider, $applicant, , $application] = $this->award();
+        $url = "/provider/applications/{$application->id}/support-decision";
+        $recordWithdrawal = function () use ($provider, $url): void {
+            foreach (['completed', 'terminated'] as $decision) {
+                $this->actingAs($provider)->postJson($url, [
+                    'decision' => $decision, 'reason_category' => 'recipient_withdrew',
+                    'effective_on' => now()->toDateString(), 'notice_given_on' => now()->toDateString(),
+                    'reason' => 'Record that the recipient chose to end scholarship support.', 'confirmed' => true,
+                ])->assertUnprocessable()->assertJsonValidationErrors('reason_category')
+                    ->assertJsonPath('errors.reason_category.0', 'Approve a withdrawal request from the recipient in Scholarship withdrawal instead.');
+            }
+        };
+
+        $recordWithdrawal();
+        $withdrawal = $this->submit($applicant, $application);
+        $this->actingAs($provider)->patchJson($this->reviewUrl($withdrawal), $this->decision('declined'))->assertOk();
+        $recordWithdrawal();
+
+        $this->assertSame('awarded', $application->fresh()->status);
+        $this->assertDatabaseCount('recipient_support_decisions', 0);
+    }
+
     public function test_pending_request_cannot_be_bypassed_by_the_old_support_outcome_or_termination_endpoints(): void
     {
         [$provider, $applicant, , $application] = $this->award();
         $this->submit($applicant, $application);
         $this->actingAs($provider)->postJson("/provider/applications/{$application->id}/support-decision", [
-            'decision' => 'terminated', 'reason_category' => 'recipient_withdrew', 'effective_on' => now()->toDateString(),
-            'notice_given_on' => now()->toDateString(), 'reason' => 'The applicant asked to exit the scholarship.', 'confirmed' => true,
+            'decision' => 'terminated', 'reason_category' => 'provider_funding_ended', 'effective_on' => now()->toDateString(),
+            'notice_given_on' => now()->toDateString(), 'reason' => 'The funding for this scholarship has ended.', 'confirmed' => true,
         ])->assertUnprocessable()->assertJsonValidationErrors('decision');
         $this->actingAs($provider)->patchJson("/provider/applications/{$application->id}/status", [
             'status' => 'benefits_terminated', 'decision_reason' => 'procedure_not_followed',
@@ -405,6 +437,7 @@ class RecipientWithdrawalRequestTest extends TestCase
 
     public function test_pending_requests_do_not_block_agreed_benefit_distribution(): void
     {
+        Storage::fake('local');
         [$provider, $applicant, $program, $application] = $this->award();
         $benefit = $program->benefits()->create(['type' => 'allowance', 'title' => 'Agreed benefit', 'frequency' => 'one_time']);
         $this->submit($applicant, $application);
@@ -414,8 +447,18 @@ class RecipientWithdrawalRequestTest extends TestCase
             'requires_original_verification' => false, 'recipient_ids' => [$application->id], 'benefit_ids' => [$benefit->id],
         ])->assertCreated();
         $recordId = $created->json('release.records.0.id');
+        $this->actingAs($applicant)->postJson("/dashboard/benefit-release-records/{$recordId}/payout-details", [
+            'method' => 'bank_transfer', 'institution' => 'Example Bank',
+            'account_holder' => 'Example Recipient', 'account_number' => '0000123456', 'confirmed' => true,
+        ])->assertOk();
+        $this->actingAs($provider)->patchJson("/provider/benefit-release-records/{$recordId}/payout-details", [
+            'decision' => 'approve', 'expected_revision' => 1, 'confirmed' => true,
+        ])->assertOk();
         $this->actingAs($provider)->postJson("/provider/benefit-release-records/{$recordId}/result", [
             'status' => 'released', 'notes' => 'The agreed benefit was transferred to the recipient.',
+            'expected_payout_revision' => 2,
+            'transfer_sent_on' => now()->toDateString(), 'transfer_confirmed' => true,
+            'receipt_proof' => UploadedFile::fake()->image('transfer-proof.png'),
         ])->assertOk();
         $this->assertDatabaseHas('recipient_benefit_release_records', ['id' => $recordId, 'status' => 'released']);
         $this->assertSame('pending', RecipientWithdrawalRequest::sole()->status);

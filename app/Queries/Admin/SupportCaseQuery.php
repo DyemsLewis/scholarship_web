@@ -2,8 +2,10 @@
 
 namespace App\Queries\Admin;
 
+use App\Models\SupportAccountHandoff;
 use App\Models\SupportReport;
 use App\Models\User;
+use App\Services\SupportAccountHandoffService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -14,14 +16,15 @@ class SupportCaseQuery
         $nextCase = $this->forQueue('needs_response')
             ->with($this->directoryRelations())
             ->oldest()
+            ->orderBy('id')
             ->first();
 
         return [
             'needs_response' => $this->forQueue('needs_response')->count(),
             'waiting' => $this->forQueue('waiting')->count(),
+            'waiting_for_account' => $this->forQueue('waiting')->whereHas('accountHandoffs', fn (Builder $query) => $query->where('status', 'pending'))->count(),
             'resolved' => $this->forQueue('resolved')->count(),
-            'privacy_open' => SupportReport::query()
-                ->where('admin_status', 'open')
+            'privacy_open' => $this->forQueue('needs_response')
                 ->where('category', 'privacy')
                 ->count(),
             'next_case' => $nextCase ? $this->directoryItem($nextCase) : null,
@@ -99,6 +102,13 @@ class SupportCaseQuery
 
         return [
             ...$item,
+            'support_token' => app(SupportAccountHandoffService::class)->caseToken($report),
+            'handoff_tasks' => collect(SupportAccountHandoff::TASKS)->map(fn ($label, $value) => compact('label', 'value'))->values(),
+            'can_refer_account' => $report->admin_status === 'open'
+                && ! $report->accountHandoffs()->where('status', 'pending')->exists()
+                && ($report->applicant?->isApplicant() || $report->applicant?->isProvider()),
+            'account_handoffs' => $report->accountHandoffs()->latest('id')->limit(5)->get()
+                ->map(fn ($handoff) => app(SupportAccountHandoffService::class)->payload($handoff)),
             'description' => $report->description,
             'context' => $report->context,
             'context_label' => $this->contextLabel($report->context),
@@ -144,20 +154,24 @@ class SupportCaseQuery
     {
         return match ($queue) {
             'waiting' => SupportReport::query()
-                ->whereIn('admin_status', ['resolved', 'not_required'])
+                ->where(fn (Builder $query) => $query->whereIn('admin_status', ['resolved', 'not_required'])
+                    ->orWhereHas('accountHandoffs', fn (Builder $handoff) => $handoff->where('status', 'pending')))
                 ->where('status', 'open'),
             'resolved' => SupportReport::query()->where('status', 'resolved'),
-            default => SupportReport::query()->where('admin_status', 'open'),
+            default => SupportReport::query()->where('admin_status', 'open')
+                ->whereDoesntHave('accountHandoffs', fn (Builder $query) => $query->where('status', 'pending')),
         };
     }
 
     private function directoryItem(SupportReport $report): array
     {
+        $pendingAccount = $report->accountHandoffs->contains('status', 'pending');
         $submittedByProvider = $report->applicant?->isProvider() && $report->assigned_role === 'admin';
         $categoryLabels = $submittedByProvider
             ? SupportReport::PROVIDER_CATEGORIES
             : SupportReport::CATEGORIES;
         $state = match (true) {
+            $pendingAccount => 'waiting',
             $report->admin_status === 'open' => 'needs_response',
             $report->status === 'open' => 'waiting',
             default => 'resolved',
@@ -184,7 +198,7 @@ class SupportCaseQuery
             ] : null,
             'state' => $state,
             'state_label' => match ($state) {
-                'waiting' => 'Waiting for provider',
+                'waiting' => $pendingAccount ? 'With Account Manager' : 'Waiting for provider',
                 'resolved' => 'Resolved',
                 default => 'Needs response',
             },
@@ -192,6 +206,10 @@ class SupportCaseQuery
                 ? ($report->admin_status === 'not_required' ? 'Provider support' : 'Provider and platform')
                 : 'Platform support',
             'requires_provider' => $report->assigned_role === 'provider',
+            'waiting_for_account' => $pendingAccount,
+            'responsible_role' => $pendingAccount ? 'Account Manager' : ($state === 'waiting' ? 'Provider' : 'Support Officer'),
+            'next_action' => $pendingAccount ? 'Account Manager checks access; Support replies after the result is returned.'
+                : ($state === 'waiting' ? 'Provider completes its response.' : ($state === 'resolved' ? 'No action needed.' : 'Support reviews the issue and replies to the reporter.')),
             'has_attachment' => filled($report->attachment_path),
             'submitted_at' => $report->created_at?->format('M d, Y h:i A'),
             'updated_at' => $report->updated_at?->format('M d, Y h:i A'),
@@ -203,6 +221,7 @@ class SupportCaseQuery
     private function directoryRelations(): array
     {
         return [
+            'accountHandoffs',
             'applicant.studentProfile',
             'applicant.providerProfile',
             'applicant.parentAccount.providerProfile',

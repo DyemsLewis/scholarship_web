@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ScholarshipApplication extends Model
 {
+    protected $hidden = ['selection_decision_snapshot'];
+
     protected $fillable = [
         'scholarship_id',
         'applicant_id',
@@ -79,6 +81,8 @@ class ScholarshipApplication extends Model
             'eligibility_score' => 'decimal:2',
             'eligibility_breakdown' => 'array',
             'review_rubric_snapshot' => 'array',
+            'selection_scoring_snapshot' => 'array',
+            'selection_decision_snapshot' => 'array',
             'application_answers' => 'array',
             'rubric_scores' => 'array',
             'rubric_total_score' => 'decimal:2',
@@ -163,6 +167,11 @@ class ScholarshipApplication extends Model
     public function stageAssignments(): HasMany
     {
         return $this->hasMany(ApplicationStageAssignment::class);
+    }
+
+    public function stageEvaluations(): HasMany
+    {
+        return $this->hasMany(ApplicationStageEvaluation::class);
     }
 
     public function stageEvidence(): HasMany

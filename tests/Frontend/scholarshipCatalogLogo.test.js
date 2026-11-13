@@ -18,3 +18,10 @@ test('find, saved, quick preview and comparison images share the logo selector',
     assert.equal((source.match(/data-scholarship-logo/g) || []).length, 4);
     assert.doesNotMatch(source, /:src="scholarshipImage\(/);
 });
+
+test('catalog and preview provider names use a clear byline', () => {
+    assert.match(source, /By \{\{ scholarship\.provider\.name \|\| 'Scholarship provider' \}\}/);
+    assert.match(source, /By \{\{ previewScholarship\.provider\?\.name \|\| 'Scholarship provider' \}\}/);
+    assert.equal((source.match(/By \{\{ scholarship\.provider\?\.name/g) || []).length, 2);
+    assert.match(source, />By scholarship provider<\/p>/);
+});

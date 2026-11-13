@@ -14,6 +14,111 @@ class ApplicantMonitoringDetailContractTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_support_landing_uses_the_same_direct_action_as_the_detail_and_only_shows_owned_support(): void
+    {
+        [$provider, $applicant, $program, $application, $plan] = $this->selectedRecipient();
+        $program->update(['image_path' => 'uploads/scholarships/support-logo.png']);
+        $cycle = $this->cycle($program, $plan, [
+            'title' => 'Next check-in period',
+            'opens_at' => now()->addDays(3)->toDateString(),
+            'due_at' => now()->addWeeks(2)->toDateString(),
+        ]);
+        $cycle->requirements()->create([
+            'type' => 'enrollment', 'title' => 'Proof of enrollment', 'required' => true,
+            'requires_file' => true, 'requires_original_verification' => false, 'sort_order' => 0,
+        ]);
+        $released = $this->landingRelease($program, $application, 'Learning allowance', 'released', now()->subDay());
+        $this->landingRelease($program, $application, 'Next learning allowance', 'scheduled', now()->addWeek());
+        $this->landingRelease($program, $application, 'Old release appointment', 'scheduled', now()->subWeek());
+        $other = Scholarship::create(['provider_id' => $provider->id, 'title' => 'Another scholarship', 'description' => 'Other scholarship', 'status' => 'published']);
+        $pending = ScholarshipApplication::create([
+            'scholarship_id' => $other->id, 'applicant_id' => $applicant->id, 'status' => 'submitted',
+        ]);
+        $anotherApplicant = User::factory()->create(['role' => 'applicant']);
+        ScholarshipApplication::create([
+            'scholarship_id' => $other->id, 'applicant_id' => $anotherApplicant->id,
+            'status' => 'awarded', 'final_outcome' => 'selected',
+        ]);
+
+        $landing = $this->actingAs($applicant)->getJson(route('dashboard.monitoring.data'))
+            ->assertOk()
+            ->assertJsonCount(1, 'support.active')
+            ->assertJsonCount(0, 'support.past')
+            ->assertJsonPath('support.active.0.logo_url', $program->logoUrl())
+            ->assertJsonPath('support.focus.decision.state', 'benefit_confirmation_required')
+            ->assertJsonPath('support.focus.decision.action.href', route('dashboard.monitoring.benefits.show', [$application, 'release-'.$released->id], false))
+            ->assertJsonMissing(['title' => 'Another scholarship'])
+            ->assertJsonMissing(['title' => 'Old release appointment'])
+            ->assertJsonMissingPath('applications');
+        $this->assertDatabaseCount('recipient_monitoring_cases', 0);
+        $this->assertDatabaseHas('scholarship_applications', ['id' => $pending->id, 'status' => 'submitted']);
+        $landing->assertJsonPath('support.schedule.0.title', 'Next learning allowance')
+            ->assertJsonPath('support.schedule.1.title', 'Next check-in period');
+        $detail = $this->getJson(route('dashboard.monitoring.show.data', $application))->assertOk()
+            ->assertJsonCount(2, 'detail.content.schedule')
+            ->assertJsonPath('detail.content.schedule.0.title', 'Next learning allowance')
+            ->assertJsonPath('detail.content.schedule.0.context', 'In person')
+            ->assertJsonPath('detail.content.schedule.1.title', 'Next check-in period');
+        $this->assertSame($detail->json('detail.decision'), $landing->json('support.focus.decision'));
+        $this->assertNotContains($detail->json('detail.decision.action.href'), array_column($detail->json('detail.content.schedule'), 'href'));
+    }
+
+    public function test_support_landing_keeps_ended_awards_in_past_support_without_hiding_a_pending_outcome(): void
+    {
+        [$provider, $applicant, $program, $ended] = $this->selectedRecipient();
+        $scheduledProgram = Scholarship::create(['provider_id' => $provider->id, 'title' => 'Current award', 'description' => 'Current scholarship', 'status' => 'published']);
+        $current = ScholarshipApplication::create([
+            'scholarship_id' => $scheduledProgram->id, 'applicant_id' => $applicant->id,
+            'status' => 'awarded', 'student_response_status' => 'accepted',
+        ]);
+        $this->landingRelease($scheduledProgram, $current, 'Scheduled award', 'scheduled', now()->addDays(2));
+        $declinedProgram = Scholarship::create(['provider_id' => $provider->id, 'title' => 'Declined award', 'description' => 'Declined scholarship', 'status' => 'published']);
+        ScholarshipApplication::create([
+            'scholarship_id' => $declinedProgram->id, 'applicant_id' => $applicant->id,
+            'status' => 'awarded', 'student_response_status' => 'declined',
+        ]);
+        $decision = RecipientSupportDecision::create([
+            'scholarship_application_id' => $ended->id, 'applicant_id' => $applicant->id,
+            'decision' => 'completed', 'reason' => 'The support period ended.', 'decided_by' => $provider->id,
+            'decided_at' => now(), 'effective_on' => now()->toDateString(), 'response_status' => 'pending',
+        ]);
+        $this->landingRelease($program, $ended, 'Future date on ended support', 'scheduled', now()->addDay());
+        $this->actingAs($applicant)->getJson(route('dashboard.monitoring.data'))
+            ->assertOk()
+            ->assertJsonCount(1, 'support.active')
+            ->assertJsonPath('support.active.0.title', 'Current award')
+            ->assertJsonCount(2, 'support.past')
+            ->assertJsonFragment(['label' => 'Award declined'])
+            ->assertJsonPath('support.focus.decision.state', 'outcome_response_required')
+            ->assertJsonPath('support.focus.decision.action.href', route('dashboard.monitoring.history.show', [$ended, 'outcome-'.$decision->id], false))
+            ->assertJsonCount(1, 'support.schedule')
+            ->assertJsonPath('support.schedule.0.title', 'Scheduled award');
+        $this->getJson(route('dashboard.monitoring.show.data', $ended))
+            ->assertOk()->assertJsonCount(0, 'detail.content.schedule');
+    }
+
+    public function test_support_landing_handles_empty_accounts_and_rejects_other_roles(): void
+    {
+        $this->getJson(route('dashboard.monitoring.data'))->assertUnauthorized();
+        $this->actingAs(User::factory()->create(['role' => 'provider']))->getJson(route('dashboard.monitoring.data'))->assertForbidden();
+        $this->actingAs(User::factory()->create(['role' => 'applicant']))->getJson(route('dashboard.monitoring.data'))
+            ->assertOk()
+            ->assertJsonPath('support.focus', null)
+            ->assertJsonCount(0, 'support.active')
+            ->assertJsonCount(0, 'support.past')
+            ->assertJsonCount(0, 'support.schedule');
+    }
+
+    private function landingRelease(Scholarship $program, ScholarshipApplication $application, string $title, string $status, \Carbon\CarbonInterface $date): \App\Models\RecipientBenefitReleaseRecord
+    {
+        return $program->benefitReleases()->create([
+            'created_by' => $program->provider_id, 'title' => $title, 'release_at' => $date,
+            'benefit_description' => $title, 'release_method' => 'in_person', 'status' => 'scheduled', 'published_at' => now(),
+        ])->records()->create([
+            'scholarship_application_id' => $application->id, 'applicant_id' => $application->applicant_id, 'status' => $status,
+        ]);
+    }
+
     public function test_every_monitoring_section_uses_the_program_logo_not_its_cover(): void
     {
         [, $applicant, $program, $application] = $this->selectedRecipient();
@@ -32,6 +137,24 @@ class ApplicantMonitoringDetailContractTest extends TestCase
                     ->assertJsonPath('detail.identity.program.cover_image_url', $program->coverImageUrl());
             }
         }
+    }
+
+    public function test_overview_links_to_the_saved_agreement_and_only_includes_published_plan_instructions(): void
+    {
+        [, $applicant, , $application, $plan] = $this->selectedRecipient();
+        $application->update(['provider_contract_terms_snapshot' => ['program_title' => 'Scholarship agreement']]);
+        $plan->update(['status' => 'draft', 'instructions' => 'Internal draft instructions']);
+        $agreementUrl = route('dashboard.applications.show.section', ['application' => $application, 'section' => 'outcome'], false).'?action=view-agreement';
+
+        $this->actingAs($applicant)->getJson(route('dashboard.monitoring.show.data', $application))
+            ->assertOk()
+            ->assertJsonPath('detail.content.plan.agreement.label', 'Accepted')
+            ->assertJsonPath('detail.content.plan.agreement.href', $agreementUrl)
+            ->assertJsonPath('detail.content.plan.instructions', null);
+        $plan->update(['status' => 'active', 'instructions' => 'Bring your current school records.']);
+        $this->getJson(route('dashboard.monitoring.show.data', $application))
+            ->assertOk()
+            ->assertJsonPath('detail.content.plan.instructions', 'Bring your current school records.');
     }
 
     public function test_monitoring_contract_returns_a_focused_overview_and_one_next_action(): void
@@ -182,6 +305,8 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ->assertJsonPath('detail.content.selected.record_key', $recordKey)
             ->assertJsonPath('detail.content.selected.title', 'First semester progress check')
             ->assertJsonPath('detail.content.selected.requirements.0.title', 'Semester grades')
+            ->assertJsonPath('detail.content.selected.preparation', null)
+            ->assertJsonPath('detail.content.directory.next_appointment', null)
             ->assertJsonPath('detail.content.directory.active.0.record_key', $recordKey)
             ->assertJsonPath('detail.content.directory.active.0.pending_items', 1)
             ->assertJsonPath('detail.content.directory.active.0.href', route('dashboard.monitoring.check-ins.show', [
@@ -192,6 +317,29 @@ class ApplicantMonitoringDetailContractTest extends TestCase
         $this->actingAs($applicant)
             ->getJson(route('dashboard.monitoring.show.data', $application).'?view=check-ins&record=check-in-999999')
             ->assertNotFound();
+    }
+
+    public function test_legacy_closure_without_an_outcome_is_not_counted_as_completed(): void
+    {
+        [, $applicant, $scholarship, $application, $plan] = $this->selectedRecipient();
+        $closed = $this->cycle($scholarship, $plan, ['title' => 'Legacy academic check-in', 'status' => 'closed']);
+        $this->cycle($scholarship, $plan, ['title' => 'Cancelled academic check-in', 'status' => 'cancelled']);
+
+        $this->actingAs($applicant)
+            ->getJson(route('dashboard.monitoring.show.data', $application).'?view=check-ins&record=academic-'.$closed->id)
+            ->assertOk()
+            ->assertJsonPath('detail.summary.check_ins.completed', 0)
+            ->assertJsonPath('detail.summary.check_ins.next_due_label', null)
+            ->assertJsonCount(2, 'detail.content.directory.completed')
+            ->assertJsonPath('detail.content.selected.state_label', 'Closed')
+            ->assertJsonPath('detail.content.selected.state_tone', 'neutral')
+            ->assertJsonFragment(['state_label' => 'Cancelled']);
+
+        $this->getJson(route('dashboard.monitoring.show.data', $application).'?view=history')
+            ->assertOk()
+            ->assertJsonCount(2, 'detail.content.timeline')
+            ->assertJsonPath('detail.content.timeline.0.date_label', null)
+            ->assertJsonPath('detail.content.timeline.1.month_key', null);
     }
 
     public function test_one_time_benefit_has_an_explicit_monitoring_mode_and_check_in_empty_state(): void
@@ -220,7 +368,10 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ->assertOk()
             ->assertJsonPath('detail.status.mode', 'one_time')
             ->assertJsonPath('detail.content.plan.mode', 'one_time')
-            ->assertJsonPath('detail.decision.state', 'benefit_scheduled');
+            ->assertJsonPath('detail.decision.state', 'benefit_payout_required')
+            ->assertJsonCount(3, 'detail.navigation')
+            ->assertJsonMissing(['key' => 'check-ins'])
+            ->assertJsonCount(0, 'detail.content.schedule');
 
         $this->actingAs($applicant)
             ->getJson(route('dashboard.monitoring.show.data', $application).'?view=check-ins')
@@ -231,7 +382,8 @@ class ApplicantMonitoringDetailContractTest extends TestCase
 
     public function test_support_only_record_has_calm_empty_states_without_fake_schedules(): void
     {
-        [, $applicant, , $application] = $this->selectedRecipient(withPlan: false);
+        [, $applicant, $program, $application] = $this->selectedRecipient(withPlan: false);
+        $program->update(['support_mode' => 'recurring', 'monitoring_policy' => 'none']);
 
         $this->actingAs($applicant)
             ->getJson(route('dashboard.monitoring.show.data', $application))
@@ -301,6 +453,8 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ->assertJsonPath('detail.content.selected.record_key', $recordKey)
             ->assertJsonPath('detail.content.selected.title', 'Learning materials allowance')
             ->assertJsonPath('detail.content.selected.can_respond', true)
+            ->assertJsonPath('detail.content.selected.delivery.label', 'Confirmation needed')
+            ->assertJsonPath('detail.content.selected.delivery.date_caption', 'Provider recorded release')
             ->assertJsonPath('detail.content.directory.action_required.0.record_key', $recordKey)
             ->assertJsonPath('detail.decision.state', 'benefit_confirmation_required')
             ->assertJsonPath('detail.decision.action.href', route('dashboard.monitoring.benefits.show', [
@@ -311,6 +465,53 @@ class ApplicantMonitoringDetailContractTest extends TestCase
         $this->actingAs($applicant)
             ->getJson(route('dashboard.monitoring.show.data', $application).'?view=benefits&record=release-999999')
             ->assertNotFound();
+
+        $this->postJson(route('dashboard.benefit-release-records.response', $record), [
+            'response_type' => 'confirmed',
+            'received_on' => now()->toDateString(),
+            'acknowledged' => true,
+        ])->assertCreated();
+
+        $this->getJson(route('dashboard.monitoring.show.data', $application).'?view=benefits&record='.$recordKey)
+            ->assertOk()
+            ->assertJsonPath('detail.content.selected.delivery.label', 'Received')
+            ->assertJsonPath('detail.content.selected.delivery.date_caption', 'Received on')
+            ->assertJsonPath('detail.content.selected.delivery.date_label', now()->format('M d, Y'))
+            ->assertJsonPath('detail.content.selected.can_respond', false)
+            ->assertJsonCount(0, 'detail.content.directory.action_required')
+            ->assertJsonPath('detail.content.directory.completed.0.record_key', $recordKey);
+    }
+
+    public function test_benefit_directory_distinguishes_future_schedules_from_collection_and_past_updates(): void
+    {
+        [, $applicant, $program, $application] = $this->selectedRecipient(withPlan: false);
+        $future = $this->landingRelease($program, $application, 'Future collection', 'prepared', now()->addDay());
+        $ready = $this->landingRelease($program, $application, 'Collection ready', 'prepared', now()->subHour());
+        $waiting = $this->landingRelease($program, $application, 'Awaiting provider', 'scheduled', now()->subDay());
+        $transfer = $this->landingRelease($program, $application, 'Pending transfer', 'prepared', now()->subDays(2));
+        $transfer->release->update(['release_method' => 'e_wallet']);
+        $transfer->payoutDetails()->create([
+            'method' => 'e_wallet', 'destination' => ['institution' => 'Example Wallet'],
+            'submitted_at' => now()->subDays(3),
+        ]);
+
+        $url = route('dashboard.monitoring.show.data', $application).'?view=benefits';
+        $this->actingAs($applicant)->getJson($url)->assertOk()
+            ->assertJsonPath('detail.content.one_time', true)
+            ->assertJsonCount(1, 'detail.content.directory.upcoming')
+            ->assertJsonPath('detail.content.directory.upcoming.0.record_key', 'release-'.$future->id)
+            ->assertJsonPath('detail.content.directory.upcoming.0.delivery.label', 'Scheduled')
+            ->assertJsonCount(3, 'detail.content.directory.in_progress')
+            ->assertJsonPath('detail.content.directory.in_progress.0.record_key', 'release-'.$transfer->id)
+            ->assertJsonPath('detail.content.directory.in_progress.0.delivery.label', 'Awaiting release update')
+            ->assertJsonPath('detail.content.directory.in_progress.1.record_key', 'release-'.$waiting->id)
+            ->assertJsonPath('detail.content.directory.in_progress.2.record_key', 'release-'.$ready->id)
+            ->assertJsonPath('detail.content.directory.in_progress.2.delivery.label', 'Ready for collection')
+            ->assertJsonCount(0, 'detail.content.directory.completed');
+
+        $this->getJson($url.'&record=release-'.$ready->id)->assertOk()
+            ->assertJsonPath('detail.content.selected.delivery.label', 'Ready for collection')
+            ->assertJsonPath('detail.content.selected.can_respond', false);
     }
 
     public function test_support_history_opens_one_focused_outcome_and_only_latest_can_be_answered(): void
@@ -356,6 +557,8 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ->assertOk()
             ->assertJsonPath('detail.content.selected.record_key', $recordKey)
             ->assertJsonPath('detail.content.selected.decision', 'terminated')
+            ->assertJsonPath('detail.content.selected.closeout.kind', 'ended_early')
+            ->assertJsonPath('detail.content.selected.closeout.counts', null)
             ->assertJsonPath('detail.content.selected.can_respond', true)
             ->assertJsonPath('detail.content.action_required.0.record_key', $recordKey)
             ->assertJsonPath('detail.decision.state', 'outcome_response_required')
@@ -377,6 +580,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
 
         $this->assertNotNull($olderPayload);
         $this->assertSame('support_outcome', $olderPayload['kind']);
+        $this->assertSame('No response recorded', $olderPayload['status_label']);
         $this->assertSame(route('dashboard.monitoring.history.show', [
             'application' => $application,
             'record' => 'outcome-'.$older->id,
@@ -385,6 +589,62 @@ class ApplicantMonitoringDetailContractTest extends TestCase
         $this->actingAs($applicant)
             ->getJson(route('dashboard.monitoring.show.data', $application).'?view=history&record=outcome-999999')
             ->assertNotFound();
+
+        $this->getJson(route('dashboard.monitoring.show.data', $application).'?view=history&record=outcome-'.$older->id)
+            ->assertOk()
+            ->assertJsonPath('detail.content.selected.response_status_label', 'No response recorded')
+            ->assertJsonPath('detail.content.selected.can_respond', false);
+    }
+
+    public function test_support_history_uses_actual_dates_and_separates_action_from_past_records(): void
+    {
+        $this->travelTo(now()->setDate(2026, 11, 10)->setTime(9, 0));
+        [$provider, $applicant, $program, $application, $plan] = $this->selectedRecipient();
+        $closed = $this->cycle($program, $plan, [
+            'title' => 'Closed semester check-in', 'status' => 'closed', 'closed_at' => now()->subDays(4),
+            'due_at' => now()->subMonth()->toDateString(),
+        ]);
+        $this->cycle($program, $plan, ['title' => 'Next semester check-in']);
+        $release = $this->landingRelease($program, $application, 'Learning allowance', 'released', now()->subMonth());
+        $release->update(['released_at' => now()->subDays(3), 'recorded_at' => now()->subDays(3)]);
+        $withheld = $this->landingRelease($program, $application, 'Withheld release', 'withheld', now()->addWeek());
+        $withheld->update(['recorded_at' => now()->subWeeks(2)]);
+        $decision = RecipientSupportDecision::create([
+            'scholarship_application_id' => $application->id, 'applicant_id' => $applicant->id,
+            'decision' => 'renewed', 'reason_category' => 'requirements_met', 'reason' => 'The check-in was completed.',
+            'effective_on' => now()->addWeek()->toDateString(), 'decided_by' => $provider->id, 'decided_at' => now(),
+            'response_status' => 'pending',
+        ]);
+
+        $this->actingAs($applicant)->postJson(route('dashboard.benefit-release-records.response', $release), [
+            'response_type' => 'confirmed', 'received_on' => '2026-11-09', 'acknowledged' => true,
+        ])->assertCreated();
+
+        $url = route('dashboard.monitoring.show.data', $application).'?view=history';
+        $this->getJson($url)->assertOk()
+            ->assertJsonPath('detail.content.action_required.0.record_key', 'outcome-'.$decision->id)
+            ->assertJsonCount(3, 'detail.content.timeline')
+            ->assertJsonPath('detail.content.timeline.0.record_key', 'release-'.$release->id)
+            ->assertJsonPath('detail.content.timeline.0.status_label', 'Received')
+            ->assertJsonPath('detail.content.timeline.0.date_label', 'Nov 09, 2026')
+            ->assertJsonPath('detail.content.timeline.0.date_caption', 'Received')
+            ->assertJsonPath('detail.content.timeline.0.month_label', 'November 2026')
+            ->assertJsonPath('detail.content.timeline.1.record_key', 'academic-'.$closed->id)
+            ->assertJsonPath('detail.content.timeline.1.date_caption', 'Closed')
+            ->assertJsonPath('detail.content.timeline.1.date_label', 'Nov 06, 2026')
+            ->assertJsonPath('detail.content.timeline.2.record_key', 'release-'.$withheld->id)
+            ->assertJsonPath('detail.content.timeline.2.date_label', 'Oct 27, 2026')
+            ->assertJsonPath('detail.content.timeline.2.date_caption', 'Recorded');
+
+        $this->postJson(route('dashboard.support-decisions.response', $decision), [
+            'response_type' => 'acknowledged', 'confirmed' => true,
+        ])->assertCreated();
+        $this->getJson($url)->assertOk()
+            ->assertJsonCount(0, 'detail.content.action_required')
+            ->assertJsonCount(4, 'detail.content.timeline')
+            ->assertJsonPath('detail.content.timeline.0.record_key', 'outcome-'.$decision->id)
+            ->assertJsonPath('detail.content.timeline.0.status_label', 'Acknowledged')
+            ->assertJsonPath('detail.content.timeline.0.date_label', 'Nov 10, 2026');
     }
 
     public function test_an_applicant_cannot_open_another_applicants_monitoring_contract(): void

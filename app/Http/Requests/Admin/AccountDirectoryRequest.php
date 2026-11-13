@@ -18,7 +18,7 @@ class AccountDirectoryRequest extends FormRequest
         return [
             'search' => ['sometimes', 'nullable', 'string', 'max:120'],
             'role' => ['sometimes', 'nullable', Rule::in(['all', 'applicant', 'provider', 'admin'])],
-            'attention' => ['sometimes', 'nullable', Rule::in(['all', 'needs_attention', 'unverified', 'password_reset', 'suspended'])],
+            'attention' => ['sometimes', 'nullable', Rule::in(['all', 'needs_attention', 'unverified', 'password_reset', 'suspended', 'support_handoff'])],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:5', 'max:50'],
         ];

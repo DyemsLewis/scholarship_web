@@ -1,7 +1,7 @@
 <script setup>
 import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { ref, watch } from 'vue';
-import { usePageScrollLock } from '../../composables/usePageScrollLock';
+import { useModalAccessibility } from '../../composables/useModalAccessibility';
 import { showPortalToast } from '../../support/portalToast';
 
 const props = defineProps({
@@ -10,9 +10,15 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['close', 'saved']);
-usePageScrollLock(() => props.open);
+const dialog = ref(null);
+const { handleKeydown } = useModalAccessibility(() => props.open, dialog, close);
 const isSaving = ref(false);
 const form = ref(defaultForm());
+const responseLabels = {
+    acknowledged: 'Acknowledge decision',
+    clarification_requested: 'Ask for clarification',
+    reconsideration_requested: 'Request reconsideration',
+};
 
 function defaultForm() {
     return {
@@ -43,7 +49,13 @@ async function submit() {
         return;
     }
 
-    if (!await confirmOutcome({ record: 'Scholarship support decision', outcome: form.value.response_type, consequence: 'Your response will be sent to the provider. Acknowledging the decision does not mean agreeing with it.' }, () => props.open && !!props.outcome && !isSaving.value && form.value.confirmed)) return;
+    if (!await confirmOutcome({
+        record: props.outcome.decision_label,
+        outcome: responseLabels[form.value.response_type],
+        consequence: form.value.response_type === 'acknowledged'
+            ? 'This records that you read the decision. It does not mean you agree with it.'
+            : 'Your request will be sent to the provider and saved with this decision.',
+    }, () => props.open && !!props.outcome && !isSaving.value && form.value.confirmed)) return;
     isSaving.value = true;
     const data = new FormData();
     data.append('response_type', form.value.response_type);
@@ -79,13 +91,9 @@ async function submit() {
         <div
             v-if="open"
             class="fixed inset-0 z-[2200] grid place-items-center bg-slate-950/65 p-3 sm:p-5"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="support-outcome-response-title"
             @click.self="close"
-            @keydown.esc="close"
         >
-            <form class="flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-md border border-slate-300 bg-white text-slate-950 shadow-2xl" @submit.prevent="submit">
+            <form ref="dialog" role="dialog" aria-modal="true" aria-labelledby="support-outcome-response-title" tabindex="-1" class="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-xl flex-col overflow-hidden rounded-md border border-slate-300 bg-white text-slate-950 shadow-2xl sm:max-h-[calc(100dvh-2.5rem)]" @keydown="handleKeydown" @submit.prevent="submit">
                 <header class="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
                     <div>
                         <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Support outcome</p>
@@ -101,17 +109,17 @@ async function submit() {
                     <fieldset>
                         <legend class="text-xs font-bold text-slate-700">Choose a response</legend>
                         <div class="mt-2 space-y-2">
-                            <label :class="['block cursor-pointer border bg-white p-3', form.response_type === 'acknowledged' ? 'border-emerald-600 ring-1 ring-emerald-600' : 'border-slate-200']">
+                            <label :class="['block cursor-pointer rounded-sm border bg-white p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-amber-600', form.response_type === 'acknowledged' ? 'border-slate-800 ring-1 ring-slate-800' : 'border-slate-300']">
                                 <input v-model="form.response_type" type="radio" value="acknowledged" class="sr-only">
-                                <span class="block text-sm font-bold">Acknowledge outcome</span>
+                                <span class="block text-sm font-bold">Acknowledge decision</span>
                                 <span class="mt-1 block text-xs text-slate-500">Confirm that you received and reviewed it.</span>
                             </label>
-                            <label v-if="!outcome?.case_review_url" :class="['block cursor-pointer border bg-white p-3', form.response_type === 'clarification_requested' ? 'border-amber-500 ring-1 ring-amber-500' : 'border-slate-200']">
+                            <label v-if="!outcome?.case_review_url" :class="['block cursor-pointer rounded-sm border bg-white p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-amber-600', form.response_type === 'clarification_requested' ? 'border-slate-800 ring-1 ring-slate-800' : 'border-slate-300']">
                                 <input v-model="form.response_type" type="radio" value="clarification_requested" class="sr-only">
                                 <span class="block text-sm font-bold">Ask for clarification</span>
                                 <span class="mt-1 block text-xs text-slate-500">Ask the provider to explain part of the decision.</span>
                             </label>
-                            <label v-if="outcome?.decision === 'terminated' && !outcome?.case_review_url" :class="['block cursor-pointer border bg-white p-3', form.response_type === 'reconsideration_requested' ? 'border-rose-500 ring-1 ring-rose-500' : 'border-slate-200']">
+                            <label v-if="outcome?.decision === 'terminated' && !outcome?.case_review_url" :class="['block cursor-pointer rounded-sm border bg-white p-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-amber-600', form.response_type === 'reconsideration_requested' ? 'border-slate-800 ring-1 ring-slate-800' : 'border-slate-300']">
                                 <input v-model="form.response_type" type="radio" value="reconsideration_requested" class="sr-only">
                                 <span class="block text-sm font-bold">Request reconsideration</span>
                                 <span class="mt-1 block text-xs text-slate-500">Provide information the provider should review again.</span>
@@ -137,8 +145,8 @@ async function submit() {
                 </div>
 
                 <footer class="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
-                    <button type="button" :disabled="isSaving" class="border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700" @click="close">Cancel</button>
-                    <button type="submit" :disabled="isSaving || !form.confirmed" class="bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isSaving ? 'Saving...' : 'Submit response' }}</button>
+                    <button type="button" :disabled="isSaving" class="rounded-sm border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700" @click="close">Cancel</button>
+                    <button type="submit" :disabled="isSaving || !form.confirmed" class="rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isSaving ? 'Saving...' : 'Continue' }}</button>
                 </footer>
             </form>
         </div>

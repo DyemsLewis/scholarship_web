@@ -190,6 +190,7 @@ class ApplicantProfilePhotoTest extends TestCase
 
         $this->actingAs($admin)
             ->patchJson(route('admin.applicants.profile-photo-review', $applicant), [
+                'expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'action' => 'request_replacement',
                 'reason' => 'The image is blurred and the face is not clear.',
             ])
@@ -221,6 +222,7 @@ class ApplicantProfilePhotoTest extends TestCase
 
         $this->actingAs($admin)
             ->patchJson(route('admin.applicants.profile-photo-review', $applicant), [
+                'expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id),
                 'action' => 'approve',
             ])
             ->assertOk()

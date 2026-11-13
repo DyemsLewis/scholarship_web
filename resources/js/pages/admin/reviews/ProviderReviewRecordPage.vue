@@ -1,6 +1,8 @@
 <script setup>
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
-import { staffQueueReturn } from '../../../support/staffQueueState.js';
+import AdminReviewGuide from '../../../components/admin/AdminReviewGuide.vue';
+import AdminReviewNavigation from '../../../components/admin/AdminReviewNavigation.vue';
+import { useAdminReviewNavigation } from '../../../composables/useAdminReviewNavigation.js';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
@@ -13,6 +15,7 @@ import { labelFromKey } from '../../../support/display.js';
 import { reviewErrorMessage, reviewStatusLabel } from '../../../support/adminReviewPresentation.js';
 
 const providerId = (window.portalPathname?.() ?? window.location.pathname).match(/providers\/(\d+)/)?.[1];
+const navigation = useAdminReviewNavigation('providers', providerId);
 const resource = useAdminResource(async ({ signal }) => {
     const response = await window.axios.get(`/admin/providers/${providerId}/review/data`, { signal });
     if (!response.data.provider) throw new Error('Missing provider.');
@@ -28,10 +31,14 @@ const notes = ref('');
 const reviewDocument = ref(null);
 const documentSaving = ref(false);
 const stale = ref(false);
+const evidenceFilter = ref('attention');
+const outstandingDocuments = computed(() => (provider.value?.verification_documents ?? []).filter((item) => item.review_status !== 'approved' || item.file_available === false));
+const visibleDocuments = computed(() => evidenceFilter.value === 'all' ? provider.value?.verification_documents ?? [] : outstandingDocuments.value);
 const documentSummary = computed(() => provider.value?.document_review ?? { total: 0, accepted: 0, awaiting_review: 0, replacement_requested: 0 });
 
 const statusClass = computed(() => provider.value?.verification_status === 'approved' ? 'bg-emerald-100 text-emerald-800' : provider.value?.verification_status === 'rejected' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700');
 const canSave = computed(() => Boolean(provider.value) && !loading.value && !loadError.value && !saving.value && !reviewDocument.value && !stale.value
+    && provider.value.can_review_evidence !== false
     && (decision.value !== 'approved' || (documentSummary.value.can_approve && documentSummary.value.token))
     && (decision.value !== 'rejected' || Boolean(notes.value.trim())));
 
@@ -41,6 +48,7 @@ async function loadRecord() {
     const payload = await resource.load();
     if (payload) {
         provider.value = payload;
+        navigation.load();
         stale.value = false;
         decision.value = provider.value.verification_status === 'pending' ? 'approved' : provider.value.verification_status;
         notes.value = provider.value.verification_notes ?? '';
@@ -69,6 +77,7 @@ async function saveDecision() {
         };
         notes.value = provider.value.verification_notes ?? '';
         successMessage.value = response.data.message;
+        navigation.load();
     } catch (error) {
         stale.value = error.response?.status === 409;
         errorMessage.value = reviewErrorMessage(error, 'The decision could not be saved.');
@@ -93,17 +102,23 @@ function documentState(document) {
     return { label: 'Awaiting review', class: 'bg-slate-100 text-slate-700' };
 }
 
+function continueReview() {
+    if (saving.value || documentSaving.value) return;
+    const nextDocument = outstandingDocuments.value.find((item) => item.review_status !== 'rejected');
+    if (nextDocument) openDocument(nextDocument);
+    else document.getElementById('provider-final-decision')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 onMounted(loadRecord);
-const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/reviews/providers');
 </script>
 
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
-        <a :href="backToQueue" class="mb-3 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Provider queue</a>
+        <AdminReviewNavigation :back-url="navigation.backUrl" :next="navigation.next.value" :loading="navigation.loading.value" :error="navigation.error.value" @retry="navigation.load" />
         <AdminWorkspaceHeader eyebrow="Provider verification" title="Organization record" description="Confirm the organization and its submitted proof." icon="fa-solid fa-building-shield" />
         <section v-if="loading || loadError" class="admin-panel mt-4 overflow-hidden"><AdminLoadState :loading="loading" :error="loadError" loading-message="Loading provider record..." error-title="Organization record unavailable" @retry="loadRecord" /></section>
 
         <template v-else-if="provider">
+            <AdminReviewGuide :workflow="provider.review_workflow" kind="provider" @continue="continueReview" />
             <p v-if="successMessage" class="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800" role="status">{{ successMessage }}</p>
 
             <section class="admin-panel mt-4 overflow-hidden">
@@ -124,14 +139,15 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
             <section class="admin-panel mt-4 overflow-hidden">
                 <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Step 1</p><h2 class="mt-0.5 font-black text-slate-950">Review submitted proof</h2><p class="mt-0.5 text-sm text-slate-500">Inspect each file and record its own outcome.</p></div></div><p class="shrink-0 text-sm font-semibold text-slate-600">{{ documentSummary.accepted }} of {{ documentSummary.total }} accepted</p></header>
                 <p v-if="provider.verification_status === 'approved' && documentSummary.awaiting_review" class="border-b border-slate-200 px-6 py-3 text-xs leading-5 text-slate-600">Existing account approval is unchanged. Historical file approvals need individual reviews before another final account verification.</p>
-                <div v-if="provider.verification_documents?.length" class="staff-table-viewport staff-table-viewport--compact">
+                <div class="flex items-center gap-2 border-b border-slate-200 px-6 py-3"><button type="button" :aria-pressed="evidenceFilter === 'attention'" class="staff-row-action px-3 py-2 text-xs" @click="evidenceFilter = 'attention'">Needs attention ({{ outstandingDocuments.length }})</button><button type="button" :aria-pressed="evidenceFilter === 'all'" class="staff-row-action px-3 py-2 text-xs" @click="evidenceFilter = 'all'">All proof ({{ provider.verification_documents?.length ?? 0 }})</button></div>
+                <div v-if="visibleDocuments.length" class="staff-table-viewport staff-table-viewport--compact">
                     <table class="portal-data-table table-fixed min-w-[52rem]">
                         <colgroup><col><col class="w-48"><col class="w-44"><col class="w-36"></colgroup>
                         <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
                             <tr><th class="px-6 py-3">Document</th><th class="px-4 py-3">Review status</th><th class="px-4 py-3">Last reviewed</th><th class="px-6 py-3 text-right">Action</th></tr>
                         </thead>
                         <tbody class="divide-y divide-slate-200">
-                            <tr v-for="document in provider.verification_documents" :key="document.id" class="align-middle">
+                            <tr v-for="document in visibleDocuments" :key="document.id" class="align-middle">
                                 <td class="px-6 py-4">
                                     <p class="text-sm font-bold text-slate-950">{{ labelFromKey(document.document_type) }}</p>
                                     <p class="review-text mt-0.5 text-xs text-slate-500" data-file-name>{{ document.original_name }}</p>
@@ -140,6 +156,7 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
                                 <td class="px-4 py-4">
                                     <span :class="['inline-flex px-2.5 py-1.5 text-xs font-bold', documentState(document).class]">{{ documentState(document).label }}</span>
                                     <p v-if="document.file_available === false" class="mt-1 text-xs text-amber-800">File unavailable</p>
+                                    <p v-else-if="provider.review_workflow?.changed_keys?.includes('evidence:' + document.document_type)" class="mt-1 text-xs font-bold text-amber-800">Updated since last decision</p>
                                 </td>
                                 <td class="px-4 py-4 text-xs text-slate-600">
                                     <template v-if="document.reviewed_at"><p class="font-semibold">{{ document.reviewed_by }}</p><p class="mt-1">{{ document.reviewed_at }}</p></template>
@@ -152,10 +169,10 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
                         </tbody>
                     </table>
                 </div>
-                <p v-else class="px-6 py-10 text-center text-sm font-semibold text-slate-500">No verification proof has been submitted.</p>
+                <p v-else class="px-6 py-8 text-center text-sm font-semibold text-slate-500">{{ provider.verification_documents?.length ? 'All submitted proof is accepted. Continue to the final account decision.' : 'No verification proof has been submitted.' }}</p>
             </section>
 
-            <form class="admin-panel mt-4 p-6" :aria-busy="saving" @submit.prevent="saveDecision">
+            <form id="provider-final-decision" class="admin-panel mt-4 p-6 scroll-mt-5" :aria-busy="saving" @submit.prevent="saveDecision">
                 <div class="flex items-start justify-between gap-8"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Step 2</p><h2 class="mt-0.5 text-lg font-black text-slate-950">Final provider account decision</h2><p class="mt-0.5 text-sm text-slate-500">Approval requires every current document to be accepted. This does not change individual file outcomes.</p></div></div><button type="submit" :disabled="!canSave" class="bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{{ saving ? 'Saving...' : 'Save decision' }}</button></div>
                 <p v-if="errorMessage" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
                 <p v-if="decision === 'approved' && !documentSummary.can_approve" class="mt-4 text-sm font-semibold text-amber-800">{{ documentSummary.unavailable_files ? 'A saved file is unavailable. Request a replacement before approval.' : documentSummary.total ? 'Finish the document reviews in Step 1. Unreviewed files and replacement requests block approval.' : 'Uploaded organization proof is required before approval.' }}</p>
@@ -163,6 +180,6 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
                 <fieldset :disabled="saving" class="mt-5 grid grid-cols-[14rem_minmax(0,1fr)] gap-4"><label><span class="mb-1.5 block text-sm font-bold text-slate-700">Outcome</span><select v-model="decision" class="h-11 w-full border border-slate-300 bg-white px-3"><option value="approved">Approve</option><option value="rejected">Reject</option><option value="pending">Return to pending</option></select></label><label><span class="mb-1.5 block text-sm font-bold text-slate-700">Review note <span v-if="decision === 'rejected'" class="text-rose-700">required</span></span><textarea v-model="notes" :required="decision === 'rejected'" rows="3" maxlength="1500" class="w-full border border-slate-300 px-3 py-2" placeholder="State what must be corrected."></textarea></label></fieldset>
             </form>
         </template>
-        <ProviderDocumentReviewDialog v-if="provider" :document="reviewDocument" :provider="provider" @close="reviewDocument = null" @busy="documentSaving = $event" @saved="refreshReviews" @reload="refreshReviews()" />
+        <ProviderDocumentReviewDialog v-if="provider" :document="reviewDocument" :provider="provider" :allowed="provider.can_review_evidence !== false" @close="reviewDocument = null" @busy="documentSaving = $event" @saved="refreshReviews" @reload="refreshReviews()" />
     </AdminWorkspacePage>
 </template>

@@ -1,0 +1,14 @@
+{
+  "roles": [
+    "marilag.manager",
+    "learner.release.record"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\monitoring-part-3-check-in-outcomes.png"
+  ],
+  "verified_application_ids": [],
+  "passed": true
+}

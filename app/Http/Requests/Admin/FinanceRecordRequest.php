@@ -17,7 +17,7 @@ class FinanceRecordRequest extends FormRequest
     {
         return [
             'period' => ['nullable', Rule::in(['today', 'month', 'year', 'all'])],
-            'status' => ['nullable', Rule::in(['pending', 'failed', 'all'])],
+            'status' => ['nullable', Rule::in(['pending', 'failed', 'refund', 'unconfirmed', 'follow_up', 'needs_review', 'all'])],
             'search' => ['nullable', 'string', 'max:120'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:25'],

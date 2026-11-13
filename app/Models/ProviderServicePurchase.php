@@ -179,4 +179,9 @@ class ProviderServicePurchase extends Model
     {
         return $this->hasMany(ProviderServiceLifecycleEvent::class);
     }
+
+    public function financeReviews(): HasMany
+    {
+        return $this->hasMany(ServiceFinanceReview::class);
+    }
 }

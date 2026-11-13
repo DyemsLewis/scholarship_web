@@ -105,6 +105,7 @@ class ApplicationWorkflowService
 
     public function start(ScholarshipApplication $application): ScholarshipApplication
     {
+        $application = app(SelectionEvaluationService::class)->freezeForSubmission($application);
         $application->update([
             'workflow_version' => 2,
             'application_state' => 'submitted',
@@ -217,6 +218,7 @@ class ApplicationWorkflowService
         $application = $this->initialize($application);
 
         return DB::transaction(function () use ($application, $stage, $result, $actor, $notes, $decisionReason): ScholarshipApplication {
+            Scholarship::query()->whereKey($application->scholarship_id)->lockForUpdate()->firstOrFail();
             $locked = ScholarshipApplication::query()
                 ->with(['scholarship', 'stageProgresses'])
                 ->lockForUpdate()
@@ -251,6 +253,7 @@ class ApplicationWorkflowService
             $previousStatus = $locked->status;
             $reason = $decisionReason ?: $this->defaultDecisionReason($stage, $result);
             $now = now();
+            $progress->increment('evaluation_revision');
             $progress->update([
                 'status' => $result === 'passed' ? 'passed' : 'not_passed',
                 'result' => $result,
@@ -307,6 +310,10 @@ class ApplicationWorkflowService
                     'reviewed_by' => $actor->id,
                     'reviewed_at' => $now,
                 ]);
+            }
+
+            if ($stage === 'screening' && $result === 'passed') {
+                app(SelectionEvaluationService::class)->captureScreening($locked->fresh(), $actor);
             }
 
             ApplicationStatusHistory::create([
@@ -395,6 +402,29 @@ class ApplicationWorkflowService
                 }
             }
 
+            $comparisonService = app(SelectionComparisonService::class);
+            $comparison = $comparisonService->forApplication($locked);
+            if (array_key_exists('comparison_reference', $confirmed)
+                && ! hash_equals($comparison['reference'] ?? '', (string) $confirmed['comparison_reference'])) {
+                throw ValidationException::withMessages([
+                    'comparison_reference' => 'The evaluation order or available slots changed. Reload and review the comparison before confirming this decision.',
+                ]);
+            }
+            $rationale = trim((string) ($confirmed['selection_rationale'] ?? ''));
+            if ($comparisonService->requiresRationale($comparison, $outcome) && mb_strlen($rationale) < 10) {
+                throw ValidationException::withMessages(['selection_rationale' => 'Add a short internal reason for this outcome or tie resolution (at least 10 characters).']);
+            }
+            $evaluation = app(SelectionEvaluationService::class)->summary($locked);
+            $evaluation['stages'] = array_map(function (array $stage): array {
+                unset($stage['history'], $stage['note'], $stage['save_url']);
+
+                return [...$stage, 'can_record' => false];
+            }, $evaluation['stages']);
+            $selectionSnapshot = [
+                'version' => 1, 'captured_at' => now()->toISOString(), 'outcome' => $outcome,
+                'recorded_by' => $actor->id, 'evaluation' => $evaluation,
+                'comparison' => $comparison, 'rationale' => $rationale ?: null,
+            ];
             $previousStatus = $locked->status;
             $status = match ($outcome) {
                 'selected' => 'awarded',
@@ -455,6 +485,7 @@ class ApplicationWorkflowService
                 'student_response_terms_version' => null,
                 'student_response_note' => null,
             ]);
+            $locked->forceFill(['selection_decision_snapshot' => $selectionSnapshot])->save();
 
             ApplicationStatusHistory::create([
                 'scholarship_application_id' => $locked->id,
@@ -463,6 +494,7 @@ class ApplicationWorkflowService
                 'to_status' => $status,
                 'decision_reason' => $reason,
                 'review_notes' => $notes ?: 'Final provider outcome recorded.',
+                'selection_evaluation_snapshot' => $selectionSnapshot,
                 'changed_at' => $now,
             ]);
 
@@ -656,6 +688,7 @@ class ApplicationWorkflowService
                 'reviewed_by' => $actor->id,
                 'reviewed_at' => $now,
             ]);
+            $locked->forceFill(['selection_decision_snapshot' => null])->save();
 
             ApplicationStatusHistory::create([
                 'scholarship_application_id' => $locked->id,
@@ -776,6 +809,7 @@ class ApplicationWorkflowService
                 $locked->stageProgresses()
                     ->where('position', '>', $progress->position)
                     ->update([
+                        'evaluation_revision' => DB::raw('evaluation_revision + 1'),
                         'status' => 'pending',
                         'operational_status' => null,
                         'result' => null,
@@ -800,6 +834,7 @@ class ApplicationWorkflowService
                     ->update(['status' => 'cancelled']);
             }
 
+            $progress->increment('evaluation_revision');
             $progress->update([
                 'status' => 'current',
                 'operational_status' => ScholarshipSelectionPlan::isSchedulable($stage)
@@ -845,6 +880,7 @@ class ApplicationWorkflowService
                 'reviewed_by' => $actor->id,
                 'reviewed_at' => $now,
             ]);
+            $locked->forceFill(['selection_decision_snapshot' => null])->save();
 
             ApplicationStatusHistory::create([
                 'scholarship_application_id' => $locked->id,

@@ -30,6 +30,7 @@ class ApplicationStageProgress extends Model
     protected function casts(): array
     {
         return [
+            'evaluation_revision' => 'integer',
             'position' => 'integer',
             'proof_required' => 'boolean',
             'started_at' => 'datetime',

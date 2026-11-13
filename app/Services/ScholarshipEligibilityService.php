@@ -68,6 +68,7 @@ class ScholarshipEligibilityService
                 'category' => $category,
                 ...$metadata,
                 'rule_mode' => $ruleMode,
+                'counts_toward_match' => $counts,
                 'is_blocking' => $status === 'fail' && $category === 'eligibility' && $ruleMode === 'required',
                 'needs_review' => in_array($comparisonMode, ['scale_mismatch', 'manual_review'], true),
             ];
@@ -300,6 +301,14 @@ class ScholarshipEligibilityService
             'policy_version' => EligibilityRulePolicy::VERSION,
             'rule_modes' => $ruleModes,
             'score' => $score,
+            'match_calculation' => [
+                'matched' => $passed,
+                'compared' => $applicable,
+                'percentage' => $applicable === 0 ? null : $score,
+                'includes_document_readiness' => collect($criteria)->contains(fn (array $row): bool => $row['category'] === 'readiness' && $row['counts_toward_match']),
+                'formula' => 'Matched checks / compared checks x 100, rounded to the nearest whole percent.',
+                'notice' => 'This compares your profile and preparation with the published requirements. It is not your chance of selection or your final evaluation score.',
+            ],
             'passed' => $passed,
             'applicable' => $applicable,
             'is_eligible' => $blockingCriteria === [],

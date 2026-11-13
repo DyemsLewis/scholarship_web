@@ -4,6 +4,7 @@ namespace App\Queries\Admin\Dashboards;
 
 use App\Domain\Shared\Dashboard\RoleDashboardPayload;
 use App\Queries\Admin\FinanceRecordQuery;
+use App\Support\AdminWorkPriority;
 
 final class FinanceOfficerDashboardQuery
 {
@@ -18,7 +19,11 @@ final class FinanceOfficerDashboardQuery
         $payments = collect($this->finance->payments(['period' => 'month', 'per_page' => 5])['items'])
             ->map(fn (array $payment): array => $this->paymentItem($payment));
 
-        return RoleDashboardPayload::make(
+        $next = $exceptions->first();
+        $failed = ($next['status']['label'] ?? null) === 'Failed';
+        $waitingForBilling = ($next['status']['label'] ?? null) === 'With Billing';
+
+        return [...RoleDashboardPayload::make(
             workspace: [
                 'key' => 'finance-officer',
                 'eyebrow' => 'Financial oversight',
@@ -33,7 +38,7 @@ final class FinanceOfficerDashboardQuery
                 'icon' => 'fa-solid fa-arrow-right',
             ],
             metrics: [
-                ['key' => 'exceptions', 'label' => 'Payment exceptions', 'value' => $summary['exceptions'], 'detail' => $summary['pending_payments'].' pending · '.$summary['failed_payments'].' failed', 'tone' => 'attention', 'url' => '/admin/workspaces/finance/exceptions', 'icon' => 'fa-solid fa-triangle-exclamation'],
+                ['key' => 'exceptions', 'label' => 'Payment follow-up', 'value' => $summary['exceptions'], 'detail' => $summary['pending_payments'].' pending · '.$summary['failed_payments'].' failed · '.$summary['pending_refunds'].' refunds', 'tone' => 'attention', 'url' => '/admin/workspaces/finance/exceptions', 'icon' => 'fa-solid fa-triangle-exclamation'],
                 ['key' => 'month', 'label' => 'This month', 'value' => $this->money($summary['month'], $summary['currency']), 'detail' => 'Confirmed revenue', 'tone' => 'positive', 'url' => '/admin/workspaces/finance/payments?period=month', 'icon' => 'fa-solid fa-calendar-days'],
                 ['key' => 'today', 'label' => 'Today', 'value' => $this->money($summary['today'], $summary['currency']), 'detail' => 'Confirmed revenue', 'url' => '/admin/workspaces/finance/payments?period=today', 'icon' => 'fa-solid fa-coins'],
                 ['key' => 'confirmed', 'label' => 'Confirmed payments', 'value' => $summary['successful_payments'], 'detail' => 'All recorded payments', 'tone' => 'positive', 'url' => '/admin/workspaces/finance/payments', 'icon' => 'fa-solid fa-receipt'],
@@ -43,7 +48,7 @@ final class FinanceOfficerDashboardQuery
                     'key' => 'payment-exceptions',
                     'eyebrow' => 'Current focus',
                     'title' => 'Payments needing review',
-                    'description' => 'Pending and failed payment records appear here.',
+                    'description' => 'Payment exceptions, incomplete confirmation, refunds, and internal Billing follow-up. Reviews never change payment states.',
                     'empty_message' => 'No payment exception needs review.',
                     'icon' => 'fa-solid fa-triangle-exclamation',
                     'action' => ['label' => 'Open exceptions', 'url' => '/admin/workspaces/finance/exceptions', 'icon' => 'fa-solid fa-arrow-right'],
@@ -56,11 +61,16 @@ final class FinanceOfficerDashboardQuery
                     'description' => 'A concise view of the latest confirmed provider payments.',
                     'empty_message' => 'No confirmed payment was recorded this month.',
                     'icon' => 'fa-solid fa-receipt',
-                    'action' => ['label' => 'Open payment records', 'url' => '/admin/workspaces/finance/payments', 'icon' => 'fa-solid fa-arrow-right'],
+                    'action' => ['label' => 'Open payment records', 'url' => '/admin/workspaces/finance/payments?period=month', 'icon' => 'fa-solid fa-arrow-right'],
                     'items' => $payments,
                 ],
             ],
-        );
+        ), 'priority' => $next ? AdminWorkPriority::make(
+            $next['title'].' - '.$next['subtitle'],
+            $waitingForBilling ? 'Billing is checking the record. Finance reviews the response when it returns.' : ($failed ? 'Inspect the failed payment and its recorded gateway reason. A failed checkout is not a confirmed payment.' : 'Check the payment, delivery, and refund record separately. An internal review never confirms money received or refunded.'),
+            $waitingForBilling ? 'Billing Officer' : (($next['status']['label'] ?? null) === 'Pending' ? 'Payment gateway / payer' : 'Finance Officer'), $next['action'],
+            state: $waitingForBilling || ($next['status']['label'] ?? null) === 'Pending' ? 'waiting' : 'actionable',
+        ) : AdminWorkPriority::make('No payment exceptions', 'Confirmed payments and receipts remain available below.', 'Finance Officer', state: 'clear')];
     }
 
     /** @return array<string, mixed> */
@@ -72,7 +82,7 @@ final class FinanceOfficerDashboardQuery
             'subtitle' => $payment['provider'],
             'image_url' => $payment['provider_logo_url'],
             'image_fit' => 'contain',
-            'status' => ['label' => ucfirst($payment['status']), 'tone' => 'attention'],
+            'status' => ['label' => $payment['exception_label'] ?? ucfirst($payment['status']), 'tone' => 'attention'],
             'hint' => $this->money($payment['amount'], $payment['currency']),
             'action' => ['label' => 'Open exceptions', 'url' => '/admin/workspaces/finance/exceptions?search='.urlencode($payment['reference_number'])],
         ];

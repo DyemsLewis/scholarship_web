@@ -8,10 +8,11 @@ const providerProgramQueuePath = new RegExp('^/provider/workspaces/(?:'+[
     'releases/(?:issues|record|upcoming|history|schedule)',
 ].join('|')+')$');
 const returnPaths = {
+    adminRecords: /^\/admin\/workspaces\/records\/activity$/,
     accounts: /^\/admin\/workspaces\/accounts\/(directory|attention)$/,
     adminReviews: /^\/admin\/workspaces\/reviews\/(applicants|benefits|monitoring|programs|providers|selection-activities)$/,
     adminSupport: /^\/admin\/workspaces\/support\/(needs-response|waiting|resolved)$/,
-    adminBilling: /^\/admin\/workspaces\/billing\/queues\/(ready|active|waiting|completed)$/,
+    adminBilling: /^\/admin\/workspaces\/billing\/queues\/(ready|active|waiting|completed|finance)$/,
     programs: /^\/provider\/programs(?:\/(drafts|review|published|closed))?$/,
     programWorkspaces: providerProgramQueuePath,
     selection: /^\/provider\/workspaces\/selection\/(active|history|results|setup|unassigned)$/,

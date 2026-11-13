@@ -37,7 +37,7 @@ class ApplicantProfileEvidenceTest extends TestCase
         $applicant->studentProfile()->update(['verification_status' => 'pending']);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'approved'])
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id), 'verification_status' => 'approved'])
             ->assertUnprocessable()
             ->assertJsonPath('missing_evidence.0', $type);
 
@@ -101,7 +101,7 @@ class ApplicantProfileEvidenceTest extends TestCase
         $this->acceptProfileEvidence($applicant, $admin);
 
         $this->actingAs($admin)
-            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'approved'])
+            ->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id), 'verification_status' => 'approved'])
             ->assertOk()
             ->assertJsonPath('user.is_profile_verified', true);
     }

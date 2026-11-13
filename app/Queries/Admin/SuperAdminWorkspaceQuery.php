@@ -6,6 +6,8 @@ use App\Domain\Admin\Workspace\AdminRoleCatalog;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Support\AdminStaffAvailability;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -37,10 +39,13 @@ final class SuperAdminWorkspaceQuery
             'summary' => [
                 'managed_admins' => $staff->count(),
                 'active_admins' => $staff->where('account_status', '!=', 'suspended')->count(),
+                'available_admins' => $staff->filter(fn (User $user) => AdminStaffAvailability::state($user) === 'Ready')->count(),
                 'covered_roles' => $coverage->where('covered', true)->count(),
                 'total_roles' => $coverage->count(),
                 'platform_users' => $platform['users'],
                 'operational_attention' => $operations['summary']['total_attention'],
+                'waiting_total' => $operations['summary']['waiting_total'],
+                'workload_note' => $operations['summary']['workload_note'],
             ],
             'role_coverage' => $coverage,
             'operational_areas' => $areas,
@@ -50,7 +55,7 @@ final class SuperAdminWorkspaceQuery
         ];
     }
 
-    public function team(): array
+    public function team(?string $role = null): array
     {
         $staff = $this->adminStaff();
         $coverage = $this->roleCoverage($staff);
@@ -63,7 +68,8 @@ final class SuperAdminWorkspaceQuery
                 'unassigned' => $staff->filter(fn (User $user): bool => AdminRoleCatalog::keyFor($user) === null)->count(),
             ],
             'coverage' => $coverage,
-            'members' => $staff->map(fn (User $user): array => [
+            'selected_role' => $role,
+            'members' => $staff->filter(fn (User $user) => ! $role || AdminRoleCatalog::keyFor($user) === $role)->map(fn (User $user): array => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
@@ -72,6 +78,7 @@ final class SuperAdminWorkspaceQuery
                 'permission_count' => count($user->effectivePortalPermissions()),
                 'status' => $user->account_status ?: 'active',
                 'email_verified' => $user->hasVerifiedEmail(),
+                'access_state' => AdminStaffAvailability::state($user),
                 'updated_at' => $user->updated_at?->format('M d, Y'),
                 'edit_url' => route('admin.accounts.edit', $user, false),
             ])->values(),
@@ -114,13 +121,17 @@ final class SuperAdminWorkspaceQuery
             ->map(function (array $definition, string $key) use ($staff): array {
                 $members = $staff->filter(fn (User $user): bool => AdminRoleCatalog::keyFor($user) === $key);
                 $active = $members->where('account_status', '!=', 'suspended')->count();
+                $available = $members->filter(fn (User $user) => AdminStaffAvailability::state($user) === 'Ready')->count();
 
                 return [
                     'key' => $key,
                     'title' => $definition['title'],
                     'total' => $members->count(),
                     'active' => $active,
-                    'covered' => $active > 0,
+                    'available' => $available,
+                    'blocked' => $members->count() - $available,
+                    'covered' => $available > 0,
+                    'team_url' => route('admin.governance.team', ['role' => $key], false),
                 ];
             })
             ->values();
@@ -131,11 +142,13 @@ final class SuperAdminWorkspaceQuery
         return $priorities->map(function (array $priority) use ($coverage): array {
             $ownerKey = self::AREA_OWNERS[$priority['key']] ?? null;
             $ownerCoverage = $coverage->firstWhere('key', $ownerKey);
+            unset($priority['url']);
 
             return [
                 ...$priority,
                 'covered' => (bool) ($ownerCoverage['covered'] ?? false),
-                'active_owners' => (int) ($ownerCoverage['active'] ?? 0),
+                'active_owners' => (int) ($ownerCoverage['available'] ?? 0),
+                'owner_url' => route('admin.governance.team', ['role' => $ownerKey], false),
             ];
         })->values();
     }
@@ -148,12 +161,13 @@ final class SuperAdminWorkspaceQuery
             'programs' => Scholarship::query()->count(),
             'published_programs' => Scholarship::query()->where('status', 'published')->count(),
             'applications' => ScholarshipApplication::query()->count(),
-            'active_recipients' => ScholarshipApplication::query()->whereIn('status', [
-                'awarded',
-                'distribution_scheduled',
-                'disbursed',
-                'renewed',
-            ])->count(),
+            'active_recipients' => ScholarshipApplication::query()
+                ->where('student_response_status', 'accepted')
+                ->where('status', '!=', 'benefits_terminated')
+                ->where(fn (Builder $query) => $query->where('final_outcome', 'selected')
+                    ->orWhereIn('status', ['awarded', 'distribution_scheduled', 'disbursed', 'renewed']))
+                ->whereDoesntHave('supportDecisions', fn (Builder $query) => $query->whereIn('decision', ['completed', 'terminated']))
+                ->count(),
         ];
     }
 }

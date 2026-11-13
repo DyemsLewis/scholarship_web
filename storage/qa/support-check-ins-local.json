@@ -1,0 +1,13 @@
+{
+  "roles": [
+    "learner.release.confirm"
+  ],
+  "errors": [],
+  "serverErrors": [],
+  "blockedWrites": [],
+  "screenshots": [
+    "storage\\qa\\applicant-support-part-3-check-in.png"
+  ],
+  "verified_application_ids": [],
+  "passed": true
+}

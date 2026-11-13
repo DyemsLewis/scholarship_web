@@ -138,7 +138,7 @@ class ApplicantCompletedQualificationTest extends TestCase
         $academic = $applicant->applicantVerificationDocuments()->where('document_type', 'academic_record')->firstOrFail();
         $academicBefore = $academic->fresh()->getRawOriginal();
 
-        $this->actingAs($admin)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['verification_status' => 'approved'])
+        $this->actingAs($admin)->patchJson("/admin/users/{$applicant->id}/profile-verification", ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::applicant($applicant->id), 'verification_status' => 'approved'])
             ->assertUnprocessable()->assertJsonPath('missing_evidence.0', 'qualification_record');
 
         $upload = $this->actingAs($applicant->fresh())->postJson('/dashboard/profile/verification-documents', [

@@ -16,7 +16,7 @@ class BillingQueueRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'queue' => ['nullable', Rule::in(['ready', 'active', 'waiting', 'completed'])],
+            'queue' => ['nullable', Rule::in(['ready', 'active', 'waiting', 'completed', 'finance'])],
             'search' => ['nullable', 'string', 'max:120'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:25'],

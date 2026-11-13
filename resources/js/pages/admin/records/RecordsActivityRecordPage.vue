@@ -4,8 +4,10 @@ import { useAdminResource } from '../../../composables/useAdminResource.js';
 import AdminLoadState from '../components/AdminLoadState.vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
+import { staffQueueReturn } from '../../../support/staffQueueState.js';
 
 const entryId = document.getElementById('app')?.dataset.entryId;
+const backUrl = staffQueueReturn(window, 'adminRecords', '/admin/workspaces/records/activity');
 const resource = useAdminResource(async ({ signal }) => {
     const response = await window.axios.get(`/admin/workspaces/records/activity/${entryId}/data`, { signal });
     if (!response.data.entry) throw new Error('Missing record');
@@ -26,7 +28,7 @@ onMounted(loadRecord);
 
 <template>
     <AdminWorkspacePage workspace="records_officer" class="admin-records-workspace">
-        <a href="/admin/workspaces/records/activity" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to activity records</a>
+        <a :href="backUrl" class="mb-4 inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to activity records</a>
 
         <AdminWorkspaceHeader
             eyebrow="Audit entry"
@@ -46,6 +48,8 @@ onMounted(loadRecord);
                 <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Source IP</dt><dd class="mt-1 font-mono text-xs font-bold text-slate-900">{{ entry.ip_address || 'Not recorded' }}</dd></div>
                 <div class="px-5 py-4"><dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Recorded</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ entry.created_at }}</dd></div>
             </dl>
+
+            <div class="border-b border-slate-200 px-6 py-4"><p class="text-sm text-slate-600">This is a recorded event, not the current decision. Later entries may supersede it.</p><div v-if="entry.related_trails?.length" class="mt-3 flex flex-wrap gap-2"><a v-for="trail in entry.related_trails" :key="trail.url" :href="trail.url" class="inline-flex h-10 items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>{{ trail.label }}</a></div></div>
 
             <section class="border-b border-slate-200 px-6 py-5">
                 <h3 class="text-sm font-black text-slate-950">Recorded details</h3>

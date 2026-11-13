@@ -30,20 +30,23 @@ const accountDescription = computed(() => previewLabel(payload.value.users?.leng
 const supportDescription = computed(() => previewLabel(payload.value.cases?.items?.length, payload.value.cases?.pagination?.total, 'cases') + ' Oldest first.');
 const financeDescription = computed(() => previewLabel(payload.value.payments?.items?.length, payload.value.payments?.pagination?.total, 'confirmed payments this month'));
 const activityDescription = computed(() => previewLabel(payload.value.activity?.items?.length, payload.value.activity?.pagination?.total, 'events from the last 30 days'));
-const serviceDescription = computed(() => 'Up to 5 requests per delivery queue. ' + previewLabel(serviceItems.value.length, ['ready', 'active', 'waiting'].reduce((total, key) => total + Number(payload.value.summary?.[key] ?? 0), 0), 'open requests'));
+const serviceDescription = computed(() => 'Up to 5 examples per work queue. ' + previewLabel(serviceItems.value.length, payload.value.summary?.actionable !== undefined
+    ? Number(payload.value.summary.actionable) + Number(payload.value.summary.waiting_on_provider)
+    : ['ready', 'active', 'waiting'].reduce((total, key) => total + Number(payload.value.summary?.[key] ?? 0), 0), 'requests and follow-ups'));
 
 function previewLabel(shown = 0, total = 0, label) {
     return `Showing ${Number(shown)} of ${Number(total)} ${label}.`;
 }
 
-const serviceItems = computed(() => ['ready', 'active', 'waiting'].flatMap((key) => payload.value.queues?.[key]?.items ?? []));
+const serviceItems = computed(() => [...new Map((payload.value.queues?.actionable ? ['actionable', 'provider_waiting'] : ['ready', 'active', 'waiting'])
+    .flatMap((key) => payload.value.queues?.[key]?.items ?? []).map((item) => [item.id, item])).values()]);
 const reviewItems = computed(() => payload.value.groups ?? []);
 const metrics = computed(() => {
     const values = payload.value;
 
     if (area === 'accounts') return [
         metric('total', 'All accounts', values.summary?.total, 'Registered users', 'fa-solid fa-users'),
-        metric('attention', 'Needs attention', values.summary?.attention_total, 'Access exceptions', 'fa-solid fa-triangle-exclamation', 'attention'),
+        metric('attention', 'Team action', values.summary?.actionable, 'Restrictions or Support referrals', 'fa-solid fa-triangle-exclamation', 'attention'),
         metric('unverified', 'Unverified', values.summary?.unverified, 'Email pending', 'fa-solid fa-envelope-circle-check'),
         metric('suspended', 'Suspended', values.summary?.suspended, 'Access blocked', 'fa-solid fa-user-lock'),
     ];
@@ -55,21 +58,21 @@ const metrics = computed(() => {
     ];
     if (area === 'support') return [
         metric('response', 'Needs response', values.summary?.needs_response, 'Open cases', 'fa-solid fa-reply', 'attention'),
-        metric('waiting', 'Waiting', values.summary?.waiting, 'External follow-up', 'fa-solid fa-hourglass-half'),
+        metric('waiting', 'Waiting', values.summary?.waiting, 'Account Manager or provider', 'fa-solid fa-hourglass-half'),
         metric('resolved', 'Resolved', values.summary?.resolved, 'Completed cases', 'fa-solid fa-circle-check'),
         metric('privacy', 'Privacy', values.summary?.privacy_open, 'Open requests', 'fa-solid fa-user-shield'),
     ];
     if (area === 'services') return [
-        metric('ready', 'Ready', values.summary?.ready, 'Awaiting assignment', 'fa-solid fa-inbox', 'attention'),
+        metric('ready', 'Team action', values.summary?.actionable, 'Delivery and Finance follow-up', 'fa-solid fa-inbox', 'attention'),
         metric('active', 'In progress', values.summary?.active, 'Being delivered', 'fa-solid fa-gears'),
-        metric('waiting', 'Waiting', values.summary?.waiting, 'Provider response', 'fa-solid fa-clock'),
+        metric('waiting', 'Waiting', values.summary?.waiting_on_provider, 'Provider response only', 'fa-solid fa-clock'),
         metric('meetings', 'Meetings', values.summary?.meeting_requests, 'Requested', 'fa-solid fa-video'),
     ];
     if (area === 'finance') return [
-        metric('today', 'Revenue today', money(values.summary?.today, values.summary?.currency), 'Confirmed', 'fa-solid fa-peso-sign'),
-        metric('month', 'This month', money(values.summary?.month, values.summary?.currency), 'Confirmed', 'fa-solid fa-chart-column'),
+        metric('today', 'Payments today', money(values.summary?.today, values.summary?.currency), 'Gross confirmed receipts', 'fa-solid fa-peso-sign'),
+        metric('month', 'This month', money(values.summary?.month, values.summary?.currency), 'Gross confirmed receipts', 'fa-solid fa-chart-column'),
         metric('payments', 'Payments', values.summary?.successful_payments, 'Successful', 'fa-solid fa-receipt'),
-        metric('exceptions', 'Exceptions', values.summary?.exceptions, 'Need review', 'fa-solid fa-triangle-exclamation', 'attention'),
+        metric('exceptions', 'Follow-up records', values.summary?.exceptions, `${values.summary?.needs_review ?? 0} need Finance action`, 'fa-solid fa-triangle-exclamation', 'attention'),
     ];
 
     return [
@@ -138,18 +141,27 @@ onMounted(loadArea);
                 <thead><tr><th class="px-5">Concern</th><th>Reporter</th><th>Category</th><th class="px-5">Submitted</th></tr></thead>
                 <tbody><tr v-for="item in payload.cases.items" :key="item.id"><td class="px-5"><p class="break-words font-bold text-slate-950">{{ item.subject }}</p><p v-if="item.program?.title" class="mt-1 break-words text-xs text-slate-500">{{ item.program.title }}</p></td><td><div class="flex items-center gap-3"><StaffTableIdentity :kind="item.reporter.image_fit === 'contain' ? 'provider' : 'applicant'" :src="item.reporter.image_url" class="h-10 w-10" /><span><strong class="block text-sm text-slate-800">{{ item.reporter.name }}</strong><span class="text-xs text-slate-500">{{ labelFromKey(item.reporter.type) }}</span></span></div></td><td class="text-sm font-semibold text-slate-700">{{ item.category_label }}</td><td class="px-5 text-sm text-slate-500">{{ item.submitted_at }}</td></tr></tbody>
             </table>
-            <AdminEmptyState v-else title="No cases need a response" description="The support queue is clear." icon="fa-solid fa-comments" />
+            <AdminEmptyState v-else title="No cases need a response" :description="payload.summary?.waiting ? 'No platform response is pending. Other-team follow-up is shown below.' : 'No platform response or other-team follow-up is pending.'" icon="fa-solid fa-comments" />
         </AdminTableFrame>
 
-        <AdminTableFrame v-else-if="area === 'services'" title="Open delivery workload" :description="serviceDescription" icon="fa-solid fa-file-invoice-dollar" class="mt-4">
+        <AdminTableFrame v-if="area === 'support' && payload.waiting?.items?.length" title="Waiting on another team" :description="previewLabel(payload.waiting.items.length, payload.waiting.pagination.total, 'waiting cases')" icon="fa-solid fa-clock" class="mt-4">
+            <table class="portal-data-table portal-oversight-table"><colgroup><col style="width: 38%"><col style="width: 22%"><col style="width: 22%"><col style="width: 18%"></colgroup><thead><tr><th class="px-5">Concern</th><th>Next owner</th><th>State</th><th class="px-5">Submitted</th></tr></thead><tbody><tr v-for="item in payload.waiting.items" :key="item.id"><td class="px-5 font-bold text-slate-950">{{ item.subject }}</td><td class="text-sm font-semibold text-slate-700">{{ item.responsible_role }}</td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ item.state_label }}</span></td><td class="px-5 text-sm text-slate-500">{{ item.submitted_at }}</td></tr></tbody></table>
+        </AdminTableFrame>
+
+        <AdminTableFrame v-if="area === 'services'" title="Delivery and Finance follow-up" :description="serviceDescription" icon="fa-solid fa-file-invoice-dollar" class="mt-4">
             <table v-if="serviceItems.length" class="portal-data-table portal-oversight-table"><colgroup><col style="width: 29%"><col style="width: 21%"><col style="width: 19%"><col style="width: 16%"><col style="width: 15%"></colgroup>
                 <thead><tr><th class="px-5">Provider</th><th>Service</th><th>State</th><th>Assigned to</th><th class="px-5">Target</th></tr></thead>
-                <tbody><tr v-for="item in serviceItems" :key="item.id"><td class="px-5"><div class="flex items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span><strong class="block text-sm text-slate-900">{{ item.provider }}</strong><span class="text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td><td class="text-sm font-semibold text-slate-700">{{ item.plan_name }}</td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ item.state_label }}</span></td><td class="text-sm text-slate-600">{{ item.assigned_to || 'Unassigned' }}</td><td class="px-5 text-sm text-slate-500">{{ item.target_due_at || 'Not set' }}</td></tr></tbody>
+                <tbody><tr v-for="item in serviceItems" :key="item.id"><td class="px-5"><div class="flex items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span><strong class="block text-sm text-slate-900">{{ item.provider }}</strong><span class="text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td><td class="text-sm font-semibold text-slate-700">{{ item.plan_name }}</td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ item.finance_follow_up ? 'Finance follow-up' : item.state_label }}</span></td><td class="text-sm text-slate-600">{{ item.assigned_to || 'Unassigned' }}</td><td class="px-5 text-sm text-slate-500">{{ item.target_due_at || 'Not set' }}</td></tr></tbody>
             </table>
             <AdminEmptyState v-else title="No open service requests" description="All paid requests have reached closeout." icon="fa-solid fa-circle-check" />
         </AdminTableFrame>
 
-        <AdminTableFrame v-else-if="area === 'finance'" title="Confirmed this month" :description="financeDescription" icon="fa-solid fa-receipt" class="mt-4">
+        <template v-else-if="area === 'finance'">
+        <AdminTableFrame title="Payment and refund follow-up" :description="previewLabel(payload.exceptions?.items?.length, payload.exceptions?.pagination?.total, 'follow-up records')" icon="fa-solid fa-clipboard-check" class="mt-4">
+            <table v-if="payload.exceptions?.items?.length" class="portal-data-table portal-oversight-table"><colgroup><col style="width: 23%"><col style="width: 31%"><col style="width: 28%"><col style="width: 18%"></colgroup><thead><tr><th class="px-5">Reference</th><th>Provider</th><th>State</th><th class="px-5">Amount</th></tr></thead><tbody><tr v-for="item in payload.exceptions.items" :key="item.id"><td class="px-5 break-words font-mono text-xs font-bold text-slate-900">{{ item.reference_number }}</td><td class="font-semibold text-slate-800">{{ item.provider }}</td><td><span class="inline-flex bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{{ item.exception_label || labelFromKey(item.status) }}</span></td><td class="px-5 font-bold text-slate-900">{{ money(item.amount, item.currency) }}</td></tr></tbody></table>
+            <AdminEmptyState v-else title="No payment follow-up" description="No payment, refund, or internal Billing question is awaiting follow-up." icon="fa-solid fa-clipboard-check" />
+        </AdminTableFrame>
+        <AdminTableFrame title="Confirmed this month" :description="financeDescription" icon="fa-solid fa-receipt" class="mt-4">
             <table v-if="payload.payments?.items?.length" class="portal-data-table portal-oversight-table"><colgroup><col style="width: 20%"><col style="width: 31%"><col style="width: 20%"><col style="width: 13%"><col style="width: 16%"></colgroup>
                 <thead><tr><th class="px-5">Receipt</th><th>Provider</th><th>Service</th><th>Amount</th><th class="px-5">Paid</th></tr></thead>
                 <tbody><tr v-for="item in payload.payments.items" :key="item.id"><td class="px-5 font-mono text-xs font-bold text-slate-900">{{ item.receipt_number }}</td><td><div class="flex items-center gap-3"><StaffTableIdentity kind="provider" :src="item.provider_logo_url" class="h-10 w-10" /><span><strong class="block text-sm text-slate-900">{{ item.provider }}</strong><span class="text-xs text-slate-500">{{ item.provider_email }}</span></span></div></td><td class="text-sm font-semibold text-slate-700">{{ item.service }}</td><td class="font-bold text-slate-950">{{ money(item.amount, item.currency) }}</td><td class="px-5 text-sm text-slate-500">{{ item.paid_at }}</td></tr></tbody>
@@ -157,6 +169,7 @@ onMounted(loadArea);
             <AdminEmptyState v-else title="No confirmed payments" description="No successful payments were recorded this month." icon="fa-solid fa-receipt" />
             <template v-if="payload.summary?.exceptions" #footer><span class="inline-flex items-center gap-2 text-sm font-bold text-amber-800"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>{{ payload.summary.exceptions }} payment {{ payload.summary.exceptions === 1 ? 'exception needs' : 'exceptions need' }} specialist review</span></template>
         </AdminTableFrame>
+        </template>
 
         <template v-else-if="area === 'records'">
             <AdminTableFrame title="Recent activity" :description="activityDescription" icon="fa-solid fa-clock-rotate-left" class="mt-4">

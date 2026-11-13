@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { createStaffQueueState } from '../../resources/js/support/staffQueueState.js';
+import { createStaffQueueState, staffQueueLink, staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, ref, watch } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -24,7 +24,7 @@ function harness(name, exposed) {
     class BrowserURL extends URL { static createObjectURL() { return 'blob:demo'; } static revokeObjectURL(url) { revoked.push(url); } }
     const document = { getElementById: () => ({ dataset: { purchaseId: '2', entryId: '1' } }), body: { appendChild() {} }, createElement: () => ({ click() { clicks.push(this.download); }, remove() {} }) };
     const source = parse(read(name)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
-    const deps = { createStaffQueueState, computed, ref, watch, useAdminResource, normalizeWorkspaceDashboard, window, document, URL: BrowserURL, URLSearchParams, Blob, AbortController,
+    const deps = { createStaffQueueState, staffQueueLink, staffQueueReturn, computed, ref, watch, useAdminResource, normalizeWorkspaceDashboard, window, document, URL: BrowserURL, URLSearchParams, Blob, AbortController,
         onMounted: (fn) => mounted.push(fn), onBeforeUnmount: (fn) => cleanup.push(fn) };
     return { ...new Function(...Object.keys(deps), `${source}\nreturn { ${exposed} };`)(...Object.values(deps)), window, gets, mounted, cleanup, clicks, revoked, prints: () => prints };
 }

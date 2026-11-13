@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class RecipientSupportDecision extends Model
 {
@@ -41,6 +42,7 @@ class RecipientSupportDecision extends Model
         'resolved_by',
         'resolved_at',
         'agreement_case_review_id',
+        'closeout_snapshot',
     ];
 
     protected function casts(): array
@@ -53,6 +55,7 @@ class RecipientSupportDecision extends Model
             'decided_at' => 'datetime',
             'applicant_responded_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'closeout_snapshot' => 'array',
         ];
     }
 
@@ -79,5 +82,22 @@ class RecipientSupportDecision extends Model
     public function agreementReview(): BelongsTo
     {
         return $this->belongsTo(RecipientCaseReview::class, 'agreement_case_review_id');
+    }
+
+    public function approvedWithdrawal(): HasOne
+    {
+        return $this->hasOne(RecipientWithdrawalRequest::class, 'support_decision_id')->where('status', 'approved');
+    }
+
+    public function isApprovedWithdrawal(): bool
+    {
+        if ($this->decision !== 'terminated' || $this->reason_category !== 'recipient_withdrew') {
+            return false;
+        }
+
+        $withdrawal = $this->approvedWithdrawal;
+
+        return $withdrawal && $withdrawal->scholarship_application_id === $this->scholarship_application_id
+            && $withdrawal->applicant_id === $this->applicant_id;
     }
 }

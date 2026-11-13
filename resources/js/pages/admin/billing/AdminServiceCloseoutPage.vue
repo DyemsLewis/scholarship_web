@@ -4,6 +4,7 @@ import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { computed, reactive, ref } from 'vue';
 import { formatAdminServiceDateTime, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
+import BillingFinanceFollowUp from '../../../components/admin/BillingFinanceFollowUp.vue';
 
 const { purchaseId, purchase, isLoading, loadError, loadRecord, isSaving, errorMessage, successMessage, queueUrl, runAction } = useAdminServiceWorkspace('closeout');
 const decision = reactive({ decision_note: '', refund_status: 'not_applicable', refund_reference: '' });
@@ -52,6 +53,7 @@ function serviceRecordLink(href) {
 
 <template>
     <AdminServiceWorkspaceShell :purchase="purchase" active-section="closeout" :loading="isLoading" :load-error="loadError" @retry="loadRecord" :error-message="errorMessage" :success-message="successMessage" :queue-url="queueUrl">
+        <BillingFinanceFollowUp :purchase-id="purchaseId" :coordination="purchase?.finance_coordination" :disabled="isSaving" @updated="purchase.finance_coordination = $event" />
         <section class="admin-panel mt-4 overflow-hidden">
             <header class="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i></span><div><h2 class="text-lg font-black text-slate-950">Closeout</h2><p class="mt-0.5 text-sm text-slate-500">Review provider acceptance, revisions, and cancellation.</p></div></div><a :href="serviceRecordLink(`/admin/workspaces/billing/requests/${purchaseId}/history`)" class="inline-flex h-10 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:border-slate-950">View audit history <i class="fa-solid fa-arrow-right text-[9px]" aria-hidden="true"></i></a></header>
 

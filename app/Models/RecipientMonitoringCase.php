@@ -28,6 +28,10 @@ class RecipientMonitoringCase extends Model
         'closed_at',
         'reopened_by',
         'reopened_at',
+        'appointment_at',
+        'appointment_location',
+        'address_details',
+        'attendance_status',
     ];
 
     protected function casts(): array
@@ -40,6 +44,8 @@ class RecipientMonitoringCase extends Model
             'ready_to_close_at' => 'datetime',
             'closed_at' => 'datetime',
             'reopened_at' => 'datetime',
+            'appointment_at' => 'datetime',
+            'address_details' => 'array',
         ];
     }
 

@@ -849,6 +849,9 @@ class ApplicantScholarshipDetailService
         $expectedResults = $scholarship->expected_results_at?->format('M d, Y');
 
         return [
+            'formal_application' => in_array('formal_application', $stages, true)
+                ? $this->formalApplicationSchedule($scholarship, (int) $publishedSessionCounts->get('formal_application', 0))
+                : null,
             'stages' => collect($stages)
                 ->map(function (string $stage, int $index) use ($eventsByType, $publishedSessionCounts, $expectedResults): array {
                     $event = $eventsByType->get($stage);
@@ -924,6 +927,33 @@ class ApplicantScholarshipDetailService
                 ->all(),
             'intro' => 'You move forward one step at a time. The provider will notify you before any activity that needs a schedule.',
             'schedule_note' => 'Published dates describe the program schedule, not your assigned appointment. If you advance, check your application record for your confirmed session and instructions.',
+        ];
+    }
+
+    private function formalApplicationSchedule(Scholarship $scholarship, int $sessionCount): array
+    {
+        $mode = $scholarship->handoff_mode;
+        $hasVenue = in_array($mode, ['onsite', 'hybrid'], true);
+        $url = trim((string) $scholarship->handoff_url);
+        $url = filter_var($url, FILTER_VALIDATE_URL) && in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['https', 'http'], true) ? $url : null;
+
+        // Publish program instructions, not an applicant's private assigned-session details.
+        return [
+            'mode' => $mode,
+            'mode_label' => match ($mode) {
+                'online' => 'Online', 'onsite' => 'In person', 'hybrid' => 'Online and in person',
+                'provider_contact' => 'Contact the provider', default => 'Provider instructions',
+            },
+            'deadline_label' => $scholarship->handoff_deadline?->format('M d, Y'),
+            'instructions' => $scholarship->handoff_instructions,
+            'url' => $url,
+            'requirements' => $this->eligibilityService->splitDocumentRequirements($scholarship->post_qualification_requirements),
+            'location' => $hasVenue ? [
+                'name' => $scholarship->handoff_location_name, 'address' => $scholarship->handoff_location_address,
+                'latitude' => $scholarship->handoff_latitude, 'longitude' => $scholarship->handoff_longitude,
+            ] : null,
+            'session_count' => $sessionCount,
+            'is_assigned_appointment' => false,
         ];
     }
 

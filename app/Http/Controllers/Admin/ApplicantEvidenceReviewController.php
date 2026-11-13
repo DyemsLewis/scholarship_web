@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ApplicantEvidenceReview;
 use App\Models\ApplicantVerificationDocument;
 use App\Models\User;
+use App\Services\AdminReviewWorkflowService;
 use App\Services\ApplicantEvidenceReviewService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ class ApplicantEvidenceReviewController extends Controller
                 'status' => $document->status, 'review_notes' => $document->review_notes, ...$document->reviewPayload()],
             'evidence_review' => $reviews->summary($applicant),
             'user' => $applicant->publicPayload(),
+            'review_workflow' => app(AdminReviewWorkflowService::class)->context('applicant', $applicant),
         ]);
     }
 

@@ -10,11 +10,7 @@ class BillingWorkQueue
 {
     public function summary(): array
     {
-        $next = $this->forQueue('ready')
-            ->with(['provider.providerProfile', 'assignee.adminProfile'])
-            ->orderByRaw('CASE WHEN action_due_at IS NOT NULL AND action_due_at < ? THEN 0 ELSE 1 END', [now()])
-            ->orderBy('action_due_at')
-            ->oldest('paid_at')
+        $next = $this->prioritize($this->filteredQuery('actionable', ''))
             ->first();
 
         return [
@@ -22,6 +18,10 @@ class BillingWorkQueue
             'active' => $this->forQueue('active')->count(),
             'waiting' => $this->forQueue('waiting')->count(),
             'completed' => $this->forQueue('completed')->count(),
+            'finance' => $this->forQueue('finance')->count(),
+            'actionable' => $this->forQueue('actionable')->count(),
+            'waiting_on_provider' => $this->forQueue('waiting')
+                ->whereNotIn('id', $this->forQueue('actionable')->select('id'))->count(),
             'meeting_requests' => ProviderServicePurchase::query()
                 ->where('status', 'paid')
                 ->where('meeting_status', 'requested')
@@ -35,12 +35,7 @@ class BillingWorkQueue
         $queue = $filters['queue'] ?? 'ready';
         $query = $this->filteredQuery($queue, trim((string) ($filters['search'] ?? '')));
 
-        $paginator = $query
-            ->orderByRaw('CASE WHEN action_due_at IS NOT NULL AND action_due_at < ? THEN 0 ELSE 1 END', [now()])
-            ->orderByRaw("CASE WHEN meeting_status = 'requested' THEN 0 ELSE 1 END")
-            ->orderBy('action_due_at')
-            ->orderBy($queue === 'completed' ? 'fulfilled_at' : 'paid_at', $queue === 'completed' ? 'desc' : 'asc')
-            ->latest('id')
+        $paginator = ($queue === 'completed' ? $query->latest('fulfilled_at')->latest('id') : $this->prioritize($query))
             ->paginate((int) ($filters['per_page'] ?? 10))
             ->withQueryString();
 
@@ -65,6 +60,7 @@ class BillingWorkQueue
     {
         return $this->forQueue($queue)
             ->with(['provider.providerProfile', 'assignee.adminProfile'])
+            ->withExists(['financeReviews as finance_follow_up' => fn (Builder $query) => $query->where('state', 'with_billing')])
             ->when($search !== '', function (Builder $query) use ($search): void {
                 $query->where(function (Builder $builder) use ($search): void {
                     $builder->where('reference_number', 'like', "%{$search}%")
@@ -83,6 +79,20 @@ class BillingWorkQueue
         $query = ProviderServicePurchase::query()->where('status', 'paid');
 
         return match ($queue) {
+            'finance' => $query->whereHas('financeReviews', fn (Builder $review) => $review->where('state', 'with_billing')),
+            'provider_waiting' => $query->whereIn('fulfillment_status', ['needs_information', 'provider_review'])
+                ->whereNotIn('id', $this->forQueue('actionable')->select('id')),
+            'actionable' => $query->where(function (Builder $work): void {
+                $work->whereHas('financeReviews', fn (Builder $review) => $review->where('state', 'with_billing'))
+                    ->orWhere(fn (Builder $delivery) => $delivery->whereNotIn('fulfillment_status', ['completed', 'cancelled'])
+                        ->where(function (Builder $work): void {
+                            $work->where('meeting_status', 'requested')
+                                ->orWhere('cancellation_status', 'requested')
+                                ->orWhere('current_action_owner', 'platform')
+                                ->orWhere(fn (Builder $legacy) => $legacy->whereNull('current_action_owner')
+                                    ->whereIn('fulfillment_status', ['queued', 'ready', 'in_progress']));
+                        }));
+            }),
             'active' => $query->where('fulfillment_status', 'in_progress'),
             'waiting' => $query->whereIn('fulfillment_status', ['needs_information', 'provider_review']),
             'completed' => $query->whereIn('fulfillment_status', ['completed', 'cancelled']),
@@ -92,6 +102,7 @@ class BillingWorkQueue
 
     private function item(ProviderServicePurchase $purchase): array
     {
+        $financeFollowUp = (bool) $purchase->finance_follow_up;
         $state = match ($purchase->fulfillment_status) {
             'in_progress' => 'active',
             'needs_information', 'provider_review' => 'waiting',
@@ -119,6 +130,9 @@ class BillingWorkQueue
                 default => 'Ready to start',
             },
             'priority' => $purchase->priority ?? 'normal',
+            'next_action_owner' => $purchase->current_action_owner,
+            'finance_follow_up' => $financeFollowUp,
+            'cancellation_requested' => $purchase->cancellation_status === 'requested',
             'assigned_to' => $purchase->assignee?->name,
             'target_due_at' => $purchase->target_due_at?->format('M d, Y'),
             'action_due_label' => $this->actionDueLabel($purchase),
@@ -134,6 +148,17 @@ class BillingWorkQueue
             ],
             'action_url' => route('admin.workspaces.billing.requests.show', $purchase, false),
         ];
+    }
+
+    private function prioritize(Builder $query): Builder
+    {
+        // Do not let a request without a deadline outrank overdue active work.
+        return $query->orderByDesc('finance_follow_up')
+            ->orderByRaw('CASE WHEN action_due_at IS NOT NULL AND action_due_at < ? THEN 0 ELSE 1 END', [today()])
+            ->orderByRaw("CASE WHEN cancellation_status = 'requested' THEN 0 WHEN meeting_status = 'requested' THEN 1 ELSE 2 END")
+            ->orderByRaw("CASE WHEN priority = 'urgent' THEN 0 WHEN priority = 'high' THEN 1 ELSE 2 END")
+            ->orderByRaw('CASE WHEN action_due_at IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('action_due_at')->oldest('paid_at')->orderBy('id');
     }
 
     private function actionDueLabel(ProviderServicePurchase $purchase): ?string

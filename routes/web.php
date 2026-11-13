@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AccountManagerWorkspaceController;
+use App\Http\Controllers\Admin\SupportAccountHandoffController;
+use App\Http\Controllers\Admin\ServiceFinanceCoordinationController;
 use App\Http\Controllers\Admin\ApplicantEvidenceReviewController;
 use App\Http\Controllers\Admin\ProviderDocumentReviewController;
 use App\Http\Controllers\Admin\BillingOfficerWorkspaceController;
@@ -10,6 +12,7 @@ use App\Http\Controllers\Admin\ReviewOfficerWorkspaceController;
 use App\Http\Controllers\Admin\SuperAdminWorkspaceController;
 use App\Http\Controllers\Admin\SupportOfficerWorkspaceController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\ApplicantBenefitPayoutController;
 use App\Http\Controllers\ApplicantDashboardController;
 use App\Http\Controllers\ApplicationDocumentController;
 use App\Http\Controllers\AuthController;
@@ -18,8 +21,10 @@ use App\Http\Controllers\BillingController;
 use App\Http\Controllers\FinanceController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\RecipientBenefitFollowUpController;
 use App\Http\Controllers\PortalManagerController;
 use App\Http\Controllers\Provider\ApplicationStageOperationController;
+use App\Http\Controllers\Provider\BenefitPayoutReviewController;
 use App\Http\Controllers\Provider\Programs\ProgramCoordinatorDashboardController;
 use App\Http\Controllers\Provider\Programs\ProgramDirectoryController;
 use App\Http\Controllers\Provider\Programs\ProgramRecordController;
@@ -66,6 +71,7 @@ Route::get('/dashboard/scholarships/{scholarship}/{section}', [ApplicantDashboar
 Route::get('/dashboard/applications', [ApplicantDashboardController::class, 'applications'])->middleware('auth')->name('dashboard.applications');
 Route::get('/dashboard/applications/start/{scholarship}', [ApplicantDashboardController::class, 'startApplication'])->middleware('auth')->name('dashboard.applications.start');
 Route::get('/dashboard/monitoring', [ApplicantDashboardController::class, 'monitoring'])->middleware('auth')->name('dashboard.monitoring');
+Route::get('/dashboard/monitoring/data', [ApplicantDashboardController::class, 'monitoringData'])->middleware('auth')->name('dashboard.monitoring.data');
 Route::get('/dashboard/monitoring/{application}', [ApplicantDashboardController::class, 'monitoringDetail'])->middleware('auth')->whereNumber('application')->name('dashboard.monitoring.show');
 Route::get('/dashboard/monitoring/{application}/data', [ApplicantDashboardController::class, 'monitoringDetailData'])->middleware('auth')->whereNumber('application')->name('dashboard.monitoring.show.data');
 Route::get('/dashboard/monitoring/{application}/check-ins/{record}', [ApplicantDashboardController::class, 'monitoringCheckInDetail'])->middleware('auth')->whereNumber('application')->where('record', '(check-in|academic)-[0-9]+')->name('dashboard.monitoring.check-ins.show');
@@ -107,6 +113,8 @@ Route::post('/dashboard/applications/{application}/monitoring-requirements/{requ
 Route::get('/dashboard/monitoring-adjustment-requests/{adjustment}/attachment', [ApplicantDashboardController::class, 'viewRecipientMonitoringAdjustmentAttachment'])->middleware('auth')->whereNumber('adjustment')->name('dashboard.monitoring-adjustment-requests.attachment');
 Route::get('/dashboard/monitoring-submissions/{submission}/view', [ApplicantDashboardController::class, 'viewRecipientMonitoringGrade'])->middleware('auth')->name('dashboard.monitoring-submissions.view');
 Route::post('/dashboard/benefit-release-records/{record}/response', [ApplicantDashboardController::class, 'respondToRecipientBenefitRelease'])->middleware(['auth', 'throttle:10,1'])->whereNumber('record')->name('dashboard.benefit-release-records.response');
+Route::post('/dashboard/benefit-release-records/{record}/follow-up', [RecipientBenefitFollowUpController::class, 'store'])->middleware(['auth', 'throttle:10,1'])->whereNumber('record')->name('dashboard.benefit-follow-ups.action');
+Route::post('/dashboard/benefit-release-records/{record}/payout-details', [ApplicantBenefitPayoutController::class, 'store'])->middleware(['auth', 'throttle:10,1'])->whereNumber('record')->name('dashboard.benefit-release-records.payout-details');
 Route::get('/dashboard/benefit-release-records/{record}/receipt', [ApplicantDashboardController::class, 'viewRecipientBenefitReleaseReceipt'])->middleware('auth')->whereNumber('record')->name('dashboard.benefit-release-records.receipt');
 Route::get('/dashboard/benefit-receipt-responses/{response}/files/{kind}', [ApplicantDashboardController::class, 'viewRecipientBenefitReceiptResponseFile'])->middleware('auth')->whereNumber('response')->whereIn('kind', ['evidence', 'resolution-proof'])->name('dashboard.benefit-receipt-responses.file');
 Route::post('/dashboard/support-decisions/{decision}/response', [ApplicantDashboardController::class, 'respondToRecipientSupportDecision'])->middleware(['auth', 'throttle:10,1'])->whereNumber('decision')->name('dashboard.support-decisions.response');
@@ -172,6 +180,7 @@ Route::middleware(['auth', 'admin'])
                 Route::get('/{user}/photo', [AccountManagerWorkspaceController::class, 'photo'])->whereNumber('user')->name('workspaces.accounts.photo');
                 Route::get('/{user}', [AccountManagerWorkspaceController::class, 'show'])->whereNumber('user')->name('workspaces.accounts.show');
                 Route::get('/{user}/data', [AccountManagerWorkspaceController::class, 'showData'])->whereNumber('user')->name('workspaces.accounts.show.data');
+                Route::patch('/{user}/support-handoffs/{handoff}', [SupportAccountHandoffController::class, 'complete'])->whereNumber(['user', 'handoff'])->name('workspaces.accounts.handoffs.complete');
             });
         Route::middleware('permission:manage_reviews')
             ->prefix('workspaces/reviews')
@@ -208,6 +217,8 @@ Route::middleware(['auth', 'admin'])
                 Route::get('/data', [SupportOfficerWorkspaceController::class, 'data'])->name('workspaces.support.data');
                 Route::get('/cases/{report}', [SupportOfficerWorkspaceController::class, 'show'])->whereNumber('report')->name('workspaces.support.cases.show');
                 Route::get('/cases/{report}/data', [SupportOfficerWorkspaceController::class, 'showData'])->whereNumber('report')->name('workspaces.support.cases.data');
+                Route::post('/cases/{report}/account-handoffs', [SupportAccountHandoffController::class, 'store'])->whereNumber('report')->name('workspaces.support.handoffs.store');
+                Route::patch('/cases/{report}/account-handoffs/{handoff}/cancel', [SupportAccountHandoffController::class, 'cancel'])->whereNumber(['report', 'handoff'])->name('workspaces.support.handoffs.cancel');
                 Route::get('/reporters/{reporter}/photo', [SupportOfficerWorkspaceController::class, 'reporterPhoto'])->whereNumber('reporter')->name('workspaces.support.reporters.photo');
                 Route::get('/{queue}', [SupportOfficerWorkspaceController::class, 'queue'])
                     ->whereIn('queue', ['needs-response', 'waiting', 'resolved'])
@@ -222,9 +233,10 @@ Route::middleware(['auth', 'admin'])
                 Route::get('/queue-data', [BillingOfficerWorkspaceController::class, 'data'])->name('workspaces.billing.queue-data');
                 Route::get('/export', [BillingOfficerWorkspaceController::class, 'export'])->name('workspaces.billing.export');
                 Route::get('/queues/{queue}', [BillingOfficerWorkspaceController::class, 'queue'])
-                    ->whereIn('queue', ['ready', 'active', 'waiting', 'completed'])
+                    ->whereIn('queue', ['ready', 'active', 'waiting', 'completed', 'finance'])
                     ->name('workspaces.billing.queue');
                 Route::get('/requests/{purchase}', [BillingOfficerWorkspaceController::class, 'show'])->whereNumber('purchase')->name('workspaces.billing.requests.show');
+                Route::patch('/requests/{purchase}/finance-response', [ServiceFinanceCoordinationController::class, 'respond'])->whereNumber('purchase')->name('workspaces.billing.finance-response');
                 Route::get('/requests/{purchase}/{section}', [BillingOfficerWorkspaceController::class, 'show'])
                     ->whereNumber('purchase')
                     ->whereIn('section', ['delivery', 'files', 'updates', 'meeting', 'closeout', 'history'])
@@ -241,6 +253,8 @@ Route::middleware(['auth', 'admin'])
                 Route::get('/payments/data', [FinanceOfficerWorkspaceController::class, 'paymentData'])->name('workspaces.finance.payments.data');
                 Route::get('/exceptions', [FinanceOfficerWorkspaceController::class, 'exceptions'])->name('workspaces.finance.exceptions');
                 Route::get('/exceptions/data', [FinanceOfficerWorkspaceController::class, 'exceptionData'])->name('workspaces.finance.exceptions.data');
+                Route::get('/records/{purchase}/data', [ServiceFinanceCoordinationController::class, 'show'])->whereNumber('purchase')->name('workspaces.finance.records.data');
+                Route::post('/records/{purchase}/review', [ServiceFinanceCoordinationController::class, 'review'])->whereNumber('purchase')->name('workspaces.finance.records.review');
                 Route::get('/receipts', [FinanceOfficerWorkspaceController::class, 'legacyReceipts'])->name('workspaces.finance.receipts');
                 Route::get('/receipts/{purchase}', [FinanceOfficerWorkspaceController::class, 'receipt'])->whereNumber('purchase')->name('workspaces.finance.receipts.show');
                 Route::get('/receipts/{purchase}/data', [FinanceOfficerWorkspaceController::class, 'receiptData'])->whereNumber('purchase')->name('workspaces.finance.receipts.data');
@@ -882,6 +896,7 @@ Route::middleware(['auth', 'provider'])
         Route::patch('/applications/{application}/schedules/{schedule}', [ProviderController::class, 'updateApplicationScheduleTracking'])->middleware(['permission:manage_selection_activities', 'provider.approved'])->name('applications.schedules.tracking');
         Route::patch('/applications/{application}/decision', [ProviderController::class, 'decideApplication'])->middleware(['permission:verify_applications,manage_selection_activities', 'provider.approved'])->name('applications.decision');
         Route::patch('/applications/{application}/stages/{stage}/result', [ProviderController::class, 'recordApplicationStageResult'])->middleware(['permission:verify_applications,manage_selection_activities', 'provider.approved'])->name('applications.stages.result');
+        Route::post('/applications/{application}/stages/{stage}/evaluation', [ProviderController::class, 'recordApplicationStageEvaluation'])->middleware(['permission:manage_selection_activities', 'provider.approved', 'throttle:20,1'])->whereIn('stage', ['exam', 'interview'])->name('applications.stages.evaluation');
         Route::get('/applications/{application}/stage-readiness', [ApplicationStageOperationController::class, 'applicationReadiness'])
             ->middleware(['permission:manage_selection_activities', 'provider.approved'])
             ->whereNumber('application')
@@ -964,6 +979,7 @@ Route::middleware(['auth', 'provider'])
         Route::get('/monitoring-adjustment-requests/{adjustment}/attachment', [ProviderController::class, 'viewRecipientMonitoringAdjustmentAttachment'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('adjustment')->name('monitoring-adjustment-requests.attachment');
         Route::post('/monitoring-requirements/{requirement}/applications/{application}/interventions', [ProviderController::class, 'storeRecipientMonitoringIntervention'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber(['requirement', 'application'])->name('monitoring-interventions.store');
         Route::patch('/monitoring-interventions/{intervention}/complete', [ProviderController::class, 'completeRecipientMonitoringIntervention'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('intervention')->name('monitoring-interventions.complete');
+        Route::patch('/monitoring-cases/{case}/appointment', [ProviderController::class, 'updateRecipientCheckInAppointment'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('case')->name('monitoring-cases.appointment');
         Route::patch('/monitoring-cases/{case}/close', [ProviderController::class, 'closeRecipientMonitoringCase'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('case')->name('monitoring-cases.close');
         Route::patch('/monitoring-cases/{case}/waive', [ProviderController::class, 'waiveRecipientMonitoringCase'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('case')->name('monitoring-cases.waive');
         Route::patch('/monitoring-cases/{case}/reopen', [ProviderController::class, 'reopenRecipientMonitoringCase'])->middleware(['permission:manage_monitoring', 'provider.approved', 'throttle:20,1'])->whereNumber('case')->name('monitoring-cases.reopen');
@@ -971,6 +987,9 @@ Route::middleware(['auth', 'provider'])
         Route::get('/monitoring-submissions/{submission}/view', [ProviderController::class, 'viewRecipientMonitoringSubmission'])->middleware(['permission:manage_monitoring', 'provider.approved'])->whereNumber('submission')->name('monitoring-submissions.view');
         Route::post('/scholarships/{scholarship}/benefit-releases', [ProviderController::class, 'storeRecipientBenefitRelease'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:10,1'])->whereNumber('scholarship')->name('scholarships.benefit-releases.store');
         Route::post('/benefit-release-records/{record}/result', [ProviderController::class, 'recordRecipientBenefitRelease'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:20,1'])->whereNumber('record')->name('benefit-release-records.result');
+        Route::post('/benefit-release-records/{record}/follow-up', [RecipientBenefitFollowUpController::class, 'store'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:10,1'])->whereNumber('record')->name('benefit-follow-ups.action');
+        Route::get('/benefit-release-records/{record}/payout-details', [BenefitPayoutReviewController::class, 'show'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:30,1'])->whereNumber('record')->name('benefit-release-records.payout-details.show');
+        Route::patch('/benefit-release-records/{record}/payout-details', [BenefitPayoutReviewController::class, 'review'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:20,1'])->whereNumber('record')->name('benefit-release-records.payout-details.review');
         Route::get('/benefit-release-records/{record}/receipt', [ProviderController::class, 'viewRecipientBenefitReleaseReceipt'])->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('record')->name('benefit-release-records.receipt');
         Route::post('/benefit-receipt-responses/{response}/resolve', [ProviderController::class, 'resolveRecipientBenefitReceiptResponse'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:20,1'])->whereNumber('response')->name('benefit-receipt-responses.resolve');
         Route::get('/benefit-receipt-responses/{response}/files/{kind}', [ProviderController::class, 'viewRecipientBenefitReceiptResponseFile'])->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('response')->whereIn('kind', ['evidence', 'resolution-proof'])->name('benefit-receipt-responses.file');

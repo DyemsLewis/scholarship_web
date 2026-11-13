@@ -68,7 +68,7 @@ test('the guide renders one primary action and does not duplicate files or norma
     assert.equal((html.match(/data-scholarship-primary-action/g) ?? []).length, 1);
     assert.equal((html.match(/href="\/dashboard\/applications\/start\/1"/g) ?? []).length, 1);
     assert.match(html, /How to apply/);
-    assert.match(html, /Submitting starts pre-screening, not a scholarship award/);
+    assert.match(html, /Submission is not a scholarship award/);
     assert.match(source, /data-guide-status/);
     assert.match(source, /data-guide-action/);
     assert.doesNotMatch(html, /in_application|preferences_differ|% complete|100%|type="checkbox"/);
@@ -192,11 +192,22 @@ test('how to apply explains the real controls and distinguishes starting from se
         assert.ok(applicationForm.includes(label));
         assert.ok(html.includes(label));
     }
-    for (const instruction of ['Continue to Eligibility', 'Continue to Requirements', 'Continue to Confirm', 'document upload terms', 'accept the application terms']) assert.ok(html.includes(instruction));
-    assert.match(html, /This scholarship will already be selected/);
-    assert.match(html, /Only <strong[^>]*>Submit application<\/strong> sends it to the provider/);
-    assert.match(html, /Track your application from Applications in the sidebar/);
+    for (const instruction of ['Continue to Eligibility', 'Continue to Requirements', 'Continue to Confirm', 'document upload terms', 'accept the terms']) assert.ok(html.includes(instruction));
+    assert.match(html, /Open the form for this scholarship/);
+    assert.match(html, /then select <strong[^>]*>Submit application<\/strong>/);
+    assert.match(html, /Track updates in Applications/);
     assert.ok(html.indexOf('data-application-instructions') < html.indexOf('data-guide-readiness'));
+});
+
+test('main instructions are scan-friendly and control-by-control tips stay secondary', async () => {
+    const html = await render();
+    const instructions = html.slice(html.indexOf('data-application-instructions'), html.indexOf('</ol>', html.indexOf('data-application-instructions')));
+    const words = instructions.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean);
+    assert.ok(words.length < 90, `Four main steps should stay concise, got ${words.length} words.`);
+    assert.doesNotMatch(instructions, /Continue to Eligibility|document upload terms/);
+    assert.match(html, /<details[^>]+data-guide-submission-note(?![^>]*open)/);
+    assert.match(html, /Form tips and submission checks/);
+    assert.match(page, /class="grid grid-cols-1 items-start gap-4" data-scholarship-how-to-apply/);
 });
 
 test('readiness checks are secondary and collapsed unless a required check needs attention', async () => {

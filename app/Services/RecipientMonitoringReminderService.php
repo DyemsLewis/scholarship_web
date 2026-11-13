@@ -110,7 +110,7 @@ final class RecipientMonitoringReminderService
         User $applicant,
         array &$counts,
     ): ?string {
-        $appointment = $case->next_action === 'attend_handoff' ? $case->cycle->handoffDetails() : null;
+        $appointment = $case->next_action === 'attend_handoff' ? $case->cycle->handoffDetails($case) : null;
         if ((! $appointment && ! in_array($case->due_status, ['open', 'extended'], true)) || ! $case->effective_due_at) {
             return null;
         }
@@ -130,7 +130,8 @@ final class RecipientMonitoringReminderService
         }
 
         $dueLabel = $case->effective_due_at->format('M d, Y');
-        $key = $this->key($case, "applicant:due:{$band}:{$case->effective_due_at->format('Y-m-d')}");
+        $reminderDate = $appointment ? $case->cycle->handoffTime($case)->format('Y-m-d-Hi') : $case->effective_due_at->format('Y-m-d');
+        $key = $this->key($case, "applicant:due:{$band}:{$reminderDate}");
         $title = match ($band) {
             'today' => 'Check-in due today',
             'soon' => 'Check-in due soon',
@@ -276,6 +277,7 @@ final class RecipientMonitoringReminderService
                 ->sortByDesc('submitted_at')
                 ->first()?->submitted_at,
             'record_requirement' => $case->cycle->published_at ?? $case->opened_at,
+            'record_attendance', 'resolve_missed_appointment' => $case->cycle->handoffTime($case),
             'close_check_in' => $case->ready_to_close_at,
             'manage_follow_up' => $application->monitoringInterventions
                 ->where('recipient_monitoring_cycle_id', $cycleId)
@@ -371,6 +373,8 @@ final class RecipientMonitoringReminderService
             'decide_adjustment' => 'decide the recipient request',
             'review_requirements' => 'review the submitted records',
             'record_requirement' => 'record the provider-confirmed result',
+            'record_attendance' => 'record attendance',
+            'resolve_missed_appointment' => 'follow up on the missed appointment',
             'close_check_in' => 'record the check-in outcome',
             'manage_follow_up' => 'record the follow-up outcome',
             default => 'resolve the current action',

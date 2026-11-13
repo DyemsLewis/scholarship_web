@@ -36,23 +36,41 @@ function actionLabel(row) {
     if (row.result.status === 'review') return 'View supporting evidence';
     return row.result.status === 'missing' ? 'Add profile details' : 'Review profile details';
 }
+
+function shortResult(row) {
+    return { pass: 'Matched', fail: 'Not met', preferred: 'Preference differs', missing: 'Add details', review: 'Needs review', unknown: 'Not checked' }[row.result.status] ?? row.result.label;
+}
+
+function groupDescription(group) {
+    return {
+        blocking: 'These required differences prevent a new application.',
+        review: 'Missing details or a check that needs provider review.',
+        preferred: 'These differences do not block an application.',
+        matched: 'Based on your saved profile, not a selection decision.',
+        required: 'Published requirements for applicants.',
+    }[group.id] ?? group.description;
+}
 </script>
 
 <template>
     <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-eligibility aria-labelledby="scholarship-eligibility-title">
-        <header class="border-b border-slate-200 px-5 py-5 sm:px-6 sm:py-6">
-            <p class="student-kicker">{{ generalPreview ? 'Published eligibility' : 'Eligibility check' }}</p>
-            <h2 id="scholarship-eligibility-title" class="mt-1.5 font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">{{ generalPreview ? 'Who this scholarship is for' : verdict.title }}</h2>
-            <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{{ generalPreview ? 'Applicants see these rules compared with their own saved profile.' : verdict.description }}</p>
+        <header class="border-b border-slate-200 px-5 py-5 sm:px-6">
+            <p class="student-kicker">{{ generalPreview ? 'Published eligibility' : 'Profile comparison' }}</p>
+            <h2 id="scholarship-eligibility-title" class="mt-1.5 font-display text-2xl font-bold leading-tight text-slate-950">{{ generalPreview ? 'Who this scholarship is for' : 'Eligibility at a glance' }}</h2>
+            <p class="mt-2 text-sm font-semibold leading-6 text-slate-700" data-eligibility-verdict>{{ generalPreview ? 'Applicants see these rules compared with their own saved profile.' : verdict.title }}</p>
+            <details v-if="!generalPreview && verdict.description" class="mt-1 text-xs" data-eligibility-verdict-details>
+                <summary class="w-fit cursor-pointer py-1 font-semibold text-slate-600 hover:text-slate-950">About this result</summary>
+                <p class="mt-1 max-w-3xl leading-5 text-slate-600">{{ verdict.description }}</p>
+            </details>
             <a v-if="!preview && (!content.profile?.complete || !content.profile?.verified)" :href="contextualHref(profileAction.href)" class="student-button student-button-secondary mt-4">{{ profileAction.label }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
         </header>
 
         <p v-if="preview && !generalPreview" class="border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs leading-5 text-slate-600 sm:px-6" data-preview-comparison-note>Illustrative sample only. These are not real applicant values or a recorded review decision.</p>
 
         <dl v-if="groups.length && !generalPreview" data-eligibility-summary class="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-xs sm:px-6" aria-label="Profile comparison summary">
-            <div v-if="counts.blocking" class="flex items-center gap-2 text-rose-800"><dt>Required rules not met</dt><dd class="font-bold tabular-nums">{{ counts.blocking }}</dd></div>
-            <div v-if="counts.review" class="flex items-center gap-2 text-slate-700"><dt>Not confirmed</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.review }}</dd></div>
-            <div v-if="counts.preferred" class="flex items-center gap-2 text-slate-700"><dt>Preferences to review</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.preferred }}</dd></div>
+            <div v-if="counts.blocking" class="flex items-center gap-2 text-rose-800"><dt>Not met</dt><dd class="font-bold tabular-nums">{{ counts.blocking }}</dd></div>
+            <div v-if="counts.review" class="flex items-center gap-2 text-amber-900"><dt>Needs attention</dt><dd class="font-bold tabular-nums">{{ counts.review }}</dd></div>
+            <div v-if="counts.preferred" class="flex items-center gap-2 text-slate-700"><dt>Preferences differ</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.preferred }}</dd></div>
             <div v-if="counts.matched" class="flex items-center gap-2 text-slate-700"><dt>Matched</dt><dd class="font-bold tabular-nums text-slate-950">{{ counts.matched }}</dd></div>
         </dl>
 
@@ -60,36 +78,28 @@ function actionLabel(row) {
             <component :is="group.collapsed ? 'summary' : 'header'" :class="['flex min-h-14 items-center justify-between gap-3 bg-slate-50/60 px-5 py-3 sm:px-6', group.collapsed && 'cursor-pointer list-none hover:bg-slate-100 [&::-webkit-details-marker]:hidden']">
                 <span class="min-w-0">
                     <span :id="`eligibility-${group.id}-title`" class="block text-sm font-bold text-slate-950">{{ group.label }} <span class="ml-1 text-xs font-normal text-slate-500">({{ group.rows.length }})</span></span>
-                    <span class="mt-0.5 block text-xs leading-5 text-slate-600">{{ group.description }}</span>
+                    <span class="mt-0.5 block text-xs leading-5 text-slate-600">{{ groupDescription(group) }}</span>
                 </span>
                 <i v-if="group.collapsed" class="fa-solid fa-chevron-down shrink-0 text-xs text-slate-500 transition group-open:rotate-180" aria-hidden="true"></i>
             </component>
-            <div v-if="!generalPreview" class="student-detail-label hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_11rem] gap-4 border-t border-slate-200 px-6 py-2 md:grid" aria-hidden="true">
-                <span>{{ group.id === 'preferred' ? 'Program preference' : 'Program rule' }}</span><span>{{ preview ? 'Sample profile' : 'Your saved profile' }}</span><span>Comparison</span>
-            </div>
             <div class="divide-y divide-slate-200 border-t border-slate-200">
-                <article v-for="row in group.rows" :key="row.id" :data-eligibility-criterion="row.key" :data-comparison="generalPreview ? undefined : row.result.status" class="px-5 py-3.5 sm:px-6">
-                    <div :class="['grid min-w-0 gap-x-4 gap-y-2 md:items-start', !generalPreview && 'md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_11rem]']">
+                <article v-for="row in group.rows" :key="row.id" :data-eligibility-criterion="row.key" :data-comparison="generalPreview ? undefined : row.result.status" class="px-5 py-4 sm:px-6">
+                    <div class="flex min-w-0 items-start justify-between gap-3" data-eligibility-row-heading>
                         <div class="min-w-0">
                             <h3 class="text-sm font-bold text-slate-950">{{ eligibilityValue(row.label, '', 'Eligibility requirement') }}</h3>
-                            <p class="mt-0.5 break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">{{ row.requirementValue }}</p>
                         </div>
-                        <div v-if="!generalPreview" class="min-w-0">
-                            <p class="student-detail-label md:sr-only">{{ preview ? 'Sample profile' : 'Your saved profile' }}</p>
-                            <p class="break-words text-sm font-semibold leading-6 text-slate-800 [overflow-wrap:anywhere]">{{ row.profileValue }}</p>
-                        </div>
-                        <div v-if="!generalPreview" data-eligibility-result class="flex min-w-0 items-start">
-                            <span :class="['student-badge', resultStyle(row).badge]"><i :class="[resultStyle(row).icon, 'block shrink-0 text-[10px] leading-none']" aria-hidden="true"></i>{{ row.result.label }}</span>
+                        <div v-if="!generalPreview" data-eligibility-result class="flex shrink-0 items-start">
+                            <span :class="['student-badge min-w-24 justify-center', resultStyle(row).badge]" :aria-label="row.result.label"><i :class="[resultStyle(row).icon, 'block shrink-0 text-[10px] leading-none']" aria-hidden="true"></i>{{ shortResult(row) }}</span>
                         </div>
                     </div>
-
-                    <div v-if="row.attention && row.result.status !== 'preferred' && !generalPreview" data-eligibility-explanation class="mt-3 border-l-2 border-slate-200 pl-3">
-                        <p class="text-xs leading-5 text-slate-600">{{ row.explanation || 'This comparison has not been confirmed. Review the published requirement and your saved information.' }}</p>
-                        <a v-if="!preview && ['missing', 'review', 'fail'].includes(row.result.status)" :href="contextualHref(row.profileHref)" class="mt-1.5 inline-flex min-h-11 items-center gap-2 text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950">{{ actionLabel(row) }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
-                        <p v-if="row.result.status === 'fail'" class="mt-1 text-xs leading-5 text-slate-500">Only correct your profile if the saved information is inaccurate.</p>
-                    </div>
-                    <details v-else-if="row.explanation && !generalPreview" data-eligibility-explanation class="mt-2 text-xs">
-                        <summary class="w-fit cursor-pointer py-1 font-semibold text-slate-500 hover:text-slate-800">How this was checked</summary>
+                    <dl class="mt-2 space-y-1 text-sm leading-6" data-eligibility-values>
+                        <div class="min-w-0 [overflow-wrap:anywhere]"><dt class="inline text-slate-500">{{ row.rule_mode === 'preferred' ? 'Program preference' : 'Required' }}: </dt><dd class="inline font-semibold text-slate-900">{{ row.requirementValue }}</dd></div>
+                        <div v-if="!generalPreview" class="min-w-0 [overflow-wrap:anywhere]"><dt class="inline text-slate-500">{{ preview ? 'Sample profile' : 'Your profile' }}: </dt><dd class="inline text-slate-700">{{ row.profileValue }}</dd></div>
+                    </dl>
+                    <p v-if="!generalPreview && row.result.status === 'fail'" class="mt-2 text-xs leading-5 text-slate-600">Only correct your profile if the saved information is inaccurate.</p>
+                    <a v-if="!preview && ['missing', 'review', 'fail'].includes(row.result.status)" :href="contextualHref(row.profileHref)" data-eligibility-profile-action class="mt-1 inline-flex min-h-11 items-center gap-2 text-xs font-bold text-slate-800 underline decoration-slate-300 underline-offset-4 hover:text-slate-950">{{ actionLabel(row) }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></a>
+                    <details v-if="row.explanation && !generalPreview" data-eligibility-explanation class="mt-1 text-xs">
+                        <summary class="w-fit cursor-pointer py-1 font-semibold text-slate-600 hover:text-slate-950">{{ row.attention ? 'Why this needs attention' : 'How this was checked' }}</summary>
                         <p class="mt-1 max-w-4xl border-l-2 border-slate-200 pl-3 leading-5 text-slate-600">{{ row.explanation }}</p>
                     </details>
                 </article>

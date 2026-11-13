@@ -3,8 +3,9 @@ import { staffQueueLink, staffQueueReturn } from '../../../support/staffQueueSta
 import { computed } from 'vue';
 import { formatAdminServiceDateTime, formatAdminServiceMoney, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
+import BillingFinanceFollowUp from '../../../components/admin/BillingFinanceFollowUp.vue';
 
-const { purchaseId, purchase, isLoading, loadError, loadRecord, errorMessage, successMessage, queueUrl } = useAdminServiceWorkspace('overview');
+const { purchaseId, purchase, isLoading, loadError, loadRecord, isSaving, errorMessage, successMessage, queueUrl } = useAdminServiceWorkspace('overview');
 const milestoneProgress = computed(() => {
     const milestones = purchase.value?.milestones ?? [];
     return `${milestones.filter((item) => item.completed).length} of ${milestones.length}`;
@@ -23,6 +24,7 @@ function serviceRecordLink(href) {
         :success-message="successMessage"
         :queue-url="queueUrl"
     >
+        <BillingFinanceFollowUp :purchase-id="purchaseId" :coordination="purchase?.finance_coordination" :disabled="isSaving" @updated="purchase.finance_coordination = $event" />
         <section class="admin-panel mt-4 overflow-hidden">
             <header class="flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4">
                 <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><h2 class="text-lg font-black text-slate-950">Request brief</h2><p class="mt-0.5 text-sm text-slate-500">What was purchased and what the provider expects.</p></div></div>

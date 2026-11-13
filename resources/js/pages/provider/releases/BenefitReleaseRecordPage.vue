@@ -1,5 +1,6 @@
 <script setup>
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
+import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
@@ -7,6 +8,8 @@ import ProviderSidebar from '../ProviderSidebar.vue';
 import LocationMapLink from '../../../components/LocationMapLink.vue';
 import BenefitDeliveryReportDialog from '../../../components/benefit-delivery/BenefitDeliveryReportDialog.vue';
 import BenefitDeliveryReportPanel from '../../../components/benefit-delivery/BenefitDeliveryReportPanel.vue';
+import BenefitPayoutVerification from '../../../components/benefit-delivery/BenefitPayoutVerification.vue';
+import BenefitFollowUpPanel from '../../../components/benefit-delivery/BenefitFollowUpPanel.vue';
 
 const releaseId = document.getElementById('app')?.dataset.releaseId;
 const returnTo = new URLSearchParams(window.location.search).get('return_to');
@@ -23,13 +26,32 @@ const recordFilter = ref('action');
 const selectedRecordId = ref(null);
 const confirmation = ref(null);
 const resultForm = ref({ status: 'prepared', originals_verified: false, notes: '', receipt_proof: null });
+const transferSentOn = ref('');
 const deliveryReport = ref(null);
 
 const records = computed(() => release.value?.records ?? []);
 const selectedRecord = computed(() => records.value.find((record) => record.id === selectedRecordId.value) ?? null);
 const canMarkReleased = computed(() => release.value?.release_at && new Date(release.value.release_at) <= new Date());
+const isDigital = computed(() => ['bank_transfer', 'e_wallet'].includes(release.value?.release_method));
+const recordingTransfer = computed(() => isDigital.value && resultForm.value.status === 'released');
+const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Manila' }).format();
+const canReleaseSelected = computed(() => !!selectedRecord.value && canMarkReleased.value && selectedRecord.value.release_readiness?.eligible !== false
+    && (!isDigital.value || selectedRecord.value.payout?.status === 'approved'));
+const releaseHold = computed(() => {
+    const readiness = selectedRecord.value?.release_readiness;
+    if (readiness?.eligible !== false) return null;
+
+    return {
+        state: 'blocked',
+        title: 'Release on hold',
+        detail: readiness.hold_summary ?? readiness.reason,
+        owner: readiness.blocked_cycle_id ? 'Monitoring officer' : '',
+        action: readiness.monitoring_url ? { label: 'Open check-in', url: readiness.monitoring_url } : null,
+    };
+});
 
 function recordState(record) {
+    if (['not_started', 'awaiting_response', 'responded'].includes(record.follow_up?.status)) return 'issue';
     if (record.has_open_delivery_report) return 'issue';
     if (record.receipt_response?.delivery_report && record.receipt_response.delivery_report.status !== 'closed') return 'issue';
     if (record.receipt_response?.response_type === 'issue' && record.receipt_response.status === 'open') return 'issue';
@@ -48,12 +70,15 @@ const filteredRecords = computed(() => {
 });
 
 function stateLabel(record) {
+    if (record.follow_up) return record.follow_up.label;
     if (recordState(record) === 'issue') return 'Issue reported';
-    return record.status_label;
+    return record.payout?.label ?? record.status_label;
 }
 
 function stateClass(record) {
+    if (record.follow_up && !record.has_open_delivery_report && recordState(record) === 'issue') return 'border-amber-200 bg-amber-50 text-amber-900';
     if (recordState(record) === 'issue') return 'border-rose-200 bg-rose-50 text-rose-800';
+    if (record.payout?.status === 'approved') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
     if (recordState(record) === 'pending') return 'border-amber-200 bg-amber-50 text-amber-800';
     if (record.status === 'released') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
     return 'border-slate-300 bg-slate-100 text-slate-700';
@@ -66,8 +91,9 @@ function firstError(error, fallback) {
 
 function selectRecord(record) {
     selectedRecordId.value = record.id;
+    transferSentOn.value = '';
     resultForm.value = {
-        status: canMarkReleased.value ? 'released' : 'prepared',
+        status: !isDigital.value && canMarkReleased.value && record.release_readiness?.eligible !== false ? 'released' : 'prepared',
         originals_verified: Boolean(record.originals_verified),
         notes: record.notes ?? '',
         receipt_proof: null,
@@ -82,14 +108,16 @@ watch(filteredRecords, (items) => {
     if (!items.some((record) => record.id === selectedRecordId.value)) selectRecord(items[0]);
 });
 
-async function loadRecord() {
+async function loadRecord(preserveSelection = false) {
+    const previous = preserveSelection ? selectedRecordId.value : null;
     isLoading.value = true;
     errorMessage.value = '';
     try {
         const response = await window.axios.get(`/provider/workspaces/releases/distributions/${releaseId}/data`);
         program.value = response.data.program;
         release.value = response.data.release;
-        const first = records.value.find((record) => ['issue', 'pending'].includes(recordState(record))) ?? records.value[0];
+        const first = records.value.find((record) => record.id === previous)
+            ?? records.value.find((record) => ['issue', 'pending'].includes(recordState(record))) ?? records.value[0];
         if (first) selectRecord(first);
     } catch (error) {
         errorMessage.value = firstError(error, 'The benefit release record could not be loaded.');
@@ -98,12 +126,26 @@ async function loadRecord() {
     }
 }
 
+async function refreshAfterPayoutReview(message) {
+    successMessage.value = message;
+    await loadRecord(true);
+}
+
 function askToSaveResult() {
+    if (!selectedRecord.value || actionBusy.value || (resultForm.value.status === 'released' && !canReleaseSelected.value)) return;
+    if (recordingTransfer.value && (!resultForm.value.receipt_proof || !transferSentOn.value)) return;
+    const transfer = recordingTransfer.value;
     confirmation.value = {
         type: 'result',
-        title: 'Record distribution result',
-        message: `Save ${resultForm.value.status.replaceAll('_', ' ')} for ${selectedRecord.value.name}?`,
-        confirmLabel: 'Save result',
+        recordId: selectedRecord.value.id,
+        payoutRevision: selectedRecord.value.payout?.approved_revision,
+        form: { ...resultForm.value },
+        transferSentOn: transfer ? transferSentOn.value : null,
+        title: transfer ? 'Record this transfer as sent?' : 'Record distribution result',
+        message: transfer
+            ? `Only record this if you already sent the transfer to ${selectedRecord.value.name} outside the portal. The applicant will be asked to confirm receipt. This does not send money.`
+            : `Save ${resultForm.value.status.replaceAll('_', ' ')} for ${selectedRecord.value.name}?`,
+        confirmLabel: transfer ? 'Record as sent' : 'Save result',
         tone: ['missed', 'withheld'].includes(resultForm.value.status) ? 'danger' : 'warning',
     };
 }
@@ -144,14 +186,23 @@ async function runAction(action, fallback) {
 }
 
 async function confirmAction() {
-    const type = confirmation.value?.type;
+    const request = confirmation.value;
     confirmation.value = null;
-    if (!selectedRecord.value) return;
+    if (!request || selectedRecord.value?.id !== request.recordId) return;
 
-    if (type === 'result') {
+    if (request.type === 'result') {
+        if (request.form.status === 'released' && !canReleaseSelected.value) return;
         const data = new FormData();
-        Object.entries(resultForm.value).forEach(([key, value]) => appendFormValue(data, key, key === 'originals_verified' ? (value ? '1' : '0') : value));
-        await runAction(() => window.axios.post(`/provider/benefit-release-records/${selectedRecord.value.id}/result`, data), 'The release result could not be saved.');
+        Object.entries(request.form).forEach(([key, value]) => {
+            if (key === 'receipt_proof' && isDigital.value && !request.transferSentOn) return;
+            appendFormValue(data, key, key === 'originals_verified' ? (value ? '1' : '0') : value);
+        });
+        if (request.transferSentOn) {
+            appendFormValue(data, 'expected_payout_revision', request.payoutRevision);
+            data.append('transfer_sent_on', request.transferSentOn);
+            data.append('transfer_confirmed', '1');
+        }
+        await runAction(() => window.axios.post(`/provider/benefit-release-records/${request.recordId}/result`, data), 'The release result could not be saved.');
     }
 }
 
@@ -180,7 +231,7 @@ onMounted(loadRecord);
                     </section>
 
                     <nav class="mt-4 flex border border-slate-200 bg-white shadow-sm" aria-label="Recipient result filters">
-                        <button v-for="filter in [{ key: 'action', label: 'Needs action', count: recordCounts.issue + recordCounts.pending }, { key: 'issue', label: 'Reported issues', count: recordCounts.issue }, { key: 'pending', label: 'To record', count: recordCounts.pending }, { key: 'complete', label: 'Completed', count: recordCounts.complete }, { key: 'all', label: 'All recipients', count: records.length }]" :key="filter.key" type="button" :class="['flex h-14 flex-1 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', recordFilter === filter.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50']" @click="recordFilter = filter.key"><span>{{ filter.label }}</span><span :class="['px-2 py-0.5 text-xs', recordFilter === filter.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-600']">{{ filter.count }}</span></button>
+                        <button v-for="filter in [{ key: 'action', label: 'Needs action', count: recordCounts.issue + recordCounts.pending }, { key: 'issue', label: 'Issues & follow-up', count: recordCounts.issue }, { key: 'pending', label: 'To record', count: recordCounts.pending }, { key: 'complete', label: 'Closed records', count: recordCounts.complete }, { key: 'all', label: 'All recipients', count: records.length }]" :key="filter.key" type="button" :class="['flex h-14 flex-1 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', recordFilter === filter.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50']" @click="recordFilter = filter.key"><span>{{ filter.label }}</span><span :class="['px-2 py-0.5 text-xs', recordFilter === filter.key ? 'bg-amber-300 text-slate-950' : 'bg-slate-100 text-slate-600']">{{ filter.count }}</span></button>
                     </nav>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
@@ -194,14 +245,66 @@ onMounted(loadRecord);
                             <div v-if="selectedRecord" class="px-6 py-6">
                                 <div class="flex items-center justify-between gap-6"><div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Selected recipient</p><h3 class="monitoring-text mt-1 text-lg font-bold text-slate-950">{{ selectedRecord.name }}</h3><p class="mt-1 text-sm text-slate-500">{{ selectedRecord.email }}</p></div><span :class="['border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', stateClass(selectedRecord)]">{{ stateLabel(selectedRecord) }}</span></div>
 
+                                <BenefitFollowUpPanel v-if="selectedRecord.follow_up" :key="`follow-up-${selectedRecord.id}`" :follow-up="selectedRecord.follow_up" :context="`${release.title} / ${selectedRecord.name}`" provider @saved="loadRecord(true)" />
+
                                 <div v-if="selectedRecord.receipt_response?.response_type === 'issue' && (selectedRecord.receipt_response.status === 'open' || selectedRecord.receipt_response.import_report_url)" class="mt-5">
                                     <div class="border-l-4 border-rose-400 bg-rose-50 px-5 py-4"><p class="text-xs font-bold uppercase tracking-[0.14em] text-rose-800">{{ selectedRecord.receipt_response.issue_type_label }}</p><WorkspaceTextSummary class="mt-2 text-sm font-semibold leading-6 text-rose-950" :text="selectedRecord.receipt_response.issue_details" label="details" /><WorkspaceTextSummary class="mt-2 text-sm text-rose-900" :text="selectedRecord.receipt_response.recipient_note" label="details" /><a v-if="selectedRecord.receipt_response.evidence" :href="selectedRecord.receipt_response.evidence.view_url" target="_blank" rel="noopener" class="mt-3 inline-flex items-center gap-2 text-xs font-bold text-rose-950 underline">Open recipient evidence<i class="fa-solid fa-arrow-up-right-from-square text-[9px]" aria-hidden="true"></i></a></div>
                                     <div class="mt-4 flex items-center justify-between gap-5 border border-slate-200 bg-slate-50 px-4 py-4"><p class="text-sm leading-6 text-slate-600">Respond with a correction plan or delivery proof. Only the applicant can confirm receipt or accept a clarification.</p><button type="button" :disabled="actionBusy" class="inline-flex min-h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white disabled:opacity-40" @click="openDeliveryReport"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i>Open delivery report</button></div>
                                 </div>
 
-                                <form v-else-if="['scheduled', 'prepared'].includes(selectedRecord.status)" class="mt-5" @submit.prevent="askToSaveResult"><div class="grid grid-cols-3 gap-4"><label class="text-sm font-semibold text-slate-700">Distribution result<select v-model="resultForm.status" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal"><option value="prepared">Prepared</option><option value="released" :disabled="!canMarkReleased">Released / received</option><option value="missed">Recipient missed release</option><option value="withheld">Release withheld</option></select><span v-if="!canMarkReleased" class="mt-1 block text-xs font-normal text-slate-500">Receipt can be confirmed on or after the scheduled time.</span></label><label class="col-span-2 text-sm font-semibold text-slate-700">Record note <span class="font-normal text-slate-600">({{ ['missed', 'withheld'].includes(resultForm.status) ? 'required' : 'optional' }})</span><textarea v-model="resultForm.notes" :required="['missed', 'withheld'].includes(resultForm.status) || (resultForm.status === 'released' && !resultForm.receipt_proof)" rows="3" class="mt-2 w-full border border-slate-300 px-3 py-2 font-normal"></textarea></label><label class="col-span-3 text-sm font-semibold text-slate-700">Receipt or acknowledgement <span class="font-normal text-slate-600">(PDF or image)</span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="mt-2 block w-full border border-slate-300 bg-white px-3 py-2 text-sm" @change="resultForm.receipt_proof = $event.target.files?.[0] || null"></label></div><label v-if="release.requires_original_verification" class="mt-4 flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"><input v-model="resultForm.originals_verified" type="checkbox" :required="resultForm.status === 'released'" class="mt-0.5 h-4 w-4">Original documents were checked before confirming release.</label><button type="submit" class="mt-4 inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white disabled:opacity-40" :disabled="actionBusy"><i :class="['fa-solid', actionBusy ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>Save distribution result</button></form>
+                                <template v-else-if="['scheduled', 'prepared'].includes(selectedRecord.status)">
+                                    <BenefitPayoutVerification v-if="selectedRecord.payout" :key="selectedRecord.id" :payout="selectedRecord.payout" @reviewed="refreshAfterPayoutReview" />
+                                    <ProviderNextStep :step="releaseHold" />
+                                    <form class="mt-5 space-y-4" @submit.prevent="askToSaveResult">
+                                        <div class="grid grid-cols-3 gap-4">
+                                            <label class="text-sm font-semibold text-slate-700">
+                                                Distribution result
+                                                <select v-model="resultForm.status" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal" data-distribution-result>
+                                                    <option value="prepared">Prepared</option>
+                                                    <option value="released" :disabled="!canReleaseSelected">{{ isDigital ? 'Sent' : 'Released / received' }}</option>
+                                                    <option value="missed">{{ isDigital ? 'Transfer not completed' : 'Recipient missed release' }}</option>
+                                                    <option value="withheld">Release withheld</option>
+                                                </select>
+                                                <span v-if="!canMarkReleased" class="mt-1 block text-xs font-normal text-slate-500">You can record the release on or after the scheduled time.</span>
+                                            </label>
+                                            <label class="col-span-2 text-sm font-semibold text-slate-700">
+                                                Record note <span class="font-normal text-slate-600">({{ ['missed', 'withheld'].includes(resultForm.status) ? 'required' : 'optional' }})</span>
+                                                <textarea v-model="resultForm.notes" :required="['missed', 'withheld'].includes(resultForm.status) || (!isDigital && resultForm.status === 'released' && !resultForm.receipt_proof)" rows="3" class="mt-2 w-full border border-slate-300 px-3 py-2 font-normal"></textarea>
+                                            </label>
+                                            <label v-if="!isDigital" class="col-span-3 text-sm font-semibold text-slate-700">
+                                                Receipt or acknowledgement <span class="font-normal text-slate-600">(PDF or image)</span>
+                                                <input type="file" accept=".pdf,.jpg,.jpeg,.png" class="mt-2 block w-full border border-slate-300 bg-white px-3 py-2 text-sm" @change="resultForm.receipt_proof = $event.target.files?.[0] || null">
+                                            </label>
+                                        </div>
+                                        <section v-if="recordingTransfer" data-transfer-evidence class="border border-slate-200 bg-slate-50 px-4 py-4">
+                                            <div class="flex items-start gap-3">
+                                                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-950 text-amber-300"><i class="fa-solid fa-receipt text-xs" aria-hidden="true"></i></span>
+                                                <div>
+                                                    <h4 class="font-bold text-slate-950">Transfer details</h4>
+                                                    <p class="mt-1 text-sm text-slate-600">Only record this after you send the benefit outside the portal.</p>
+                                                </div>
+                                            </div>
+                                            <div class="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4">
+                                                <label class="text-sm font-semibold text-slate-700">
+                                                    Date sent
+                                                    <input v-model="transferSentOn" type="date" name="transfer_sent_on" :min="selectedRecord.payout?.approved_on || undefined" :max="today" required class="mt-2 h-11 w-full rounded-sm border border-slate-300 bg-white px-3 font-normal">
+                                                </label>
+                                                <label class="text-sm font-semibold text-slate-700">
+                                                    Transfer proof <span class="font-normal text-slate-600">(required)</span>
+                                                    <input type="file" name="transfer_proof" accept=".pdf,.jpg,.jpeg,.png" required class="mt-2 block min-h-11 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" @change="resultForm.receipt_proof = $event.target.files?.[0] || null">
+                                                    <span class="mt-1.5 block text-xs font-normal text-slate-600">PDF or image, up to 5 MB. Keep the date and amount visible, but cover full account numbers and unrelated transactions before uploading.</span>
+                                                </label>
+                                            </div>
+                                        </section>
+                                        <label v-if="release.requires_original_verification" class="flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"><input v-model="resultForm.originals_verified" type="checkbox" :required="resultForm.status === 'released'" class="mt-0.5 h-4 w-4">Original documents were checked before confirming release.</label>
+                                        <button type="submit" class="student-button student-button-primary disabled:opacity-40" :disabled="actionBusy || (resultForm.status === 'released' && !canReleaseSelected)">
+                                            <i :class="['fa-solid', actionBusy ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>
+                                            {{ recordingTransfer ? 'Record transfer as sent' : 'Save distribution result' }}
+                                        </button>
+                                    </form>
+                                </template>
 
-                                <div v-else class="mt-5 border-y border-slate-200 py-5"><dl class="grid grid-cols-4"><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Result</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.status_label }}</dd></div><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Recorded by</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.recorded_by || 'Not recorded' }}</dd></div><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Recorded</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.recorded_at || 'Not available' }}</dd></div><div class="px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Receipt response</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.receipt_response?.status_label || 'Awaiting recipient' }}</dd></div></dl><WorkspaceTextSummary class="mt-5 text-sm leading-6 text-slate-600" :text="selectedRecord.notes" label="details" /><a v-if="selectedRecord.receipt" :href="selectedRecord.receipt.view_url" target="_blank" rel="noopener" class="mt-4 inline-flex items-center gap-2 border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"><i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>Open receipt proof</a></div>
+                                <div v-else class="mt-5 border-y border-slate-200 py-5"><dl class="grid grid-cols-4"><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Result</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.status_label }}</dd></div><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Recorded by</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.recorded_by || 'Not recorded' }}</dd></div><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">{{ selectedRecord.transfer_sent_label ? 'Sent on' : 'Recorded' }}</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.transfer_sent_label || selectedRecord.recorded_at || 'Not available' }}</dd></div><div class="px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Receipt response</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.receipt_response?.status_label || (selectedRecord.status === 'released' ? 'Awaiting recipient' : 'Not applicable') }}</dd></div></dl><WorkspaceTextSummary class="mt-5 text-sm leading-6 text-slate-600" :text="selectedRecord.notes" label="details" /><a v-if="selectedRecord.receipt" :href="selectedRecord.receipt.view_url" target="_blank" rel="noopener" class="mt-4 inline-flex items-center gap-2 border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"><i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>{{ selectedRecord.transfer_sent_label ? 'View transfer proof' : 'Open receipt proof' }}</a></div>
                                 <BenefitDeliveryReportPanel v-if="selectedRecord.has_open_delivery_report && !selectedRecord.receipt_response" :history-url="selectedRecord.delivery_reports_url" provider />
                             </div>
                         </template>

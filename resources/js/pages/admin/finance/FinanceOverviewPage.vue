@@ -5,7 +5,8 @@ import AdminLoadState from '../components/AdminLoadState.vue';
 import WorkspaceDashboardFrame from '../../../components/workspace-dashboard/WorkspaceDashboardFrame.vue';
 import WorkspaceDashboardItemList from '../../../components/workspace-dashboard/WorkspaceDashboardItemList.vue';
 import WorkspaceDashboardSection from '../../../components/workspace-dashboard/WorkspaceDashboardSection.vue';
-import { normalizeWorkspaceDashboard } from '../../../support/workspaceDashboard.js';
+import { normalizeAdminDashboard as normalizeWorkspaceDashboard } from '../../../support/adminDashboard.js';
+import AdminDashboardPriority from '../components/AdminDashboardPriority.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 
 const resource = useAdminResource(async ({ signal }) => {
@@ -24,6 +25,7 @@ onMounted(loadDashboard);
 <template>
     <AdminWorkspacePage workspace="finance_officer">
         <WorkspaceDashboardFrame :dashboard="dashboard" :loading="loading" :error-message="errorMessage">
+            <AdminDashboardPriority v-if="dashboard.priority" :priority="dashboard.priority" />
             <template #error><section class="admin-panel mt-4"><AdminLoadState :error="errorMessage" @retry="loadDashboard" /></section></template>
             <WorkspaceDashboardSection v-for="section in dashboard.sections" :key="section.key" :section="section">
                 <template #default="{ items }">

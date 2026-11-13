@@ -1,124 +1,100 @@
 <script setup>
 import { computed } from 'vue';
+import MonitoringDecisionBanner from './MonitoringDecisionBanner.vue';
+import SupportCloseoutSummary from './SupportCloseoutSummary.vue';
 
 const props = defineProps({
-    content: {
-        type: Object,
-        required: true,
-    },
-    navigation: {
-        type: Array,
-        required: true,
-    },
+    content: { type: Object, required: true },
 });
 
-const plan = computed(() => props.content.plan ?? {});
-const checkInsHref = computed(() => props.navigation.find((item) => item.key === 'check-ins')?.href);
-const benefitsHref = computed(() => props.navigation.find((item) => item.key === 'benefits')?.href);
-const historyHref = computed(() => props.navigation.find((item) => item.key === 'history')?.href);
-
+const plan = computed(() => props.content.plan);
+const decision = computed(() => props.content.next_action);
+const schedule = computed(() => props.content.schedule ?? []);
+const latestUpdate = computed(() => {
+    const update = props.content.latest_support_decision;
+    return update && update.href !== decision.value.action?.href ? update : null;
+});
+const showPlan = computed(() => plan.value.mode !== 'not_scheduled'
+    || plan.value.agreement_accepted || plan.value.agreement?.href);
 const supportPeriod = computed(() => {
-    if (plan.value.starts_label && plan.value.ends_label) {
-        return `${plan.value.starts_label} to ${plan.value.ends_label}`;
-    }
-
-    return plan.value.ends_label ? `Until ${plan.value.ends_label}` : 'Not specified';
+    const { starts_label: start, ends_label: end } = plan.value;
+    if (start && end) return start + ' to ' + end;
+    if (start) return 'From ' + start;
+    return end ? 'Until ' + end : null;
 });
 </script>
 
 <template>
     <div data-monitoring-overview class="mt-4 space-y-4">
-        <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-            <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-6">
-                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
-                    <i class="fa-solid fa-shield-heart" aria-hidden="true"></i>
-                </span>
-                <div>
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Support plan</p>
-                    <h2 class="mt-1 font-display text-lg font-bold text-slate-950">{{ plan.mode_label }}</h2>
-                </div>
-            </header>
+        <SupportCloseoutSummary v-if="content.closeout" :closeout="content.closeout" :next-step="decision" />
+        <div v-else :class="['grid items-stretch gap-4', schedule.length ? 'xl:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]' : '']">
+            <MonitoringDecisionBanner :decision="decision" />
 
-            <dl class="grid bg-slate-50/70 sm:grid-cols-3">
-                <div class="px-4 py-4 sm:px-6">
-                    <dt class="text-xs font-semibold text-slate-500">Review frequency</dt>
-                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ plan.frequency_label || 'No recurring review' }}</dd>
-                </div>
-                <div class="border-t border-slate-200 px-4 py-4 sm:border-l sm:border-t-0 sm:px-6">
-                    <dt class="text-xs font-semibold text-slate-500">Support period</dt>
-                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ supportPeriod }}</dd>
-                </div>
-                <div class="border-t border-slate-200 px-4 py-4 sm:border-l sm:border-t-0 sm:px-6">
-                    <dt class="text-xs font-semibold text-slate-500">Recipient agreement</dt>
-                    <dd class="mt-1 text-sm font-bold text-slate-950">{{ plan.agreement_accepted ? 'Accepted' : 'Needs review' }}</dd>
-                </div>
-            </dl>
-
-            <p v-if="plan.instructions" class="border-t border-slate-200 px-4 py-3 text-sm leading-6 text-slate-600 sm:px-6">
-                {{ plan.instructions }}
-            </p>
-        </section>
-
-        <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-            <header class="border-b border-slate-200 px-4 py-4 sm:px-6">
-                <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">Coming up</p>
-                <h2 class="mt-1 font-display text-lg font-bold text-slate-950">Your support schedule</h2>
-            </header>
-
-            <div class="divide-y divide-slate-200">
-                <article v-if="content.next_check_in" class="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
-                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700">
-                        <i class="fa-solid fa-list-check" aria-hidden="true"></i>
-                    </span>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Next check-in</p>
-                        <h3 class="mt-1 text-sm font-bold text-slate-950">{{ content.next_check_in.title }}</h3>
-                        <p class="mt-1 text-xs text-slate-500">{{ content.next_check_in.period_label }}<span v-if="content.next_check_in.handoff"> · {{ content.next_check_in.handoff.scheduled_label }}</span><span v-else-if="content.next_check_in.due_label"> · Due {{ content.next_check_in.due_label }}</span></p>
+            <section v-if="schedule.length" data-overview-schedule class="min-w-0 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm" aria-labelledby="overview-schedule-title">
+                <header class="flex items-center gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4">
+                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-white text-slate-700 ring-1 ring-slate-200"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span>
+                    <div>
+                        <h2 id="overview-schedule-title" class="font-display text-xl font-bold text-slate-950">Coming up</h2>
+                        <p class="mt-0.5 text-xs text-slate-600">Upcoming dates for this scholarship</p>
                     </div>
-                    <a :href="content.next_check_in.href || checkInsHref" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                        View check-in
-                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                    </a>
-                </article>
+                </header>
+                <ul class="divide-y divide-slate-200">
+                    <li v-for="item in schedule" :key="item.href">
+                        <a :href="item.href" class="flex items-center justify-between gap-3 px-5 py-3.5 transition hover:bg-slate-50">
+                            <div class="min-w-0">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-amber-800">{{ item.kind }}</p>
+                                <p class="mt-0.5 break-words text-sm font-bold text-slate-950">{{ item.title }}</p>
+                                <p class="mt-1 text-xs font-semibold text-slate-700">{{ item.date_label }}</p>
+                                <p v-if="item.context" class="mt-0.5 break-words text-xs text-slate-600">{{ item.context }}</p>
+                            </div>
+                            <i class="fa-solid fa-chevron-right shrink-0 text-xs text-slate-500" aria-hidden="true"></i>
+                        </a>
+                    </li>
+                </ul>
+            </section>
+        </div>
 
-                <article v-if="content.next_release" class="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
-                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700">
-                        <i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i>
-                    </span>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Next benefit release</p>
-                        <h3 class="mt-1 text-sm font-bold text-slate-950">{{ content.next_release.title }}</h3>
-                        <p class="mt-1 text-xs text-slate-500">{{ content.next_release.release_label || content.next_release.status_label }}</p>
-                    </div>
-                    <a :href="content.next_release.href || benefitsHref" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                        View release
-                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                    </a>
-                </article>
-
-                <article v-if="content.latest_support_decision" class="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:px-6">
-                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700">
-                        <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
-                    </span>
-                    <div class="min-w-0 flex-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Latest support update</p>
-                        <h3 class="mt-1 text-sm font-bold text-slate-950">{{ content.latest_support_decision.decision_label }}</h3>
-                        <p class="mt-1 text-xs text-slate-500">{{ content.latest_support_decision.effective_label || content.latest_support_decision.decided_at }}</p>
-                    </div>
-                    <a :href="content.latest_support_decision.href || historyHref" class="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                        View outcome
-                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                    </a>
-                </article>
-
-                <div v-if="!content.next_check_in && !content.next_release && !content.latest_support_decision" class="px-5 py-8 text-center">
-                    <span class="mx-auto grid h-10 w-10 place-items-center rounded-sm bg-emerald-100 text-emerald-700">
-                        <i class="fa-solid fa-check" aria-hidden="true"></i>
-                    </span>
-                    <h3 class="mt-3 text-sm font-bold text-slate-950">Nothing is scheduled right now</h3>
-                    <p class="mt-1 text-sm text-slate-500">New check-ins and benefit releases will appear here.</p>
+        <section v-if="latestUpdate && !content.closeout" class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-5 py-4 shadow-sm sm:px-6" aria-labelledby="overview-update-title">
+            <div class="flex min-w-0 items-center gap-3">
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
+                <div class="min-w-0">
+                    <p id="overview-update-title" class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Latest support update</p>
+                    <p class="mt-0.5 text-sm font-bold text-slate-950">{{ latestUpdate.decision_label }}</p>
+                    <p v-if="latestUpdate.effective_label || latestUpdate.decided_at" class="mt-0.5 text-xs text-slate-600">{{ latestUpdate.effective_label || latestUpdate.decided_at }}</p>
                 </div>
             </div>
+            <a :href="latestUpdate.href" class="student-button student-button-secondary">View outcome <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
         </section>
+
+        <details v-if="showPlan" data-overview-plan class="group overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+            <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-amber-500 sm:px-6 [&::-webkit-details-marker]:hidden">
+                <span class="flex min-w-0 items-center gap-3">
+                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700"><i class="fa-solid fa-file-signature" aria-hidden="true"></i></span>
+                    <span>
+                        <span class="block text-base font-bold text-slate-950">Support plan and agreement</span>
+                        <span class="mt-0.5 block text-xs text-slate-600">{{ plan.mode_label }}</span>
+                    </span>
+                </span>
+                <span class="flex shrink-0 items-center gap-2 text-xs font-bold text-slate-600"><span class="hidden sm:inline group-open:hidden">View details</span><i class="fa-solid fa-chevron-down transition group-open:rotate-180" aria-hidden="true"></i></span>
+            </summary>
+            <div class="space-y-4 border-t border-slate-200 bg-slate-50/60 px-5 py-5 sm:px-6">
+                <dl class="grid gap-4 sm:grid-cols-3">
+                    <div v-if="plan.frequency_label">
+                        <dt class="text-xs font-semibold text-slate-600">Review frequency</dt>
+                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ plan.frequency_label }}</dd>
+                    </div>
+                    <div v-if="supportPeriod">
+                        <dt class="text-xs font-semibold text-slate-600">Support period</dt>
+                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ supportPeriod }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-xs font-semibold text-slate-600">Recipient agreement</dt>
+                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ plan.agreement.label }}</dd>
+                    </div>
+                </dl>
+                <p v-if="plan.instructions" class="max-w-3xl whitespace-pre-line text-sm leading-6 text-slate-600">{{ plan.instructions }}</p>
+                <a v-if="plan.agreement.href" :href="plan.agreement.href" class="student-button student-button-secondary">Open agreement record <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+            </div>
+        </details>
     </div>
 </template>

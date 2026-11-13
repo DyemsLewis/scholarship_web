@@ -32,6 +32,7 @@ const supportLink = ref('');
 const verificationDocuments = ref([]);
 const previewDocument = ref(null);
 const applicantVerificationNotes = ref('');
+const applicantReviewToken = ref(null);
 const formSections = [
     { key: 'identity', label: 'Identity', icon: 'fa-solid fa-user' },
     { key: 'access', label: 'Role and access', icon: 'fa-solid fa-shield-halved' },
@@ -370,6 +371,7 @@ async function loadAccount() {
     const payload = await accountResource.load();
     if (payload) {
         fillForm(payload.user);
+        applicantReviewToken.value = payload.review_workflow?.token ?? null;
         verificationDocuments.value = payload.verification_documents ?? [];
         applicantVerificationNotes.value = payload.user?.applicant_verification_notes ?? '';
     }
@@ -599,10 +601,12 @@ async function updateApplicantVerification(status) {
         const response = await window.axios.patch(`/admin/users/${accountId}/profile-verification`, {
             verification_status: status,
             verification_notes: applicantVerificationNotes.value.trim() || null,
+            expected_review_token: applicantReviewToken.value,
         });
 
         fillForm(response.data.user);
         verificationDocuments.value = response.data.verification_documents ?? [];
+        applicantReviewToken.value = response.data.applicant?.review_workflow?.token ?? null;
         applicantVerificationNotes.value = response.data.user?.applicant_verification_notes ?? '';
     } catch (error) {
         errorMessage.value = actionError(error, 'The verification review could not be saved.');

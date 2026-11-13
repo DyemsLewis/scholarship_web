@@ -97,22 +97,22 @@ test('the applicant sidebar and directory use Scholarship Support at the existin
     assert.match(read('pages/UserMonitoringPage.vue'), /title="Scholarship Support"/);
 });
 
-test('monitoring directories retain their introduction, date facts, status and application link', async () => {
+test('monitoring directories retain their introduction and application link with compact program branding', async () => {
     const html = await render(MonitoringShell, { detail: monitoringDetail() });
-    for (const text of ['Back to Scholarship Support', 'Support record sections', 'Education scholarship', 'Support active', 'Jan 15, 2027', 'Dec 11, 2026', '1 open', '2 recorded', 'Application record']) assert.ok(html.includes(text));
+    for (const text of ['Back to Scholarship Support', 'Support record sections', 'Education scholarship', 'Education foundation', 'Support active', 'Application record', '/program-logo.png']) assert.ok(html.includes(text));
     assert.match(html, /href="\/dashboard\/monitoring"/);
     assert.match(html, /href="\/dashboard\/applications\/1"/);
     assert.equal((html.match(/Support active/g) ?? []).length, 1);
     assert.match(html, /data-record-section-intro/);
     assert.ok(html.indexOf('data-monitoring-detail-navigation') < html.indexOf('data-record-section-intro'));
-    assert.match(html, /lg:min-h-\[10rem\]/);
+    assert.doesNotMatch(html, /data-record-snapshot|filipino-students-studying\.jpg|Jan 15, 2027|Dec 11, 2026/);
 });
 
 test('a selected monitoring record omits only the generic directory introduction', async () => {
     for (const view of ['check-ins', 'benefits', 'history']) {
         const html = await render(MonitoringShell, { detail: { ...monitoringDetail({ record_key: 'record-1' }), view } });
         assert.doesNotMatch(html, /data-record-section-intro|Useful section instructions/);
-        for (const hook of ['data-monitoring-detail-header', 'data-record-snapshot', 'data-monitoring-detail-navigation', 'data-record-content']) assert.ok(html.includes(hook));
+        for (const hook of ['data-monitoring-detail-header', 'data-monitoring-detail-navigation', 'data-record-content']) assert.ok(html.includes(hook));
     }
 });
 
@@ -120,7 +120,9 @@ test('focused monitoring records retain instructions, due dates, release facts a
     const checkIn = read('components/monitoring-detail/MonitoringCheckInRecord.vue');
     const release = read('components/monitoring-detail/BenefitReleaseRecord.vue');
     for (const value of ['record.instructions', 'record.due_label', 'record.effective_due_label', 'record.requirements', 'acceptedTerms', 'saveManualGrade', 'MonitoringAdjustmentModal', 'MonitoringCaseHistoryModal']) assert.ok(checkIn.includes(value), value);
-    for (const value of ['release.instructions', 'release.amount_label', 'release.release_label', 'release.release_method_label', 'release.location', 'BenefitReceiptResponseModal', 'LocationMapLink', 'FilePreviewModal']) assert.ok(release.includes(value), value);
-    assert.match(checkIn, /grid-cols-2[^>]*sm:grid-cols-3/);
-    assert.match(release, /grid-cols-2[^>]*sm:grid-cols-4/);
+    for (const value of ['release.instructions', 'release.amount_label', 'delivery.date_label', 'release.release_method_label', 'release.location', 'BenefitReceiptResponseModal', 'LocationMapLink', 'FilePreviewModal']) assert.ok(release.includes(value), value);
+    assert.match(checkIn, /data-check-in-appointment/);
+    assert.match(checkIn, /sm:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)\]/);
+    assert.match(release, /data-benefit-next-step/);
+    assert.match(release, /md:order-1/);
 });
