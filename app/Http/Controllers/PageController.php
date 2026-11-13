@@ -10,7 +10,7 @@ class PageController extends Controller
 {
     public function home(Request $request): View|RedirectResponse
     {
-        if ($redirect = $this->roleRedirect($request, includeApplicant: false)) {
+        if ($redirect = $this->roleRedirect($request)) {
             return $redirect;
         }
 
@@ -80,7 +80,7 @@ class PageController extends Controller
         return view('account-setup');
     }
 
-    private function roleRedirect(Request $request, bool $includeApplicant = true): ?RedirectResponse
+    private function roleRedirect(Request $request): ?RedirectResponse
     {
         if ($request->user()?->isAdmin()) {
             return redirect()->route('admin.index');
@@ -90,7 +90,7 @@ class PageController extends Controller
             return redirect()->route('provider.index');
         }
 
-        if ($includeApplicant && $request->user()) {
+        if ($request->user()) {
             return redirect()->route('dashboard');
         }
 
