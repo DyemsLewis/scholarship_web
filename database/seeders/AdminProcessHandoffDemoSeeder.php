@@ -28,25 +28,25 @@ final class AdminProcessHandoffDemoSeeder extends Seeder
             throw new RuntimeException('Reserved guide examples already exist without a completion marker.');
         }
         $users = [];
-        foreach (['talunaw', 'talunaw.billing', 'demoops.support', 'demoops.accounts', 'demoops.billing', 'demoops.finance',
-            'demo.process.support.appointment', 'demo.process.support.review'] as $username) {
+        foreach (['nuvareya', 'nuvareya.billing', 'novacore.support', 'novacore.accounts', 'novacore.billing', 'novacore.finance',
+            'cohort.process.support.appointment', 'cohort.process.support.review'] as $username) {
             $users[$username] = User::where('username', $username)->sole();
             if (! $users[$username]->isActive()) throw new RuntimeException('Required account is inactive: '.$username);
         }
         DB::transaction(function () use ($users): void {
             $handoffs = app(SupportAccountHandoffService::class);
-            foreach (['pending' => 'demo.process.support.appointment', 'returned' => 'demo.process.support.review'] as $state => $username) {
+            foreach (['pending' => 'cohort.process.support.appointment', 'returned' => 'cohort.process.support.review'] as $state => $username) {
                 $report = SupportReport::create(['applicant_id' => $users[$username]->id, 'assigned_role' => 'admin', 'category' => 'account',
                     'subject' => $state === 'pending' ? 'Check my sign-in settings' : 'Explain the account access check',
                     'description' => 'I can sign in. Please help me understand the account access and password recovery settings.',
                     'context' => 'Account access help', 'status' => 'open', 'provider_status' => 'not_required', 'admin_status' => 'open']);
-                $handoffs->refer($this->request($users['demoops.support'], [
+                $handoffs->refer($this->request($users['novacore.support'], [
                     'expected_support_token' => $handoffs->caseToken($report), 'task' => 'sign_in',
                     'instruction' => 'Check the account access settings and explain the next account-holder step. Do not change verification or scholarship support.',
                 ]), $report);
                 if ($state === 'returned') {
                     $task = $report->accountHandoffs()->sole();
-                    $handoffs->finish($this->request($users['demoops.accounts'], [
+                    $handoffs->finish($this->request($users['novacore.accounts'], [
                         'expected_handoff_token' => $handoffs->payload($task)['token'],
                         'result' => 'The account is active and email verified. Sign-in is available; use password recovery only if the account holder needs it. No account or verification changes were required.',
                     ]), $task, false);
@@ -54,28 +54,28 @@ final class AdminProcessHandoffDemoSeeder extends Seeder
             }
             $finance = app(ServiceFinanceCoordination::class);
             foreach (['BILLING', 'FINANCE'] as $state) {
-                $purchase = ProviderServicePurchase::create(['provider_id' => $users['talunaw']->id, 'created_by' => $users['talunaw.billing']->id,
+                $purchase = ProviderServicePurchase::create(['provider_id' => $users['nuvareya']->id, 'created_by' => $users['nuvareya.billing']->id,
                     'plan_code' => 'application_cycle_support', 'plan_name' => 'Application cycle support',
                     'amount' => config('billing.plans.application_cycle_support.amount'), 'currency' => 'PHP',
                     'status' => 'paid', 'fulfillment_status' => 'in_progress', 'livemode' => false,
                     'payment_method' => 'demo', 'reference_number' => 'GUIDE-20261113-'.$state,
-                    'paid_at' => now()->subDays(3), 'started_at' => now()->subDays(2), 'assigned_to' => $users['demoops.billing']->id,
+                    'paid_at' => now()->subDays(3), 'started_at' => now()->subDays(2), 'assigned_to' => $users['novacore.billing']->id,
                     'request_summary' => 'Review operational records for the current scholarship cycle.',
                     'requested_outcome' => 'Clear service records and confirmed ownership of the remaining delivery work.',
                     'target_due_at' => now()->addDays(7), 'service_terms_accepted_at' => now()->subDays(4)]);
                 app(ProviderServiceLifecycleService::class)->initialize($purchase);
-                $finance->financeReview($this->request($users['demoops.finance'], [
+                $finance->financeReview($this->request($users['novacore.finance'], [
                     'expected_finance_token' => $finance->payload($purchase->fresh())['token'], 'action' => 'request_billing',
                     'note' => 'Please compare the service intake and payment reference with the delivery record. Confirm what was checked without changing payment or fulfillment status.',
                 ]), $purchase);
                 if ($state === 'FINANCE') {
-                    $finance->billingResponse($this->request($users['demoops.billing'], [
+                    $finance->billingResponse($this->request($users['novacore.billing'], [
                         'expected_finance_token' => $finance->payload($purchase->fresh())['token'],
                         'note' => 'The intake, amount and payment reference match the service record. Delivery remains in progress under the assigned officer. No payment change or refund was recorded.',
                     ]), $purchase);
                 }
             }
-            ActivityLog::record($users['demoops.support'], self::MARKER,
+            ActivityLog::record($users['novacore.support'], self::MARKER,
                 'Prepared separate account-access and service-record handoffs. Existing accounts and payment records were not altered.');
         });
     }

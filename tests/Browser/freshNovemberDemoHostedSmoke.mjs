@@ -1,0 +1,68 @@
+import { readFile } from 'node:fs/promises';
+
+const manifest=JSON.parse(await readFile('storage/app/private/workflow-demo-20261113/manifest.json','utf8'));
+const folder='C:/Users/James/.codex/visualizations/2026/04/20/019da896-fac2-7a43-95f3-aeb7ea1ba958/fresh-demo-20261113/screenshots';
+let source=await readFile('tests/Browser/recipientAccountabilityHostedSmoke.mjs','utf8');
+source=source.replace(/^const folder = .*;$/m,`const folder = ${JSON.stringify(folder)};`).replaceAll('storage/deployment/accountability-part6-hosted-browser-20261103.json',folder+'/browser.json');
+const start=source.indexOf("    const response = await fetch(origin + '/login');"),end=source.indexOf('} catch (error) { report.failure',start);
+source=source.slice(0,start)+`    const manifest=${JSON.stringify(manifest)};\n`+String.raw`
+    const ok=async url=>{const r=await get(url);assert.equal(r.status,200,url);return r.body;};
+    const capture=async(url,predicate,name)=>{await navigate(url,predicate);await shot(name);};
+    await login('cohort.learner.apply');
+    await shot('applicant-dashboard');
+    await capture('/dashboard/scholarships','document.querySelectorAll("[data-scholarship-logo]").length>0','applicant-find-scholarships');
+    const scholarship=await ok('/dashboard/scholarships/1/data');
+    assert.ok(!JSON.stringify(scholarship).includes('education_plan'));
+    await capture('/dashboard/profile','document.body.innerText.includes("Learner Profile 03")','applicant-profile');
+    await capture('/dashboard/scholarships/1','document.body.innerText.includes("Nuvareya Campus Pathways Grant")','applicant-scholarship-details');
+    await login('nuvareya.selection');
+    for(const [scenario,stage] of [['exam.result','exam'],['interview.result','interview']]) {
+        const row=manifest.applications.find(a=>a.username==='cohort.learner.'+scenario);assert.ok(row);
+        const data=await ok('/provider/applications/'+row.id+'/data?workspace=selection');
+        assert.equal(data.application.selection_evaluation.policy_frozen,true);
+        assert.notEqual(data.application.selection_evaluation.state,'legacy');
+        await navigate('/provider/applications/'+row.id,'!!document.querySelector("input[type=radio][value=passed]")');
+        await client.evaluate('document.querySelector("input[type=radio][value=passed]").click()');
+        await wait(()=>client.evaluate('!!document.querySelector("[data-outcome-evaluation]")'),'stage evaluation');
+        await client.evaluate('document.querySelector("[data-outcome-evaluation]").scrollIntoView({block:"center"})');
+        await shot('selection-'+stage+'-evaluation');
+    }
+    const missing=manifest.applications.find(a=>a.username==='cohort.process.dss.score');
+    await capture('/provider/applications/'+missing.id,'!!document.querySelector("[data-recorded-evaluations]")','selection-missing-score');
+    await client.evaluate('document.querySelector("[data-recorded-evaluations]").open=true');
+    await click('Add score');await wait(()=>client.evaluate('!!document.querySelector("[data-stage-evaluation-dialog]")'),'missing evaluation dialog');
+    await shot('selection-add-score-dialog');
+    await login('nuvareya.decisions');
+    const ranked=manifest.applications.find(a=>a.username==='cohort.process.dss.first');
+    const comparison=await ok('/provider/workspaces/decisions/data?queue=pending&program_id='+ranked.program_id);
+    assert.equal(comparison.selection_comparison.ranked,3);assert.equal(comparison.selection_comparison.provisional,false);
+    await capture('/provider/workspaces/decisions/pending?program_id='+ranked.program_id,'!!document.querySelector("[data-selection-comparison]")','decision-ranked-candidates');
+    await capture('/provider/applications/'+ranked.id,'document.body.innerText.includes("Record final")','decision-final-outcome');
+    await login('nuvareya.monitoring');
+    const support=manifest.applications.find(a=>a.username==='cohort.process.support.review');
+    await capture('/provider/monitoring/'+support.program_id+'/plan','document.body.innerText.includes("Monitoring plan")','monitoring-plan');
+    await capture('/provider/workspaces/monitoring/check-ins/'+support.check_ins[0],'document.body.innerText.includes("Current academic record")','monitoring-roster');
+    await client.evaluate('[...document.querySelectorAll("button")].find(b=>b.innerText.includes("Current academic record")).click()');
+    await wait(()=>client.evaluate('document.body.innerText.includes("Record result")'),'academic result form');
+    await shot('monitoring-academic-result');
+    await login('nuvareya.recipients');
+    const settled=manifest.applications.find(a=>a.username==='cohort.process.support.decision');
+    await capture('/provider/applications/'+settled.id+'?section=support','!!document.querySelector("[data-support-settlement]")','recipient-support-closeout');
+    await client.evaluate('document.querySelector("[data-support-settlement]").scrollIntoView({block:"center"})');await shot('recipient-support-closeout');
+    await login('cohort.learner.monitoring.appointment');
+    const appointment=manifest.applications.find(a=>a.username==='cohort.learner.monitoring.appointment');
+    await capture('/dashboard/monitoring/'+appointment.id+'/check-ins','!!document.querySelector("[data-next-check-in-appointment]")','applicant-check-in');
+    await click('View map','document.querySelector("[data-next-check-in-appointment]")');
+    await wait(()=>client.evaluate('!!document.querySelector("[aria-labelledby=location-map-modal-title] .leaflet-marker-icon")'),'appointment map');await shot('applicant-check-in-map');
+    await login('cohort.learner.payout.details');
+    const payout=manifest.applications.find(a=>a.username==='cohort.learner.payout.details');
+    await capture('/dashboard/monitoring/'+payout.id+'/benefits','document.body.innerText.includes("Payout details needed")','applicant-payout');
+    await login('cohort.process.award.receipt');
+    const receipt=manifest.applications.find(a=>a.username==='cohort.process.award.receipt');
+    await capture('/dashboard/monitoring/'+receipt.id+'/benefits/release-'+receipt.release_record_ids[0],'!!document.querySelector("[data-benefit-release-record]")','applicant-receipt');
+    await login('novacore.reviews');await ok('/admin/workspaces/reviews/applicants/data');await shot('admin-review-dashboard');
+    await login('novacore.root');await ok('/admin/dashboard/data');await shot('superadmin-dashboard');
+    assert.deepEqual(report.errors,[]);assert.deepEqual(report.serverErrors,[]);assert.deepEqual(report.blockedWrites,[]);
+    report.passed=true;console.log('PASS Fresh hosted accounts, exam/interview evaluations, DSS, monitoring maps, payout and receipt handoffs. No tester outcomes submitted.');
+`+source.slice(end);
+try{await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));}catch(error){console.error(error.message);process.exitCode=1;}

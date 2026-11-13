@@ -23,8 +23,9 @@ use RuntimeException;
 /** Additive fixtures only: existing decisions, profiles and applications are never rewritten. */
 class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
 {
+    protected bool $seedStageScores = false;
     public const MARKER = 'workflow_process_enrichment_20261113';
-    public const PREFIX = 'demo.process.';
+    public const PREFIX = 'cohort.process.';
     private array $staggeredSessions = [];
     public const SCENARIOS = [
         'dss.first' => ['Nerali', 'Salindaw', 'Review the highest evaluated candidate; no final decision recorded.'],
@@ -38,7 +39,7 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
         'support.history' => ['Revian', 'Talihim', 'View the successful renewal decision and its acknowledgment action.'],
         'award.receipt' => ['Avelis', 'Dalisaw', 'Confirm receipt of the recorded one-time award.'],
         'award.complete' => ['Lenavi', 'Salumay', 'Receipt confirmed; provider can complete the one-time scholarship.'],
-        'award.followup' => ['Oriven', 'Lumaray', 'Respond to the provider notice to arrange the uncollected award.'],
+        'award.followup' => ['Process', 'Learner 12', 'Attend the upcoming collection appointment; the tester records its outcome.'],
     ];
 
     public function run(): void
@@ -56,23 +57,23 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
             throw new RuntimeException('Reserved process accounts already exist without a completion marker.');
         }
         $this->timeline = new WorkflowDemoTimeline;
-        foreach (['talunaw', 'talunaw.reviewer', 'talunaw.selection', 'talunaw.decisions', 'talunaw.recipients', 'talunaw.monitoring', 'talunaw.releases', 'demoops.reviews'] as $username) {
+        foreach (['nuvareya', 'nuvareya.reviewer', 'nuvareya.selection', 'nuvareya.decisions', 'nuvareya.recipients', 'nuvareya.monitoring', 'nuvareya.releases', 'novacore.reviews'] as $username) {
             $this->staff[$username] = User::where('username', $username)->sole();
             if (! $this->staff[$username]->isActive()) throw new RuntimeException('Required demo staff is inactive: '.$username);
         }
-        if ($this->staff['talunaw']->providerProfile?->verification_status !== 'approved') {
+        if ($this->staff['nuvareya']->providerProfile?->verification_status !== 'approved') {
             throw new RuntimeException('The organization must already be approved. This patch does not bypass verification.');
         }
         $mailer = config('mail.default');
         config()->set('mail.default', 'array');
         try {
             DB::transaction(function (): void {
-                $provider = $this->staff['talunaw'];
-                $this->programs['decision'] = $this->program($provider, 'decision', 'Talunaw Scholar Selection Round', 'TSE', 1, 'published');
+                $provider = $this->staff['nuvareya'];
+                $this->programs['decision'] = $this->program($provider, 'decision', 'Nuvareya Scholar Selection Round', 'TSE', 1, 'published');
                 $this->programs['decision']->update(['slots_available' => 2]);
-                $scoring = $this->program($provider, 'decision', 'Talunaw Assessment Completion Round', 'TAC', 2, 'published');
-                $this->programs['support'] = $this->program($provider, 'support', 'Talunaw Learning Continuity Grant', 'TLC', 3, 'published');
-                $this->programs['one_time'] = $this->program($provider, 'one_time', 'Talunaw Study Essentials Award', 'TSA', 0, 'published');
+                $scoring = $this->program($provider, 'decision', 'Nuvareya Assessment Completion Round', 'TAC', 2, 'published');
+                $this->programs['support'] = $this->program($provider, 'support', 'Nuvareya Learning Continuity Grant', 'TLC', 3, 'published');
+                $this->programs['one_time'] = $this->program($provider, 'one_time', 'Nuvareya Study Essentials Award', 'TSA', 0, 'published');
                 $programIds = [...array_map(fn ($p) => $p->id, $this->programs), $scoring->id];
                 foreach (User::where('parent_account_id', $provider->id)->get() as $staff) {
                     if ($staff->assigned_program_ids !== null) {
@@ -82,8 +83,10 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
                 foreach ($this->staff as $staff) $staff->refresh();
                 $number = 500;
                 foreach (self::SCENARIOS as $key => [$first, $last, $next]) {
+                    $first = 'Process';
+                    $last = 'Learner '.sprintf('%02d', $number - 499);
                     $learner = $this->applicant(['username' => self::PREFIX.$key, 'scenario' => 'process', 'first_name' => $first,
-                        'last_name' => $last, 'next_action' => $next, 'actor' => 'the appropriate workspace'], ++$number, $this->staff['demoops.reviews']);
+                        'last_name' => $last, 'next_action' => $next, 'actor' => 'the appropriate workspace'], ++$number, $this->staff['novacore.reviews']);
                     PortalNotification::where('user_id', $learner->id)->delete();
                     $round = str_starts_with($key, 'dss.') ? 'decision' : (str_starts_with($key, 'award.') ? 'one_time' : 'support');
                     $selectionProgram = $this->programs['decision'];
@@ -96,7 +99,7 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
                         $score = match ($key) { 'dss.first' => 96, 'dss.second' => 90, 'dss.third' => 82, default => 93 };
                         $progress = $application->stageProgresses()->where('stage_key', $stage)->sole();
                         Carbon::withTestNow($progress->completed_at->copy()->addMinute(), fn () => app(SelectionEvaluationService::class)->record(
-                            $application->fresh(), $this->staff['talunaw.selection'], $stage, $score, 100,
+                            $application->fresh(), $this->staff['nuvareya.selection'], $stage, $score, 100,
                             (int) $progress->evaluation_revision, 0, 'Assessment recorded from the completed session.',
                         ));
                     }
@@ -112,14 +115,8 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
                 }
                 $this->confirmReceipt($this->applications['award.complete']);
                 $record = $this->applications['award.followup']->benefitReleaseRecords()->sole();
-                $record->update(['status' => 'missed', 'recorded_by' => $this->staff['talunaw.releases']->id, 'recorded_at' => $this->timeline->at(-1, 19),
-                    'notes' => 'The award remains available. Contact the scholarship desk to arrange collection.']);
-                app(RecipientBenefitEntitlementService::class)->syncReleaseResult($record->fresh());
-                app(RecipientBenefitFollowUpService::class)->act($this->staff['talunaw.releases'], $record->fresh(), [
-                    'action' => 'notice', 'expected_revision' => 0, 'respond_by' => $this->timeline->at(10)->toDateString(),
-                    'note' => 'Please confirm whether you would like a new collection appointment. Your award has not been cancelled.',
-                ]);
-                ActivityLog::record($this->staff['demoops.reviews'], self::MARKER, 'Prepared additional selection and recipient handoffs without changing previous outcomes.',
+                $record->release->update(['release_at' => $this->timeline->at(5, 10), 'instructions' => 'Bring your school ID to collect the study-start award. Confirm receipt only after receiving it.']);
+                ActivityLog::record($this->staff['novacore.reviews'], self::MARKER, 'Prepared additional selection and recipient handoffs without changing previous outcomes.',
                     metadata: ['usernames' => $this->usernames(), 'program_ids' => $programIds]);
             });
         } finally {
@@ -131,7 +128,7 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
     {
         [, , , $decision, $accepted] = $this->timeline->progression($round);
         $application = Carbon::withTestNow($this->timeline->at($decision), fn () => app(ApplicationWorkflowService::class)->recordFinalOutcome(
-            $application->fresh(), 'selected', $this->staff['talunaw.decisions'], 'Selection completed before the recipient support period.', 'approved_for_award',
+            $application->fresh(), 'selected', $this->staff['nuvareya.decisions'], 'Selection completed before the recipient support period.', 'approved_for_award',
             ['selection_rationale' => 'All required stages and recorded assessments meet the program requirements.'],
         ));
         $at = $this->timeline->at($accepted);
@@ -145,7 +142,7 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
 
     private function prepareSupport(): void
     {
-        $actor = $this->staff['talunaw.monitoring'];
+        $actor = $this->staff['nuvareya.monitoring'];
         $program = $this->programs['support'];
         $plan = RecipientMonitoringPlan::create(['scholarship_id' => $program->id, 'created_by' => $actor->id, 'updated_by' => $actor->id,
             'frequency' => 'semester', 'starts_on' => $program->support_starts_at, 'ends_on' => $program->support_ends_at,
@@ -185,7 +182,7 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
             'support_ends_on' => $program->support_ends_at, 'next_review_on' => $this->timeline->at(60)->toDateString(),
             'reason' => 'Original records meet the required academic and enrollment conditions.',
             'next_period_terms' => 'Remain enrolled and attend the next scheduled document review.',
-            'decided_by' => $this->staff['talunaw.recipients']->id, 'decided_at' => $this->timeline->at(-1, 22),
+            'decided_by' => $this->staff['nuvareya.recipients']->id, 'decided_at' => $this->timeline->at(-1, 22),
             'closeout_snapshot' => app(RecipientSupportSettlementService::class)->closeoutSnapshot($history->fresh(), true)]);
     }
 
@@ -202,7 +199,7 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
     {
         $session = parent::session($application, $round, $stage, $scenario);
         if (! isset($this->staggeredSessions[$session->id])) {
-            $hours = $application->scholarship->title === 'Talunaw Assessment Completion Round' ? 4 : 2;
+            $hours = $application->scholarship->title === 'Nuvareya Assessment Completion Round' ? 4 : 2;
             $session->update(['starts_at' => $session->starts_at->copy()->addHours($hours), 'ends_at' => $session->ends_at->copy()->addHours($hours),
                 'completed_at' => $session->completed_at->copy()->addHours($hours)]);
             foreach ($session->evidence as $proof) $proof->update(['uploaded_at' => $proof->uploaded_at->copy()->addHours($hours)]);

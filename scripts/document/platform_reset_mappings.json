@@ -1,0 +1,45 @@
+{
+  "status": "PREPARED_ONLY_AWAITING_MAIN_MANIFEST_AND_SCREENSHOTS",
+  "as_of_date": "2026-11-13",
+  "canonical_output": "deliverables/Platform_Process_Guide_With_Accounts_Expanded.docx",
+  "expected_accounts_after_enrichment": 77,
+  "expected_programs": 16,
+  "literal_replacements": [
+    ["Talunaw Learning Trust", "Nuvareya Learning Trust"],
+    ["Sidlakbay Education Guild", "Velasora Education Foundation"],
+    ["Hirayalon Study Foundation", "Kinoraya Study Guild"],
+    ["Talunaw", "Nuvareya"],
+    ["Sidlakbay", "Velasora"],
+    ["Hirayalon", "Kinoraya"],
+    ["talunaw", "nuvareya"],
+    ["sidlakbay", "velasora"],
+    ["hirayalon", "kinoraya"],
+    ["demoops", "novacore"],
+    ["demo.student", "cohort.learner"],
+    ["demo.process", "cohort.process"]
+  ],
+  "identity_rule": {
+    "base_names": "Learner Profile 01 through Learner Profile 28 in original scenario order",
+    "enriched_names": "Process Learner 01 through Process Learner 12 in original SCENARIOS order",
+    "exact_old_name_to_new_name_map": "AWAITING_MAIN_MANIFEST_DO_NOT_GUESS",
+    "avatar": "generic platform silhouette"
+  },
+  "factual_updates_requiring_paragraph_review": [
+    "Both local and hosting demo data are explicitly reset, not additive updates preserving prior records.",
+    "All application scoring snapshots are captured at submission.",
+    "Prior examination and interview scores are 93; screening score is 92; the current stage remains blank for the tester.",
+    "Keep enriched DSS rankings 96, 90 and 82 and the missing-interview scenario.",
+    "Replace the Mentorship benefit with School supplies kit using the exact new manifest wording.",
+    "Remove assertions about seeded short questions; do not remove general question-handling process controls without inspecting the new platform state.",
+    "The award.followup scenario is an upcoming collection, not a missed collection.",
+    "No negative seeded outcomes; preserve documented guarded concern and appeal processes as tester-created actions.",
+    "All screenshots containing old identities must be replaced with fresh platform captures, not edited labels or a retained old-image package.",
+    "Manager and superadmin sections remain last."
+  ],
+  "update_gate": [
+    "Main confirms cutover ready and supplies authoritative account, program, applicant and scenario manifest.",
+    "Main supplies fresh platform screenshots mapped to every retained figure, including applicant, provider and admin views.",
+    "Validate screenshot account, record, environment, capture date and generic avatar before replacing any document content.",
+    "Take private rollback backup; update only the canonical deliverable; render and inspect every page before delivery."
+  ]
+}

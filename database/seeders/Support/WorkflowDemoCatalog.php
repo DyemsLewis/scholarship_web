@@ -4,14 +4,14 @@ namespace Database\Seeders\Support;
 
 final class WorkflowDemoCatalog
 {
-    public const CONFIRMATION = 'RESET_WORKFLOW_DEMO_20261110';
-    public const DIRECTORY = 'workflow-demo-20261110';
-    public const ROOT = 'demoops.root';
-    public const ADMIN = 'demoops';
-    public const PRIMARY = 'talunaw';
-    public const PARTNER = 'sidlakbay';
-    public const PENDING = 'hirayalon';
-    public const APPLICANT = 'demo.student';
+    public const CONFIRMATION = 'RESET_WORKFLOW_DEMO_20261113';
+    public const DIRECTORY = 'workflow-demo-20261113';
+    public const ROOT = 'novacore.root';
+    public const ADMIN = 'novacore';
+    public const PRIMARY = 'nuvareya';
+    public const PARTNER = 'velasora';
+    public const PENDING = 'kinoraya';
+    public const APPLICANT = 'cohort.learner';
 
     public static function applicants(): array
     {
@@ -46,11 +46,11 @@ final class WorkflowDemoCatalog
             ['payout.transfer', 'Biran', 'Kalibay', 'Record transfer proof for an approved fictional payout destination', self::PRIMARY.'.releases'],
         ];
 
-        return array_map(fn (array $row): array => [
+        return array_map(fn (array $row, int $index): array => [
             'scenario' => $row[0], 'username' => self::APPLICANT.'.'.$row[0],
-            'first_name' => $row[1], 'last_name' => $row[2],
+            'first_name' => 'Learner', 'last_name' => sprintf('Profile %02d', $index + 1),
             'next_action' => $row[3], 'actor' => $row[4],
-        ], $rows);
+        ], $rows, array_keys($rows));
     }
 
     public static function roundFor(string $scenario): ?string

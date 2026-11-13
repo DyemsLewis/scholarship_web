@@ -13,10 +13,15 @@ import ProviderSidebar from '../ProviderSidebar.vue';
 import EligibilityRuleModeSelect from './components/EligibilityRuleModeSelect.vue';
 import EligibilityRulesSummary from './components/EligibilityRulesSummary.vue';
 import EducationEligibilityPolicyEditor from './components/EducationEligibilityPolicyEditor.vue';
+import EligibilityOptionPicker from './components/EligibilityOptionPicker.vue';
+import EligibilityLocationPicker from './components/EligibilityLocationPicker.vue';
 import DocumentRequirementsPicker from './components/DocumentRequirementsPicker.vue';
 import { normalizeEducationPolicy, educationPolicyError } from '../../../support/educationEligibilityPolicy';
 import { configuredEligibilityRules, normalizeEligibilityRuleModes } from '../../../support/providerEligibilityRules';
 import { programConfigurationErrors } from '../../../support/programConfiguration';
+import { programDraftSnapshot, programSaveLabel, shouldGuardProgramLink } from '../../../support/programSaveState';
+import { eligibilitySummaryFromRules, eligibilitySummaryReviewKey } from '../../../support/programEligibilitySummary';
+import { programEligibilityOptions } from '../../../support/programEligibilityOptions';
 
 const pathMatch = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
 const portalUser = window.portalUser ?? {};
@@ -35,6 +40,7 @@ const activeStep = ref(validStepIds.has(pathMatch?.[2]) ? pathMatch[2] : 'basics
 const isLoading = ref(Boolean(programId.value));
 const hasSavedProgram = ref(false);
 const isSaving = ref(false);
+const saveFailed = ref(false);
 const savedMessage = ref('');
 const originalStatus = ref('draft');
 const applicationsCount = ref(0);
@@ -54,6 +60,7 @@ const mapMessage = ref('');
 const benefitType = ref('');
 const benefitDialogOpen = ref(false);
 const benefitDraft = ref(null);
+const benefitSavedSnapshot = ref('');
 const editingBenefitIndex = ref(null);
 const benefitDialog = ref(null);
 const alert = ref({ open: false, title: '', message: '' });
@@ -156,6 +163,26 @@ function emptyForm() {
 }
 
 const form = ref(emptyForm());
+const eligibilityRules = computed(() => configuredEligibilityRules(form.value, { educationLevels, schoolTypes }));
+const eligibilityOptions = computed(() => programEligibilityOptions(form.value.eligibleEducationLevels));
+const suggestedEligibilitySummary = computed(() => eligibilitySummaryFromRules(eligibilityRules.value));
+const useGeneratedEligibilitySummary = ref(true);
+const reviewedEligibilitySummary = ref('');
+const eligibilitySummary = computed(() => useGeneratedEligibilitySummary.value ? suggestedEligibilitySummary.value : form.value.eligibility);
+const currentEligibilitySummaryKey = computed(() => eligibilitySummaryReviewKey(eligibilityRules.value, eligibilitySummary.value));
+const customSummaryNeedsReview = computed(() => !isReadOnly.value && !useGeneratedEligibilitySummary.value
+    && Boolean(eligibilitySummary.value.trim()) && reviewedEligibilitySummary.value !== currentEligibilitySummaryKey.value);
+const draftSnapshot = computed(() => programDraftSnapshot({ ...form.value, eligibility: eligibilitySummary.value }, coverSource.value, coverKey.value));
+const savedSnapshot = ref(draftSnapshot.value);
+const hasPendingBenefitChanges = computed(() => benefitDialogOpen.value && programDraftSnapshot(benefitDraft.value) !== benefitSavedSnapshot.value);
+const hasUnsavedChanges = computed(() => !isLoading.value && (
+    draftSnapshot.value !== savedSnapshot.value || Boolean(logoFile.value || coverFile.value) || hasPendingBenefitChanges.value
+));
+const saveStatus = computed(() => programSaveLabel({
+    saving: isSaving.value, dirty: hasUnsavedChanges.value, failed: saveFailed.value, saved: hasSavedProgram.value,
+}));
+let allowNavigation = false;
+let leaveConfirmationPending = false;
 const activeStepIndex = computed(() => steps.findIndex((step) => step.id === activeStep.value));
 const currentStep = computed(() => steps[activeStepIndex.value] ?? steps[0]);
 const isCreateMode = computed(() => !programId.value);
@@ -182,7 +209,6 @@ const coverSourceLabel = computed(() => ({
 const mapAddress = computed(() => form.value.locationAddress.trim());
 const requiresAgreementDetails = computed(() => !['provider_briefing', 'none'].includes(form.value.recipientAgreement.commitment_type));
 const selectedStages = computed(() => stageOptions.filter((stage) => form.value.selectionStages.includes(stage.id)));
-const eligibilityRules = computed(() => configuredEligibilityRules(form.value, { educationLevels, schoolTypes }));
 const eligibilityCounts = computed(() => ({
     required: eligibilityRules.value.filter((rule) => rule.mode === 'required').length,
     preferred: eligibilityRules.value.filter((rule) => rule.mode === 'preferred').length,
@@ -235,7 +261,9 @@ const stepChecks = computed(() => ({
         && !configurationErrorForStep('dates-location')
     ),
     eligibility: Boolean(
-        form.value.eligibility.trim()
+        eligibilitySummary.value.trim()
+        && eligibilitySummary.value.length <= 5000
+        && !customSummaryNeedsReview.value
         && (
             form.value.eligibleEducationLevels.length
             || form.value.eligibleCourses.trim()
@@ -307,6 +335,8 @@ function closeAlert() {
 }
 
 function stepMessage(stepId) {
+    if (stepId === 'eligibility' && eligibilitySummary.value.length > 5000) return 'The eligibility summary exceeds 5,000 characters. Shorten the rule lists or use a shorter custom summary.';
+    if (stepId === 'eligibility' && customSummaryNeedsReview.value) return 'Check the custom eligibility summary against the current rules, then confirm it is consistent or use the rule-based summary.';
     if (stepId === 'eligibility' && educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions)) return educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions);
     if (configurationErrorForStep(stepId)) return configurationErrorForStep(stepId);
     return {
@@ -351,10 +381,55 @@ function handleHistory() {
     if (validStepIds.has(step)) activeStep.value = step;
 }
 
+function handleBeforeUnload(event) {
+    if (allowNavigation || (!hasUnsavedChanges.value && !isSaving.value)) return;
+    event.preventDefault();
+    event.returnValue = '';
+}
+
+function leaveProgramPage(url) {
+    allowNavigation = true;
+    window.location.assign(url);
+}
+
+async function handlePageLink(event) {
+    if ((!hasUnsavedChanges.value && !isSaving.value) || !shouldGuardProgramLink(event, window.location.href)) return;
+    const destination = event.target.closest('a[href]').href;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (isSaving.value) {
+        showAlert('Save in progress', 'Wait for the save to finish before leaving this page.');
+        return;
+    }
+    if (leaveConfirmationPending) return;
+    leaveConfirmationPending = true;
+    try {
+        const confirmed = await requestConfirmation({
+            title: 'Leave without saving?',
+            message: 'Your latest program changes have not been saved. Leaving will discard those changes.',
+            confirmLabel: 'Leave page',
+            cancelLabel: 'Keep editing',
+        });
+        if (confirmed) leaveProgramPage(destination);
+    } finally {
+        leaveConfirmationPending = false;
+    }
+}
+
 function toggleArrayValue(field, value) {
     form.value[field] = form.value[field].includes(value)
         ? form.value[field].filter((item) => item !== value)
         : [...form.value[field], value];
+}
+
+function useRuleBasedEligibilitySummary() {
+    useGeneratedEligibilitySummary.value = true;
+}
+
+function writeCustomEligibilitySummary() {
+    form.value.eligibility = eligibilitySummary.value;
+    useGeneratedEligibilitySummary.value = false;
+    reviewedEligibilitySummary.value = '';
 }
 
 function toggleStage(stage) {
@@ -388,6 +463,7 @@ function openBenefitDialog(index = null) {
     }
 
     editingBenefitIndex.value = index;
+    benefitSavedSnapshot.value = programDraftSnapshot(benefitDraft.value);
     benefitDialogOpen.value = true;
     benefitType.value = '';
 }
@@ -580,6 +656,9 @@ function fillForm(program) {
     logoPreviewUrl.value = '';
     clearCoverUpload();
     hasSavedProgram.value = true;
+    useGeneratedEligibilitySummary.value = form.value.eligibility.trim() === suggestedEligibilitySummary.value.trim();
+    savedSnapshot.value = draftSnapshot.value;
+    saveFailed.value = false;
 }
 
 function append(payload, key, value) {
@@ -598,7 +677,7 @@ function createPayload(status, termsAccepted = false) {
         location_address: form.value.locationAddress.trim(), latitude: form.value.latitude, longitude: form.value.longitude,
         contact_email: form.value.contactEmail.trim(), contact_number: form.value.contactNumber.trim(),
         contact_person: form.value.contactPerson.trim(), contact_department: form.value.contactDepartment.trim(),
-        official_program_url: form.value.officialProgramUrl.trim(), eligibility: form.value.eligibility.trim(),
+        official_program_url: form.value.officialProgramUrl.trim(), eligibility: eligibilitySummary.value.trim(),
         eligibility_rule_modes: JSON.stringify(normalizeEligibilityRuleModes(form.value.eligibilityRuleModes)),
         education_eligibility_policy: JSON.stringify(normalizeEducationPolicy(form.value.educationEligibilityPolicy)),
         eligible_education_levels: form.value.eligibleEducationLevels.join('\n'),
@@ -652,6 +731,7 @@ function showBackendError(error) {
 }
 
 async function save(status = 'draft', termsAccepted = false) {
+    if (isSaving.value) return null;
     const conflict = Object.entries(configurationErrors.value)[0];
     if (conflict) {
         openStep(stepForBackendField(conflict[0]));
@@ -659,6 +739,7 @@ async function save(status = 'draft', termsAccepted = false) {
         return null;
     }
     isSaving.value = true;
+    saveFailed.value = false;
     savedMessage.value = '';
     try {
         const payload = createPayload(status, termsAccepted);
@@ -672,6 +753,7 @@ async function save(status = 'draft', termsAccepted = false) {
         savedMessage.value = response.data.message ?? 'Program saved.';
         return saved;
     } catch (error) {
+        saveFailed.value = true;
         showBackendError(error);
         return null;
     } finally {
@@ -703,7 +785,10 @@ async function saveDraft() {
         return;
     }
     const saved = await save('draft');
-    if (saved) showAlert('Draft saved', 'Your program remains private. You can continue editing it from Drafts & changes.');
+    if (saved) {
+        openStep(activeStep.value, true);
+        showAlert('Draft saved', 'Your program remains private. You can continue editing it from Drafts & changes.');
+    }
 }
 
 async function submitProgram() {
@@ -720,7 +805,7 @@ async function submitProgram() {
 
     const requestedStatus = originalStatus.value === 'published' ? 'published' : 'pending_review';
     const saved = await save(requestedStatus, true);
-    if (saved) window.location.assign(`/provider/programs/${saved.id}`);
+    if (saved) leaveProgramPage(`/provider/programs/${saved.id}`);
 }
 
 async function deleteDraft() {
@@ -737,7 +822,7 @@ async function deleteDraft() {
     isSaving.value = true;
     try {
         await window.axios.delete(`/provider/scholarships/${draftId}`);
-        window.location.assign('/provider/programs/drafts');
+        leaveProgramPage('/provider/programs/drafts');
     } catch (error) {
         showBackendError(error);
     } finally {
@@ -776,9 +861,13 @@ onMounted(() => {
     loadProgram();
     loadCoverOptions();
     window.addEventListener('popstate', handleHistory);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('click', handlePageLink, true);
 });
 onBeforeUnmount(() => {
     window.removeEventListener('popstate', handleHistory);
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+    document.removeEventListener('click', handlePageLink, true);
     if (logoPreviewUrl.value) URL.revokeObjectURL(logoPreviewUrl.value);
     if (coverPreviewUrl.value) URL.revokeObjectURL(coverPreviewUrl.value);
 });
@@ -808,7 +897,11 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                         <div class="program-page-actions">
-                            <p v-if="savedMessage" class="program-text text-xs font-semibold text-slate-600" role="status">{{ savedMessage }}</p>
+                            <p v-if="!isLoading" data-program-save-status role="status" aria-live="polite" :class="['inline-flex items-center gap-2 text-xs font-semibold', hasUnsavedChanges ? 'text-amber-800' : 'text-slate-600']">
+                                <i :class="isSaving ? 'fa-solid fa-spinner animate-spin' : hasUnsavedChanges ? 'fa-solid fa-pen' : hasSavedProgram ? 'fa-solid fa-circle-check' : 'fa-regular fa-floppy-disk'" aria-hidden="true"></i>
+                                {{ saveStatus }}
+                            </p>
+                            <p v-if="savedMessage && !hasUnsavedChanges && !isSaving" class="program-text text-xs font-semibold text-slate-600" role="status">{{ savedMessage }}</p>
                             <span v-if="!isCreateMode" class="program-status border border-slate-200 bg-slate-50 px-3 py-2 font-bold uppercase tracking-wide text-slate-700">
                                 {{ programStatusLabel }}
                             </span>
@@ -1015,7 +1108,22 @@ onBeforeUnmount(() => {
                                 </div>
                                 <p id="eligibility-mode-guide" class="mt-4 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-600"><strong class="text-slate-900">Required</strong> blocks a confirmed mismatch. <strong class="text-slate-900">Preferred</strong> highlights fit without blocking. Leave a rule empty for no restriction.</p>
                                 <div class="mt-6 w-full">
-                                    <label><span :class="labelClass">Eligibility summary <span class="text-amber-700">Required</span></span><textarea v-model="form.eligibility" rows="4" maxlength="5000" :class="textareaClass" placeholder="Example: Open to enrolled Grade 12 STEM students who meet the stated academic requirement."></textarea></label>
+                                    <div data-program-eligibility-summary>
+                                        <div class="mb-2 flex items-center justify-between gap-4">
+                                            <label for="program-eligibility-summary" class="text-xs font-bold text-slate-700">Eligibility summary <span class="text-amber-700">Required</span></label>
+                                            <button v-if="useGeneratedEligibilitySummary" type="button" class="text-xs font-bold text-slate-600 underline underline-offset-2" @click="writeCustomEligibilitySummary">Write custom summary</button>
+                                            <button v-else type="button" class="text-xs font-bold text-slate-600 underline underline-offset-2" @click="useRuleBasedEligibilitySummary">Use rule-based summary</button>
+                                        </div>
+                                        <textarea id="program-eligibility-summary" :value="eligibilitySummary" :readonly="useGeneratedEligibilitySummary" rows="4" maxlength="5000" :class="textareaClass" :placeholder="useGeneratedEligibilitySummary ? 'Configure the rules below to generate the applicant-facing summary.' : 'Describe the eligibility rules and any additional provider conditions.'" @input="form.eligibility = $event.target.value"></textarea>
+                                        <div class="mt-1 flex items-start justify-between gap-4 text-xs leading-5 text-slate-500">
+                                            <p>{{ useGeneratedEligibilitySummary ? 'Updates automatically from your Required and Preferred rules. No need to type them again.' : 'Your existing wording is preserved. Check special conditions against the configured rules before submission.' }}</p>
+                                            <span class="shrink-0" :class="eligibilitySummary.length > 5000 ? 'font-bold text-rose-700' : ''">{{ eligibilitySummary.length }} / 5000</span>
+                                        </div>
+                                        <div v-if="customSummaryNeedsReview" data-eligibility-summary-review class="mt-3 flex items-center justify-between gap-4 border-l-2 border-amber-400 bg-amber-50 px-3 py-3">
+                                            <p class="text-xs leading-5 text-amber-950">Check that this custom summary agrees with the current rules below. This check is required again if the rules or wording change.</p>
+                                            <button type="button" class="shrink-0 rounded-sm border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-950" @click="reviewedEligibilitySummary = currentEligibilitySummaryKey">I checked my summary</button>
+                                        </div>
+                                    </div>
 
                                     <div class="mt-6 border-t border-slate-200 pt-6">
                                         <div class="flex items-center justify-between gap-4"><p class="text-xs font-bold text-slate-700">Current study levels</p><EligibilityRuleModeSelect v-if="hasEligibilityRule('education_level')" v-model="form.eligibilityRuleModes.education_level" rule-key="education_level" label="Current study levels" /></div>
@@ -1031,10 +1139,10 @@ onBeforeUnmount(() => {
                                     <EducationEligibilityPolicyEditor v-model="form.educationEligibilityPolicy" v-model:modes="form.eligibilityRuleModes" :input-class="inputClass" />
 
                                     <div class="mt-6 grid grid-cols-2 gap-5">
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-courses" class="text-xs font-bold text-slate-700">Courses, tracks, or strands</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('course')" v-model="form.eligibilityRuleModes.course" rule-key="course" label="Courses, tracks, or strands" /></div><textarea id="program-eligible-courses" v-model="form.eligibleCourses" rows="3" :class="textareaClass" placeholder="One per line, or Any"></textarea></div>
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-years" class="text-xs font-bold text-slate-700">Grade or year levels</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('year_level')" v-model="form.eligibilityRuleModes.year_level" rule-key="year_level" label="Grade or year levels" /></div><textarea id="program-eligible-years" v-model="form.eligibleYearLevels" rows="3" :class="textareaClass" placeholder="Example: Grade 12"></textarea></div>
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-locations" class="text-xs font-bold text-slate-700">Covered locations</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('location')" v-model="form.eligibilityRuleModes.location" rule-key="location" label="Covered locations" /></div><textarea id="program-eligible-locations" v-model="form.eligibleLocations" rows="3" :class="textareaClass" placeholder="Example: Antipolo City, Rizal, or Nationwide"></textarea></div>
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-income-rule" class="text-xs font-bold text-slate-700">Household income rule</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('income')" v-model="form.eligibilityRuleModes.income" rule-key="income" label="Household income" /></div><select id="program-income-rule" v-model="form.incomeRequirement" :class="inputClass"><option>Any</option><option>Below PHP 10,000</option><option>PHP 10,000 - 20,000</option><option>PHP 20,001 - 40,000</option><option>PHP 40,001 - 60,000</option><option>Above PHP 60,000</option></select></div>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-courses" class="text-xs font-bold text-slate-700">Courses, tracks, or strands</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('course')" v-model="form.eligibilityRuleModes.course" rule-key="course" label="Courses, tracks, or strands" /></div><EligibilityOptionPicker id="program-eligible-courses" v-model="form.eligibleCourses" :options="eligibilityOptions.courses" :input-class="inputClass" open-label="Any course / strand" custom-label="Add a specific course not listed" /></div>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-years" class="text-xs font-bold text-slate-700">Grade or year levels</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('year_level')" v-model="form.eligibilityRuleModes.year_level" rule-key="year_level" label="Grade or year levels" /></div><EligibilityOptionPicker id="program-eligible-years" v-model="form.eligibleYearLevels" :options="eligibilityOptions.years" :input-class="inputClass" :max-length="2000" open-label="Any grade / year level" custom-label="Add an unlisted grade or year level" /></div>
+                                        <div class="col-span-2"><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-locations" class="text-xs font-bold text-slate-700">Covered locations</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('location')" v-model="form.eligibilityRuleModes.location" rule-key="location" label="Covered locations" /></div><EligibilityLocationPicker v-model="form.eligibleLocations" :input-class="inputClass" /></div>
+                                        <div class="col-span-2"><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-income-rule" class="text-xs font-bold text-slate-700">Household income rule</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('income')" v-model="form.eligibilityRuleModes.income" rule-key="income" label="Household income" /></div><select id="program-income-rule" v-model="form.incomeRequirement" :class="inputClass"><option>Any</option><option>Below PHP 10,000</option><option>PHP 10,000 - 20,000</option><option>PHP 20,001 - 40,000</option><option>PHP 40,001 - 60,000</option><option>Above PHP 60,000</option></select></div>
                                     </div>
 
                                     <div class="mt-6 border-t border-slate-200 pt-6">
@@ -1185,8 +1293,8 @@ onBeforeUnmount(() => {
                                 <button v-if="canDelete" type="button" class="inline-flex items-center gap-2 px-3 py-2.5 text-sm font-bold text-rose-700 disabled:opacity-40" :disabled="isSaving" @click="deleteDraft"><i class="fa-regular fa-trash-can text-xs" aria-hidden="true"></i>Delete draft</button>
                             </div>
                             <div v-if="activeStep !== 'review'" class="flex items-center gap-3">
-                                <button v-if="programId && originalStatus === 'draft'" type="button" class="inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-40" :disabled="isSaving" @click="saveDraft"><i class="fa-regular fa-floppy-disk text-xs" aria-hidden="true"></i>Save draft</button>
-                                <button type="submit" class="bg-slate-950 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40" :disabled="isSaving || isReadOnly">{{ isSaving ? 'Saving...' : activeStepIndex === steps.length - 2 ? 'Review program' : 'Save and continue' }} <i class="fa-solid fa-arrow-right ml-2 text-xs" aria-hidden="true"></i></button>
+                                <button v-if="originalStatus === 'draft'" type="button" class="inline-flex items-center gap-2 border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 disabled:opacity-40" :disabled="isSaving" @click="saveDraft"><i class="fa-regular fa-floppy-disk text-xs" aria-hidden="true"></i>Save draft</button>
+                                <button type="submit" class="bg-slate-950 px-5 py-2.5 text-sm font-bold text-white disabled:opacity-40" :disabled="isSaving || isReadOnly">{{ isSaving ? 'Saving...' : activeStepIndex === steps.length - 2 ? 'Review program' : originalStatus === 'draft' ? 'Save and continue' : 'Continue' }} <i class="fa-solid fa-arrow-right ml-2 text-xs" aria-hidden="true"></i></button>
                             </div>
                         </footer>
                     </form>
@@ -1325,6 +1433,7 @@ onBeforeUnmount(() => {
             :title="confirmation.title"
             :message="confirmation.message"
             :confirm-label="confirmation.confirmLabel"
+            :cancel-label="confirmation.cancelLabel"
             :tone="confirmation.tone"
             @confirm="confirmConfirmation"
             @cancel="cancelConfirmation"

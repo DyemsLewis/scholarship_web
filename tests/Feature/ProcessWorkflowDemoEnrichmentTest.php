@@ -72,32 +72,33 @@ class ProcessWorkflowDemoEnrichmentTest extends TestCase
         $this->assertNull($this->application('award.receipt')->benefitReleaseRecords()->sole()->receiptResponse);
         $followup = $this->application('award.followup')->benefitReleaseRecords()->sole();
         $payload = app(RecipientBenefitFollowUpService::class)->payload($followup, $followup->applicant);
-        $this->assertTrue($payload['can_reply']);
-        $this->assertSame('awaiting_response', $payload['status']);
+        $this->assertNull($payload);
+        $this->assertSame('scheduled', $followup->status);
+        $this->assertTrue($followup->release->release_at->isFuture());
         $this->assertFalse($this->application('award.complete')->scholarship->monitoringCycles()->exists());
         $this->assertDatabaseCount('recipient_benefit_receipt_responses', 5);
         $this->assertDatabaseCount('recipient_support_decisions', 1);
-        $this->assertDatabaseCount('recipient_benefit_follow_ups', 1);
+        $this->assertDatabaseCount('recipient_benefit_follow_ups', 0);
         $counts = [User::count(), ScholarshipApplication::count(), ActivityLog::count()];
         $this->seed(Enrichment::class);
         $this->assertSame($counts, [User::count(), ScholarshipApplication::count(), ActivityLog::count()]);
         $this->assertSame($before, $this->existingRows());
 
         // Exercise the next actions in SQLite only; hosted fixtures remain undecided.
-        $officer = User::where('username', 'talunaw.decisions')->sole();
+        $officer = User::where('username', 'nuvareya.decisions')->sole();
         $reference = app(SelectionComparisonService::class)->forApplication($first->fresh())['reference'];
         $this->actingAs($officer)->patchJson('/provider/applications/'.$first->id.'/final-outcome', [
             'outcome' => 'selected', 'comparison_reference' => $reference, 'expected_outcome' => null,
         ])->assertSuccessful();
         $this->assertSame('selected', $first->fresh()->final_outcome);
         $case = $this->application('support.close')->monitoringCases()->sole();
-        $this->actingAs(User::where('username', 'talunaw.monitoring')->sole())->patchJson('/provider/monitoring-cases/'.$case->id.'/close', [
+        $this->actingAs(User::where('username', 'nuvareya.monitoring')->sole())->patchJson('/provider/monitoring-cases/'.$case->id.'/close', [
             'outcome' => 'completed',
         ])->assertSuccessful();
         $this->assertSame('closed', $case->fresh()->status);
         foreach (['support.decision', 'award.complete'] as $key) {
             $application = $this->application($key);
-            $this->actingAs(User::where('username', 'talunaw.recipients')->sole())->postJson('/provider/applications/'.$application->id.'/support-decision', [
+            $this->actingAs(User::where('username', 'nuvareya.recipients')->sole())->postJson('/provider/applications/'.$application->id.'/support-decision', [
                 'decision' => 'completed', 'reason_category' => 'program_completed', 'effective_on' => now()->toDateString(),
                 'reason' => 'All agreed support and required reviews are complete.', 'confirmed' => true,
             ])->assertSuccessful();

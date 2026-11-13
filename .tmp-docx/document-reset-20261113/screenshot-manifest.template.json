@@ -1,0 +1,1690 @@
+{
+  "status": "AWAITING_FRESH_CAPTURES_NOT_READY_FOR_EDIT",
+  "source_sha256": "d3e68699c81a4c29222c2188a95856e92cf24ea76df385c4bef53eb9469176d0",
+  "captured_at": null,
+  "environment": null,
+  "figures": [
+    {
+      "figure": 1,
+      "block_index": 61,
+      "section": "1 Registration and sign in",
+      "subsection": "",
+      "signed_in_account": "Not signed in",
+      "page_shown": "Registration form before sign in",
+      "relationship_id": "rId9",
+      "package_target": "word/media/image1.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6492240",
+        "cy": "4508500"
+      },
+      "preceding_text": [
+        "1 Registration and sign in",
+        "Signed in account: Not signed in",
+        "Page shown: Registration form before sign in",
+        "A new applicant or provider starts at registration, selects the appropriate account type and supplies the requested identity and contact information. Follow the email verification instructions before continuing. An existing demo account instead signs in using its username or email. The middle initial is optional."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 2,
+      "block_index": 67,
+      "section": "2 Applicant profile and supporting evidence",
+      "subsection": "",
+      "signed_in_account": "demo.student.profile",
+      "page_shown": "Applicant profile and supporting evidence",
+      "relationship_id": "rId90",
+      "package_target": "word/media/image82.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "2 Applicant profile and supporting evidence",
+        "Signed in account: demo.student.profile",
+        "Page shown: Applicant profile and supporting evidence",
+        "The applicant maintains identity, contact, education, household, and location details. Section edit modals keep the applicant on their record. Upload documents that support the profile rather than merely filling the text fields."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 3,
+      "block_index": 86,
+      "section": "3 Admin applicant verification",
+      "subsection": "Open the applicant verification record",
+      "signed_in_account": "demoops.reviews",
+      "page_shown": "Admin applicant verification",
+      "relationship_id": "rId91",
+      "package_target": "word/media/image83.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "1. Select Brenel Dumayun from Applicant verification. Confirm the name and account before reviewing.",
+        "2. Read the review guide for the current step. Expand the complete profile only when more context is needed, and check any changes since the previous decision.",
+        "3. Go to Supporting evidence and compare each required document with the corresponding declared information.",
+        "4. Uploaded files do not verify the whole profile. Review current evidence first; use the queue navigation to keep the original search and filters while opening the next record."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 4,
+      "block_index": 103,
+      "section": "4 Provider organization profile",
+      "subsection": "",
+      "signed_in_account": "talunaw.profile",
+      "page_shown": "Provider organization profile",
+      "relationship_id": "rId92",
+      "package_target": "word/media/image84.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "4 Provider organization profile",
+        "Signed in account: talunaw.profile",
+        "Page shown: Provider organization profile",
+        "The organization profile manager maintains the provider information shown to applicants, including identity, public description, branding, contact information, and location. A provider preview shows the applicant-facing presentation."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 5,
+      "block_index": 116,
+      "section": "5 Admin provider verification",
+      "subsection": "Review organization documents individually",
+      "signed_in_account": "demoops.reviews",
+      "page_shown": "Admin provider verification",
+      "relationship_id": "rId93",
+      "package_target": "word/media/image85.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "1. Sign in as demoops.reviews. Open Provider verification and select Hirayalon. Step 1 shows each file as Awaiting review, Accepted, or Needs replacement, with reviewer and date when available.",
+        "2. Choose Review on one file. Compare the submitted proof with the legal organization name, registration authority and number, and representative details. Download it if the format cannot be previewed.",
+        "3. Choose Accept document only after inspecting it and checking the comparison acknowledgement. Otherwise choose Request replacement and explain what must be corrected. Saving records the reviewer, time, note and file revision; it does not verify the account.",
+        "4. Repeat for every current file. Unreviewed files, unavailable files and replacement requests block final approval. If another reviewer or upload changes the file, reload instead of submitting an outdated review. The screenshot shows an unsaved form."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 6,
+      "block_index": 135,
+      "section": "6 Program creation and publication",
+      "subsection": "",
+      "signed_in_account": "talunaw.programs",
+      "page_shown": "Program creation and publication",
+      "relationship_id": "rId94",
+      "package_target": "word/media/image86.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "6 Program creation and publication",
+        "Signed in account: talunaw.programs",
+        "Page shown: Program creation and publication",
+        "The program coordinator prepares scholarship details, benefits, eligibility rules, requirements, selection stages, dates, applicant limits, and branding. Drafts and requested changes stay separate from published programs. The staged editor validates each step."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 7,
+      "block_index": 154,
+      "section": "7 Admin program review",
+      "subsection": "Inspect the submitted scholarship before publication",
+      "signed_in_account": "demoops.reviews",
+      "page_shown": "Admin program review",
+      "relationship_id": "rId95",
+      "package_target": "word/media/image87.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "1. Open a program from Program review and confirm its provider and submission status.",
+        "2. Review the advertised support, eligibility, requirements, dates, selection process and recipient terms.",
+        "3. Read the readiness checks and changes since the previous review, then approve a valid submission or request clear changes with a review note.",
+        "4. Save only after checking the current submission. If another user changed it, reload before deciding. Publication is separate from selecting a scholarship applicant."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 8,
+      "block_index": 168,
+      "section": "8 Scholarship discovery and preparation",
+      "subsection": "",
+      "signed_in_account": "demo.student.apply",
+      "page_shown": "Scholarship discovery and preparation",
+      "relationship_id": "rId96",
+      "package_target": "word/media/image88.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "8 Scholarship discovery and preparation",
+        "Signed in account: demo.student.apply",
+        "Page shown: Scholarship discovery and preparation",
+        "Use Search and filter to find published scholarships, then open View details to review benefits, eligibility, required files, deadlines and application instructions. Each result displays the scholarship logo beside its name; background photographs and provider logos are separate assets. Apply starts the application only when the verified profile meets the required rules and applications are open. Use the provider link to inspect the organization."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 9,
+      "block_index": 183,
+      "section": "9 Reusable applicant documents",
+      "subsection": "",
+      "signed_in_account": "demo.student.apply",
+      "page_shown": "Reusable applicant documents",
+      "relationship_id": "rId97",
+      "package_target": "word/media/image89.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "9 Reusable applicant documents",
+        "Signed in account: demo.student.apply",
+        "Page shown: Reusable applicant documents",
+        "My Documents holds reusable files for future applications. A saved document is not automatically an accepted application requirement; the applicant must choose appropriate current files during an application."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 10,
+      "block_index": 189,
+      "section": "10 Submitted application and next action",
+      "subsection": "",
+      "signed_in_account": "demo.student.screening",
+      "page_shown": "Submitted application and next action",
+      "relationship_id": "rId98",
+      "package_target": "word/media/image90.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "10 Submitted application and next action",
+        "Signed in account: demo.student.screening",
+        "Page shown: Submitted application and next action",
+        "The application details tell the applicant the current stage, what happens next, required submissions, schedule, decision, and history. demo.student.screening is waiting for the initial provider review."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 11,
+      "block_index": 202,
+      "section": "11 Provider screening and document review",
+      "subsection": "Inspect application eligibility after selecting an applicant",
+      "signed_in_account": "talunaw.reviewer",
+      "page_shown": "Provider screening and document review",
+      "relationship_id": "rId99",
+      "package_target": "word/media/image91.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "1. Open Darel Kalimbas from My review queue and confirm that the application is assigned to you.",
+        "2. Compare the declared profile against each program rule. Review unresolved items rather than relying only on an overall score.",
+        "3. Inspect the Profile tab and supporting evidence where a claim needs checking.",
+        "4. Hard requirements and reviewable qualifications must follow their configured policy; resolve the relevant review before recording a screening result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 12,
+      "block_index": 209,
+      "section": "11 Provider screening and document review",
+      "subsection": "Review the application evidence",
+      "signed_in_account": "talunaw.reviewer",
+      "page_shown": "Provider screening and document review",
+      "relationship_id": "rId100",
+      "package_target": "word/media/image92.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "1. Open Evidence in the selected application record.",
+        "2. Use View or the file preview to inspect the submitted file, then select Review beside that document.",
+        "3. Record an evidence status and specific review notes appropriate to the file. An upload alone is not accepted evidence.",
+        "4. Repeat for the required files before relying on document readiness for the screening result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 13,
+      "block_index": 228,
+      "section": "12 Formal application verification",
+      "subsection": "",
+      "signed_in_account": "demo.student.formal",
+      "page_shown": "Formal application verification",
+      "relationship_id": "rId101",
+      "package_target": "word/media/image93.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "12 Formal application verification",
+        "Signed in account: demo.student.formal",
+        "Page shown: Formal application verification",
+        "Formal application is a configured stage for providers that require a further official application or in-person verification. Applicants follow the published instructions and schedule where applicable. A separate session is not always mandatory for this stage."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 14,
+      "block_index": 240,
+      "section": "13 Examination and interview scheduling",
+      "subsection": "",
+      "signed_in_account": "talunaw.selection",
+      "page_shown": "Examination and interview scheduling",
+      "relationship_id": "rId102",
+      "package_target": "word/media/image94.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "13 Examination and interview scheduling",
+        "Signed in account: talunaw.selection",
+        "Page shown: Examination and interview scheduling",
+        "The selection officer assigns eligible applicants to sessions. Separate sessions support different dates or venues; online interviews use a meeting link. Session attendance or completion and an individual applicant result are different records."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 15,
+      "block_index": 255,
+      "section": "14 Applicant examination schedule",
+      "subsection": "",
+      "signed_in_account": "demo.student.exam.confirm",
+      "page_shown": "Applicant examination schedule",
+      "relationship_id": "rId103",
+      "package_target": "word/media/image95.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "14 Applicant examination schedule",
+        "Signed in account: demo.student.exam.confirm",
+        "Page shown: Applicant examination schedule",
+        "The applicant reads the assigned examination date, venue, instructions, and acknowledgement action. Other prepared accounts cover completing the conducted session and recording an individual examination result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 16,
+      "block_index": 267,
+      "section": "15 Applicant interview schedule",
+      "subsection": "",
+      "signed_in_account": "demo.student.interview.confirm",
+      "page_shown": "Applicant interview schedule",
+      "relationship_id": "rId104",
+      "package_target": "word/media/image96.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "15 Applicant interview schedule",
+        "Signed in account: demo.student.interview.confirm",
+        "Page shown: Applicant interview schedule",
+        "The interview schedule tells the applicant when and how to attend, including the meeting link for an online interview. An applicant acknowledgement does not prove the interview took place."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 17,
+      "block_index": 279,
+      "section": "16 Recording conducted stage results",
+      "subsection": "",
+      "signed_in_account": "talunaw.selection",
+      "page_shown": "Recording conducted stage results",
+      "relationship_id": "rId105",
+      "package_target": "word/media/image97.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "16 Recording conducted stage results",
+        "Signed in account: talunaw.selection",
+        "Page shown: Recording conducted stage results",
+        "The results workspace separates work ready for result recording from scheduling work. Complete the required conducted-session or stage verification and attach proof where required before recording an applicant result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 18,
+      "block_index": 292,
+      "section": "17 Final scholarship decision",
+      "subsection": "Open the final decision form",
+      "signed_in_account": "talunaw.decisions",
+      "page_shown": "Final scholarship decision",
+      "relationship_id": "rId22",
+      "package_target": "word/media/image12.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. As talunaw.decisions, open Pending decisions, choose Talunaw Scholar Selection Round, and select Nerali Salindaw. Read the evaluated score, rank, review guidance, capacity and prior stage results.",
+        "2. Confirm that the comparison is Ready to compare. There are three complete evaluations and two unfilled slots. Review the stage breakdown; a profile matching percentage is not this selection score.",
+        "3. In Record final outcome, choose the actual decision and add the required notes or internal rationale. A different suggestion or a cutoff tie can require an explanation. A waitlist suggestion is not an official waitlist entry until saved.",
+        "4. Review the confirmation and save only the intended outcome. If another decision or score changed, reload the comparison. Selection reserves capacity and sends the offer; it does not accept the agreement for the applicant or release money."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 19,
+      "block_index": 301,
+      "section": "17 Final scholarship decision",
+      "subsection": "Compare final candidates using the DSS",
+      "signed_in_account": "talunaw.decisions",
+      "page_shown": "Final scholarship decision",
+      "relationship_id": "rId31",
+      "package_target": "word/media/image21.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. Inspect scores 94.8, 90.6 and 85.0, their ranks and the two remaining slots. The first two suggestions are Consider selecting; the third is Consider waitlisting.",
+        "3. Open the small evaluation-breakdown icon. Compare frozen screening, examination and interview components and their weights. These are recorded evaluations, not the applicant matching percentage.",
+        "4. Open Record decision for the intended candidate. Follow the result controls and confirmation. Enter a clear internal reason if departing from guidance or resolving a cutoff tie.",
+        "5. Return to Pending decisions after saving. Capacity and suggestions update. Equal scores can share a rank; an unresolved tie at the cutoff must not be arbitrarily treated as an automatic winner."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 20,
+      "block_index": 310,
+      "section": "17 Final scholarship decision",
+      "subsection": "Read the scored stage breakdown",
+      "signed_in_account": "talunaw.decisions",
+      "page_shown": "Final scholarship decision",
+      "relationship_id": "rId32",
+      "package_target": "word/media/image22.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Open the evaluation-breakdown icon for Nerali Salindaw.",
+        "2. Read the stage status, score, maximum and weight. Screening reuses the reviewed academic-merit and financial-need rubric components.",
+        "3. Treat formal verification as a prerequisite. It is not counted twice as additional points.",
+        "4. If a stage is incomplete or its result was reopened, review it through the responsible workspace before relying on the final total."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 21,
+      "block_index": 318,
+      "section": "17 Final scholarship decision",
+      "subsection": "Complete a missing evaluation before ranking",
+      "signed_in_account": "talunaw.selection then talunaw.decisions",
+      "page_shown": "Final scholarship decision",
+      "relationship_id": "rId33",
+      "package_target": "word/media/image23.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. As talunaw.selection, open the completed interview through selection history, then the assigned applicant record. Confirm participation and the original assessment evidence.",
+        "2. Expand Earlier stage evaluations in the applicant record. Beside Interview, choose Add score and enter the actual score and maximum. Add a factual note and review the confirmation before recording it.",
+        "3. To correct an existing evaluation later, use the correction control and give the required explanation. Earlier score revisions stay in history.",
+        "4. As talunaw.decisions, select this program in Pending decisions. A final score appears only after all scored and qualifying prerequisites are complete. Missing does not mean zero."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 22,
+      "block_index": 332,
+      "section": "18 Applicant acceptance of the agreement",
+      "subsection": "Read and respond to the recipient agreement",
+      "signed_in_account": "demo.student.agreement",
+      "page_shown": "Applicant acceptance of the agreement",
+      "relationship_id": "rId107",
+      "package_target": "word/media/image99.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "2. Read the actual recipient terms, responsibilities and any stated consequences rather than accepting from the summary alone.",
+        "3. Use the acceptance acknowledgement and response note where required, then choose the intended response.",
+        "4. Only submit after understanding the agreement. The provider must wait for the applicant response before the corresponding support steps.",
+        "5. If the agreement is already accepted, View agreement shows the saved terms. Use a still-pending offer to demonstrate acceptance; do not reset an existing response."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 23,
+      "block_index": 337,
+      "section": "19 Recipient support and agreement tracking",
+      "subsection": "",
+      "signed_in_account": "talunaw.recipients",
+      "page_shown": "Recipient support and agreement tracking",
+      "relationship_id": "rId108",
+      "package_target": "word/media/image100.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "19 Recipient support and agreement tracking",
+        "Signed in account: talunaw.recipients",
+        "Page shown: Recipient support and agreement tracking",
+        "The recipient officer tracks agreement responses and active scholarship support. Formal application, final selection, agreement acceptance and active support are separate process stages."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 24,
+      "block_index": 350,
+      "section": "20 Applicant scholarship support and in person check in",
+      "subsection": "Open the appointment and prepare the originals",
+      "signed_in_account": "demo.process.support.appointment",
+      "page_shown": "Scholarship Support check-in preparation",
+      "relationship_id": "rId23",
+      "package_target": "word/media/image13.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Open Scholarship Support, choose the scholarship, and select Check-ins.",
+        "2. Open the upcoming appointment and read the Manila date, time, venue, and instructions.",
+        "3. Bring the current academic record and enrollment certificate. This record has no applicant upload form.",
+        "4. Use View map for the venue and follow the appointment instructions. Contact the provider for a different schedule; do not upload substitute files for this in-person check. Return after attendance for the provider-recorded results."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 25,
+      "block_index": 362,
+      "section": "21 Provider monitoring evidence review",
+      "subsection": "Select a recipient and open the monitoring checklist",
+      "signed_in_account": "talunaw.monitoring",
+      "page_shown": "Provider monitoring evidence review",
+      "relationship_id": "rId24",
+      "package_target": "word/media/image14.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. As talunaw.monitoring, choose Talunaw Learning Continuity Grant and open the attended check-in, not just the work queue.",
+        "2. Select Nivara Kalumay from the roster. Attendance is already recorded; the two original documents still need provider results.",
+        "3. Open Current academic record. Compare the original, enter the verified grade and grading scale, select the result and record notes. Repeat for Current enrollment certificate. These are provider records, not applicant uploads.",
+        "4. Switch to Elvian Silaraw to demonstrate Close check-in after both items are met. Review the closure dialog and confirm the case outcome. Closing one check-in does not renew or end the scholarship."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 26,
+      "block_index": 371,
+      "section": "21 Provider monitoring evidence review",
+      "subsection": "Set up and activate the monitoring plan",
+      "signed_in_account": "talunaw.programs or talunaw.manager",
+      "page_shown": "Provider monitoring evidence review",
+      "relationship_id": "rId34",
+      "package_target": "word/media/image24.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. In Requirements, add only necessary academic, enrollment or other program checks. For academic progress, choose the required minimum and grading scale.",
+        "3. Configure the actual evidence method. The demonstrated check-ins require the provider to inspect originals at an appointment, not accept an applicant upload as verified proof.",
+        "4. Open Review and compare all settings with the published support terms. Save draft while preparing; activate only the intended complete plan after confirmation.",
+        "5. Use talunaw.monitoring to publish individual appointments from the active plan. Activating a plan does not by itself assign every recipient to a new appointment."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 27,
+      "block_index": 381,
+      "section": "21 Provider monitoring evidence review",
+      "subsection": "Publish a check in for the selected recipients",
+      "signed_in_account": "talunaw.monitoring",
+      "page_shown": "Provider monitoring evidence review",
+      "relationship_id": "rId35",
+      "package_target": "word/media/image25.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. Name the period, academic year and appointment. Set the actual date, time, venue, original documents to bring and short recipient instructions.",
+        "3. Choose the intended accepted recipients from the roster. Keep separate sessions or recipient arrangements for different dates and venues instead of publishing overlapping appointments.",
+        "4. Review the recipient count and instructions, then confirm Publish check-in only when ready. Cancel leaves the current data unchanged.",
+        "5. Sign in as an assigned applicant and open Scholarship Support then Check-ins. Confirm that the appointment and required originals appear for that applicant."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 28,
+      "block_index": 390,
+      "section": "21 Provider monitoring evidence review",
+      "subsection": "Record attendance originals and case closure",
+      "signed_in_account": "talunaw.monitoring",
+      "page_shown": "Provider monitoring evidence review",
+      "relationship_id": "rId36",
+      "package_target": "word/media/image26.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. For a new actual appointment, record Attended only after the applicant attends. If the appointment changes, use the reschedule controls and notify the recipient instead of pretending the old meeting occurred.",
+        "2. For Nivara Kalumay, open Current academic record and inspect the physical original. Record the verified grade, scale, result and notes. Repeat for enrollment.",
+        "3. If an extension, exception or follow-up is genuinely needed, record it through the available request or follow-up controls and resolve it before normal closure. Do not mark a pending item met to remove the blocker.",
+        "4. Select Elvian Silaraw. Both items are already met. Choose Close check-in, review the outcome and confirm it. The applicant can then read the closed result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 29,
+      "block_index": 396,
+      "section": "22 Admin monitoring oversight",
+      "subsection": "",
+      "signed_in_account": "demoops.reviews",
+      "page_shown": "Admin monitoring oversight",
+      "relationship_id": "rId111",
+      "package_target": "word/media/image103.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "22 Admin monitoring oversight",
+        "Signed in account: demoops.reviews",
+        "Page shown: Admin monitoring oversight",
+        "The review officer can inspect monitoring records and supporting evidence through its own oversight workspace. This is separate from routine provider checklist review."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 30,
+      "block_index": 409,
+      "section": "23 Renewal completion and support decisions",
+      "subsection": "",
+      "signed_in_account": "talunaw.recipients",
+      "page_shown": "Renewal completion and support decisions",
+      "relationship_id": "rId25",
+      "package_target": "word/media/image15.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "23 Renewal completion and support decisions",
+        "Signed in account: talunaw.recipients",
+        "Page shown: Renewal completion and support decisions",
+        "Open Calira Maranaw (demo.process.support.decision) in Talunaw Learning Continuity Grant as talunaw.recipients, then Support status. The check-in is closed and both cash allowance and mentoring receipts are confirmed. Renew support to continue the award, or Complete support after the agreed work is finished. The current decision is deliberately left to the tester. Outstanding schedules, unconfirmed receipts or delivery issues block normal completion."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 31,
+      "block_index": 415,
+      "section": "23 Renewal completion and support decisions",
+      "subsection": "Read the applicant closeout summary",
+      "signed_in_account": "demo.process.support.decision for the current walkthrough; the retained image is an isolated completion illustration using demo.student.support.decision.",
+      "page_shown": "Renewal completion and support decisions",
+      "relationship_id": "rId13",
+      "package_target": "word/media/image3.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "In practice, the award terms determine whether support ends at graduation, at the end of a term, or through an early decision. A period ending without renewal is not the same as ending it early. Some programs require final documents before the last release. See UP Diliman DOST-ASTHRDP procedures and CHED Merit Scholarship guidelines on notice and appeal.",
+        "Read the applicant closeout summary",
+        "Signed in account: demo.process.support.decision for the current walkthrough; the retained image is an isolated completion illustration using demo.student.support.decision.",
+        "After completing support in the preceding step, sign in with the same applicant account, open Scholarship Support then the award under Past support. Overview shows the end reason, effective date and next action. The retained image below is an isolated completed example, not a pre-recorded completion on this applicant. For a live successful renewal use demo.process.support.history."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 32,
+      "block_index": 424,
+      "section": "23 Renewal completion and support decisions",
+      "subsection": "Renew support and read the recipient response",
+      "signed_in_account": "talunaw.recipients then demo.process.support.history",
+      "page_shown": "Renewal completion and support decisions",
+      "relationship_id": "rId37",
+      "package_target": "word/media/image27.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. For Calira, open Support status. Check the completed review, accepted agreement and benefit settlement. Choose Renewed only when the provider intends to continue support.",
+        "2. Record a matching reason category, effective date, renewed support end, next review and the next-period terms. Review the confirmation before saving.",
+        "3. Sign in as the recipient. Open Support history and the renewal outcome, then read its dates, reasons and terms. Use the acknowledgment or permitted response rather than accepting a different current program page.",
+        "4. To demonstrate a response without first recording another provider outcome, use Revian Talihim and the existing renewal history shown below."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 33,
+      "block_index": 430,
+      "section": "24 Planning the first or one time benefit release",
+      "subsection": "",
+      "signed_in_account": "talunaw.releases",
+      "page_shown": "Planning the first or one time benefit release",
+      "relationship_id": "rId113",
+      "package_target": "word/media/image105.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "24 Planning the first or one time benefit release",
+        "Signed in account: talunaw.releases",
+        "Page shown: Planning the first or one time benefit release",
+        "The benefit release officer can schedule the first distribution after the required agreement state without creating recurring monitoring merely to distribute a benefit. One-time awards can use no recurring monitoring policy."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 34,
+      "block_index": 452,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Open the distribution record and record delivery",
+      "signed_in_account": "talunaw.releases",
+      "page_shown": "Recording actual benefit distribution",
+      "relationship_id": "rId114",
+      "package_target": "word/media/image106.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "1. Select the relevant release from Record distribution and confirm the title, schedule and recipients.",
+        "2. Select the intended recipient and inspect the current distribution status before entering a result.",
+        "3. Record actual delivery details and attach required proof. Do not mark a scheduled event as delivered merely because its date arrived.",
+        "4. The applicant must still confirm receipt or report an issue. Provider evidence alone cannot make that response for the applicant."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 35,
+      "block_index": 458,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Submit payout details for a digital benefit",
+      "signed_in_account": "demo.student.payout.details",
+      "page_shown": "Recording actual benefit distribution",
+      "relationship_id": "rId132",
+      "package_target": "word/media/image124.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "Signed in account: demo.student.payout.details",
+        "1. Open Scholarship Support, choose the award, then open its benefit release under Benefits.",
+        "2. Choose Add payout details. Enter the institution, account holder, and the fictional account number for the release method.",
+        "3. Review and submit. The provider must review the destination; saving the details does not send money."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 36,
+      "block_index": 464,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Review the payout destination",
+      "signed_in_account": "talunaw.releases",
+      "page_shown": "Recording actual benefit distribution",
+      "relationship_id": "rId133",
+      "package_target": "word/media/image125.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "Signed in account: talunaw.releases",
+        "1. Open the distribution for demo.student.payout.review. Choose Review payout details from that recipient record.",
+        "2. Inspect the submitted details. Approve a matching destination or request a correction from the applicant.",
+        "3. Approval unlocks recording a transfer. It does not send the benefit and does not confirm receipt."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 37,
+      "block_index": 470,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Record simulated transfer proof",
+      "signed_in_account": "talunaw.releases",
+      "page_shown": "Recording actual benefit distribution",
+      "relationship_id": "rId134",
+      "package_target": "word/media/image126.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "Signed in account: talunaw.releases",
+        "1. Open the approved destination for demo.student.payout.transfer.",
+        "2. For the demo, record a simulated transfer date and attach fictional proof. Do not send real money. In actual use, record a transfer only after completing it outside the portal.",
+        "3. Confirm the record. The applicant can then acknowledge receipt or report a problem."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 38,
+      "block_index": 477,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Follow up a missed benefit release",
+      "signed_in_account": "talunaw.releases",
+      "page_shown": "Recording actual benefit distribution",
+      "relationship_id": "rId26",
+      "package_target": "word/media/image16.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Open the distribution, select the recipient, and record the missed release only if the scheduled delivery did not happen. Find it again under Issues & follow-up.",
+        "2. Send a follow-up notice with instructions and at least seven days to reply. Allow at least two days between contact attempts. The reminder must leave at least two more days to reply and cannot shorten the original deadline.",
+        "3. The recipient can ask for a new arrangement or explicitly decline the benefit. Keep the missed attempt in history and link a replacement release when applicable. An actual reply stops closure for no response.",
+        "4. Leave the current example awaiting the applicant reply. Only after a reminder, at least two further days, and expiry of the reply deadline without a response can an authorized officer mark the benefit unclaimed. Do not backdate contact or change the clock. A real reply stops no-response closure; missing collection is not receipt, voluntary withdrawal or misconduct."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 39,
+      "block_index": 485,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Reply to an uncollected benefit notice",
+      "signed_in_account": "demo.process.award.followup then talunaw.releases",
+      "page_shown": "Recording actual benefit distribution",
+      "relationship_id": "rId38",
+      "package_target": "word/media/image28.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. As the applicant, open the award, Benefit releases and the release follow-up. Read the instructions and response deadline.",
+        "2. Choose the available response to request a new arrangement if the applicant still wants the benefit, or explicitly decline it only if that is the intended decision. Explain the circumstances and confirm.",
+        "3. As talunaw.releases, open the same missed release. Read the actual recipient response. For continued collection, schedule and link an eligible replacement for the same person and benefit.",
+        "4. Keep the missed attempt and notice in history. Record actual replacement delivery and obtain recipient receipt confirmation; do not label the missed original as received."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 40,
+      "block_index": 497,
+      "section": "26 Applicant receipt and delivery reports",
+      "subsection": "Open a benefit record before confirming receipt",
+      "signed_in_account": "demo.student.release.confirm",
+      "page_shown": "Applicant receipt and delivery reports",
+      "relationship_id": "rId115",
+      "package_target": "word/media/image107.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "1. Open the relevant benefit record rather than confirming from the list alone.",
+        "2. Read the recorded distribution details, benefit amount or description, and any available proof.",
+        "3. Confirm receipt only if you actually received the stated benefit. If it is missing or incomplete, use the delivery-issue response.",
+        "4. When a response is already recorded, inspect its status and history instead of sending a duplicate confirmation."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 41,
+      "block_index": 506,
+      "section": "26 Applicant receipt and delivery reports",
+      "subsection": "Complete a one time award without recurring monitoring",
+      "signed_in_account": "demo.process.award.receipt then talunaw.recipients",
+      "page_shown": "Applicant receipt and delivery reports",
+      "relationship_id": "rId39",
+      "package_target": "word/media/image29.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. Confirm only the benefit actually received. If something is missing, submit the appropriate issue instead; a provider cannot confirm it for the applicant.",
+        "3. As talunaw.recipients, select Lenavi and open Support status. Before completing support shows the agreed one-time benefit settled with no outstanding distribution or delivery issue.",
+        "4. Choose Complete support with the accurate completion reason and effective date, then review and confirm. Do not create an unnecessary semester plan or grade check for this one-time award.",
+        "5. As Lenavi afterward, open Past support and the outcome to read the saved completion reason, dates, benefit summary and any permitted response."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 42,
+      "block_index": 512,
+      "section": "27 Recipient withdrawal requests",
+      "subsection": "",
+      "signed_in_account": "demo.student.support.decision",
+      "page_shown": "Recipient withdrawal section",
+      "relationship_id": "rId116",
+      "package_target": "word/media/image108.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "27 Recipient withdrawal requests",
+        "Signed in account: demo.student.support.decision",
+        "Page shown: Recipient withdrawal section",
+        "An accepted recipient can request withdrawal with an explanation. Support does not end while the request is pending. A missed pickup or silence is not a withdrawal request. This process is separate from withdrawing an application before accepting an award."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 43,
+      "block_index": 526,
+      "section": "28 Agreement concerns before conclusions",
+      "subsection": "",
+      "signed_in_account": "talunaw.recipients",
+      "page_shown": "Agreement concerns before conclusions",
+      "relationship_id": "rId117",
+      "package_target": "word/media/image109.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "28 Agreement concerns before conclusions",
+        "Signed in account: talunaw.recipients",
+        "Page shown: Agreement concerns before conclusions",
+        "Agreement concerns begin as private drafts with a specific accepted obligation, factual explanation and proof. Sending the notice gives the applicant an opportunity to respond; a notice is not a confirmed breach. The live queue starts empty until a tester creates a case."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 44,
+      "block_index": 541,
+      "section": "29 Provider delivery investigation and correction",
+      "subsection": "",
+      "signed_in_account": "talunaw.releases",
+      "page_shown": "Provider delivery investigation and correction",
+      "relationship_id": "rId118",
+      "package_target": "word/media/image110.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "29 Provider delivery investigation and correction",
+        "Signed in account: talunaw.releases",
+        "Page shown: Provider delivery investigation and correction",
+        "The release officer responds to missing-benefit reports, requests information or proposes a documented delivery correction. The report stays unresolved until the applicant confirms receipt or gives the appropriate response."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 45,
+      "block_index": 556,
+      "section": "30 Independent review appeals and privacy",
+      "subsection": "",
+      "signed_in_account": "demoops.reviews",
+      "page_shown": "Independent review appeals and privacy",
+      "relationship_id": "rId119",
+      "package_target": "word/media/image111.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "30 Independent review appeals and privacy",
+        "Signed in account: demoops.reviews",
+        "Page shown: Independent review appeals and privacy",
+        "The admin reviewer examines the accepted obligation or benefit, evidence, statements and response opportunity, then records a reasoned outcome. A different authorized reviewer must decide an appeal of the first reviewers outcome. Privacy and access details are collapsed inside an opened case."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 46,
+      "block_index": 583,
+      "section": "31 Provider support and platform reports",
+      "subsection": "",
+      "signed_in_account": "talunaw.support",
+      "page_shown": "Provider support and platform reports",
+      "relationship_id": "rId120",
+      "package_target": "word/media/image112.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "31 Provider support and platform reports",
+        "Signed in account: talunaw.support",
+        "Page shown: Provider support and platform reports",
+        "Provider support staff handle questions and track replies within their organization. Platform problems and privacy requests can be escalated through the platform support process rather than changing an applicant decision informally."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 47,
+      "block_index": 589,
+      "section": "32 Admin support case handling",
+      "subsection": "",
+      "signed_in_account": "demoops.support",
+      "page_shown": "Admin support case handling",
+      "relationship_id": "rId27",
+      "package_target": "word/media/image17.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "32 Admin support case handling",
+        "Signed in account: demoops.support",
+        "Page shown: Admin support case handling",
+        "The Support Officer owns the final platform reply. For a sign-in, password, email or account restriction issue, it can send a limited access task to the Account Manager. The original report and attachments stay with Support. A reply is not profile verification or a scholarship decision."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 48,
+      "block_index": 601,
+      "section": "33 Provider staff and program assignment",
+      "subsection": "",
+      "signed_in_account": "talunaw.team",
+      "page_shown": "Provider staff and program assignment",
+      "relationship_id": "rId122",
+      "package_target": "word/media/image114.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "33 Provider staff and program assignment",
+        "Signed in account: talunaw.team",
+        "Page shown: Provider staff and program assignment",
+        "The team administrator manages staff access, role responsibilities and assigned scholarships. Limited program assignment prevents a staff member from automatically working on every program. Newly invited staff complete their first-login setup."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 49,
+      "block_index": 621,
+      "section": "34 Admin account management",
+      "subsection": "Inspect and manage the selected account",
+      "signed_in_account": "demoops.accounts",
+      "page_shown": "Admin account management",
+      "relationship_id": "rId28",
+      "package_target": "word/media/image18.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Open Needs attention or Support referrals and select Iralen Dumaloy, username demo.process.support.appointment. The pending Check sign-in access task is separate from the scholarship support record.",
+        "2. Read the task, then inspect the relevant sign-in, verification-email, password or restriction controls. Use a separate access action only when it is actually required.",
+        "3. Select Return result, explain the checked account controls and any account-holder step, then confirm. The task returns to Support. No password reset, suspension or verification change is required merely to demonstrate this task.",
+        "4. Returning a result does not automatically change account access, verify the profile or close the support case. Support reviews the result and sends the final reply. A stale or already completed task cannot be saved twice."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 50,
+      "block_index": 626,
+      "section": "35 Provider paid services and requests",
+      "subsection": "",
+      "signed_in_account": "talunaw.billing",
+      "page_shown": "Optional support services",
+      "relationship_id": "rId124",
+      "package_target": "word/media/image116.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "35 Provider paid services and requests",
+        "Signed in account: talunaw.billing",
+        "Page shown: Optional support services",
+        "The provider billing role reviews available platform services, submits intake information, follows checkout and tracks delivery, files, meetings and acceptance. These are provider-to-platform services, not scholarship payments to applicants."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 51,
+      "block_index": 647,
+      "section": "36 Admin service intake delivery and closeout",
+      "subsection": "",
+      "signed_in_account": "demoops.billing",
+      "page_shown": "Service record with the Finance response form",
+      "relationship_id": "rId29",
+      "package_target": "word/media/image19.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "36 Admin service intake delivery and closeout",
+        "Signed in account: demoops.billing",
+        "Page shown: Service record with the Finance response form",
+        "The Billing Officer handles intake, assignment, service delivery, files, meetings and closeout. Its Finance follow-up queue also contains internal payment-record questions, including questions about already closed services. Delivery, payment and refund states remain separate."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 52,
+      "block_index": 659,
+      "section": "37 Admin finance and payment records",
+      "subsection": "",
+      "signed_in_account": "demoops.finance",
+      "page_shown": "Financial record review with a returned Billing response",
+      "relationship_id": "rId30",
+      "package_target": "word/media/image20.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "37 Admin finance and payment records",
+        "Signed in account: demoops.finance",
+        "Page shown: Financial record review with a returned Billing response",
+        "The Finance Officer reviews confirmed payments, receipts and exceptions. An internal financial check can be sent to Billing and returned to Finance without changing the underlying transaction. Gateway confirmation, delivery completion and external refunds have their own states."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 53,
+      "block_index": 675,
+      "section": "37 Admin finance and payment records",
+      "subsection": "Demonstrate the two admin handoffs from end to end",
+      "signed_in_account": "demoops.support demoops.accounts demoops.billing demoops.finance",
+      "page_shown": "Financial record review with a returned Billing response",
+      "relationship_id": "rId30",
+      "package_target": "word/media/image20.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. For Support reply after a return, use Explain the account access check for Nivara Kalumay. Read the already returned internal result, then compose and confirm the reporter-facing reply as demoops.support.",
+        "3. For a Finance question awaiting Billing, open GUIDE-20261113-BILLING as demoops.billing. Choose Respond to Finance, record what was checked and confirm. The service remains paid and in progress.",
+        "4. For the returned Finance step, open GUIDE-20261113-FINANCE as demoops.finance. Read Billing response, choose Record a financial check, explain the finding and confirm.",
+        "5. Use demoops.records to follow the related service or support history afterward. Neither internal task completion sends money, closes the service automatically, verifies a profile or changes scholarship support."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 54,
+      "block_index": 681,
+      "section": "38 Admin audit history and exports",
+      "subsection": "",
+      "signed_in_account": "demoops.records",
+      "page_shown": "Related service audit history",
+      "relationship_id": "rId19",
+      "package_target": "word/media/image9.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "38 Admin audit history and exports",
+        "Signed in account: demoops.records",
+        "Page shown: Related service audit history",
+        "The Records Officer can follow exact related account, application, program, service or support records from an audit entry. The saved entry describes the event at that time; later events can supersede its outcome. Private handoff instructions and financial notes are not copied into audit metadata."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 55,
+      "block_index": 687,
+      "section": "39 Provider manager overview and combined workspaces",
+      "subsection": "",
+      "signed_in_account": "talunaw.manager",
+      "page_shown": "Provider dashboard",
+      "relationship_id": "rId128",
+      "package_target": "word/media/image120.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "39 Provider manager overview and combined workspaces",
+        "Signed in account: talunaw.manager",
+        "Page shown: Provider dashboard",
+        "The provider manager has a cross-workspace overview for its organization rather than a separate new scholarship process. It can move between permitted programs, reviews, selection, decisions, recipients, monitoring and releases. Program assignment and organization boundaries still apply."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 56,
+      "block_index": 693,
+      "section": "40 Organization representative view",
+      "subsection": "",
+      "signed_in_account": "talunaw",
+      "page_shown": "Provider dashboard",
+      "relationship_id": "rId129",
+      "package_target": "word/media/image121.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5806440",
+        "cy": "4032250"
+      },
+      "preceding_text": [
+        "40 Organization representative view",
+        "Signed in account: talunaw",
+        "Page shown: Provider dashboard",
+        "The organization representative is the organization owner account. Its visible navigation and actions follow the current role model; do not assume it is interchangeable with every specialist or the provider manager. Use the named operational account for the process being demonstrated."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 57,
+      "block_index": 699,
+      "section": "41 Portal manager overview",
+      "subsection": "",
+      "signed_in_account": "demoops.manager",
+      "page_shown": "Operations overview",
+      "relationship_id": "rId20",
+      "package_target": "word/media/image10.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "41 Portal manager overview",
+        "Signed in account: demoops.manager",
+        "Page shown: Operations overview",
+        "The Portal Manager has read-only oversight across admin service areas. Team action counts show work currently owned by staff. Waiting steps show another team, the account holder or gateway; failed sign-in history is reference information, not automatically unresolved work. Totals count work items, not unique people."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 58,
+      "block_index": 718,
+      "section": "42 Superadmin governance view",
+      "subsection": "Open an admin team account in governance",
+      "signed_in_account": "demoops.root",
+      "page_shown": "Admin team availability and role coverage",
+      "relationship_id": "rId21",
+      "package_target": "word/media/image11.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5486400",
+        "cy": "3810000"
+      },
+      "preceding_text": [
+        "1. Review role coverage and any area with open work but no available owner. Select its role-coverage link to open the filtered admin team list.",
+        "2. Inspect the staff member and readiness label, such as email verification needed, password reset required, missing role permissions or access suspended.",
+        "3. Make only the intended governance change after its confirmation. Restoring readiness does not complete the operational work or grant unrelated permissions.",
+        "4. Return to the specialist queue with its assigned account. Demonstrate manager oversight and superadmin governance last, after the actual operational handoffs."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    }
+  ]
+}

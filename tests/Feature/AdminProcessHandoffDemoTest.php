@@ -43,8 +43,8 @@ class AdminProcessHandoffDemoTest extends TestCase
         $counts = [ActivityLog::count(), SupportAccountHandoff::count(), ProviderServicePurchase::count()];
         $this->seed(AdminProcessHandoffDemoSeeder::class);
         $this->assertSame($counts, [ActivityLog::count(), SupportAccountHandoff::count(), ProviderServicePurchase::count()]);
-        foreach (['demoops.accounts' => '/admin/workspaces/accounts/data?queue=attention',
-            'demoops.support' => '/admin/workspaces/support/data', 'demoops.finance' => '/admin/workspaces/finance/exceptions/data'] as $username => $path) {
+        foreach (['novacore.accounts' => '/admin/workspaces/accounts/data?queue=attention',
+            'novacore.support' => '/admin/workspaces/support/data', 'novacore.finance' => '/admin/workspaces/finance/exceptions/data'] as $username => $path) {
             $this->actingAs(User::where('username', $username)->sole())->getJson($path)->assertSuccessful();
         }
     }

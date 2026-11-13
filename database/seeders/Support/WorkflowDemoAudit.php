@@ -21,8 +21,10 @@ final class WorkflowDemoAudit
         };
         $assert(User::find(1)?->username === WorkflowDemoCatalog::ROOT, 'This database does not contain the new demo catalog.');
         $assert(User::where('email', 'not like', '%@portal-demo.test')->doesntExist(), 'An account is not part of the new fictional dataset.');
-        $assert(User::count() === 37 + count(WorkflowDemoCatalog::applicants()), 'The role/account catalog is incomplete.');
-        $assert(Scholarship::count() === 12 && Scholarship::distinct()->count('image_path') === 12, 'The programs or distinct logos are incomplete.');
+        $enriched = User::where('username', 'like', 'cohort.process.%')->count();
+        $assert(User::count() === 37 + count(WorkflowDemoCatalog::applicants()) + $enriched, 'The role/account catalog is incomplete.');
+        $programCount = $enriched ? 16 : 12;
+        $assert(Scholarship::count() === $programCount && Scholarship::distinct()->count('image_path') === $programCount, 'The programs or distinct logos are incomplete.');
         $timeline = WorkflowDemoTimelineAudit::assertValid();
         $assert(ScholarshipApplication::whereIn('final_outcome', ['not_selected', 'waitlisted'])->doesntExist(), 'Unexpected final outcome in the demo.');
         $assert(ScholarshipApplication::whereIn('status', ['rejected', 'exam_failed', 'interview_failed', 'withdrawn', 'benefits_terminated'])->doesntExist(), 'An unwanted negative state was seeded.');
@@ -65,13 +67,13 @@ final class WorkflowDemoAudit
             $assert($assignment->session->starts_at->isFuture(), 'The acknowledgement example is no longer upcoming: '.$key.'. Rebuild the candidate with a fresh timeline.');
         }
         $ready = User::where('username', WorkflowDemoCatalog::APPLICANT.'.apply')->sole();
-        $program = Scholarship::where('title', 'Talunaw Campus Pathways Grant')->sole();
+        $program = Scholarship::where('title', 'Nuvareya Campus Pathways Grant')->sole();
         $match = app(ScholarshipEligibilityService::class)->evaluate($program, $ready);
         $assert($program->isAcceptingApplications(), 'The ready-to-apply round is no longer open. Rebuild the candidate with a fresh timeline.');
         $assert($match['is_eligible'] && count($match['preferred_mismatches']) === 1, 'The ready-to-apply preference example is not usable.');
-        $assert(RecipientMonitoringCase::where('status', 'ready_to_close')->count() === 1, 'No case is ready for a closure decision.');
+        $assert(RecipientMonitoringCase::where('status', 'ready_to_close')->count() >= 1, 'No case is ready for a closure decision.');
         $assert(ProviderServicePurchase::where('status', 'failed')->doesntExist(), 'A failed service purchase was seeded.');
-        $oneTime = Scholarship::where('title', 'Talunaw Learning Kit Award')->sole();
+        $oneTime = Scholarship::where('title', 'Nuvareya Learning Kit Award')->sole();
         $assert($oneTime->monitoring_policy === 'none' && ! $oneTime->monitoringCycles()->exists(), 'One-time support unexpectedly requires recurring monitoring.');
         $accounts = User::orderBy('id')->get()->map(fn ($user) => [$user->id, $user->username, $user->role, $user->parent_account_id, $user->assigned_program_ids])->all();
 

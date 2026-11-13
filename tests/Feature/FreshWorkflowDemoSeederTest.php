@@ -100,7 +100,7 @@ class FreshWorkflowDemoSeederTest extends TestCase
         Storage::fake('local');
         $this->seed(FreshWorkflowDemoSeeder::class);
         $actor = fn ($username) => User::where('username', $username)->sole();
-        $program = Scholarship::where('title', 'Talunaw Campus Pathways Grant')->sole();
+        $program = Scholarship::where('title', 'Nuvareya Campus Pathways Grant')->sole();
         $this->actingAs($actor(Catalog::APPLICANT.'.apply'))->postJson('/dashboard/applications', [
             'scholarship_id' => $program->id, 'document_checklist' => preg_split('/\n/', $program->requirements),
             'application_answers' => [['question_id' => 'education_plan', 'answer' => 'Continue school and prepare for college.']],

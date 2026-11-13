@@ -27,6 +27,8 @@ use App\Services\RecipientBenefitEntitlementService;
 use App\Services\RecipientBenefitPayoutService;
 use App\Services\RecipientMonitoringCaseService;
 use App\Services\ScholarshipEligibilityService;
+use App\Services\SelectionEvaluationService;
+use App\Support\SelectionScoringPolicy;
 use App\Support\ReviewRubric;
 use App\Support\Terms;
 use Carbon\Carbon;
@@ -52,6 +54,7 @@ class FreshWorkflowDemoSeeder extends Seeder
     protected array $staff = [];
     protected array $programs = [];
     protected array $applications = [];
+    protected bool $seedStageScores = true;
     private array $sessions = [];
     private int $releaseSlot = 0;
 
@@ -87,22 +90,22 @@ class FreshWorkflowDemoSeeder extends Seeder
             $user->adminProfile()->create(['first_name' => 'Platform', 'last_name' => Str::headline($suffix), 'display_name' => $definition['title'], 'contact_number' => '09000001001']);
             $this->staff[$username] = $user;
         }
-        $primary = $this->provider(Catalog::PRIMARY, 'Talunaw Learning Trust', 'TLT', $root);
-        $partner = $this->provider(Catalog::PARTNER, 'Sidlakbay Education Guild', 'SEG', $root);
-        $this->provider(Catalog::PENDING, 'Hirayalon Study Foundation', 'HSF', $root, false);
+        $primary = $this->provider(Catalog::PRIMARY, 'Nuvareya Learning Trust', 'TLT', $root);
+        $partner = $this->provider(Catalog::PARTNER, 'Velasora Education Foundation', 'SEG', $root);
+        $this->provider(Catalog::PENDING, 'Kinoraya Study Guild', 'HSF', $root, false);
         $rounds = [
-            'intake' => ['Talunaw Campus Pathways Grant', 'TCP'],
-            'screening' => ['Talunaw Classroom Bridge Grant', 'TCB'],
-            'exam' => ['Talunaw Applied Science Scholarship', 'TAS'],
-            'interview' => ['Talunaw Community Leadership Scholarship', 'TCL'],
-            'decision' => ['Talunaw Senior Scholars Award', 'TSS'],
-            'support' => ['Talunaw Continuing Studies Scholarship', 'TCS'],
-            'one_time' => ['Talunaw Learning Kit Award', 'TLK'],
-            'draft' => ['Talunaw Skills Lab Grant', 'TSL', 'draft'],
-            'review' => ['Talunaw Digital Horizons Award', 'TDH', 'pending_review'],
-            'partner_intake' => ['Sidlakbay Study Access Grant', 'SSA'],
-            'partner_screening' => ['Sidlakbay School Essentials Award', 'SSE'],
-            'partner_draft' => ['Sidlakbay Learning Routes Grant', 'SLR', 'draft'],
+            'intake' => ['Nuvareya Campus Pathways Grant', 'TCP'],
+            'screening' => ['Nuvareya Classroom Bridge Grant', 'TCB'],
+            'exam' => ['Nuvareya Applied Science Scholarship', 'TAS'],
+            'interview' => ['Nuvareya Community Leadership Scholarship', 'TCL'],
+            'decision' => ['Nuvareya Senior Scholars Award', 'TSS'],
+            'support' => ['Nuvareya Continuing Studies Scholarship', 'TCS'],
+            'one_time' => ['Nuvareya Learning Kit Award', 'TLK'],
+            'draft' => ['Nuvareya Skills Lab Grant', 'TSL', 'draft'],
+            'review' => ['Nuvareya Digital Horizons Award', 'TDH', 'pending_review'],
+            'partner_intake' => ['Velasora Study Access Grant', 'SSA'],
+            'partner_screening' => ['Velasora School Essentials Award', 'SSE'],
+            'partner_draft' => ['Velasora Learning Routes Grant', 'SLR', 'draft'],
         ];
         foreach ($rounds as $round => [$title, $mark]) {
             $provider = str_starts_with($round, 'partner_') ? $partner : $primary;
@@ -161,7 +164,7 @@ class FreshWorkflowDemoSeeder extends Seeder
     {
         $user = $this->account($username, 'provider', title: 'Organization Representative', permissions: User::PROVIDER_PERMISSIONS);
         $user->providerProfile()->create([
-            'first_name' => match ($username) { Catalog::PRIMARY => 'Taren', Catalog::PARTNER => 'Silaren', Catalog::PENDING => 'Hiravel' },
+            'first_name' => match ($username) { Catalog::PRIMARY => 'Nuvareya', Catalog::PARTNER => 'Velasora', Catalog::PENDING => 'Kinoraya' },
             'last_name' => 'Demo Representative', 'contact_number' => '09000002000', 'representative_position' => 'Program Director',
             'provider_name' => $name, 'provider_type' => 'foundation', 'provider_website' => 'https://example.org/'.$username,
             'provider_address' => 'Antipolo City, Rizal (demo venue)', 'latitude' => 14.5864, 'longitude' => 121.1753,
@@ -215,7 +218,7 @@ class FreshWorkflowDemoSeeder extends Seeder
             'cover_image_source' => 'default', 'cover_image_key' => $oneTime ? 'student-workshop' : 'learning-together',
             'title' => $title, 'category' => 'Financial assistance', 'program_cycle' => 'School Year '.$this->schoolYear(),
             'description' => $oneTime ? 'A one-time study-start award with agreement, distribution proof, and recipient receipt confirmation.'
-                : 'Continuing support for senior high school learners through allowance, mentoring, and periodic academic check-ins.',
+                : 'Continuing support for senior high school learners through allowance, school supplies, and periodic academic check-ins.',
             'provider_objectives' => ['education_access', 'academic_progress'],
             'eligibility' => 'Verified senior high school profile, current enrollment, and at least an 85% average. STEM is preferred, not required.',
             'eligible_education_levels' => 'senior_high_school', 'eligible_courses' => 'STEM',
@@ -231,7 +234,7 @@ class FreshWorkflowDemoSeeder extends Seeder
             'handoff_location_name' => $provider->provider_name.' Learning Center',
             'handoff_location_address' => $provider->provider_address, 'handoff_latitude' => 14.5864, 'handoff_longitude' => 121.1753,
             'review_rubric' => ReviewRubric::DEFAULT,
-            'application_questions' => [['id' => 'education_plan', 'prompt' => 'How will this support help your studies?', 'required' => true]],
+            'application_questions' => [],
             'award_amount' => $oneTime ? 5000 : 18000, 'slots_available' => 60, 'application_limit' => 150,
             'application_mode' => 'online', 'selection_stages' => $oneTime ? ['screening', 'formal_application', 'decision'] : ['screening', 'formal_application', 'exam', 'interview', 'decision'],
             'exam_duration_minutes' => $oneTime ? null : 90, 'exam_passing_score' => $oneTime ? null : 75,
@@ -245,11 +248,12 @@ class FreshWorkflowDemoSeeder extends Seeder
             'contact_department' => 'Scholarship Desk', ...$dates,
             'status' => $status, 'provider_terms_accepted_at' => $dates['created_at'], 'provider_terms_version' => Terms::VERSION,
         ]);
+        $program->forceFill(['selection_scoring_policy' => [...SelectionScoringPolicy::preset($program->selection_stages, $program->review_rubric), 'frozen_at' => $dates['created_at']->toISOString()]])->save();
         $program->benefits()->create(['type' => 'allowance', 'title' => $oneTime ? 'Study-start award' : 'Term learning allowance',
             'amount' => $oneTime ? 5000 : 9000, 'coverage' => 'fixed', 'frequency' => $oneTime ? 'one_time' : 'per_term',
             'duration' => $oneTime ? 'Once' : 'Two semesters', 'description' => 'Study expenses and learning materials.', 'sort_order' => 1]);
         if (! $oneTime) {
-            $program->benefits()->create(['type' => 'mentorship', 'title' => 'College pathway mentoring', 'frequency' => 'per_term', 'description' => 'A scheduled provider-led mentoring session.', 'sort_order' => 2]);
+            $program->benefits()->create(['type' => 'school_supplies', 'title' => 'School supplies kit', 'frequency' => 'per_term', 'description' => 'Notebooks, pens, writing paper, and essential school supplies provided each semester.', 'sort_order' => 2]);
         }
         return $program->fresh(['benefits', 'provider.providerProfile']);
     }
@@ -349,7 +353,7 @@ class FreshWorkflowDemoSeeder extends Seeder
             'document_checklist' => self::REQUIREMENTS, 'optional_document_checklist' => [],
             'eligibility_score' => $eligibility['score'], 'eligibility_breakdown' => $eligibility,
             'review_rubric_snapshot' => ReviewRubric::DEFAULT, 'assigned_reviewer_id' => $reviewer->id,
-            'application_answers' => [['question_id' => 'education_plan', 'prompt' => 'How will this support help your studies?', 'answer' => 'It will cover school supplies, transport, and study expenses.']],
+            'application_answers' => [],
             'submitted_at' => $submittedAt, 'terms_accepted_at' => $submittedAt, 'terms_version' => Terms::VERSION,
             'created_at' => $submittedAt,
         ]);
@@ -364,6 +368,7 @@ class FreshWorkflowDemoSeeder extends Seeder
             'to_status' => 'submitted', 'review_notes' => 'Application submitted with complete evidence.', 'changed_at' => $submittedAt]);
         $workflow = app(ApplicationWorkflowService::class);
         $application = Carbon::withTestNow($submittedAt, fn () => $workflow->start($application->fresh()));
+        $application = Carbon::withTestNow($submittedAt, fn () => app(SelectionEvaluationService::class)->freezeForSubmission($application->fresh()));
         if ($isScreening) return $application;
         $scores = collect(ReviewRubric::DEFAULT)->mapWithKeys(fn ($criterion) => [$criterion['key'] => 92])->all();
         $application->update(['rubric_scores' => $scores, 'rubric_total_score' => ReviewRubric::result(ReviewRubric::DEFAULT, $scores)['total_score'],
@@ -382,6 +387,10 @@ class FreshWorkflowDemoSeeder extends Seeder
                 $application = Carbon::withTestNow($session->completed_at->copy()->addMinutes(30), fn () => $workflow->recordStageResult(
                     $application->fresh(), $stage, 'passed', $actor, ucfirst($stage).' completed successfully.',
                 ));
+                if ($this->seedStageScores) {
+                    $revision = (int) $application->stageProgresses()->where('stage_key', $stage)->value('evaluation_revision');
+                    Carbon::withTestNow($session->completed_at->copy()->addMinutes(31), fn () => app(SelectionEvaluationService::class)->record($application->fresh(), $actor, $stage, 93, 100, $revision, 0, 'Assessment recorded from the completed session.'));
+                }
             }
         }
         if ($scenario === 'decision') return $application->fresh();
@@ -536,14 +545,14 @@ class FreshWorkflowDemoSeeder extends Seeder
         $digital = app(RecipientBenefitPayoutService::class)->isDigital($method);
         $releaseAt = $mentoring ? $this->timeline->at(8, 14) : $this->timeline->at(-1, 9)->addMinutes(45 * $this->releaseSlot++);
         $publishedAt = $this->timeline->at(-6, 10);
-        $benefit = $mentoring ? $program->benefits->firstWhere('type', 'mentorship') : $program->benefits->firstWhere('type', 'allowance');
+        $benefit = $mentoring ? $program->benefits->firstWhere('type', 'school_supplies') : $program->benefits->firstWhere('type', 'allowance');
         $release = RecipientBenefitRelease::create(['scholarship_id' => $program->id, 'created_by' => $actor->id,
             'title' => $benefit->title.' - '.$application->applicant->name, 'release_at' => $releaseAt,
             'benefit_description' => $benefit->description, 'amount' => $benefit->amount, 'release_method' => $mentoring ? 'in_person' : $method,
             'location' => $digital ? null : $program->location_name.', Antipolo City, Rizal', 'latitude' => $digital ? null : 14.5864, 'longitude' => $digital ? null : 121.1753,
             'address_details' => $digital ? null : $this->supportVenueAddress($program),
             'instructions' => $mentoring
-                ? 'Attend the mentoring session at the scheduled date and time. Open View map for the venue. Bring your school ID and questions about your college plans. Confirm receipt only after attending the session.'
+                ? 'Collect your school supplies kit at the scheduled date and time. Open View map for the venue and bring your school ID. Confirm receipt only after receiving and checking the items.'
                 : ($digital
                     ? 'Open this release and enter your payout details when requested. The provider verifies the details and sends the benefit outside the portal. Confirm receipt only after checking your account; report a problem if the benefit has not arrived.'
                     : 'Report to the listed venue at the scheduled date and time. Open View map for directions and bring your school ID. Confirm receipt only after receiving the listed benefit.'),

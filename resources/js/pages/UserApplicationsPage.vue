@@ -177,7 +177,7 @@ const selectedEligibilityCriteria = computed(() => {
         { key: 'location', label: 'Location coverage', value: scholarship.eligible_locations, icon: 'fa-solid fa-location-dot' },
         { key: 'income', label: 'Household income', value: scholarship.income_requirement, icon: 'fa-solid fa-wallet' },
         { key: 'academic', label: 'Academic requirement', value: academicRequirementLabel(scholarship), icon: 'fa-solid fa-chart-line', formatted: true },
-        { key: 'current_scholarship_support', label: 'Other scholarship support', value: checks.get('current_scholarship_support')?.requirement, icon: 'fa-solid fa-hand-holding-heart' },
+        { key: 'current_scholarship_support', label: 'Other scholarship support', value: scholarship.exclude_current_scholarship_recipients ? 'No other active scholarship' : checks.get('current_scholarship_support')?.requirement, icon: 'fa-solid fa-hand-holding-heart' },
         { key: 'enrollment_status', label: 'Current enrollment', value: checks.get('enrollment_status')?.requirement, icon: 'fa-solid fa-user-graduate' },
     ];
 
@@ -668,17 +668,6 @@ function eligibilityRuleLabel(value, criterion) {
     }
 
     return criteriaLabel(value);
-}
-
-function eligibilityCriterionCardClass(status) {
-    return {
-        pass: 'border-emerald-200 bg-emerald-50/50',
-        fail: 'border-rose-300 bg-rose-50/60',
-        missing: 'border-amber-300 bg-amber-50/60',
-        preferred: 'border-amber-300 bg-amber-50/60',
-        review: 'border-amber-300 bg-amber-50/60',
-        info: 'border-sky-200 bg-sky-50/60',
-    }[status] ?? 'border-slate-200 bg-white';
 }
 
 function eligibilityCriterionIconClass(status) {
@@ -1287,21 +1276,18 @@ watch(selectedScholarship, (scholarship) => {
                                             <i class="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true"></i>
                                         </a>
                                     </div>
-                                    <dl class="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                                    <dl data-application-eligibility-rules class="m-3 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 md:grid-cols-2">
                                         <div
                                             v-for="criterion in selectedEligibilityCriteria"
                                             :key="criterion.key"
-                                            :class="[
-                                                'flex h-full items-start gap-3 rounded-md border p-3',
-                                                eligibilityCriterionCardClass(criterion.status),
-                                            ]"
+                                            class="grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-2 bg-white px-3 py-2.5 sm:grid-cols-[1.5rem_minmax(0,1fr)_auto] md:[&:last-child:nth-child(odd)]:col-span-2"
                                         >
-                                            <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-md text-xs', eligibilityCriterionIconClass(criterion.status)]"><i :class="criterion.icon" aria-hidden="true"></i></span>
-                                            <div class="flex min-w-0 flex-1 flex-col self-stretch">
-                                                <dt class="text-[11px] font-semibold text-slate-500">{{ criterion.label }}<span v-if="criterion.modeLabel" class="mt-1 block text-[10px] font-bold uppercase tracking-wide">{{ criterion.modeLabel }}</span></dt>
-                                                <dd class="mt-1 flex-1 text-sm font-bold leading-5 text-slate-900">{{ criterion.value }}</dd>
-                                                <span :class="['mt-3 inline-flex w-fit rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', eligibilityCriterionBadgeClass(criterion.status)]">{{ criterion.statusLabel }}</span>
+                                            <span :class="['mt-0.5 grid h-6 w-6 place-items-center rounded text-[10px]', eligibilityCriterionIconClass(criterion.status)]"><i :class="criterion.icon" aria-hidden="true"></i></span>
+                                            <div class="min-w-0">
+                                                <dt class="flex flex-wrap items-baseline gap-x-2 text-[11px] font-medium leading-4 text-slate-500">{{ criterion.label }}<span v-if="criterion.modeLabel" class="text-[9px] font-bold uppercase tracking-wide text-slate-400">{{ criterion.modeLabel }}</span></dt>
+                                                <dd class="mt-0.5 break-words text-xs font-semibold leading-5 text-slate-900">{{ criterion.value }}</dd>
                                             </div>
+                                            <span :class="['col-start-2 mt-1 inline-flex w-fit self-center whitespace-nowrap rounded px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide sm:col-start-auto sm:mt-0', eligibilityCriterionBadgeClass(criterion.status)]">{{ criterion.statusLabel }}</span>
                                         </div>
                                     </dl>
                                 </section>
