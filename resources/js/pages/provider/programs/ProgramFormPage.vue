@@ -11,20 +11,26 @@ import { useModalAccessibility } from '../../../composables/useModalAccessibilit
 import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import EligibilityRuleModeSelect from './components/EligibilityRuleModeSelect.vue';
-import EligibilityRulesSummary from './components/EligibilityRulesSummary.vue';
 import EducationEligibilityPolicyEditor from './components/EducationEligibilityPolicyEditor.vue';
 import EligibilityOptionPicker from './components/EligibilityOptionPicker.vue';
 import EligibilityLocationPicker from './components/EligibilityLocationPicker.vue';
 import DocumentRequirementsPicker from './components/DocumentRequirementsPicker.vue';
+import SelectionScoringPreview from './components/SelectionScoringPreview.vue';
+import ProgramReviewSummary from './components/ProgramReviewSummary.vue';
 import { normalizeEducationPolicy, educationPolicyError } from '../../../support/educationEligibilityPolicy';
 import { configuredEligibilityRules, normalizeEligibilityRuleModes } from '../../../support/providerEligibilityRules';
 import { programConfigurationErrors } from '../../../support/programConfiguration';
 import { programDraftSnapshot, programSaveLabel, shouldGuardProgramLink } from '../../../support/programSaveState';
 import { eligibilitySummaryFromRules, eligibilitySummaryReviewKey } from '../../../support/programEligibilitySummary';
-import { programEligibilityOptions } from '../../../support/programEligibilityOptions';
+import { programEligibilityOptions, educationSelectionImpact, eligibilityListValues } from '../../../support/programEligibilityOptions';
+import { organizationProgramLocation, organizationLocationWouldReplace } from '../../../support/programOrganizationLocation';
+import { hasLocationPin } from '../../../support/locationPins';
+import { programReviewSummary } from '../../../support/programReviewSummary';
+import { programScoringPreview } from '../../../support/programScoringPreview';
 
 const pathMatch = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
 const portalUser = window.portalUser ?? {};
+const organizationLocation = organizationProgramLocation(portalUser);
 const programId = ref(pathMatch?.[1] ?? null);
 const steps = [
     { id: 'basics', label: 'Basics', hint: 'Program identity', icon: 'fa-solid fa-pen-to-square' },
@@ -44,6 +50,13 @@ const saveFailed = ref(false);
 const savedMessage = ref('');
 const originalStatus = ref('draft');
 const applicationsCount = ref(0);
+const fixedScoringPolicy = ref(null);
+let scoringPresets = {};
+try {
+    scoringPresets = JSON.parse(document.getElementById('app')?.dataset.scoringPresets ?? '{}');
+} catch {
+    // An unavailable preview must not invent or change the intake's scoring rules.
+}
 const logoInput = ref(null);
 const logoFile = ref(null);
 const logoPreviewUrl = ref('');
@@ -163,6 +176,16 @@ function emptyForm() {
 }
 
 const form = ref(emptyForm());
+const programHasLocationPin = computed(() => hasLocationPin(form.value.latitude, form.value.longitude));
+const coursesNeedChoice = ref(false);
+const yearsNeedChoice = ref(false);
+const educationChangePending = ref(false);
+const educationReview = ref({ courses: [], years: [] });
+const educationValuesToReview = computed(() => [
+    ...educationReview.value.courses.filter(value => eligibilityListValues(form.value.eligibleCourses).includes(value)),
+    ...educationReview.value.years.filter(value => eligibilityListValues(form.value.eligibleYearLevels).includes(value)),
+]);
+const educationChoicesNeedReview = computed(() => coursesNeedChoice.value || yearsNeedChoice.value || educationValuesToReview.value.length > 0);
 const eligibilityRules = computed(() => configuredEligibilityRules(form.value, { educationLevels, schoolTypes }));
 const eligibilityOptions = computed(() => programEligibilityOptions(form.value.eligibleEducationLevels));
 const suggestedEligibilitySummary = computed(() => eligibilitySummaryFromRules(eligibilityRules.value));
@@ -255,8 +278,7 @@ const stepChecks = computed(() => ({
         form.value.deadline
         && form.value.locationName.trim()
         && form.value.locationAddress.trim()
-        && String(form.value.latitude).trim()
-        && String(form.value.longitude).trim()
+        && programHasLocationPin.value
         && (form.value.contactEmail.trim() || form.value.contactNumber.trim())
         && !configurationErrorForStep('dates-location')
     ),
@@ -264,6 +286,7 @@ const stepChecks = computed(() => ({
         eligibilitySummary.value.trim()
         && eligibilitySummary.value.length <= 5000
         && !customSummaryNeedsReview.value
+        && !educationChoicesNeedReview.value
         && (
             form.value.eligibleEducationLevels.length
             || form.value.eligibleCourses.trim()
@@ -302,6 +325,15 @@ const stepChecks = computed(() => ({
 
 const completedStepCount = computed(() => Object.values(stepChecks.value).filter(Boolean).length);
 const allConfigurationComplete = computed(() => Object.values(stepChecks.value).every(Boolean));
+const reviewSummaries = computed(() => programReviewSummary(form.value, {
+    eligibilitySummary: eligibilitySummary.value,
+    rules: eligibilityRules.value,
+    scoring: programScoringPreview(scoringPresets, form.value.selectionStages, fixedScoringPolicy.value, applicationsCount.value),
+    catalogs: { benefitTypes, frequencyOptions, stages: stageOptions.map(stage => [stage.id, stage.label]) },
+    coverLabel: coverSourceLabel.value,
+    hasLogo: hasScholarshipLogo.value,
+}));
+const reviewIssues = computed(() => Object.fromEntries(steps.slice(0, -1).map(step => [step.id, stepMessage(step.id)])));
 
 function positiveNumber(value) {
     return numericValue(value) !== null && Number(value) >= 1;
@@ -335,6 +367,7 @@ function closeAlert() {
 }
 
 function stepMessage(stepId) {
+    if (stepId === 'eligibility' && educationChoicesNeedReview.value) return 'Resolve the education-level changes: choose replacement courses or year levels, explicitly remove the restriction, and review any retained custom values.';
     if (stepId === 'eligibility' && eligibilitySummary.value.length > 5000) return 'The eligibility summary exceeds 5,000 characters. Shorten the rule lists or use a shorter custom summary.';
     if (stepId === 'eligibility' && customSummaryNeedsReview.value) return 'Check the custom eligibility summary against the current rules, then confirm it is consistent or use the rule-based summary.';
     if (stepId === 'eligibility' && educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions)) return educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions);
@@ -420,6 +453,42 @@ function toggleArrayValue(field, value) {
     form.value[field] = form.value[field].includes(value)
         ? form.value[field].filter((item) => item !== value)
         : [...form.value[field], value];
+}
+
+async function changeEducationLevel(value, event) {
+    const current = [...form.value.eligibleEducationLevels];
+    event.target.checked = current.includes(value);
+    if (isReadOnly.value || isSaving.value || educationChangePending.value) return;
+    const next = current.includes(value) ? current.filter(level => level !== value) : [...current, value];
+    const before = [form.value.eligibleCourses, form.value.eligibleYearLevels];
+    const impact = educationSelectionImpact(current, next, ...before);
+    if (impact.removedCourses.length || impact.removedYears.length) {
+        const removed = [
+            impact.removedCourses.length ? `Courses / strands: ${impact.removedCourses.join(', ')}.` : '',
+            impact.removedYears.length ? `Grade / year levels: ${impact.removedYears.join(', ')}.` : '',
+        ].filter(Boolean).join(' ');
+        educationChangePending.value = true;
+        let confirmed;
+        try {
+            confirmed = await requestConfirmation({
+                title: 'Change education levels?',
+                message: `${removed} These selections do not fit the new education levels and will be removed. Compatible choices and unrelated rules stay unchanged. Choose replacements or explicitly allow any option for a cleared rule.`,
+                confirmLabel: 'Change education levels', cancelLabel: 'Keep current settings',
+            });
+        } finally { educationChangePending.value = false; }
+        if (!confirmed || isSaving.value || isReadOnly.value) return;
+    }
+    if (JSON.stringify(current) !== JSON.stringify(form.value.eligibleEducationLevels)
+        || before[0] !== form.value.eligibleCourses || before[1] !== form.value.eligibleYearLevels) return;
+    form.value.eligibleEducationLevels = next;
+    form.value.eligibleCourses = impact.courses;
+    form.value.eligibleYearLevels = impact.years;
+    if (impact.removedCourses.length && !impact.courses.trim()) coursesNeedChoice.value = true;
+    if (impact.removedYears.length && !impact.years.trim()) yearsNeedChoice.value = true;
+    educationReview.value = {
+        courses: [...new Set([...educationReview.value.courses, ...impact.reviewCourses])],
+        years: [...new Set([...educationReview.value.years, ...impact.reviewYears])],
+    };
 }
 
 function useRuleBasedEligibilitySummary() {
@@ -567,6 +636,28 @@ function handleMapResolved(location) {
     mapMessage.value = 'Map pin set from the address.';
 }
 
+async function useOrganizationLocation() {
+    if (!organizationLocation.locationAddress || isReadOnly.value || isSaving.value) return;
+    if (organizationLocationWouldReplace(form.value, organizationLocation)) {
+        const confirmed = await requestConfirmation({
+            title: 'Replace the program location?',
+            message: 'This will replace this program venue and map pin with the organization location. Other program details will stay unchanged.',
+            confirmLabel: 'Use organization location', cancelLabel: 'Keep current venue',
+        });
+        if (!confirmed || isReadOnly.value || isSaving.value) return;
+    }
+    Object.assign(form.value, organizationLocation);
+    mapMessage.value = programHasLocationPin.value
+        ? 'Organization address and map pin copied. Save the program to keep these changes.'
+        : 'Organization address copied. No saved organization pin is available; select a program map pin.';
+}
+
+function clearProgramAddressPin() {
+    form.value.latitude = '';
+    form.value.longitude = '';
+    mapMessage.value = 'Address changed. Select a new map pin for this program venue.';
+}
+
 function handleMapPicked(location) {
     handleMapResolved(location);
     if (location.displayName) form.value.locationAddress = location.displayName;
@@ -649,6 +740,7 @@ function fillForm(program) {
     };
     originalStatus.value = program.status ?? 'draft';
     applicationsCount.value = Number(program.applications_count ?? 0);
+    fixedScoringPolicy.value = program.selection_scoring_policy ?? null;
     coverSource.value = program.cover_image_source ?? 'default';
     coverKey.value = program.cover_image_key ?? '';
     logoFile.value = null;
@@ -656,6 +748,10 @@ function fillForm(program) {
     logoPreviewUrl.value = '';
     clearCoverUpload();
     hasSavedProgram.value = true;
+    mapMessage.value = '';
+    coursesNeedChoice.value = false;
+    yearsNeedChoice.value = false;
+    educationReview.value = { courses: [], years: [] };
     useGeneratedEligibilitySummary.value = form.value.eligibility.trim() === suggestedEligibilitySummary.value.trim();
     savedSnapshot.value = draftSnapshot.value;
     saveFailed.value = false;
@@ -732,6 +828,11 @@ function showBackendError(error) {
 
 async function save(status = 'draft', termsAccepted = false) {
     if (isSaving.value) return null;
+    if (educationChoicesNeedReview.value) {
+        openStep('eligibility');
+        showAlert('Resolve education selections', stepMessage('eligibility'));
+        return null;
+    }
     const conflict = Object.entries(configurationErrors.value)[0];
     if (conflict) {
         openStep(stepForBackendField(conflict[0]));
@@ -1072,23 +1173,25 @@ onBeforeUnmount(() => {
                                     <label><span :class="labelClass">Expected results <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.expectedResultsAt" type="date" :min="form.deadline || undefined" :class="inputClass"></label>
                                 </div>
 
-                                <div class="mt-7 w-full border-t border-slate-200 pt-6">
+                                <div data-program-location class="mt-7 w-full border-t border-slate-200 pt-6">
                                     <div class="flex items-center justify-between gap-6">
                                         <div>
                                             <h4 class="text-sm font-bold text-slate-950">Program location</h4>
                                             <p class="mt-1 text-xs text-slate-500">Use the office or service location applicants should recognize.</p>
                                         </div>
-                                        <button type="button" class="border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="showLocationMap = true">
-                                            <i class="fa-solid fa-map-location-dot mr-2 text-amber-700" aria-hidden="true"></i>Set map pin
-                                        </button>
+                                        <div class="flex shrink-0 items-center gap-2">
+                                            <button type="button" data-use-organization-location :disabled="!organizationLocation.locationAddress" class="inline-flex items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40" @click="useOrganizationLocation"><i class="fa-solid fa-building-columns text-[10px]" aria-hidden="true"></i>Use organization location</button>
+                                            <button type="button" class="border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="showLocationMap = true"><i class="fa-solid fa-map-location-dot mr-2 text-amber-700" aria-hidden="true"></i>{{ programHasLocationPin ? 'Review map pin' : 'Set map pin' }}</button>
+                                        </div>
                                     </div>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">{{ organizationLocation.locationAddress ? 'Reuse the saved organization address and pin, or enter a different program venue below. This does not change the organization profile.' : 'No organization address is saved. Enter a program venue below, or ask the organization profile manager to add the office location.' }}</p>
                                     <div class="mt-4 grid grid-cols-2 gap-5">
-                                        <label><span :class="labelClass">Location name <span class="text-amber-700">Required</span></span><input v-model="form.locationName" type="text" maxlength="255" :class="inputClass" placeholder="Office or community desk"></label>
-                                        <label><span :class="labelClass">Complete address <span class="text-amber-700">Required</span></span><input v-model="form.locationAddress" type="text" maxlength="500" :class="inputClass"></label>
+                                        <label><span :class="labelClass">Location name <span class="text-amber-700">Required</span></span><input id="program-location-name" v-model="form.locationName" type="text" maxlength="255" :class="inputClass" placeholder="Office or community desk"></label>
+                                        <label><span :class="labelClass">Complete address <span class="text-amber-700">Required</span></span><input id="program-location-address" v-model="form.locationAddress" type="text" maxlength="500" :class="inputClass" @input="clearProgramAddressPin"></label>
                                     </div>
-                                    <p class="mt-3 text-xs font-semibold" :class="form.latitude && form.longitude ? 'text-emerald-700' : 'text-amber-700'">
-                                        <i :class="form.latitude && form.longitude ? 'fa-solid fa-circle-check' : 'fa-solid fa-location-dot'" class="mr-1.5" aria-hidden="true"></i>
-                                        {{ form.latitude && form.longitude ? 'Map pin saved' : 'Map pin still needed' }}
+                                    <p data-program-location-status class="mt-3 text-xs font-semibold" :class="programHasLocationPin ? 'text-emerald-700' : 'text-amber-700'" role="status" aria-live="polite">
+                                        <i :class="programHasLocationPin ? 'fa-solid fa-circle-check' : 'fa-solid fa-location-dot'" class="mr-1.5" aria-hidden="true"></i>
+                                        {{ mapMessage || (programHasLocationPin ? 'Map pin selected' : 'Map pin still needed') }}
                                     </p>
                                 </div>
 
@@ -1130,7 +1233,7 @@ onBeforeUnmount(() => {
                                         <p class="mt-1 text-xs leading-5 text-slate-500">Use these filters for current studies, not a diploma the applicant already completed.</p>
                                         <div class="mt-3 grid grid-cols-4 gap-2">
                                             <label v-for="([value, label]) in educationLevels" :key="value" class="flex min-h-11 items-center gap-2 border border-slate-200 px-3 text-xs font-semibold text-slate-700">
-                                                <input type="checkbox" :checked="form.eligibleEducationLevels.includes(value)" class="border-slate-300 text-slate-950 focus:ring-slate-700" @change="toggleArrayValue('eligibleEducationLevels', value)">
+                                                <input type="checkbox" :checked="form.eligibleEducationLevels.includes(value)" :disabled="educationChangePending" class="border-slate-300 text-slate-950 focus:ring-slate-700" @change="changeEducationLevel(value, $event)">
                                                 {{ label }}
                                             </label>
                                         </div>
@@ -1139,8 +1242,9 @@ onBeforeUnmount(() => {
                                     <EducationEligibilityPolicyEditor v-model="form.educationEligibilityPolicy" v-model:modes="form.eligibilityRuleModes" :input-class="inputClass" />
 
                                     <div class="mt-6 grid grid-cols-2 gap-5">
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-courses" class="text-xs font-bold text-slate-700">Courses, tracks, or strands</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('course')" v-model="form.eligibilityRuleModes.course" rule-key="course" label="Courses, tracks, or strands" /></div><EligibilityOptionPicker id="program-eligible-courses" v-model="form.eligibleCourses" :options="eligibilityOptions.courses" :input-class="inputClass" open-label="Any course / strand" custom-label="Add a specific course not listed" /></div>
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-years" class="text-xs font-bold text-slate-700">Grade or year levels</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('year_level')" v-model="form.eligibilityRuleModes.year_level" rule-key="year_level" label="Grade or year levels" /></div><EligibilityOptionPicker id="program-eligible-years" v-model="form.eligibleYearLevels" :options="eligibilityOptions.years" :input-class="inputClass" :max-length="2000" open-label="Any grade / year level" custom-label="Add an unlisted grade or year level" /></div>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-courses" class="text-xs font-bold text-slate-700">Courses, tracks, or strands</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('course')" v-model="form.eligibilityRuleModes.course" rule-key="course" label="Courses, tracks, or strands" /></div><EligibilityOptionPicker id="program-eligible-courses" v-model="form.eligibleCourses" v-model:needs-choice="coursesNeedChoice" require-explicit-open open-value="Any" :options="eligibilityOptions.courses" :input-class="inputClass" open-label="Any course / strand" custom-label="Add a specific course not listed" /></div>
+                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-years" class="text-xs font-bold text-slate-700">Grade or year levels</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('year_level')" v-model="form.eligibilityRuleModes.year_level" rule-key="year_level" label="Grade or year levels" /></div><EligibilityOptionPicker id="program-eligible-years" v-model="form.eligibleYearLevels" v-model:needs-choice="yearsNeedChoice" require-explicit-open open-value="Any" :options="eligibilityOptions.years" :input-class="inputClass" :max-length="2000" open-label="Any grade / year level" custom-label="Add an unlisted grade or year level" /></div>
+                                        <div v-if="educationValuesToReview.length" data-education-value-review class="col-span-2 flex items-center justify-between gap-4 border-l-2 border-amber-400 bg-amber-50 p-3 text-xs text-amber-950"><p class="leading-5">These custom or older values were kept. Confirm they fit the new education levels: {{ educationValuesToReview.join(', ') }}.</p><button type="button" class="shrink-0 rounded-sm border border-amber-300 bg-white px-3 py-2 font-bold" @click="educationReview = { courses: [], years: [] }">I checked these selections</button></div>
                                         <div class="col-span-2"><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-locations" class="text-xs font-bold text-slate-700">Covered locations</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('location')" v-model="form.eligibilityRuleModes.location" rule-key="location" label="Covered locations" /></div><EligibilityLocationPicker v-model="form.eligibleLocations" :input-class="inputClass" /></div>
                                         <div class="col-span-2"><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-income-rule" class="text-xs font-bold text-slate-700">Household income rule</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('income')" v-model="form.eligibilityRuleModes.income" rule-key="income" label="Household income" /></div><select id="program-income-rule" v-model="form.incomeRequirement" :class="inputClass"><option>Any</option><option>Below PHP 10,000</option><option>PHP 10,000 - 20,000</option><option>PHP 20,001 - 40,000</option><option>PHP 40,001 - 60,000</option><option>Above PHP 60,000</option></select></div>
                                     </div>
@@ -1224,18 +1328,7 @@ onBeforeUnmount(() => {
                                     </button>
                                 </div>
 
-                                <div class="mt-7 w-full border-t border-slate-200 pt-6">
-                                    <div class="flex items-start justify-between gap-8">
-                                        <div><p class="text-sm font-bold text-slate-950">Review scoring</p><p class="mt-1 text-xs text-slate-500">The standard rubric supports consistent review without making the final decision.</p></div>
-                                        <span class="text-xs font-bold text-slate-500">100% total</span>
-                                    </div>
-                                    <div class="mt-4 grid grid-cols-4 border border-slate-200">
-                                        <div v-for="criterion in form.reviewRubric" :key="criterion.key" class="border-r border-slate-200 p-4 last:border-r-0">
-                                            <p class="text-2xl font-bold text-slate-950">{{ criterion.weight }}%</p>
-                                            <p class="mt-1 text-xs font-bold text-slate-800">{{ criterion.label }}</p>
-                                        </div>
-                                    </div>
-                                </div>
+                                <SelectionScoringPreview :presets="scoringPresets" :stages="form.selectionStages" :fixed-policy="fixedScoringPolicy" :applications-count="applicationsCount" />
 
                                 <div class="mt-7 w-full border-t border-slate-200 pt-6">
                                     <label><span :class="labelClass">Recipient commitment <span class="text-amber-700">Required</span></span><select v-model="form.recipientAgreement.commitment_type" :class="inputClass"><option value="provider_briefing" disabled>Choose the agreement type</option><option value="none">No ongoing recipient commitment</option><option value="renewal">Enrollment or renewal requirements</option><option value="service">Service or community commitment</option><option value="activities">Required program activities</option><option value="reporting">Progress or utilization reports</option><option value="custom">Custom commitment</option></select></label>
@@ -1255,18 +1348,9 @@ onBeforeUnmount(() => {
                             <section v-else class="px-7 py-6">
                                 <div>
                                     <h3 class="text-base font-bold text-slate-950">Review the complete program</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Open only the section that still needs attention.</p>
+                                    <p class="mt-1 text-sm text-slate-500">Check the current form values, including unsaved edits. Expand longer details or edit a section before submitting.</p>
                                 </div>
-                                <div class="mt-6 w-full border border-slate-200">
-                                    <button v-for="(step, index) in steps.slice(0, -1)" :key="step.id" type="button" class="flex w-full items-center gap-4 border-b border-slate-200 px-5 py-4 text-left last:border-b-0 hover:bg-slate-50" @click="openStep(step.id)">
-                                        <span :class="['grid h-8 w-8 place-items-center text-xs font-bold', stepChecks[step.id] ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800']"><i :class="stepChecks[step.id] ? 'fa-solid fa-check' : 'fa-solid fa-exclamation'" aria-hidden="true"></i></span>
-                                        <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">{{ index + 1 }}. {{ step.label }}</span><span class="mt-1 block text-xs text-slate-500">{{ step.hint }}</span></span>
-                                        <span :class="['program-status font-bold uppercase tracking-wide', stepChecks[step.id] ? 'text-emerald-700' : 'text-amber-700']">{{ stepChecks[step.id] ? 'Complete' : 'Needs attention' }}</span>
-                                        <i class="fa-solid fa-arrow-right text-xs text-slate-400" aria-hidden="true"></i>
-                                    </button>
-                                </div>
-
-                                <EligibilityRulesSummary class="mt-6" :rules="eligibilityRules" />
+                                <ProgramReviewSummary :steps="steps.slice(0, -1)" :summaries="reviewSummaries" :checks="stepChecks" :issues="reviewIssues" :rules="eligibilityRules" :logo="scholarshipLogo" :background="programImage" @edit="openStep" />
 
                                 <p v-if="originalStatus === 'published'" class="mt-3 text-xs leading-5 text-slate-600">Changing a rule between Required and Preferred sends this program back for administrator review. Submitted application records keep their original rules.</p>
 

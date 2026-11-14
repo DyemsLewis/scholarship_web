@@ -1,0 +1,730 @@
+000 [Title] Platform Process Guide
+001 [] Applicant provider and admin walkthrough with account labelled screenshots
+002 [] Follow the process from the applicant action to the responsible provider or admin action and then back to the applicant. Each walkthrough identifies the account, the record to open, prerequisites, controls, expected result and next owner. Use specialist roles first; manager and superadmin views remain last.
+003 [] Use Nuvareya Campus Pathways Grant to start a new application while intake is open. Use the separate closed-intake rounds for screening, formal verification, examinations and interviews. For current DSS use Nuvareya Scholar Selection Round or Nuvareya Assessment Completion Round. For recurring support use Nuvareya Learning Continuity Grant; for a one-time award use Nuvareya Study Essentials Award.
+004 [] Verified November 13 2026 Philippine time. Both local and hosting databases were replaced with the same new fictional catalog. There are 77 accounts, 40 applicants, 16 programs and 37 applications. Earlier accounts and provider identities are no longer valid. Dates are fixed for this prepared walkthrough; do not move selection activities into an open application intake.
+005 [] All retained screenshots below were freshly captured from the hosted platform after this reset. Applicant identities use fictional learner labels and the neutral silhouette, not real people or generated portraits. Screenshots show available controls without submitting tester decisions.
+006 [] All listed accounts use password123 for this private demonstration. Applicant photos are the platform silhouette. Use fictional supporting files and payout details. A saved payment or distribution record is not evidence of a real transfer; external payments, refunds and email delivery are not performed by this guide.
+007 [Heading1] Process index
+008 [] 1. Registration and sign in
+009 [] 2. Applicant profile and supporting evidence
+010 [] 3. Admin applicant verification
+011 [] 4. Provider organization profile
+012 [] 5. Admin provider verification
+013 [] 6. Program creation and publication
+014 [] 7. Admin program review
+015 [] 8. Scholarship discovery and preparation
+016 [] 9. Reusable applicant documents
+017 [] 10. Submitted application and next action
+018 [] 11. Provider screening and document review
+019 [] 12. Formal application verification
+020 [] 13. Examination and interview scheduling
+021 [] 14. Applicant examination schedule
+022 [] 15. Applicant interview schedule
+023 [] 16. Recording conducted stage results
+024 [] 17. Final scholarship decision
+025 [] 18. Applicant acceptance of the agreement
+026 [] 19. Recipient support and agreement tracking
+027 [] 20. Applicant scholarship support and in person check in
+028 [] 21. Provider monitoring evidence review
+029 [] 22. Admin monitoring oversight
+030 [] 23. Renewal completion and support decisions
+031 [] 24. Planning the first or one time benefit release
+032 [] 25. Recording actual benefit distribution
+033 [] 26. Applicant receipt and delivery reports
+034 [] 27. Recipient withdrawal requests
+035 [] 28. Agreement concerns before conclusions
+036 [] 29. Provider delivery investigation and correction
+037 [] 30. Independent review appeals and privacy
+038 [] 31. Provider support and platform reports
+039 [] 32. Admin support case handling
+040 [] 33. Provider staff and program assignment
+041 [] 34. Admin account management
+042 [] 35. Provider paid services and requests
+043 [] 36. Admin service intake delivery and closeout
+044 [] 37. Admin finance and payment records
+045 [] 38. Admin audit history and exports
+046 [] 39. Provider manager overview and combined workspaces
+047 [] 40. Organization representative view
+048 [] 41. Portal manager overview
+049 [] 42. Superadmin governance view
+050 [Heading1] Applicant accounts in demonstration order
+051 [] All application-stage examples now have fixed scoring snapshots. Use cohort.learner.exam.result or cohort.learner.interview.result for a blank current-stage score form. Earlier scored prerequisites are already recorded. Use the cohort.process DSS examples to demonstrate ranking and a missing prior evaluation. No active example uses the legacy manual path.
+052 [] Applicant loginStarting actionActing accountcohort.learner.profileComplete profile evidenceApplicant logincohort.learner.verificationReview submitted profile evidencenovacore.reviewscohort.learner.applyStart a new application in the open roundApplicant logincohort.learner.screeningReview application evidence and record screening resultnuvareya.reviewercohort.learner.formalRecord formal application verificationnuvareya.selectioncohort.learner.exam.assignCreate or assign an examination sessionnuvareya.selectioncohort.learner.exam.confirmAcknowledge the published examination scheduleApplicant logincohort.learner.exam.completeComplete the conducted exam sessionnuvareya.selectioncohort.learner.exam.resultRecord the examination resultnuvareya.selectioncohort.learner.interview.assignAssign an interview sessionnuvareya.selectioncohort.learner.interview.confirmAcknowledge the online interview scheduleApplicant logincohort.learner.interview.resultRecord the interview resultnuvareya.selectioncohort.learner.decisionRecord the final scholarship decisionnuvareya.decisionscohort.learner.agreementRespond to the recipient agreementApplicant logincohort.learner.release.planSchedule the first benefit releasenuvareya.releasescohort.learner.monitoring.appointmentView the upcoming in-person check-in appointmentApplicant logincohort.learner.monitoring.reviewRecord the first document result after the attended check-innuvareya.monitoringcohort.learner.monitoring.closeClose the fully reviewed check-in casenuvareya.monitoringcohort.learner.support.decisionRecord renewal or support completionnuvareya.recipientscohort.learner.release.recordRecord scheduled in-person distributionnuvareya.releasescohort.learner.release.confirmConfirm receipt of the released benefitApplicant logincohort.learner.onetime.planSchedule a one-time award without recurring check-insnuvareya.releasescohort.learner.onetime.recordRecord one-time award distributionnuvareya.releasescohort.learner.onetime.confirmConfirm the received one-time awardApplicant logincohort.learner.partner.screeningReview a separate provider applicationvelasora.reviewercohort.learner.payout.detailsSubmit fictional bank payout detailsApplicant logincohort.learner.payout.reviewReview submitted fictional e-wallet detailsnuvareya.releasescohort.learner.payout.transferRecord transfer proof for an approved fictional payout destinationnuvareya.releasescohort.process.dss.firstReview the highest evaluated candidate; no final decision recorded.nuvareya.decisionscohort.process.dss.secondReview the second evaluated candidate; two award slots are available.nuvareya.decisionscohort.process.dss.thirdReview the remaining candidate; the recommendation is not an official waitlist decision.nuvareya.decisionscohort.process.dss.scoreRecord the missing interview evaluation before the final comparison.nuvareya.selection then nuvareya.decisionscohort.process.support.appointmentAttend the upcoming original-document appointment.Applicant logincohort.process.support.reviewProvider checks original grades and enrollment after attendance.nuvareya.monitoringcohort.process.support.closeAll required records are met; provider can close the check-in.nuvareya.monitoringcohort.process.support.decisionCheck-in closed and benefits received; provider can renew or complete support.nuvareya.recipientscohort.process.support.historyView the successful renewal decision and its acknowledgment action.Applicant logincohort.process.award.receiptConfirm receipt of the recorded one-time award.Applicant logincohort.process.award.completeReceipt confirmed; provider can complete the one-time scholarship.nuvareya.recipientscohort.process.award.followupRespond to the provider notice to arrange the uncollected award.Applicant login
+053 [Heading2] Provider and admin account groups
+054 [] Nuvareya and Velasora both have these specialist logins: .programs, .reviewer, .selection, .decisions, .recipients, .monitoring, .releases, .profile, .team, .support, and .billing. Add the organization prefix nuvareya or velasora, for example nuvareya.selection. The .newstaff accounts show first-login setup. Both organizations also have a .manager account and a representative login using the organization prefix alone.
+055 [] The admin specialist logins are novacore.accounts, novacore.reviews, novacore.support, novacore.billing, novacore.finance, and novacore.records. The organization awaiting verification is kinoraya. Manager and governance accounts are listed in the last four processes.
+056 [] 
+057 [Heading1] 1 Registration and sign in
+058 [] Signed in account: Not signed in
+059 [] Page shown: Registration
+060 [] A new applicant or provider starts at registration, selects the appropriate account type and supplies the requested identity and contact information. Follow the email verification instructions before continuing. An existing demo account instead signs in using its username or email. The middle initial is optional.
+061 [] Current hosted view | Not signed in | registration
+062 [] Applicant: registers and completes profile evidence. Provider: registers the organization and submits its verification information. Admin: operational accounts are managed through the authorized admin account workflow; provider and applicant verification are handled by novacore.reviews. No new account was registered for this screenshot.
+063 [Heading1] 2 Applicant profile and supporting evidence
+064 [] Signed in account: cohort.learner.apply
+065 [] Page shown: Applicant profile loaded
+066 [] The applicant maintains identity, contact, education, household, and location details. Section edit modals keep the applicant on their record. Upload documents that support the profile rather than merely filling the text fields.
+067 [] Current hosted view | cohort.learner.apply | applicant profile loaded
+068 [] Applicant: complete the record and evidence. Provider: later sees the submitted applicant record and which information is self-declared. Admin: the review officer verifies the profile evidence before the applicant can apply.
+069 [Heading2] Edit the applicant information in its modal
+070 [] Signed in account: cohort.learner.profile
+071 [] 1. Choose Edit beside the personal information section.
+072 [] 2. Update only the details that need correction and check the required fields.
+073 [] 3. Review the changes before Save changes; Cancel leaves the record unchanged.
+074 [] 4. Photo changes can save immediately through the photo controls, so do not replace or remove a photo merely to demonstrate the form.
+075 [Heading1] 3 Admin applicant verification
+076 [] Signed in account: novacore.reviews
+077 [] Page shown: Admin applicant verification
+078 [] The review officer checks supporting files first. In the academic record review, Academic results contains the grading scale and verified result; accepting that document saves any correction. Step 2 then records only the overall profile outcome and review note. Accepting evidence does not verify the whole profile or select an applicant for a scholarship. Use cohort.learner.verification for this queue and novacore.reviews to review it.
+079 [] Applicant: cohort.learner.verification supplies or corrects evidence. Provider: cannot replace platform profile verification with a scholarship decision. Admin: novacore.reviews performs verification; superadmin is not the normal operational reviewer.
+080 [Heading2] Open the applicant verification record
+081 [] Signed in account: novacore.reviews
+082 [] 1. Select Learner Profile 02 from Applicant verification. Confirm the name and account before reviewing.
+083 [] 2. Read the review guide for the current step. Expand the complete profile only when more context is needed, and check any changes since the previous decision.
+084 [] 3. Go to Supporting evidence and compare each required document with the corresponding declared information.
+085 [] 4. Uploaded files do not verify the whole profile. Review current evidence first; use the queue navigation to keep the original search and filters while opening the next record.
+086 [] Current hosted view | novacore.reviews | admin applicant verification
+087 [Heading2] Review an individual supporting document
+088 [] Signed in account: novacore.reviews
+089 [] 1. Select Review beside a submitted document to open this evidence-review dialog.
+090 [] 2. Inspect the file and related self-declared profile details. OCR is only a suggestion; use the larger preview if needed.
+091 [] 3. For an academic record, choose Accept document and confirm or correct the grading scale and verified result in Academic results. For an unreadable or unsuitable file, request a replacement and explain why.
+092 [] 4. Acknowledge the comparison, then accept the document to save the academic result and evidence decision together. This leaves overall profile verification pending.
+093 [Heading2] Record overall profile verification
+094 [] Signed in account: novacore.reviews
+095 [] 1. Return to the applicant record after reviewing the individual files and photo.
+096 [] 2. At Step 2 Final profile decision, confirm that all current required evidence is accepted. Grades were already reviewed in Academic results; there are no grading controls here.
+097 [] 3. Choose Verify profile, Request profile correction, or Keep under review for the profile as a whole. Add the final review note; correction and reopening require an explanation.
+098 [] 4. Save decision records only the overall profile outcome, not grades or a scholarship result. An outdated form is rejected if the record changed. Reload, compare the changes and review the current evidence before submitting again.
+099 [Heading1] 4 Provider organization profile
+100 [] Signed in account: nuvareya.profile
+101 [] Page shown: Provider profile
+102 [] The organization profile manager maintains the provider information shown to applicants, including identity, public description, branding, contact information, and location. A provider preview shows the applicant-facing presentation.
+103 [] Current hosted view | nuvareya.profile | provider profile
+104 [] Applicant: discovers and evaluates providers. Provider: nuvareya.profile maintains the organization record and evidence. Admin: novacore.reviews checks registration evidence and organization verification.
+105 [Heading1] 5 Admin provider verification
+106 [] Signed in account: novacore.reviews
+107 [] Page shown: Admin provider verification
+108 [] Use novacore.reviews to review the Kinoraya organization. Step 1 reviews each current proof separately: open Review, inspect the file beside the organization details, then Accept document with the comparison acknowledgement or Request replacement with a clear reason. Step 2 records the final provider account decision only after every current file is accepted. Verification does not approve the provider's scholarships.
+109 [] Applicant: sees the provider trust state. Provider: sees individual file outcomes and corrective notes, and uses Replace document to submit new proof. Admin: records each document review and then a separate account outcome; the final account decision never overwrites file outcomes or notes.
+110 [Heading2] Review organization documents individually
+111 [] Signed in account: novacore.reviews
+112 [] 1. Sign in as novacore.reviews. Open Provider verification and select Kinoraya. Step 1 shows each file as Awaiting review, Accepted, or Needs replacement, with reviewer and date when available.
+113 [] 2. Choose Review on one file. Compare the submitted proof with the legal organization name, registration authority and number, and representative details. Download it if the format cannot be previewed.
+114 [] 3. Choose Accept document only after inspecting it and checking the comparison acknowledgement. Otherwise choose Request replacement and explain what must be corrected. Saving records the reviewer, time, note and file revision; it does not verify the account.
+115 [] 4. Repeat for every current file. Unreviewed files, unavailable files and replacement requests block final approval. If another reviewer or upload changes the file, reload instead of submitting an outdated review. The screenshot shows an unsaved form.
+116 [] Current hosted view | novacore.reviews | admin provider verification
+117 [Heading2] Record the final provider account decision
+118 [] Signed in account: novacore.reviews
+119 [] 1. In Step 2 Final provider account decision, confirm all current proof has been individually accepted. Uploading documents alone is insufficient.
+120 [] 2. Choose Approve, Reject, or Return to pending. Rejection requires a clear organization review note. File outcomes and their notes remain independent.
+121 [] 3. Save decision only when appropriate. If the organization or document set changed, reload and inspect the current record before deciding.
+122 [] 4. Organization verification is not scholarship publication or applicant selection. Existing approved demo accounts are not reset by this update; inherited historical file approvals do not count as individual reviews during a new verification.
+123 [] 
+124 [Heading2] Replace organization proof after a review
+125 [] Signed in account: kinoraya
+126 [] 1. Open Organization profile then Legal verification. Review the status and corrective note for the affected file.
+127 [] 2. Choose the Replace document icon on that row. The upload form identifies the file being replaced and selects its document type. Choose the new file and acknowledge the upload terms.
+128 [] 3. Upload proof replaces the old file with a new unreviewed record. The new file does not inherit acceptance. Other unchanged accepted files keep their own decisions.
+129 [] 4. New proof or relevant legal identity changes return approved accounts to review. Relevant organization changes invalidate prior file comparisons; a reviewer must inspect the current details and files again.
+130 [] 
+131 [Heading1] 6 Program creation and publication
+132 [] Signed in account: nuvareya.programs
+133 [] Page shown: Provider programs
+134 [] The program coordinator prepares scholarship details, benefits, eligibility rules, requirements, selection stages, dates, applicant limits, and branding. Drafts and requested changes stay separate from published programs. The staged editor validates each step.
+135 [] Current hosted view | nuvareya.programs | provider programs
+136 [] Applicant: sees published scholarships, not private drafts. Provider: nuvareya.programs prepares and submits programs. Admin: novacore.reviews checks publication submissions; it does not make the provider final applicant selection.
+137 [Heading2] Configure documents and the formal application handoff
+138 [] Signed in account: nuvareya.programs
+139 [] 1. Open a program, choose Edit, and open Application in the staged editor.
+140 [] 2. Configure the pre-screening files, optional files and post-qualification requirements appropriate to the program.
+141 [] 3. Set formal handoff instructions, deadline and the official link or physical venue with its map pin where needed.
+142 [] 4. Choose common document requirements from the selector and type only provider-specific requirements. Review the remaining steps before saving or submitting.
+143 [Heading1] 7 Admin program review
+144 [] Signed in account: novacore.reviews
+145 [] Page shown: Admin program review
+146 [] The program review queue separates publication checks from organization verification and applicant verification. The officer examines the program information and requests changes or records the publication review decision.
+147 [] Applicant: can discover approved published programs. Provider: answers requested changes. Admin: verifies the submission through the program review workspace.
+148 [Heading2] Inspect the submitted scholarship before publication
+149 [] Signed in account: novacore.reviews
+150 [] 1. Open a program from Program review and confirm its provider and submission status.
+151 [] 2. Review the advertised support, eligibility, requirements, dates, selection process and recipient terms.
+152 [] 3. Read the readiness checks and changes since the previous review, then approve a valid submission or request clear changes with a review note.
+153 [] 4. Save only after checking the current submission. If another user changed it, reload before deciding. Publication is separate from selecting a scholarship applicant.
+154 [] Current hosted view | novacore.reviews | admin program review
+155 [Heading2] Define qualifications and the scoring plan
+156 [] Signed in account: nuvareya.programs
+157 [] Program configuration determines admission safeguards and later assessment. Use a draft when demonstrating a change; do not change an intake that already has fixed evaluation snapshots.
+158 [] 1. In Eligibility, choose the intended education level and qualification, grade scale, year level, location and other rules. Remove irrelevant inherited restrictions rather than relying on free-text descriptions.
+159 [] 2. Separate mandatory rules, reviewable qualifications and preferences according to the available controls. A preference contributes guidance; it is not the same as a mandatory exclusion.
+160 [] 3. In the selection setup, choose the actual screening, formal verification, exam, interview and final decision stages needed by the program. Explain their order to applicants.
+161 [] 4. Inspect the preset weights for the scored stages. Submission freezes the scoring plan for that intake; formal application is a qualifying check, not extra numeric points.
+162 [] 5. Review support terms, deadline order, recipient slots and application intake limit before submitting the draft. Publication review remains an admin decision.
+163 [] Expected result and handoff: The published program supplies clear rules and a stable evaluation basis. The admin reviewer checks publication readiness separately from applicant selection.
+164 [Heading1] 8 Scholarship discovery and preparation
+165 [] Signed in account: cohort.learner.apply
+166 [] Page shown: Applicant find scholarships
+167 [] Use Search and filter to find published scholarships, then open View details to review benefits, eligibility, required files, deadlines and application instructions. Each result displays the scholarship logo beside its name; background photographs and provider logos are separate assets. Apply starts the application only when the verified profile meets the required rules and applications are open. Use the provider link to inspect the organization.
+168 [] Current hosted view | cohort.learner.apply | applicant find scholarships
+169 [] Applicant: cohort.learner.apply is ready to start a new application. Provider: supplies accurate program and organization content. Admin: oversees publication and trust checks, not the applicant choice of scholarship.
+170 [Heading2] Submit a new scholarship application
+171 [] Signed in account: cohort.learner.apply
+172 [] Use the open Nuvareya Campus Pathways Grant. The account already has a verified profile; completing an application is a new tester action.
+173 [] 1. Open Scholarships, select View details, then read How to apply, Eligibility, Requirements and the deadline. A suggested match percentage is preparation guidance, not approval.
+174 [] 2. Choose Apply. Review the current profile and eligibility checks. Use the eligibility link for details; do not proceed by entering a false value to satisfy a rule.
+175 [] 3. For a reviewable exception, follow the available explanation and evidence controls and wait for the relevant review when required. A hard unmet rule or an unverified profile cannot simply be ignored.
+176 [] 4. Choose current files from My Documents or upload the required files. These prepared programs have no short application questions. Accept the required declarations and terms before submission; the question feature remains available for other programs.
+177 [] 5. Review the complete application and confirm submission. Open Applications afterward and inspect the saved requirements, current stage and next-action guidance.
+178 [] Expected result and handoff: A submitted application appears in the provider review queue. It is not yet screened, selected, accepted for support or paid.
+179 [Heading1] 9 Reusable applicant documents
+180 [] Signed in account: cohort.learner.screening
+181 [] Page shown: Applicant documents
+182 [] My Documents holds reusable files for future applications. A saved document is not automatically an accepted application requirement; the applicant must choose appropriate current files during an application.
+183 [] Current hosted view | cohort.learner.screening | applicant documents
+184 [] Applicant: uploads and manages documents. Provider: reviews files actually submitted to its program. Admin: profile evidence verification remains separate from a provider application document decision.
+185 [Heading1] 10 Submitted application and next action
+186 [] Signed in account: cohort.learner.screening
+187 [] Page shown: Applicant application
+188 [] The application details tell the applicant the current stage, what happens next, required submissions, schedule, decision, and history. cohort.learner.screening is waiting for the initial provider review.
+189 [] Current hosted view | cohort.learner.screening | applicant application
+190 [] Applicant: follows the next-action guidance and answers correction requests. Provider: nuvareya.reviewer checks eligibility and submitted documents. Admin: handles platform verification or oversight, not routine scholarship screening.
+191 [Heading1] 11 Provider screening and document review
+192 [] Signed in account: nuvareya.reviewer
+193 [] Page shown: Provider screening
+194 [] The application reviewer works from the assigned queue instead of the manager overview. Review the applicant record, eligibility and document evidence before recording a screening result. Corrections should identify what the applicant must fix.
+195 [] Applicant: cohort.learner.screening is the prepared screening record. Provider: nuvareya.reviewer performs the review. Admin: novacore.reviews verifies profile evidence separately; passing screening does not itself award a scholarship.
+196 [Heading2] Inspect application eligibility after selecting an applicant
+197 [] Signed in account: nuvareya.reviewer
+198 [] 1. Open Learner Profile 04 from My review queue and confirm that the application is assigned to you.
+199 [] 2. Compare the declared profile against each program rule. Review unresolved items rather than relying only on an overall score.
+200 [] 3. Inspect the Profile tab and supporting evidence where a claim needs checking.
+201 [] 4. Hard requirements and reviewable qualifications must follow their configured policy; resolve the relevant review before recording a screening result.
+202 [] Current hosted view | nuvareya.reviewer | provider screening
+203 [Heading2] Review the application evidence
+204 [] Signed in account: nuvareya.reviewer
+205 [] 1. Open Evidence in the selected application record.
+206 [] 2. Use View or the file preview to inspect the submitted file, then select Review beside that document.
+207 [] 3. Record an evidence status and specific review notes appropriate to the file. An upload alone is not accepted evidence.
+208 [] 4. Repeat for the required files before relying on document readiness for the screening result.
+209 [] Current hosted view | nuvareya.reviewer | provider screening
+210 [Heading2] Record the screening result or request correction
+211 [] Signed in account: nuvareya.reviewer
+212 [] 1. Open Result in the selected application record and check the readiness messages.
+213 [] 2. If information is missing, open Request correction and identify what the applicant must change.
+214 [] 3. Review the rubric, record its required scores and explanation, and choose the screening outcome. On a scored intake, the academic-merit and financial-need criteria supply the frozen screening component; eligibility checks and document acceptance still have their own safeguards.
+215 [] 4. Save the appropriate review or result only after completing its prerequisites. Claiming an unassigned application is a separate access action.
+216 [Heading2] Return a correction to the provider reviewer
+217 [] Signed in account: cohort.learner.screening then nuvareya.reviewer
+218 [] Use this branch only after the reviewer requests a specific correction. The request and each saved response remain part of the review history.
+219 [] 1. As the applicant, open the application next action or Requirements section and read the correction note and response deadline.
+220 [] 2. Replace only the requested files or correct the permitted information. Profile changes that invalidate platform evidence may need renewed profile verification.
+221 [] 3. Review the corrected submission, acknowledge its terms where required and confirm Send update. A replacement does not inherit the prior file acceptance.
+222 [] 4. As nuvareya.reviewer, open the returned record from the review queue, inspect the changes and current evidence, then record the review or result.
+223 [] Expected result and handoff: The corrected application returns to review. A correction response does not pass the stage automatically.
+224 [Heading1] 12 Formal application verification
+225 [] Signed in account: nuvareya.selection
+226 [] Page shown: Provider formal
+227 [] Formal application is a configured stage for providers that require a further official application or in-person verification. Applicants follow the published instructions and schedule where applicable. A separate session is not always mandatory for this stage.
+228 [] Current hosted view | nuvareya.selection | provider formal
+229 [] Applicant: cohort.learner.formal follows the formal instructions. Provider: nuvareya.selection records the verification, required proof and result according to the configured stage. Admin: can inspect selection activity evidence through oversight.
+230 [Heading2] Record the formal application verification
+231 [] Signed in account: nuvareya.selection
+232 [] 1. Select Learner Profile 05 from the formal-application work queue.
+233 [] 2. Read the published handoff instructions and verify the actual formal application requirements or originals.
+234 [] 3. Complete the required stage verification and attach provider proof where requested. Use a session only when the configured formal workflow needs one.
+235 [] 4. Record the stage outcome after the prerequisites are satisfied; a published instruction is not proof that verification happened.
+236 [Heading1] 13 Examination and interview scheduling
+237 [] Signed in account: nuvareya.selection
+238 [] Page shown: Provider sessions
+239 [] The selection officer assigns eligible applicants to sessions. Separate sessions support different dates or venues; online interviews use a meeting link. Session attendance or completion and an individual applicant result are different records.
+240 [] Current hosted view | nuvareya.selection | provider sessions
+241 [] Applicant: cohort.learner.exam.assign or cohort.learner.interview.assign awaits assignment. Provider: nuvareya.selection manages sessions and outcomes. Admin: novacore.reviews can inspect selection activity records and evidence.
+242 [Heading2] Create assign and complete a selection session
+243 [] Signed in account: nuvareya.selection
+244 [] Use Learner Profile 06 for exam assignment, Learner Profile 10 for interview assignment, or Learner Profile 08 for a conducted exam awaiting completion. They are different prepared starting points, not one person already at every step.
+245 [] 1. Open the relevant closed-intake program and selection workspace. Create a session using its form or modal. Choose the stage, date, start and end times, capacity and instructions.
+246 [] 2. For an onsite activity, enter the venue and selectable map pin. For an online interview, choose Online and provide the meeting link. Use separate sessions for different venues, dates or groups.
+247 [] 3. Assign only applicants who have reached the correct stage. Publish the session and check the roster. Applicants read or acknowledge their own assignments; capacity and program scope still apply.
+248 [] 4. After the activity actually occurs, record attendance for each assigned applicant and upload the required provider proof for that session or person.
+249 [] 5. Use the session completion control once its checks are satisfied. Then open each applicant result separately and record the actual assessment score and outcome.
+250 [] Expected result and handoff: A completed schedule with attendance and proof enables result recording where required. It does not automatically pass everyone or issue a scholarship offer.
+251 [Heading1] 14 Applicant examination schedule
+252 [] Signed in account: cohort.learner.exam.confirm
+253 [] Page shown: Applicant exam
+254 [] The applicant reads the assigned examination date, venue, instructions, and acknowledgement action. Other prepared accounts cover completing the conducted session and recording an individual examination result.
+255 [] Current hosted view | cohort.learner.exam.confirm | applicant exam
+256 [] Applicant: cohort.learner.exam.confirm acknowledges the schedule. Provider: cohort.learner.exam.complete is the session-completion scenario and cohort.learner.exam.result awaits a result, both acted on by nuvareya.selection. Admin: provides oversight rather than taking the examination decision.
+257 [Heading2] Record the conducted examination result
+258 [] Signed in account: nuvareya.selection
+259 [] 1. Open Learner Profile 09 in the results queue and inspect the assigned examination and readiness checks.
+260 [] 2. Check attendance or participation and the required completion evidence for the conducted session.
+261 [] 3. In a scored intake, enter the actual examination score and maximum score with the passing outcome, then review the confirmation. Older unscored applications can retain their original result without invented assessment points.
+262 [] 4. Session completion and an individual applicant result are separate actions; do not pass an applicant simply because the schedule exists.
+263 [Heading1] 15 Applicant interview schedule
+264 [] Signed in account: cohort.learner.interview.confirm
+265 [] Page shown: Applicant interview
+266 [] The interview schedule tells the applicant when and how to attend, including the meeting link for an online interview. An applicant acknowledgement does not prove the interview took place.
+267 [] Current hosted view | cohort.learner.interview.confirm | applicant interview
+268 [] Applicant: cohort.learner.interview.confirm acknowledges its schedule. Provider: nuvareya.selection records attendance, stage proof and the interview result; cohort.learner.interview.result is ready for that result. Admin: can inspect supporting activity records.
+269 [Heading2] Record the interview result
+270 [] Signed in account: nuvareya.selection
+271 [] 1. Open Learner Profile 12 from the interview results queue.
+272 [] 2. Check that the interview actually occurred and review participation, stage proof and any recorded interview notes.
+273 [] 3. Record the interview assessment score and maximum when the frozen scoring policy requires them, together with the stage outcome. Do not substitute an attendance status for a numeric evaluation.
+274 [] 4. An online meeting link or applicant acknowledgement is a schedule instruction, not evidence that the interview was completed.
+275 [Heading1] 16 Recording conducted stage results
+276 [] Signed in account: nuvareya.selection
+277 [] Page shown: Selection interview evaluation
+278 [] The results workspace separates work ready for result recording from scheduling work. Complete the required conducted-session or stage verification and attach proof where required before recording an applicant result.
+279 [] Current hosted view | nuvareya.selection | selection interview evaluation
+280 [] Applicant: sees the recorded result and next stage. Provider: records the evidence-based result and any permitted audited correction, rather than merely marking every applicant complete. Admin: oversight does not replace the provider stage result.
+281 [Heading1] 17 Final scholarship decision
+282 [] Signed in account: nuvareya.decisions
+283 [] Page shown: Decision ranked candidates
+284 [] The decision officer compares fully evaluated applicants within the same scholarship against its remaining slots. The DSS combines the frozen screening, exam and interview evaluations and suggests selection or waitlisting. It never makes the award decision. Earlier exam or interview success alone is not a scholarship award.
+285 [] Use cohort.process.dss.first, cohort.process.dss.second and cohort.process.dss.third in Nuvareya Scholar Selection Round. All three await the tester decision, with three evaluated applicants and two slots. Nuvareya Assessment Completion Round contains cohort.process.dss.score with an interview score still to enter. The regular cohort.learner.decision account also has a complete scoring plan.
+286 [Heading2] Open the final decision form
+287 [] Signed in account: nuvareya.decisions
+288 [] 1. As nuvareya.decisions, open Pending decisions, choose Nuvareya Scholar Selection Round, and select Process Learner 01. Read the evaluated score, rank, review guidance, capacity and prior stage results.
+289 [] 2. Confirm that the comparison is Ready to compare. There are three complete evaluations and two unfilled slots. Review the stage breakdown; a profile matching percentage is not this selection score.
+290 [] 3. In Record final outcome, choose the actual decision and add the required notes or internal rationale. A different suggestion or a cutoff tie can require an explanation. A waitlist suggestion is not an official waitlist entry until saved.
+291 [] 4. Review the confirmation and save only the intended outcome. If another decision or score changed, reload the comparison. Selection reserves capacity and sends the offer; it does not accept the agreement for the applicant or release money.
+292 [] Current hosted view | nuvareya.decisions | decision final outcome
+293 [Heading2] Compare final candidates using the DSS
+294 [] Signed in account: nuvareya.decisions
+295 [] Choose Nuvareya Scholar Selection Round. Process Learner 01, Process Learner 02 and Process Learner 03 have completed scored prerequisites and no final outcome. Two slots remain.
+296 [] 1. Open Pending decisions and select this program. Ready to compare means the intake is closed and all current candidate evaluations needed for the comparison are complete.
+297 [] 2. Inspect scores 94.8, 90.6 and 85.0, their ranks and the two remaining slots. The first two suggestions are Consider selecting; the third is Consider waitlisting.
+298 [] 3. Open the small evaluation-breakdown icon. Compare frozen screening, examination and interview components and their weights. These are recorded evaluations, not the applicant matching percentage.
+299 [] 4. Open Record decision for the intended candidate. Follow the result controls and confirmation. Enter a clear internal reason if departing from guidance or resolving a cutoff tie.
+300 [] 5. Return to Pending decisions after saving. Capacity and suggestions update. Equal scores can share a rank; an unresolved tie at the cutoff must not be arbitrarily treated as an automatic winner.
+301 [] Current hosted view | nuvareya.decisions | decision ranked candidates
+302 [] Expected result and handoff: The officer owns the official outcome. Selecting creates an offer, waitlisting creates the official queue, and an unsaved suggestion changes neither.
+303 [Heading2] Read the scored stage breakdown
+304 [] Signed in account: nuvareya.decisions
+305 [] The example uses screening 30 percent, examination 40 percent and interview 30 percent. Other configured stage combinations use their own frozen preset.
+306 [] 1. Open the evaluation-breakdown icon for Process Learner 01.
+307 [] 2. Read the stage status, score, maximum and weight. Screening reuses the reviewed academic-merit and financial-need rubric components.
+308 [] 3. Treat formal verification as a prerequisite. It is not counted twice as additional points.
+309 [] 4. If a stage is incomplete or its result was reopened, review it through the responsible workspace before relying on the final total.
+310 [] Current hosted view | nuvareya.decisions | decision stage breakdown
+311 [Heading2] Complete a missing evaluation before ranking
+312 [] Signed in account: nuvareya.selection
+313 [] Use Process Learner 04, cohort.process.dss.score, in Nuvareya Assessment Completion Round. The interview happened and passed, but its numeric evaluation is deliberately missing.
+314 [] 1. As nuvareya.selection, open the completed interview through selection history, then the assigned applicant record. Confirm participation and the original assessment evidence.
+315 [] 2. Expand Earlier stage evaluations in the applicant record. Beside Interview, choose Add score and enter the actual score and maximum. Add a factual note and review the confirmation before recording it.
+316 [] 3. To correct an existing evaluation later, use the correction control and give the required explanation. Earlier score revisions stay in history.
+317 [] 4. As nuvareya.decisions, select this program in Pending decisions. A final score appears only after all scored and qualifying prerequisites are complete. Missing does not mean zero.
+318 [] Current hosted view | nuvareya.selection | selection add score dialog
+319 [] Expected result and handoff: The comparison uses the latest valid recorded evaluation. Completing a score still leaves the final scholarship outcome to the decision officer.
+320 [Heading1] 18 Applicant acceptance of the agreement
+321 [] Signed in account: cohort.learner.agreement
+322 [] Page shown: Applicant agreement
+323 [] The selected applicant reviews the actual recipient terms before accepting or declining. Acceptance creates a clear record of the obligations the applicant agreed to; later program edits must not silently replace those accepted terms.
+324 [] Applicant: cohort.learner.agreement is awaiting its agreement response. Provider: nuvareya.recipients tracks agreement responses. Admin: independent review later uses the accepted source, not an unrelated current program rule.
+325 [Heading2] Read and respond to the recipient agreement
+326 [] Signed in account: cohort.learner.agreement
+327 [] 1. Open the selected application and choose Review agreement.
+328 [] 2. Read the actual recipient terms, responsibilities and any stated consequences rather than accepting from the summary alone.
+329 [] 3. Use the acceptance acknowledgement and response note where required, then choose the intended response.
+330 [] 4. Only submit after understanding the agreement. The provider must wait for the applicant response before the corresponding support steps.
+331 [] 5. If the agreement is already accepted, View agreement shows the saved terms. Use a still-pending offer to demonstrate acceptance; do not reset an existing response.
+332 [] Current hosted view | cohort.learner.agreement | applicant agreement
+333 [Heading1] 19 Recipient support and agreement tracking
+334 [] Signed in account: nuvareya.recipients
+335 [] Page shown: Provider recipient concerns
+336 [] The recipient officer tracks agreement responses and active scholarship support. Formal application, final selection, agreement acceptance and active support are separate process stages.
+337 [] Current hosted view | nuvareya.recipients | provider recipient concerns
+338 [] Applicant: responds to the agreement and follows accepted responsibilities. Provider: nuvareya.recipients manages the support record. Admin: handles independent cases or oversight when required.
+339 [Heading1] 20 Applicant scholarship support and in person check in
+340 [] Signed in account: cohort.process.support.appointment
+341 [] Page shown: Applicant check in
+342 [] The applicant reads the appointment date, venue, and documents to bring. This check-in is an in-person handoff, not a request to upload grades or enrollment records.
+343 [] Applicant: Process Learner 05 opens the upcoming handoff in Nuvareya Learning Continuity Grant and brings originals. Provider: nuvareya.monitoring records attendance and document results. Admin: novacore.reviews inspects oversight records when needed.
+344 [Heading2] Open the appointment and prepare the originals
+345 [] Signed in account: cohort.learner.monitoring.appointment
+346 [] 1. Open Scholarship Support, choose the scholarship, and select Check-ins.
+347 [] 2. Open the upcoming appointment and read the Manila date, time, venue, and instructions.
+348 [] 3. Bring the current academic record and enrollment certificate. This record has no applicant upload form.
+349 [] 4. Use View map for the venue and follow the appointment instructions. Contact the provider for a different schedule; do not upload substitute files for this in-person check. Return after attendance for the provider-recorded results.
+350 [] Current hosted view | cohort.learner.monitoring.appointment | applicant check in
+351 [Heading1] 21 Provider monitoring evidence review
+352 [] Signed in account: nuvareya.monitoring
+353 [] Page shown: Monitoring plan
+354 [] The monitoring officer records attendance and checks the original documents at the handoff. Recording document results and closing a check-in are separate from a decision about the entire scholarship.
+355 [] Use Nuvareya Learning Continuity Grant. Process Learner 06 (cohort.process.support.review) attended and needs original-document results. Process Learner 07 (cohort.process.support.close) is ready for check-in closure. Process Learner 08 (cohort.process.support.decision) has a closed check-in. Admin oversight does not replace the monitoring officer actions.
+356 [Heading2] Select a recipient and open the monitoring checklist
+357 [] Signed in account: nuvareya.monitoring
+358 [] 1. As nuvareya.monitoring, choose Nuvareya Learning Continuity Grant and open the attended check-in, not just the work queue.
+359 [] 2. Select Process Learner 06 from the roster. Attendance is already recorded; the two original documents still need provider results.
+360 [] 3. Open Current academic record. Compare the original, enter the verified grade and grading scale, select the result and record notes. Repeat for Current enrollment certificate. These are provider records, not applicant uploads.
+361 [] 4. Switch to Process Learner 07 to demonstrate Close check-in after both items are met. Review the closure dialog and confirm the case outcome. Closing one check-in does not renew or end the scholarship.
+362 [] Current hosted view | nuvareya.monitoring | monitoring academic result
+363 [Heading2] Set up and activate the monitoring plan
+364 [] Signed in account: nuvareya.monitoring
+365 [] The plan is the reusable support policy. A published check-in is the actual recipient appointment. Nuvareya Learning Continuity Grant already has an active plan to inspect without replacing it.
+366 [] 1. Open the program monitoring plan. In Schedule, set the review frequency, support start and end dates, grace period and whether extension or exception requests are allowed.
+367 [] 2. In Requirements, add only necessary academic, enrollment or other program checks. For academic progress, choose the required minimum and grading scale.
+368 [] 3. Configure the actual evidence method. The demonstrated check-ins require the provider to inspect originals at an appointment, not accept an applicant upload as verified proof.
+369 [] 4. Open Review and compare all settings with the published support terms. Save draft while preparing; activate only the intended complete plan after confirmation.
+370 [] 5. Use nuvareya.monitoring to publish individual appointments from the active plan. Activating a plan does not by itself assign every recipient to a new appointment.
+371 [] Current hosted view | nuvareya.monitoring | monitoring plan
+372 [] Expected result and handoff: The active plan supplies a versioned basis for future check-ins. Changes must not silently rewrite previously published periods.
+373 [Heading2] Publish a check in for the selected recipients
+374 [] Signed in account: nuvareya.monitoring
+375 [] Use New check-in from the active Learning Continuity Grant plan. Inspect the form without publishing if you only want to demonstrate its controls.
+376 [] 1. Open Plans and schedules, choose the grant and select New check-in.
+377 [] 2. Name the period, academic year and appointment. Set the actual date, time, venue, original documents to bring and short recipient instructions.
+378 [] 3. Choose the intended accepted recipients from the roster. Keep separate sessions or recipient arrangements for different dates and venues instead of publishing overlapping appointments.
+379 [] 4. Review the recipient count and instructions, then confirm Publish check-in only when ready. Cancel leaves the current data unchanged.
+380 [] 5. Sign in as an assigned applicant and open Scholarship Support then Check-ins. Confirm that the appointment and required originals appear for that applicant.
+381 [] Current hosted view | nuvareya.monitoring | monitoring plan
+382 [] Expected result and handoff: The chosen recipients receive their appointment. A plan alone, an unassigned roster entry or a published date is not attendance or completed review.
+383 [Heading2] Record attendance originals and case closure
+384 [] Signed in account: nuvareya.monitoring
+385 [] The attended-group roster has a record awaiting verification, one awaiting closure and one already completed. Select the person before opening an item.
+386 [] 1. For a new actual appointment, record Attended only after the applicant attends. If the appointment changes, use the reschedule controls and notify the recipient instead of pretending the old meeting occurred.
+387 [] 2. For Process Learner 06, open Current academic record and inspect the physical original. Record the verified grade, scale, result and notes. Repeat for enrollment.
+388 [] 3. If an extension, exception or follow-up is genuinely needed, record it through the available request or follow-up controls and resolve it before normal closure. Do not mark a pending item met to remove the blocker.
+389 [] 4. Select Process Learner 07. Both items are already met. Choose Close check-in, review the outcome and confirm it. The applicant can then read the closed result.
+390 [] Current hosted view | nuvareya.monitoring | monitoring roster
+391 [] Expected result and handoff: Check-in closure records a period outcome. The Recipient Officer still makes any renewal, completion or other support decision separately.
+392 [Heading1] 22 Admin monitoring oversight
+393 [] Signed in account: novacore.reviews
+394 [] Page shown: Admin monitoring loaded
+395 [] The review officer can inspect monitoring records and supporting evidence through its own oversight workspace. This is separate from routine provider checklist review.
+396 [] Current hosted view | novacore.reviews | admin monitoring loaded
+397 [] Applicant: brings the required records. Provider: records attendance, document results, and any follow-up. Admin: inspects the saved record without replacing the provider result.
+398 [Heading2] Inspect the exact support record as an admin
+399 [] Signed in account: novacore.reviews
+400 [] Admin monitoring oversight is an inspection and oversight workflow, not a shortcut for a provider document result.
+401 [] 1. Open Monitoring oversight and select the Learning Continuity Grant recipient or period rather than stopping at totals.
+402 [] 2. Inspect appointment, attendance, individual requirement results, provider notes and review history.
+403 [] 3. Use the available admin review controls only for their stated oversight purpose. A separate case review requires its own notice, evidence and response process.
+404 [] 4. Return the operational next action to nuvareya.monitoring or nuvareya.recipients. Do not claim an admin observation confirms receipt of a benefit.
+405 [Heading1] 23 Renewal completion and support decisions
+406 [] Signed in account: nuvareya.recipients
+407 [] Page shown: Recipient support closeout
+408 [] Open Process Learner 08 (cohort.process.support.decision) in Nuvareya Learning Continuity Grant as nuvareya.recipients, then Support status. The check-in is closed and both cash allowance and mentoring receipts are confirmed. Renew support to continue the award, or Complete support after the agreed work is finished. The current decision is deliberately left to the tester. Outstanding schedules, unconfirmed receipts or delivery issues block normal completion.
+409 [] Current hosted view | nuvareya.recipients | recipient support closeout
+410 [] For an early end, record the effective date, notice date, and reason. A decision based on an agreement concern still requires the applicable independent review and appeal opportunity. Do not use this form to record voluntary withdrawal; review the recipient request in Section 27.
+411 [] In practice, the award terms determine whether support ends at graduation, at the end of a term, or through an early decision. A period ending without renewal is not the same as ending it early. Some programs require final documents before the last release. See UP Diliman DOST-ASTHRDP procedures and CHED Merit Scholarship guidelines on notice and appeal.
+412 [Heading2] Read the applicant closeout summary
+413 [] Signed in account: cohort.process.support.history
+414 [] The current image shows the actual successful renewal history for Process Learner 09. To demonstrate completion, first record the intended completion decision as nuvareya.recipients on an eligible settled support record, then sign in with that same applicant to inspect Past support. Completion is not pre-recorded for the tester.
+415 [] Current hosted view | cohort.process.support.history | applicant support history
+416 [] Review outcome opens the decision and available response options. Benefit totals are saved with new closeouts and also appear in Support history. Later receipts update the benefit record, not the saved totals. Older decisions without saved totals still link to benefit records.
+417 [Heading2] Renew support and read the recipient response
+418 [] Signed in account: nuvareya.recipients
+419 [] Process Learner 08 is ready for the current decision. Process Learner 09, cohort.process.support.history, is a separate successful renewal whose recipient acknowledgment is available.
+420 [] 1. For Process Learner 08, open Support status. Check the completed review, accepted agreement and benefit settlement. Choose Renewed only when the provider intends to continue support.
+421 [] 2. Record a matching reason category, effective date, renewed support end, next review and the next-period terms. Review the confirmation before saving.
+422 [] 3. Sign in as the recipient. Open Support history and the renewal outcome, then read its dates, reasons and terms. Use the acknowledgment or permitted response rather than accepting a different current program page.
+423 [] 4. To demonstrate a response without first recording another provider outcome, use Process Learner 09 and the existing renewal history shown below.
+424 [] Current hosted view | nuvareya.recipients | recipient support closeout
+425 [] Expected result and handoff: A renewed support decision and its recipient response remain in history. Future check-ins and releases still need their own planning and completion.
+426 [Heading1] 24 Planning the first or one time benefit release
+427 [] Signed in account: nuvareya.releases
+428 [] Page shown: Provider release schedule
+429 [] The benefit release officer can schedule the first distribution after the required agreement state without creating recurring monitoring merely to distribute a benefit. One-time awards can use no recurring monitoring policy.
+430 [] Current hosted view | nuvareya.releases | provider release schedule
+431 [] Applicant: cohort.learner.release.plan or cohort.learner.onetime.plan is ready for planning. Provider: nuvareya.releases schedules the benefit and instructions. Admin: checks benefit evidence or service payment records in the relevant separate workspace, not a fictitious scholarship transfer.
+432 [Heading2] Plan cash digital and non cash benefits
+433 [] Signed in account: nuvareya.releases
+434 [] The first release can be planned after agreement acceptance without requiring an artificial recurring grade check. Choose the actual agreed benefit rather than creating a duplicate entitlement.
+435 [] 1. Open the release scheduling form and choose the program, agreed benefit and accepted recipients. The release amount or description must match what is actually being delivered.
+436 [] 2. For In person, provide collection date, venue, map pin, instructions and any original-document verification requirement.
+437 [] 3. For Bank transfer or E-wallet, recipients submit their private destination for this release and the provider reviews it before recording a transfer. The portal does not transfer the money.
+438 [] 4. For the School supplies kit, set In person, the structured venue and map pin, collection instructions, and the proof required after distribution. A supplies kit is an in-kind benefit, not a bank transfer or mentoring session.
+439 [] 5. Review and publish only the intended distribution. After actual delivery, record the recipient result and proof; the applicant still confirms receipt or reports an issue.
+440 [] Expected result and handoff: A published benefit release is a schedule, not delivery proof. Scholarship payments and provider purchases of platform services remain separate.
+441 [Heading1] 25 Recording actual benefit distribution
+442 [] Signed in account: nuvareya.releases
+443 [] Page shown: Applicant payout form
+444 [] A published release schedule is a plan, not proof of delivery. The release officer records distribution for each recipient and attaches the required evidence. The school supplies kit has collection instructions and a venue map; bank and e-wallet awards require payout details and provider transfer evidence.
+445 [] Applicant: cohort.learner.release.record and cohort.learner.onetime.record await provider distribution recording. Provider: nuvareya.releases records the distribution. Admin: can inspect benefit evidence; demo payment and benefit records do not prove real transfers.
+446 [Heading2] Open the distribution record and record delivery
+447 [] Signed in account: nuvareya.releases
+448 [] 1. Select the relevant release from Record distribution and confirm the title, schedule and recipients.
+449 [] 2. Select the intended recipient and inspect the current distribution status before entering a result.
+450 [] 3. Record actual delivery details and attach required proof. Do not mark a scheduled event as delivered merely because its date arrived.
+451 [] 4. The applicant must still confirm receipt or report an issue. Provider evidence alone cannot make that response for the applicant.
+452 [] Current hosted view | nuvareya.releases | provider release detail
+453 [Heading2] Submit payout details for a digital benefit
+454 [] Signed in account: cohort.learner.payout.details
+455 [] 1. Open Scholarship Support, choose the award, then open its benefit release under Benefits.
+456 [] 2. Choose Add payout details. Enter the institution, account holder, and the fictional account number for the release method.
+457 [] 3. Review and submit. The provider must review the destination; saving the details does not send money.
+458 [] Current hosted view | cohort.learner.payout.details | applicant payout form
+459 [Heading2] Review the payout destination
+460 [] Signed in account: nuvareya.releases
+461 [] 1. Open the distribution for cohort.learner.payout.review. Choose Review payout details from that recipient record.
+462 [] 2. Inspect the submitted details. Approve a matching destination or request a correction from the applicant.
+463 [] 3. Approval unlocks recording a transfer. It does not send the benefit and does not confirm receipt.
+464 [] Current hosted view | nuvareya.releases | provider release upcoming
+465 [Heading2] Record simulated transfer proof
+466 [] Signed in account: nuvareya.releases
+467 [] 1. Open the approved destination for cohort.learner.payout.transfer.
+468 [] 2. For the demo, record a simulated transfer date and attach fictional proof. Do not send real money. In actual use, record a transfer only after completing it outside the portal.
+469 [] 3. Confirm the record. The applicant can then acknowledge receipt or report a problem.
+470 [] Current hosted view | nuvareya.releases | provider release detail
+471 [Heading2] Follow up a missed benefit release
+472 [] Signed in account: nuvareya.releases
+473 [] 1. Open the distribution, select the recipient, and record the missed release only if the scheduled delivery did not happen. Find it again under Issues & follow-up.
+474 [] 2. Send a follow-up notice with instructions and at least seven days to reply. Allow at least two days between contact attempts. The reminder must leave at least two more days to reply and cannot shorten the original deadline.
+475 [] 3. The recipient can ask for a new arrangement or explicitly decline the benefit. Keep the missed attempt in history and link a replacement release when applicable. An actual reply stops closure for no response.
+476 [] 4. The reset does not pre-record a missed collection. cohort.process.award.followup starts with an upcoming collection appointment. Create the missed-release branch only after its actual scheduled time and actual non-attendance, then follow the notice, reminder and response deadlines. Do not backdate contact or change the clock to bypass safeguards.
+477 [] Current hosted view | nuvareya.releases | provider release upcoming
+478 [Heading2] Reply to an uncollected benefit notice
+479 [] Signed in account: nuvareya.releases
+480 [] Process Learner 12 starts with an upcoming Study Essentials Award collection. There is no open notice or missed outcome. The following reply steps apply only after the tester legitimately records a missed collection and sends the required follow-up notice.
+481 [] 1. Once a follow-up notice actually exists, sign in as the applicant, open the award, Benefit releases and the release follow-up. Read the instructions and response deadline.
+482 [] 2. Choose the available response to request a new arrangement if the applicant still wants the benefit, or explicitly decline it only if that is the intended decision. Explain the circumstances and confirm.
+483 [] 3. As nuvareya.releases, open the same missed release. Read the actual recipient response. For continued collection, schedule and link an eligible replacement for the same person and benefit.
+484 [] 4. Keep the missed attempt and notice in history. Record actual replacement delivery and obtain recipient receipt confirmation; do not label the missed original as received.
+485 [] Current hosted view | nuvareya.releases | provider release upcoming
+486 [Heading1] 26 Applicant receipt and delivery reports
+487 [] Signed in account: cohort.learner.release.confirm
+488 [] Page shown: Provider delivery reports
+489 [] The applicant reviews recorded benefits and confirms actual receipt or reports missing, partial, or unclear delivery. A provider statement or upload alone does not count as the applicant confirming receipt.
+490 [] Applicant: cohort.learner.release.confirm is the recurring-support example and cohort.learner.onetime.confirm the one-time example. Provider: nuvareya.releases responds to delivery reports and supplies correction proof. Admin: can independently review escalated delivery cases but cannot substitute its finding for receipt confirmation.
+491 [Heading2] Open a benefit record before confirming receipt
+492 [] Signed in account: cohort.process.award.receipt
+493 [] 1. Open the relevant benefit record rather than confirming from the list alone.
+494 [] 2. Read the recorded distribution details, benefit amount or description, and any available proof.
+495 [] 3. Confirm receipt only if you actually received the stated benefit. If it is missing or incomplete, use the delivery-issue response.
+496 [] 4. When a response is already recorded, inspect its status and history instead of sending a duplicate confirmation.
+497 [] Current hosted view | cohort.process.award.receipt | applicant receipt
+498 [Heading2] Complete a one time award without recurring monitoring
+499 [] Signed in account: nuvareya.releases
+500 [] Use Process Learner 10 to demonstrate receipt. Process Learner 11, cohort.process.award.complete, is a separate recipient with receipt already confirmed and completion ready. Both belong to Nuvareya Study Essentials Award.
+501 [] 1. As Process Learner 10, open Scholarship Support, Benefit releases, then the specific release record. Review the recorded delivery and proof before choosing Confirm receipt.
+502 [] 2. Confirm only the benefit actually received. If something is missing, submit the appropriate issue instead; a provider cannot confirm it for the applicant.
+503 [] 3. As nuvareya.recipients, select Process Learner 11 and open Support status. Before completing support shows the agreed one-time benefit settled with no outstanding distribution or delivery issue.
+504 [] 4. Choose Complete support with the accurate completion reason and effective date, then review and confirm. Do not create an unnecessary semester plan or grade check for this one-time award.
+505 [] 5. As Process Learner 11 afterward, open Past support and the outcome to read the saved completion reason, dates, benefit summary and any permitted response.
+506 [] Current hosted view | nuvareya.releases | provider delivery reports
+507 [] Expected result and handoff: The one-time award ends through an explicit support completion decision. Selection, release scheduling and provider proof alone do not finish the award.
+508 [Heading1] 27 Recipient withdrawal requests
+509 [] Signed in account: nuvareya.recipients
+510 [] Page shown: Provider recipient concerns
+511 [] An accepted recipient can request withdrawal with an explanation. Support does not end while the request is pending. A missed pickup or silence is not a withdrawal request. This process is separate from withdrawing an application before accepting an award.
+512 [] Current hosted view | nuvareya.recipients | provider recipient concerns
+513 [] Applicant: cohort.learner.support.decision submits or cancels an eligible request. Provider: nuvareya.recipients reviews it in Withdrawal requests. Approval ends future support without erasing past benefits or acceptance history. The applicant overview identifies the approved withdrawal and links to the original request.
+514 [Heading2] Submit and review a voluntary withdrawal request
+515 [] Signed in account: cohort.learner.support.decision then nuvareya.recipients
+516 [] Use the existing accepted Learner Profile 19 award if you choose this optional branch. A withdrawn award is not needed for the successful main demonstration.
+517 [] 1. As the applicant, open Scholarship Support and the withdrawal option. Explain why future support should end, inspect the confirmation and submit the request.
+518 [] 2. While the request is pending, inspect its status and any permitted cancellation control. A pending request does not end the scholarship.
+519 [] 3. As the Recipient Officer, open Withdrawal requests and select the actual request. Read the applicant statement, prior benefits and effective-date consequences.
+520 [] 4. Record the intended reviewed outcome through its controls and confirmation. An approved withdrawal ends future support without erasing prior delivery or acceptance history.
+521 [] Expected result and handoff: The applicant sees the reviewed withdrawal outcome. A missed appointment or silence is never recorded as voluntary withdrawal without the request.
+522 [Heading1] 28 Agreement concerns before conclusions
+523 [] Signed in account: nuvareya.recipients
+524 [] Page shown: Provider recipient concerns
+525 [] Agreement concerns begin as private drafts with a specific accepted obligation, factual explanation and proof. Sending the notice gives the applicant an opportunity to respond; a notice is not a confirmed breach. The live queue starts empty until a tester creates a case.
+526 [] Current hosted view | nuvareya.recipients | provider recipient concerns
+527 [] Applicant: cohort.learner.support.decision can respond to a concern created for Learner Profile 19. Provider: nuvareya.recipients prepares and issues notices. Admin: novacore.reviews receives cases only when independently escalated. No cases were seeded merely to fill this page.
+528 [Heading2] Issue a concern and receive the applicant explanation
+529 [] Signed in account: nuvareya.recipients then cohort.learner.support.decision
+530 [] This optional branch creates the facts and notice through the real workflow. No adverse conclusion is preloaded merely to populate a queue.
+531 [] 1. Open Learner Profile 19, Agreement concerns, then New concern. Select the actual accepted obligation, state the concern and save the private draft.
+532 [] 2. Add relevant fictional proof and review it. Give the required response opportunity and issue the notice only after the accuracy acknowledgment.
+533 [] 3. As the applicant, open the notice, compare the accepted term and proof, and submit the explanation, correction or circumstances with any supporting file.
+534 [] 4. As the provider, read the response before concluding anything. Resolve a clarified concern through its available control or request independent review with the preserved evidence when needed.
+535 [] 5. Do not treat silence as proof. Before a response, the response opportunity must expire where required. A concern does not add an external blacklist or automatic selection penalty.
+536 [] Expected result and handoff: The record preserves the notice, proof, applicant response and any review request. Support termination is a separate guarded decision.
+537 [Heading1] 29 Provider delivery investigation and correction
+538 [] Signed in account: nuvareya.releases
+539 [] Page shown: Provider delivery reports
+540 [] The release officer responds to missing-benefit reports, requests information or proposes a documented delivery correction. The report stays unresolved until the applicant confirms receipt or gives the appropriate response.
+541 [] Current hosted view | nuvareya.releases | provider delivery reports
+542 [] Applicant: cohort.learner.release.confirm can report an issue from its benefit page. Provider: nuvareya.releases investigates and supplies proof. Admin: may recommend follow-up on an escalated delivery review but cannot penalize the applicant for reporting a missing benefit.
+543 [Heading2] Investigate a reported missing benefit
+544 [] Signed in account: cohort.learner.release.confirm then nuvareya.releases
+545 [] Use Learner Profile 21 to create this optional report rather than preselecting an adverse finding. Keep the normal receipt and missing-benefit branches separate.
+546 [] 1. As the applicant, open Benefit releases and Report a benefit issue. Select the agreed benefit or relevant release; explain missing, partial or unclear delivery and submit the report.
+547 [] 2. As the Release Officer, open Delivery reports and the specific report. Read its source, applicant explanation, distribution and any proof.
+548 [] 3. Ask for information or propose a correction through the report controls. An actual delivery proposal needs the linked distribution, date and supporting proof.
+549 [] 4. As the applicant, review the correction and confirm actual receipt or explain why the issue remains unresolved. Provider proof alone cannot resolve this step as received.
+550 [] 5. If needed, request independent review through the permitted case controls. An admin recommendation still does not confirm benefit receipt for the applicant.
+551 [] Expected result and handoff: Resolution follows the recipient response and the report workflow. A report does not penalize the applicant or create a duplicate one-time benefit.
+552 [Heading1] 30 Independent review appeals and privacy
+553 [] Signed in account: novacore.reviews
+554 [] Page shown: Admin independent cases
+555 [] The admin reviewer examines the accepted obligation or benefit, evidence, statements and response opportunity, then records a reasoned outcome. A different authorized reviewer must decide an appeal of the first reviewers outcome. Privacy and access details are collapsed inside an opened case.
+556 [] Current hosted view | novacore.reviews | admin independent cases
+557 [] Applicant: may submit information and appeal. Provider: may request independent review but cannot decide its own appeal. Admin: novacore.reviews handles the initial case and novacore.manager can provide a different authorized reviewer. Cross-provider sharing stays disabled; no blacklist or automatic rejection is created.
+558 [Heading2] Inspect and decide an escalated case
+559 [] Signed in account: novacore.reviews
+560 [] The fresh dataset has no escalated or appeal case. Create and escalate a fictional case through the preceding workflow to demonstrate these actions.
+561 [] 1. Select a case from Case reviews after a party requests independent review.
+562 [] 2. Compare the accepted source, original proof and statements; request more information if the record is incomplete.
+563 [] 3. Choose a finding and recommendation explicitly, cite the proof considered and explain the reasons.
+564 [] 4. Complete the source and response acknowledgements before Record outcome. This does not automatically end support or confirm receipt.
+565 [Heading2] Record an internal privacy assessment
+566 [] Signed in account: novacore.reviews
+567 [] The fresh dataset has no escalated or appeal case. Create and escalate a fictional case through the preceding workflow to demonstrate these actions.
+568 [] 1. Expand Privacy and access inside the opened case, then choose Record internal assessment.
+569 [] 2. Document the purpose, reasons, recheck date and any justified retention hold.
+570 [] 3. A case change or appeal supersedes an earlier assessment; it does not automatically release a retention hold.
+571 [] 4. Saving this assessment does not enable sharing with another provider or create a blacklist.
+572 [Heading2] Respect independent appeal review
+573 [] Signed in account: novacore.reviews
+574 [] The fresh dataset has no escalated or appeal case. Create and escalate a fictional case through the preceding workflow to demonstrate these actions.
+575 [] 1. An applicant can appeal the recorded review outcome through its case dialog.
+576 [] 2. The officer who made the original outcome cannot decide that appeal.
+577 [] 3. A different authorized admin reviews the preserved evidence and appeal explanation.
+578 [] 4. The original review and any separate support decision remain part of history; an appeal is not an automatic reversal.
+579 [Heading1] 31 Provider support and platform reports
+580 [] Signed in account: nuvareya.support
+581 [] Page shown: Provider support
+582 [] Provider support staff handle questions and track replies within their organization. Platform problems and privacy requests can be escalated through the platform support process rather than changing an applicant decision informally.
+583 [] Current hosted view | nuvareya.support | provider support
+584 [] Applicant: uses its permitted help or problem-report entry points. Provider: nuvareya.support handles its inbox and platform escalations. Admin: novacore.support handles platform-level support and privacy follow-up.
+585 [Heading1] 32 Admin support case handling
+586 [] Signed in account: novacore.support
+587 [] Page shown: Admin support
+588 [] The Support Officer owns the final platform reply. For a sign-in, password, email or account restriction issue, it can send a limited access task to the Account Manager. The original report and attachments stay with Support. A reply is not profile verification or a scholarship decision.
+589 [] Current hosted view | novacore.support | admin support
+590 [] Applicant and provider: supply the relevant facts and respond to requests. Admin: novacore.support routes and resolves platform issues using the support workspace.
+591 [Heading2] Open a platform support case and respond
+592 [] Signed in account: novacore.support
+593 [] 1. Open a case from Needs response and confirm the reporter, related program or page, original report and attachments.
+594 [] 2. For an access issue, select Send to Account Manager and give a limited instruction. The hosted case Check my sign-in settings already has a pending task for cohort.process.support.appointment. Explain the account-holder step without copying passwords or sensitive report attachments into the referral.
+595 [] 3. While the task is pending, the case moves to Waiting. Support may prepare a reply but cannot complete it until the task returns or is cancelled with a reason.
+596 [] 4. Use Explain the account access check for cohort.process.support.review to demonstrate the returned-task step. Read the Account Manager result, write the reporter-facing resolution and confirm Complete platform response. Returning an internal result does not itself send that final reply.
+597 [Heading1] 33 Provider staff and program assignment
+598 [] Signed in account: nuvareya.team
+599 [] Page shown: Provider team
+600 [] The team administrator manages staff access, role responsibilities and assigned scholarships. Limited program assignment prevents a staff member from automatically working on every program. Newly invited staff complete their first-login setup.
+601 [] Current hosted view | nuvareya.team | provider team
+602 [] Applicant: has no staff-management access. Provider: nuvareya.team manages access; nuvareya.newstaff demonstrates first-login setup. Admin: novacore.accounts manages platform account controls separately.
+603 [Heading2] Give provider staff the intended program scope
+604 [] Signed in account: nuvareya.team
+605 [] Use team administration for staff access, not to impersonate another specialist. Scope controls apply even when an action page is opened directly.
+606 [] 1. Open the team directory and the intended staff account. Confirm its identity, role and current program assignments.
+607 [] 2. Choose the role responsibilities and assigned scholarships appropriate to that person. Assign selected programs rather than all unless the job actually needs broader access.
+608 [] 3. Review and confirm the change. Check the staff member own workspace using that login; excluded program records should not be accessible.
+609 [] 4. Use nuvareya.newstaff to demonstrate first-login password setup without changing an established staff password. A team role is not organization verification or platform admin access.
+610 [Heading1] 34 Admin account management
+611 [] Signed in account: novacore.accounts
+612 [] Page shown: Admin accounts
+613 [] The Account Manager handles access and setup, not evidence or organization verification. Support referrals appear first in its attention queue. The account record shows only the sanitized task and its result, not the private source report or attachments.
+614 [] Applicant and provider: use their own profile and account settings. Admin: novacore.accounts handles account controls, while novacore.reviews performs verification and superadmin handles governance.
+615 [Heading2] Inspect and manage the selected account
+616 [] Signed in account: novacore.accounts
+617 [] 1. Open Needs attention or Support referrals and select Process Learner 05, username cohort.process.support.appointment. The pending Check sign-in access task is separate from the scholarship support record.
+618 [] 2. Read the task, then inspect the relevant sign-in, verification-email, password or restriction controls. Use a separate access action only when it is actually required.
+619 [] 3. Select Return result, explain the checked account controls and any account-holder step, then confirm. The task returns to Support. No password reset, suspension or verification change is required merely to demonstrate this task.
+620 [] 4. Returning a result does not automatically change account access, verify the profile or close the support case. Support reviews the result and sends the final reply. A stale or already completed task cannot be saved twice.
+621 [] Current hosted view | novacore.accounts | admin accounts
+622 [Heading1] 35 Provider paid services and requests
+623 [] Signed in account: nuvareya.billing
+624 [] Page shown: Provider billing
+625 [] The provider billing role reviews available platform services, submits intake information, follows checkout and tracks delivery, files, meetings and acceptance. These are provider-to-platform services, not scholarship payments to applicants.
+626 [] Current hosted view | nuvareya.billing | provider billing
+627 [] Applicant: is not the purchaser in this workflow. Provider: nuvareya.billing follows request, payment and delivery steps. Admin: novacore.billing processes service delivery; novacore.finance reviews financial records. Existing paid demo records are simulated.
+628 [Heading2] Review service work and delivered files
+629 [] Signed in account: nuvareya.billing
+630 [] 1. Open a service request from your provider billing workspace.
+631 [] 2. Review intake, updates, delivered files and meeting information for the actual purchased service.
+632 [] 3. Use the appropriate response or acceptance controls after checking the delivered work, rather than treating checkout as completed service.
+633 [] 4. These services are purchased by the provider from the platform. They are separate from scholarship benefits received by applicants.
+634 [Heading2] Follow a purchased service through delivery and acceptance
+635 [] Signed in account: nuvareya.billing then novacore.billing
+636 [] Use existing Application cycle support records for payment, assignment, delivery and confirmation. They are separate starting states, not proof of a live PayMongo transaction.
+637 [] 1. As provider Billing, choose an appropriate service and submit the required intake and desired outcome. Review its scope, price and terms before checkout. A payment awaiting confirmation must not be treated as paid.
+638 [] 2. As admin Billing, review the submitted intake. Request specific missing information or assign the paid ready service to its responsible officer and record the work plan.
+639 [] 3. In the service record, use Delivery, Files, Meeting and Updates to record actual work. Upload the deliverable, arrange any required meeting and give the provider clear review instructions.
+640 [] 4. Move completed work to provider review only when its required items are ready. As provider Billing, inspect the delivered file and reply with acceptance or a specific revision request.
+641 [] 5. As admin Billing, close out only after the appropriate provider acceptance and delivery checks. Payment confirmation, service acceptance, financial review and external refund remain different states.
+642 [] Expected result and handoff: The service has a recorded delivery and acceptance history. No scholarship applicant receives this service payment.
+643 [Heading1] 36 Admin service intake delivery and closeout
+644 [] Signed in account: novacore.billing
+645 [] Page shown: Admin billing detail
+646 [] The Billing Officer handles intake, assignment, service delivery, files, meetings and closeout. Its Finance follow-up queue also contains internal payment-record questions, including questions about already closed services. Delivery, payment and refund states remain separate.
+647 [] Current hosted view | novacore.billing | admin billing detail
+648 [] Provider: nuvareya.billing supplies intake information and reviews delivered work. Admin: novacore.billing manages operational delivery. Applicant: no direct role in purchasing these provider services.
+649 [Heading2] Work inside a service request
+650 [] Signed in account: novacore.billing
+651 [] 1. Open service reference GUIDE-20261113-BILLING from Finance follow-up. The paid service is still in progress and has a question from Finance. Other existing services cover intake, assignment, delivery and provider acceptance.
+652 [] 2. Inspect the delivery, files, meeting and updates sections. For a Finance question, compare the source payment, cancellation and refund records before responding.
+653 [] 3. Record the actual service work through its controls. For a Finance question, use Respond to Finance and save a concise internal finding; this returns the question to the Finance Officer.
+654 [] 4. A Billing response does not issue a refund or change payment status. Complete service delivery only after the separate workflow and provider acceptance requirements are satisfied.
+655 [Heading1] 37 Admin finance and payment records
+656 [] Signed in account: novacore.finance
+657 [] Page shown: Admin finance detail
+658 [] The Finance Officer reviews confirmed payments, receipts and exceptions. An internal financial check can be sent to Billing and returned to Finance without changing the underlying transaction. Gateway confirmation, delivery completion and external refunds have their own states.
+659 [] Current hosted view | novacore.finance | admin finance detail
+660 [] Provider: uses its billing workspace and payment or receipt links. Admin: novacore.finance handles finance review; novacore.billing handles the service work. Applicant scholarship benefits remain a separate workflow.
+661 [Heading2] Inspect a payment or receipt record
+662 [] Signed in account: novacore.finance
+663 [] 1. Open service reference GUIDE-20261113-FINANCE from Finance exceptions or the financial record review link. The payment is marked paid, service delivery remains in progress, and Billing has returned the internal question.
+664 [] 2. If clarification is needed for a paid service, select Request a Billing record check, explain the question, then confirm Send to Billing. Finance waits for the response.
+665 [] 3. Read the request and Billing response, compare source records, then select Record a financial check. Enter the finding and confirm Record check. An outdated form requires reloading the latest record.
+666 [] 4. Check history retains the question, response and resolution. A pending refund or missing payment confirmation remains an exception even after this internal check. Recording a check does not transfer money, issue a refund or create a receipt for an unconfirmed payment.
+667 [Heading2] Demonstrate the two admin handoffs from end to end
+668 [] Signed in account: novacore.finance
+669 [] Hosting now contains both starting sides of each internal handoff so the tester need not fabricate a failed account or undo a saved response.
+670 [] 1. For an access task, use Check my sign-in settings for Process Learner 05. Support is waiting; novacore.accounts can inspect the account and Return result. No access change is necessary just to return a finding.
+671 [] 2. For Support reply after a return, use Explain the account access check for Process Learner 06. Read the already returned internal result, then compose and confirm the reporter-facing reply as novacore.support.
+672 [] 3. For a Finance question awaiting Billing, open GUIDE-20261113-BILLING as novacore.billing. Choose Respond to Finance, record what was checked and confirm. The service remains paid and in progress.
+673 [] 4. For the returned Finance step, open GUIDE-20261113-FINANCE as novacore.finance. Read Billing response, choose Record a financial check, explain the finding and confirm.
+674 [] 5. Use novacore.records to follow the related service or support history afterward. Neither internal task completion sends money, closes the service automatically, verifies a profile or changes scholarship support.
+675 [] Current hosted view | novacore.finance | admin finance detail
+676 [] Expected result and handoff: Each specialist owns its next action. Manager oversight can inspect ownership but cannot submit these specialist decisions.
+677 [Heading1] 38 Admin audit history and exports
+678 [] Signed in account: novacore.records
+679 [] Page shown: Admin records
+680 [] The Records Officer can follow exact related account, application, program, service or support records from an audit entry. The saved entry describes the event at that time; later events can supersede its outcome. Private handoff instructions and financial notes are not copied into audit metadata.
+681 [] Current hosted view | novacore.records | admin records
+682 [] Open an activity entry, confirm its actor and recorded time, then select the relevant Related history link. The filtered list keeps the exact record context and return path. Exports require separate permission; Records cannot submit specialist decisions.
+683 [Heading1] 39 Provider manager overview and combined workspaces
+684 [] Signed in account: nuvareya.manager
+685 [] Page shown: Provider manager
+686 [] The provider manager has a cross-workspace overview for its organization rather than a separate new scholarship process. It can move between permitted programs, reviews, selection, decisions, recipients, monitoring and releases. Program assignment and organization boundaries still apply.
+687 [] Current hosted view | nuvareya.manager | provider manager
+688 [] Comparison: operational staff see focused queues; the manager sees the broader organization picture. Having access to multiple workspaces does not remove evidence, notice, agreement, appeal or receipt-confirmation guards.
+689 [Heading1] 40 Organization representative view
+690 [] Signed in account: nuvareya
+691 [] Page shown: Provider representative
+692 [] The organization representative is the organization owner account. Its visible navigation and actions follow the current role model; do not assume it is interchangeable with every specialist or the provider manager. Use the named operational account for the process being demonstrated.
+693 [] Current hosted view | nuvareya | provider representative
+694 [] Comparison: the representative is shown here after the specialist workflows so organization ownership is not confused with the day-to-day duty of each role.
+695 [Heading1] 41 Portal manager overview
+696 [] Signed in account: novacore.manager
+697 [] Page shown: Admin manager
+698 [] The Portal Manager has read-only oversight across admin service areas. Team action counts show work currently owned by staff. Waiting steps show another team, the account holder or gateway; failed sign-in history is reference information, not automatically unresolved work. Totals count work items, not unique people.
+699 [] Current hosted view | novacore.manager | admin manager
+700 [] Specialists keep their own actions and permissions. The manager sees current owners, waiting handoffs, payment exceptions and history without receiving private support attachments, internal notes or specialist decision controls.
+701 [Heading2] Inspect work ownership from portal manager oversight
+702 [] Signed in account: novacore.manager
+703 [] 1. Open Operations and read Team action, Waiting steps and History only separately. Open the relevant service area rather than adding all visible counts together.
+704 [] 2. In Support, distinguish cases waiting for the Account Manager from cases needing a Support reply. In Billing and Finance, distinguish an internal follow-up from actual payment, refund or delivery status.
+705 [] 3. In Reviews, inspect the category totals and available summaries. Use novacore.reviews for evidence and final verification actions; the manager overview cannot submit them.
+706 [] 4. Use the responsible specialist for the next action. Manager oversight does not grant decision authority or replace independent review.
+707 [Heading1] 42 Superadmin governance view
+708 [] Signed in account: novacore.root
+709 [] Page shown: Superadmin dashboard
+710 [] Superadmin governs admin-team access and platform oversight. Available staff are active, email verified, finished with password setup and hold the permissions required by their role. An active account alone does not provide usable role coverage.
+711 [] Comparison: demonstrate superadmin last. Use novacore.accounts, novacore.reviews, novacore.support, novacore.billing, novacore.finance and novacore.records for the corresponding operational process.
+712 [Heading2] Open an admin team account in governance
+713 [] Signed in account: novacore.root
+714 [] 1. Review role coverage and any area with open work but no available owner. Select its role-coverage link to open the filtered admin team list.
+715 [] 2. Inspect the staff member and readiness label, such as email verification needed, password reset required, missing role permissions or access suspended.
+716 [] 3. Make only the intended governance change after its confirmation. Restoring readiness does not complete the operational work or grant unrelated permissions.
+717 [] 4. Return to the specialist queue with its assigned account. Demonstrate manager oversight and superadmin governance last, after the actual operational handoffs.
+718 [] Current hosted view | novacore.root | superadmin dashboard
+719 [Heading1] Demonstration boundaries
+720 [] Both databases now contain only the new fictional catalog. Prior records are retained solely in private rollback backups, not in the active account directory. Current decisions and responses remain tester actions except for the successful prerequisites identified above. Shared passwords and sample evidence must not be used for a real launch.
+721 [] A term-related early support termination requires its separate guarded decision and the appeal opportunity. Do not backdate records or change the clock to bypass it. Independent review and delivery receipt are separate actions. Cross-provider disclosure remains disabled.
+722 [] No failed, rejected, terminated or official waitlisted outcome is pre-recorded. The additional collection account has an upcoming schedule, not a missed or unclaimed award. Concern, appeal and missed-collection branches are created by the tester when their prerequisites are genuinely met.
+723 [Heading2] Demonstration completion checklist
+724 [ListBullet] Applicant verification is separate from scholarship screening and publication. Show the document review action before the overall verification result.
+725 [ListBullet] A published session has a real roster, attendance, proof and individual result. A DSS suggestion remains advisory until the decision officer confirms the outcome.
+726 [ListBullet] Selected recipients review their saved terms before support begins. A monitoring plan, appointment, document result and case closure are separate records.
+727 [ListBullet] Benefit delivery needs provider evidence and the recipient response. One-time awards can complete without a recurring grade plan; unsettled promised benefits still block normal completion.
+728 [ListBullet] Support, Account Manager, Billing and Finance each return their own handoff. An internal reply does not silently perform another team decision.
+729 [ListBullet] Finish with manager ownership views and superadmin role coverage. Preserve the tester decisions and use a fresh prepared starting point when demonstrating another branch.

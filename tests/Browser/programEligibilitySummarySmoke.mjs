@@ -18,7 +18,8 @@ source = source.slice(0, start) + String.raw`
     assert.equal(await needsReview(), true);
     await click('I checked my summary');
     assert.equal(await needsReview(), false);
-    await field('#program-eligible-courses', 'ABM', 'change');
+    await client.evaluate("document.querySelector('#program-eligible-courses').click()");
+    await field('#program-eligible-courses-option', 'ABM', 'change');
     await client.evaluate("document.querySelector('[data-eligibility-picker=program-eligible-courses] [data-add-option]').click()");
     await field('[data-eligibility-mode=course]', 'preferred', 'change');
     assert.equal(await needsReview(), true);

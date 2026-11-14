@@ -1,4 +1,4 @@
-import { juniorHighPathOptions, seniorHighPathOptions, collegePathOptions, tvetPathOptions, alsPathOptions } from './learnerProgramPaths.js';
+import { juniorHighPathOptions, seniorHighPathOptions, collegePathOptions, tvetPathOptions, alsPathOptions, canonicalProgramPath, normalizeProgramPath } from './learnerProgramPaths.js';
 import { isOpenEligibilityRule } from './providerEligibilityRules.js';
 
 const courseCatalogs = { junior_high_school: juniorHighPathOptions, senior_high_school: seniorHighPathOptions, college: collegePathOptions, tvet: tvetPathOptions, als: alsPathOptions };
@@ -31,4 +31,22 @@ export function programEligibilityOptions(levels = []) {
         courses: [...new Set(selected.flatMap(level => courseCatalogs[level] ?? []))].filter(value => value !== 'Other' && !isOpenEligibilityRule(value)),
         years: [...new Set(selected.flatMap(level => yearCatalogs[level] ?? []))],
     };
+}
+
+export function educationSelectionImpact(previousLevels, nextLevels, courses = '', years = '') {
+    const result = { courses, years, removedCourses: [], removedYears: [], reviewCourses: [], reviewYears: [] };
+    if (!nextLevels.length || (previousLevels.length && previousLevels.every(level => nextLevels.includes(level)))) return result;
+    const all = programEligibilityOptions();
+    const allowed = programEligibilityOptions(nextLevels);
+    const key = value => normalizeProgramPath(canonicalProgramPath(value)).replace(/\bgrade\s+(\d+)/g, 'grade$1');
+    for (const [field, removedField, reviewField] of [['courses', 'removedCourses', 'reviewCourses'], ['years', 'removedYears', 'reviewYears']]) {
+        const known = new Set(all[field].map(key));
+        const valid = new Set(allowed[field].map(key));
+        for (const value of eligibilityListValues(result[field])) {
+            if (isOpenEligibilityRule(value) || valid.has(key(value))) continue;
+            result[known.has(key(value)) ? removedField : reviewField].push(value);
+        }
+        if (result[removedField].length) result[field] = eligibilityListValues(result[field]).filter(value => !result[removedField].includes(value)).join('\n');
+    }
+    return result;
 }

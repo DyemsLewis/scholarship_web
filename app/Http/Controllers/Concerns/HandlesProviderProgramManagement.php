@@ -1877,6 +1877,7 @@ trait HandlesProviderProgramManagement
             'handoff_url' => $scholarship->handoff_url,
             'handoff_map_url' => $this->handoffMapUrl($scholarship),
             'review_rubric' => $scholarship->review_rubric ?? [],
+            'selection_scoring_policy' => $scholarship->selection_scoring_policy,
             'application_questions' => $scholarship->application_questions ?? [],
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),

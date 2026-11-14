@@ -85,7 +85,9 @@ test('the builder restores, serializes and reviews rule modes instead of resetti
     const source = readFileSync(new URL('../../resources/js/pages/provider/programs/ProgramFormPage.vue', import.meta.url), 'utf8');
     assert.match(source, /eligibilityRuleModes: normalizeEligibilityRuleModes\(program.eligibility_rule_modes\)/);
     assert.match(source, /eligibility_rule_modes: JSON.stringify\(normalizeEligibilityRuleModes\(form.value.eligibilityRuleModes\)\)/);
-    assert.match(source, /<EligibilityRulesSummary class="mt-6" :rules="eligibilityRules"/);
+    assert.match(source, /<ProgramReviewSummary[^>]*:rules="eligibilityRules"/);
+    const review = readFileSync(new URL('../../resources/js/pages/provider/programs/components/ProgramReviewSummary.vue', import.meta.url), 'utf8');
+    assert.match(review, /<EligibilityRulesSummary[^>]*:rules="rules"/);
     assert.match(source, /Changing a rule between Required and Preferred sends this program back/);
     assert.doesNotMatch(source, /Exclude applicants who currently receive another scholarship/);
     assert.match(source, /@change="form.minimumGwa = ''"/);

@@ -43,8 +43,8 @@ const nameFor = (options, code) => options.find(option => option.code === code)?
             <p class="text-xs leading-5 text-slate-500">Add a whole region, a province, or a city. Selecting below does not change coverage until you choose Add.</p>
             <div class="grid grid-cols-3 gap-3">
                 <div>
-                    <label for="program-eligible-locations" class="mb-1 block text-xs font-semibold text-slate-600">Region</label>
-                    <select id="program-eligible-locations" v-model="region" :class="inputClass" @change="loadRegion"><option value="">Choose region</option><option v-for="option in philippineRegionOptions" :key="option.code" :value="option.code">{{ option.label }}</option></select>
+                    <label for="program-coverage-region" class="mb-1 block text-xs font-semibold text-slate-600">Region</label>
+                    <select id="program-coverage-region" v-model="region" :class="inputClass" @change="loadRegion"><option value="">Choose region</option><option v-for="option in philippineRegionOptions" :key="option.code" :value="option.code">{{ option.label }}</option></select>
                     <button type="button" :disabled="!region" class="mt-2 text-xs font-bold text-slate-600 underline underline-offset-2 disabled:opacity-40" @click="add(nameFor(philippineRegionOptions, region))">Add region</button>
                 </div>
                 <div>

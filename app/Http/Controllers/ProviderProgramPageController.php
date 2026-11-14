@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Scholarship;
 use App\Support\ProviderWorkspace;
+use App\Support\ReviewRubric;
+use App\Support\SelectionScoringPolicy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -66,7 +68,9 @@ class ProviderProgramPageController extends Controller
             }
         }
 
-        return view('provider-program-form');
+        return view('provider-program-form', [
+            'scoringPresets' => SelectionScoringPolicy::builderPresets($scholarship?->review_rubric ?: ReviewRubric::DEFAULT),
+        ]);
     }
 
 }

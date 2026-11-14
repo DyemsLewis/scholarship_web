@@ -55,6 +55,8 @@ class FreshWorkflowDemoSeeder extends Seeder
     protected array $programs = [];
     protected array $applications = [];
     protected bool $seedStageScores = true;
+    protected string $assetDirectory = Catalog::DIRECTORY;
+    protected string $platformPrefix = Catalog::ADMIN;
     private array $sessions = [];
     private int $releaseSlot = 0;
 
@@ -160,11 +162,11 @@ class FreshWorkflowDemoSeeder extends Seeder
         return $user;
     }
 
-    private function provider(string $username, string $name, string $mark, User $admin, bool $approved = true): User
+    protected function provider(string $username, string $name, string $mark, User $admin, bool $approved = true): User
     {
         $user = $this->account($username, 'provider', title: 'Organization Representative', permissions: User::PROVIDER_PERMISSIONS);
         $user->providerProfile()->create([
-            'first_name' => match ($username) { Catalog::PRIMARY => 'Nuvareya', Catalog::PARTNER => 'Velasora', Catalog::PENDING => 'Kinoraya' },
+            'first_name' => match ($username) { Catalog::PRIMARY => 'Nuvareya', Catalog::PARTNER => 'Velasora', Catalog::PENDING => 'Kinoraya', default => Str::headline($username) },
             'last_name' => 'Demo Representative', 'contact_number' => '09000002000', 'representative_position' => 'Program Director',
             'provider_name' => $name, 'provider_type' => 'foundation', 'provider_website' => 'https://example.org/'.$username,
             'provider_address' => 'Antipolo City, Rizal (demo venue)', 'latitude' => 14.5864, 'longitude' => 121.1753,
@@ -180,7 +182,7 @@ class FreshWorkflowDemoSeeder extends Seeder
             'verified_at' => $approved ? $this->timeline->at(-90) : null, 'created_at' => $this->timeline->at(-99),
         ]);
         foreach (['organization_registration', 'representative_id', 'authority_letter'] as $type) {
-            $file = Document::make(Catalog::DIRECTORY.'/providers/'.$username.'/'.$type.'.pdf', Str::headline($type), [$name, 'Representative: '.$user->fresh()->name, 'Reference: DEMO-'.strtoupper($username), 'For tester review only.']);
+            $file = Document::make($this->assetDirectory.'/providers/'.$username.'/'.$type.'.pdf', Str::headline($type), [$name, 'Representative: '.$user->fresh()->name, 'Reference: DEMO-'.strtoupper($username), 'For tester review only.']);
             $uploaded = $this->timeline->at($approved ? -91 : -3);
             $user->providerVerificationDocuments()->create([...$file, 'uploaded_by' => $user->id, 'document_type' => $type,
                 'status' => $approved ? 'approved' : 'submitted', 'uploaded_at' => $uploaded,
@@ -191,10 +193,10 @@ class FreshWorkflowDemoSeeder extends Seeder
         return $this->staff[$username];
     }
 
-    private function team(User $owner, int $draftId): void
+    protected function team(User $owner, int $draftId): void
     {
         $operationalIds = collect($this->programs)->where('provider_id', $owner->id)->where('status', 'published')->pluck('id')->all();
-        $coordinatorIds = [...$operationalIds, $draftId, ...($owner->username === Catalog::PRIMARY ? [$this->programs['review']->id] : [])];
+        $coordinatorIds = [...$operationalIds, $draftId, ...(($this->programs['review']->provider_id ?? null) === $owner->id ? [$this->programs['review']->id] : [])];
         foreach (Catalog::providerRoles() as $suffix => [$title, $permission]) {
             $username = $owner->username.'.'.$suffix;
             $user = $this->account($username, 'provider', $owner, $title, $permission ? [$permission] : User::PROVIDER_PERMISSIONS);
@@ -262,7 +264,7 @@ class FreshWorkflowDemoSeeder extends Seeder
     {
         $user = $this->account($record['username'], 'applicant');
         $approved = ! in_array($record['scenario'], ['profile', 'verification'], true);
-        $photo = Catalog::DIRECTORY.'/avatars/'.$user->id.'.jpg';
+        $photo = $this->assetDirectory.'/avatars/'.$user->id.'.jpg';
         $source = public_path('images/demo/default-applicant-avatar.jpg');
         if (! is_file($source)) throw new RuntimeException('The neutral demo avatar is missing.');
         Storage::disk('local')->put($photo, file_get_contents($source));
@@ -323,7 +325,7 @@ class FreshWorkflowDemoSeeder extends Seeder
     private function learnerDocument(User $user, string $type, string $area): array
     {
         $profile = $user->studentProfile;
-        return Document::make(Catalog::DIRECTORY.'/'.$area.'/'.$user->id.'/'.Str::slug($type).'.pdf', Str::headline($type), [
+        return Document::make($this->assetDirectory.'/'.$area.'/'.$user->id.'/'.Str::slug($type).'.pdf', Str::headline($type), [
             'Learner: '.$user->name, 'School: '.$profile->school,
             'Education: Senior High School / '.$profile->course_or_strand.' / Grade 12',
             'Academic year: '.$this->schoolYear().' / First semester', 'General Average: '.$profile->gwa.'%',
@@ -439,7 +441,7 @@ class FreshWorkflowDemoSeeder extends Seeder
         $assignment->attendance()->create(['status' => $conducted ? 'present' : 'pending',
             'recorded_by' => $conducted ? $actor->id : null, 'recorded_at' => $conducted ? $recorded : null]);
         if ($conducted && ! $session->evidence()->exists()) {
-            $file = Document::make(Catalog::DIRECTORY.'/sessions/'.$session->id.'/provider-proof.pdf', ucfirst($stage).' participation proof', [
+            $file = Document::make($this->assetDirectory.'/sessions/'.$session->id.'/provider-proof.pdf', ucfirst($stage).' participation proof', [
                 'Session: '.$session->title, 'Program: '.$program->title,
                 'Attendance: present', 'Demo assessment record ready for the provider to choose an outcome.',
             ]);
@@ -573,7 +575,7 @@ class FreshWorkflowDemoSeeder extends Seeder
             ]);
         }
         if ($released) {
-            $file = Document::make(Catalog::DIRECTORY.'/release-proofs/'.$record->id.'.pdf', 'Benefit distribution proof', [
+            $file = Document::make($this->assetDirectory.'/release-proofs/'.$record->id.'.pdf', 'Benefit distribution proof', [
                 'Recipient: '.$application->applicant->name, 'Benefit: '.$benefit->title, 'Amount: PHP '.($benefit->amount ?? 0),
                 'Provider distribution recorded. Recipient confirmation is still required.',
             ]);
@@ -601,10 +603,10 @@ class FreshWorkflowDemoSeeder extends Seeder
             'assigned_role' => 'admin', 'status' => 'open', 'provider_status' => 'not_required', 'admin_status' => 'open']);
     }
 
-    private function services(User $provider): void
+    protected function services(User $provider): void
     {
-        $billing = $this->staff[Catalog::PRIMARY.'.billing'];
-        $officer = $this->staff[Catalog::ADMIN.'.billing'];
+        $billing = $this->staff[$provider->username.'.billing'];
+        $officer = $this->staff[$this->platformPrefix.'.billing'];
         ProviderServiceRequest::create(['provider_id' => $provider->id, 'created_by' => $billing->id,
             'scholarship_id' => $this->programs['draft']->id, 'plan_code' => 'assisted_setup', 'plan_name' => 'Assisted program setup',
             'amount' => config('billing.plans.assisted_setup.amount'), 'currency' => 'PHP', 'status' => 'ready_for_review',
@@ -637,7 +639,7 @@ class FreshWorkflowDemoSeeder extends Seeder
                 'payment_from' => 'pending', 'payment_to' => 'paid', 'delivery_to' => $state, 'action_owner' => 'platform',
                 'metadata' => ['demo' => true, 'no_real_transaction' => true], 'created_at' => now()->subDays(4)]);
             if ($state === 'provider_review') {
-                $file = Document::make(Catalog::DIRECTORY.'/services/'.$purchase->id.'/operating-guide.pdf', 'Demonstration operating guide', [
+                $file = Document::make($this->assetDirectory.'/services/'.$purchase->id.'/operating-guide.pdf', 'Demonstration operating guide', [
                     $provider->provider_name, 'Applicant review, scheduling, monitoring, and release hand-offs.',
                     'Delivery is ready for provider confirmation. The tester chooses whether to accept it.',
                 ]);
@@ -683,11 +685,11 @@ class FreshWorkflowDemoSeeder extends Seeder
 
     private function logo(string $key, string $mark, int $variant): string
     {
-        $path = 'images/'.Catalog::DIRECTORY.'/'.$key.'.svg';
+        $path = 'images/'.$this->assetDirectory.'/'.$key.'.svg';
         $shapes = ['<path d="M26 65V35L50 21L74 35V65L50 79Z" fill="none" stroke="#fbbf24" stroke-width="5"/>', '<circle cx="50" cy="50" r="30" fill="none" stroke="#fbbf24" stroke-width="5"/>', '<path d="M20 50L50 20L80 50L50 80Z" fill="none" stroke="#fbbf24" stroke-width="5"/>', '<path d="M24 76V24H76V76Z" fill="none" stroke="#fbbf24" stroke-width="5"/>'];
         $logo = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0f172a"/>'.$shapes[$variant % 4].'<text x="50" y="56" text-anchor="middle" font-family="Georgia,serif" font-size="18" font-weight="bold" fill="white">'.$mark.'</text></svg>';
         if (app()->environment('testing')) {
-            Storage::disk('local')->put(Catalog::DIRECTORY.'/logos/'.$key.'.svg', $logo);
+            Storage::disk('local')->put($this->assetDirectory.'/logos/'.$key.'.svg', $logo);
         } else {
             File::ensureDirectoryExists(dirname(public_path($path)));
             File::put(public_path($path), $logo);

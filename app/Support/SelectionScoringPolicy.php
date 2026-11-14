@@ -6,6 +6,18 @@ final class SelectionScoringPolicy
 {
     public const VERSION = '1.0';
 
+    public static function builderPresets(array $rubric): array
+    {
+        $presets = [];
+        foreach ([[], ['exam'], ['interview'], ['exam', 'interview']] as $optional) {
+            $presets[implode('+', $optional) ?: 'screening'] = self::preset([
+                'screening', 'formal_application', ...$optional, 'decision',
+            ], $rubric);
+        }
+
+        return $presets;
+    }
+
     public static function preset(?array $stages, array $rubric): array
     {
         $stages = ScholarshipSelectionPlan::normalize($stages);

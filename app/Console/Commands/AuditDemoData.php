@@ -3,6 +3,9 @@
 namespace App\Console\Commands;
 
 use Database\Seeders\Support\WorkflowDemoAudit;
+use Database\Seeders\Support\SingleProviderDemoAudit;
+use Database\Seeders\Support\SingleProviderDemoCatalog;
+use App\Models\User;
 use Illuminate\Console\Command;
 use RuntimeException;
 
@@ -15,7 +18,9 @@ final class AuditDemoData extends Command
     public function handle(): int
     {
         try {
-            $report = WorkflowDemoAudit::inspect();
+            $report = User::find(1)?->username === SingleProviderDemoCatalog::ADMIN.'.root'
+                ? SingleProviderDemoAudit::inspect()
+                : WorkflowDemoAudit::inspect();
         } catch (RuntimeException $exception) {
             $this->error($exception->getMessage());
 
