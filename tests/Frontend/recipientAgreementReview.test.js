@@ -68,7 +68,7 @@ test('the review component renders labelled text and escapes provider input', as
 });
 
 test('admin program review uses the formatted component instead of interpolating the raw agreement', () => {
-    const page = readFileSync('resources/js/pages/admin/reviews/ProgramReviewRecordPage.vue', 'utf8');
+    const page = readFileSync('resources/js/pages/admin/reviews/ProgramReviewDetailsModal.vue', 'utf8');
     assert.match(page, /<RecipientAgreementDetails :scholarship="program"/);
     assert.doesNotMatch(page, /\{\{\s*program\.recipient_agreement/);
 });

@@ -13,7 +13,7 @@ const components = [
     '../../resources/js/pages/provider/decisions/FinalDecisionRecordPage.vue',
 ];
 
-for (const relativePath of components) {
+for (const relativePath of ['../../resources/js/components/PrivacyNoticeCard.vue', ...components]) {
     const component = relativePath.split('/').at(-1);
 
     test(`${component} compiles with the shared applicant profile record`, () => {
@@ -79,6 +79,9 @@ test('the applicant profile has one record and an accessible section editor', ()
     assert.match(source, /document\.addEventListener\('click', handleUnsavedNavigation\)/);
     assert.match(source, /<ApplicantPageHeader[\s\S]*?compact/);
     assert.doesNotMatch(source, /showProviderPreview|profileNavigationSteps|reviewGroups|v-if="false"/);
+    assert.match(source, /Documents and verification/);
+    assert.doesNotMatch(source, />Profile resources<|>Prepared documents<|>Eligible scholarships</);
+    assert.match(source, /<PrivacyNoticeCard context="profile" inline/);
 
     assert.ok(
         source.indexOf('<ApplicantPageHeader') < source.indexOf('<ApplicantProfileRecord'),

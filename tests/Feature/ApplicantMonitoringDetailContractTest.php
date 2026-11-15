@@ -456,6 +456,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ->assertJsonPath('detail.content.selected.delivery.label', 'Confirmation needed')
             ->assertJsonPath('detail.content.selected.delivery.date_caption', 'Provider recorded release')
             ->assertJsonPath('detail.content.directory.action_required.0.record_key', $recordKey)
+            ->assertJsonPath('detail.content.directory.action_required.0.release_method', 'bank_transfer')
             ->assertJsonPath('detail.decision.state', 'benefit_confirmation_required')
             ->assertJsonPath('detail.decision.action.href', route('dashboard.monitoring.benefits.show', [
                 'application' => $application,
@@ -503,6 +504,8 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ->assertJsonPath('detail.content.directory.upcoming.0.delivery.label', 'Scheduled')
             ->assertJsonCount(3, 'detail.content.directory.in_progress')
             ->assertJsonPath('detail.content.directory.in_progress.0.record_key', 'release-'.$transfer->id)
+            ->assertJsonPath('detail.content.directory.in_progress.0.release_method', 'e_wallet')
+            ->assertJsonMissingPath('detail.content.directory.in_progress.0.payout.destination')
             ->assertJsonPath('detail.content.directory.in_progress.0.delivery.label', 'Awaiting release update')
             ->assertJsonPath('detail.content.directory.in_progress.1.record_key', 'release-'.$waiting->id)
             ->assertJsonPath('detail.content.directory.in_progress.2.record_key', 'release-'.$ready->id)

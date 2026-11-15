@@ -18,7 +18,19 @@ const statusClass = computed(() => ({
     active: 'student-badge-info',
 }[props.detail.identity?.status?.tone] ?? ''));
 
+const snapshotIcons = {
+    stage: 'fa-solid fa-route',
+    deadline: 'fa-regular fa-calendar',
+    files: 'fa-regular fa-folder-open',
+    review: 'fa-solid fa-clipboard-check',
+};
+
 const applicationVisual = computed(() => {
+    const program = props.detail.identity?.program;
+    if (program?.cover_image_url) {
+        return { src: program.cover_image_url, alt: `${program.title} background`, focus: 'object-center' };
+    }
+
     const view = props.detail.view ?? 'summary';
     const subject = `${props.detail.identity?.program?.title ?? ''} ${props.detail.identity?.program?.category ?? ''}`.toLowerCase();
 
@@ -96,74 +108,69 @@ function hideBrokenImage(event) {
                 </a>
 
                 <header class="mt-4 overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm" data-application-detail-header>
-                    <div class="grid lg:min-h-[12rem] lg:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)]">
-                        <div class="flex flex-col justify-center px-4 py-4 sm:px-6 sm:py-5">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <p class="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Application record</p>
-                                <span :class="['student-badge', statusClass]">
-                                    {{ detail.identity.status.label }}
-                                </span>
-                            </div>
-
-                            <h1 class="mt-2 max-w-3xl font-display text-2xl font-bold leading-tight text-slate-950 sm:text-3xl">
-                                {{ detail.identity.program.title }}
-                            </h1>
-
-                            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
-                                <a
-                                    v-if="detail.identity.provider.href"
-                                    :href="detail.identity.provider.href"
-                                    class="font-bold text-slate-800 hover:text-slate-950 hover:underline"
+                    <div class="grid bg-portal-navy text-white lg:grid-cols-[minmax(0,1.65fr)_minmax(16rem,1fr)]">
+                        <div class="relative z-10 flex min-w-0 items-start gap-4 px-5 py-5 sm:gap-5 sm:px-7 sm:py-7 lg:items-center">
+                            <span class="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-md border border-white/20 bg-white p-2 shadow-sm sm:size-20 sm:p-2.5" data-application-logo-frame>
+                                <i class="fa-solid fa-graduation-cap text-lg text-slate-500" aria-hidden="true"></i>
+                                <img
+                                    :src="detail.identity.program.logo_url || detail.identity.program.image_url || '/uploads/scholarship-default.jpg'"
+                                    :alt="`${detail.identity.program.title} program logo`"
+                                    class="absolute inset-0 size-full bg-white object-contain p-2 sm:p-2.5"
+                                    data-application-program-logo
+                                    @error="hideBrokenImage"
                                 >
-                                    {{ detail.identity.provider.name }}
-                                </a>
-                                <span v-else class="font-bold text-slate-800">{{ detail.identity.provider.name }}</span>
-                                <span v-if="detail.identity.provider.verified" class="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700">
-                                    <i class="fa-solid fa-circle-check" aria-hidden="true"></i>
-                                    Verified provider
-                                </span>
-                            </div>
+                            </span>
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Application record</p>
+                                    <span :class="['student-badge', statusClass]" data-application-status>{{ detail.identity.status.label }}</span>
+                                </div>
 
-                            <p v-if="detail.identity.submitted_at" class="mt-3 text-xs font-semibold text-slate-500">Submitted {{ detail.identity.submitted_at }}</p>
+                                <h1 class="mt-2 break-words font-display text-xl font-bold leading-tight text-white sm:text-3xl lg:text-[2rem]">
+                                    {{ detail.identity.program.title }}
+                                </h1>
+
+                                <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-200">
+                                    <a
+                                        v-if="detail.identity.provider.href"
+                                        :href="detail.identity.provider.href"
+                                        class="break-words font-semibold text-white underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-300"
+                                    >
+                                        {{ detail.identity.provider.name }}
+                                    </a>
+                                    <span v-else class="break-words font-semibold text-white">{{ detail.identity.provider.name }}</span>
+                                    <span v-if="detail.identity.provider.verified" class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-200">
+                                        <i class="fa-solid fa-circle-check block w-3 text-center text-xs leading-none" aria-hidden="true"></i>
+                                        Verified provider
+                                    </span>
+                                </div>
+
+                                <p v-if="detail.identity.submitted_at" class="mt-4 flex items-start gap-1.5 text-xs leading-5 text-slate-300"><i class="fa-regular fa-clock mt-1 block w-3 shrink-0 text-center leading-none" aria-hidden="true"></i><span>Submitted {{ detail.identity.submitted_at }}</span></p>
+                            </div>
                         </div>
 
-                        <figure class="relative order-first h-36 overflow-hidden bg-slate-900 sm:h-44 lg:order-last lg:h-auto">
+                        <figure class="relative hidden min-h-48 overflow-hidden bg-slate-800 lg:block" data-application-cover>
                             <img
                                 :src="applicationVisual.src"
                                 :alt="applicationVisual.alt"
                                 :class="['absolute inset-0 h-full w-full object-cover', applicationVisual.focus]"
                             >
-                            <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/5 to-transparent"></div>
-                            <figcaption class="absolute inset-x-0 bottom-0 flex items-end gap-3 p-4 sm:p-5">
-                                <span class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-sm bg-white p-2 shadow-xl ring-1 ring-white/70 sm:h-16 sm:w-16">
-                                    <i class="fa-solid fa-graduation-cap text-lg text-slate-400" aria-hidden="true"></i>
-                                    <img
-                                        :src="detail.identity.program.image_url"
-                                        :alt="`${detail.identity.program.title} mark`"
-                                        class="absolute inset-0 h-full w-full object-contain p-2"
-                                        @error="hideBrokenImage"
-                                    >
-                                </span>
-                                <div class="min-w-0 pb-1 text-white">
-                                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">Application record</p>
-                                    <p class="mt-1 truncate text-sm font-bold">{{ detail.identity.provider.name }}</p>
-                                </div>
-                            </figcaption>
+                            <div class="pointer-events-none absolute inset-0 bg-linear-to-r from-portal-navy via-portal-navy/15 to-transparent" aria-hidden="true"></div>
                         </figure>
                     </div>
 
-                    <dl class="grid grid-cols-2 border-t border-slate-200 bg-slate-50/80 xl:grid-cols-4" data-record-snapshot>
+                    <dl v-if="detail.snapshot?.length" class="grid grid-cols-2 border-t border-slate-200 bg-white xl:grid-cols-4" data-record-snapshot>
                         <div
                             v-for="(item, index) in detail.snapshot"
                             :key="item.key"
                             :class="[
-                                'min-w-0 border-slate-200 px-3 py-2.5 sm:px-5 sm:py-3',
+                                'min-w-0 border-slate-200 px-4 py-4 sm:px-6',
                                 index % 2 ? 'border-l' : '',
                                 index >= 2 ? 'border-t xl:border-l xl:border-t-0' : '',
                             ]"
                         >
-                            <dt class="student-detail-label">{{ item.label }}</dt>
-                            <dd class="mt-1 text-sm font-bold text-slate-950">{{ item.value }}</dd>
+                            <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[snapshotIcons[item.key] || 'fa-solid fa-circle-info', 'block w-3 shrink-0 text-center text-xs leading-none text-slate-600']" aria-hidden="true"></i>{{ item.label }}</dt>
+                            <dd class="mt-2 break-words text-sm font-bold leading-6 text-slate-950">{{ item.value }}</dd>
                         </div>
                     </dl>
                 </header>

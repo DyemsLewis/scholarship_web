@@ -27,10 +27,10 @@ defineEmits(['guardian-phone-input']);
 
         <component :is="guardianRequired ? 'section' : 'details'" data-guardian-section class="group py-4" :open="!guardianRequired && hasGuardianDetails ? true : undefined" aria-labelledby="household-guardian-title">
             <component :is="guardianRequired ? 'h3' : 'summary'" id="household-guardian-title" :class="guardianRequired ? sectionTitle : disclosureSummary">
-                <span>Guardian or account contact <span v-if="!guardianRequired" :class="optionalLabel">(optional)</span></span>
+                <span>Parent or guardian <span v-if="!guardianRequired" :class="optionalLabel">(optional)</span></span>
                 <i v-if="!guardianRequired" class="fa-solid fa-chevron-down text-[10px] text-slate-500 transition group-open:rotate-180" aria-hidden="true"></i>
             </component>
-            <p class="mt-1 text-xs leading-5 text-slate-500">{{ guardianRequired ? guardianReason : 'Add a trusted contact if someone helps with applications.' }}</p>
+            <p class="mt-1 text-xs leading-5 text-slate-500">{{ guardianRequired ? guardianReason : 'Optional for applicants aged 19 and above. Provide these details if a scholarship provider requests them.' }}</p>
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-2">
                 <div class="min-w-0"><label :class="labelClass" for="profile-guardian">Guardian name</label><input id="profile-guardian" v-model="form.guardian_name" :required="guardianRequired" maxlength="255" placeholder="Parent or guardian" :class="inputClass"></div>
                 <div class="min-w-0"><label :class="labelClass" for="profile-guardian-relationship">Relationship to applicant</label><select id="profile-guardian-relationship" v-model="form.guardian_relationship" :required="guardianRequired" :class="inputClass"><option value="">Select relationship</option><option v-if="form.guardian_relationship && !relationshipOptions.includes(form.guardian_relationship)" :value="form.guardian_relationship">{{ labelFromKey(form.guardian_relationship) }}</option><option v-for="option in relationshipOptions" :key="option" :value="option">{{ option }}</option></select></div>

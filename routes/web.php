@@ -30,6 +30,7 @@ use App\Http\Controllers\Provider\Programs\ProgramDirectoryController;
 use App\Http\Controllers\Provider\Programs\ProgramRecordController;
 use App\Http\Controllers\Provider\ProviderAccountController;
 use App\Http\Controllers\Provider\RoleDashboardController;
+use App\Http\Controllers\Provider\WorkspaceGuideController;
 use App\Http\Controllers\Provider\SelectionSessionWorkspaceController;
 use App\Http\Controllers\ProviderApplicationPageController;
 use App\Http\Controllers\ProviderController;
@@ -738,6 +739,10 @@ Route::middleware(['auth', 'provider'])
             ->whereNumber('serviceRequest')
             ->name('workspaces.billing.service-requests.checkout');
         Route::get('/dashboard/data', [ProviderController::class, 'dashboardData'])->name('dashboard.data');
+        Route::get('/workspace-guides/{workspace}', [WorkspaceGuideController::class, 'show'])
+            ->where('workspace', '[a-z-]+')->name('workspace-guides.show');
+        Route::post('/workspace-guides/{workspace}/progress', [WorkspaceGuideController::class, 'update'])
+            ->middleware('throttle:60,1')->where('workspace', '[a-z-]+')->name('workspace-guides.progress');
         Route::get('/programs', [ProgramDirectoryController::class, 'index'])
             ->defaults('programFilter', 'all')
             ->middleware('permission:manage_programs')

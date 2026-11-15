@@ -2,6 +2,7 @@
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
 import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
 import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
@@ -111,7 +112,10 @@ onBeforeUnmount(() => {
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-start justify-between gap-8">
                         <div class="flex min-w-0 items-start gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-award" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Recipient onboarding</p><h1 id="recipient-directory-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
-                        <a href="/provider/workspaces/recipients/withdrawals" class="inline-flex min-h-10 shrink-0 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700"><i class="fa-solid fa-arrow-right-from-bracket text-xs" aria-hidden="true"></i>Withdrawal requests</a>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="recipients" auto-offer />
+                            <a href="/provider/workspaces/recipients/withdrawals" class="inline-flex min-h-10 shrink-0 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700"><i class="fa-solid fa-arrow-right-from-bracket text-xs" aria-hidden="true"></i>Withdrawal requests</a>
+                        </div>
                     </div>
                     <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>

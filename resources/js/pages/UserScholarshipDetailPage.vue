@@ -9,8 +9,8 @@ import ScholarshipApplicationRequirements from '../components/ScholarshipApplica
 import ScholarshipFormalApplicationSchedule from '../components/ScholarshipFormalApplicationSchedule.vue';
 import ScholarshipAwardDetails from '../components/ScholarshipAwardDetails.vue';
 import ScholarshipDetailAction from '../components/ScholarshipDetailAction.vue';
+import ScholarshipOverview from '../components/ScholarshipOverview.vue';
 import { eligibilityOverview } from '../support/applicantEligibility';
-import { scholarshipBenefitFacts } from '../support/scholarshipBenefits';
 
 const props = defineProps({
     embedded: { type: Boolean, default: false },
@@ -54,7 +54,6 @@ const activeView = computed(() => detail.value?.view ?? currentView.value);
 const isOverview = computed(() => activeView.value === 'summary');
 const isApplicationView = computed(() => activeView.value === 'application');
 const sectionLabel = computed(() => navigation.value.find((item) => item.active)?.label);
-const applicationGuideHref = computed(() => navigation.value.find((item) => item.key === 'application')?.href);
 const actionProps = computed(() => ({
     decision: decision.value,
     preparation: detail.value?.preparation,
@@ -77,8 +76,6 @@ const scholarshipVisual = computed(() => {
         return {
             hero: chosenCover || '/images/filipino-students-science-class.jpg',
             heroAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino students taking part in a science class',
-            overview: chosenCover || '/images/filipino-students-science-experiment.jpg',
-            overviewAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino students learning through a classroom science activity',
         };
     }
 
@@ -86,25 +83,15 @@ const scholarshipVisual = computed(() => {
         return {
             hero: chosenCover || '/images/filipino-graduates.jpg',
             heroAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino graduates celebrating their education milestone',
-            overview: chosenCover || '/images/filipino-campus.jpg',
-            overviewAlt: chosenCover ? `${identity.value?.title} background` : 'Students walking through a campus in the Philippines',
         };
     }
 
     return {
         hero: chosenCover || '/images/filipino-students-studying.jpg',
         heroAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino students studying together in a classroom',
-        overview: chosenCover || '/images/filipino-students-group-study.jpg',
-        overviewAlt: chosenCover ? `${identity.value?.title} background` : 'Filipino students working together during class',
     };
 });
-const hasDistinctOverviewImage = computed(() => scholarshipVisual.value.overview !== scholarshipVisual.value.hero);
 const sectionVisual = computed(() => ({
-    summary: {
-        image: scholarshipVisual.value.overview,
-        alt: scholarshipVisual.value.overviewAlt,
-        caption: 'Support built around a learner\'s education.',
-    },
     application: {
         image: '/images/application-documents.jpg',
         alt: 'A student preparing scholarship application documents',
@@ -370,36 +357,38 @@ onMounted(async () => {
 
                 <div v-else-if="detail" class="mt-5 space-y-4">
                     <header class="student-card overflow-hidden rounded-md border-slate-300 border-t-4 border-t-amber-400" data-scholarship-detail-header>
-                        <div :class="['grid', isOverview ? 'lg:grid-cols-[minmax(0,1fr)_minmax(14rem,29%)]' : '']">
-                            <div class="flex min-w-0 items-start gap-3 p-4 sm:gap-4 sm:px-6 sm:py-5 lg:items-center">
-                                <span class="grid size-11 shrink-0 place-items-center overflow-hidden rounded-sm border border-slate-200 bg-white p-1.5 sm:size-14 sm:p-2">
+                        <div :class="['grid bg-portal-navy text-white', isOverview ? 'lg:grid-cols-[minmax(0,1.65fr)_minmax(16rem,1fr)]' : '']">
+                            <div :class="['relative z-10 flex min-w-0 items-start gap-4 px-5 py-5 sm:gap-5 sm:px-7', isOverview ? 'sm:py-7 lg:items-center' : 'sm:py-5']">
+                                <span :class="['grid shrink-0 place-items-center overflow-hidden rounded-md border border-white/20 bg-white shadow-sm', isOverview ? 'size-16 p-2 sm:size-20 sm:p-2.5' : 'size-12 p-1.5 sm:size-14 sm:p-2']">
                                     <img v-if="!imageFailed" :src="scholarshipImage" data-scholarship-logo :alt="`${identity.title} program logo`" class="size-full object-contain" @error="imageFailed = true">
                                     <i v-else class="fa-solid fa-graduation-cap text-lg text-slate-500" aria-hidden="true"></i>
                                 </span>
                                 <div class="min-w-0">
-                                    <p class="student-kicker">Scholarship program</p>
-                                    <h1 :class="['mt-1 break-words font-display text-xl font-bold leading-tight text-slate-950 sm:text-2xl', isOverview && 'lg:text-3xl']">{{ identity.title }}</h1>
-                                    <div class="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-sm text-slate-600">
-                                        <a v-if="identity.provider?.href" :href="identity.provider.href" class="break-words font-bold text-slate-800 hover:underline" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">{{ identity.provider.name }}</a>
-                                        <span v-else class="break-words font-bold text-slate-800">{{ identity.provider?.name }}</span>
-                                        <span v-if="identity.provider?.verified" class="student-badge student-badge-positive"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>Verified provider</span>
+                                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Scholarship program</p>
+                                    <h1 :class="['mt-2 break-words font-display text-xl font-bold leading-tight text-white sm:text-2xl', isOverview && 'sm:text-3xl lg:text-[2rem]']">{{ identity.title }}</h1>
+                                    <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-slate-200">
+                                        <a v-if="identity.provider?.href" :href="identity.provider.href" class="break-words font-semibold text-white underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-300" :aria-disabled="isPreview || undefined" @click="blockPreviewAction">{{ identity.provider.name }}</a>
+                                        <span v-else class="break-words font-semibold text-white">{{ identity.provider?.name }}</span>
+                                        <span v-if="identity.provider?.verified" class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-200"><i class="fa-solid fa-circle-check block w-3 text-center text-xs leading-none" aria-hidden="true"></i>Verified provider</span>
                                     </div>
-                                    <p v-if="isOverview && (identity.category || identity.program_cycle)" class="mt-2 text-xs font-semibold text-slate-500">
-                                        {{ [identity.category, identity.program_cycle].filter(Boolean).join(' | ') }}
-                                    </p>
+                                    <div v-if="isOverview && (identity.category || identity.program_cycle)" class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-200">
+                                        <span v-if="identity.category" class="rounded-sm border border-white/15 bg-white/10 px-2.5 py-1 font-semibold">{{ identity.category }}</span>
+                                        <span v-if="identity.program_cycle" class="inline-flex items-center gap-1.5"><i class="fa-regular fa-calendar block w-3 text-center leading-none" aria-hidden="true"></i>{{ identity.program_cycle }}</span>
+                                    </div>
                                 </div>
                             </div>
 
-                            <figure v-if="isOverview" class="relative hidden min-h-40 overflow-hidden border-l border-slate-200 bg-slate-100 lg:block" data-scholarship-cover>
+                            <figure v-if="isOverview" class="relative hidden min-h-48 overflow-hidden bg-slate-800 lg:block" data-scholarship-cover>
                                 <img :src="scholarshipVisual.hero" :alt="scholarshipVisual.heroAlt" class="absolute inset-0 h-full w-full object-cover">
+                                <div class="pointer-events-none absolute inset-0 bg-linear-to-r from-portal-navy via-portal-navy/15 to-transparent" aria-hidden="true"></div>
                             </figure>
                         </div>
 
-                        <dl v-if="isOverview && snapshot.length" class="grid grid-cols-2 border-t border-slate-200 bg-slate-50/70 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]" data-scholarship-key-facts>
-                            <div v-for="fact in snapshot" :key="fact.key" :class="['min-w-0 border-slate-200 px-4 py-2.5 sm:px-6 sm:py-3', fact.key === 'benefit' ? 'col-span-2 border-b sm:col-span-1 sm:border-r sm:border-b-0' : fact.key === 'deadline' && 'border-r']">
-                                <dt class="student-detail-label">{{ fact.label }}</dt>
-                                <dd class="mt-0.5 break-words text-sm font-bold leading-5 text-slate-900">{{ fact.value }}</dd>
-                                <dd v-if="fact.note" class="mt-0.5 text-xs leading-5 text-slate-600">{{ fact.note }}</dd>
+                        <dl v-if="isOverview && snapshot.length" class="grid grid-cols-2 border-t border-slate-200 bg-white sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]" data-scholarship-key-facts>
+                            <div v-for="fact in snapshot" :key="fact.key" :class="['min-w-0 border-slate-200 px-4 py-4 sm:px-6', fact.key === 'benefit' ? 'col-span-2 border-b sm:col-span-1 sm:border-r sm:border-b-0' : fact.key === 'deadline' && 'border-r']">
+                                <dt class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500"><i :class="[fact.key === 'benefit' ? 'fa-solid fa-gift' : fact.key === 'deadline' ? 'fa-regular fa-calendar' : 'fa-solid fa-users', 'block w-3 shrink-0 text-center text-xs leading-none text-slate-600']" aria-hidden="true"></i>{{ fact.label }}</dt>
+                                <dd class="mt-2 break-words text-sm font-bold leading-6 text-slate-950">{{ fact.value }}</dd>
+                                <dd v-if="fact.note" class="mt-1 text-xs leading-5 text-slate-600">{{ fact.note }}</dd>
                             </div>
                         </dl>
                     </header>
@@ -430,42 +419,15 @@ onMounted(async () => {
                     </p>
 
                     <div ref="sectionContent" class="space-y-4 focus:outline-none" role="region" :aria-label="sectionLabel" tabindex="-1" data-scholarship-section-content>
-                    <template v-if="isOverview">
-                        <section class="student-card overflow-hidden rounded-md border-slate-300" data-scholarship-overview>
-                            <div :class="['grid', hasDistinctOverviewImage && 'lg:grid-cols-[minmax(0,1fr)_24rem]']">
-                                <div class="flex flex-col px-5 py-6 sm:px-7 sm:py-7">
-                                    <p class="student-kicker">Program overview</p>
-                                    <h3 class="mt-1 text-2xl font-bold text-slate-950">What this scholarship provides</h3>
-                                    <p class="mt-4 max-w-3xl whitespace-pre-line text-sm leading-7 text-slate-600">{{ content.description || 'The provider has not added a program description.' }}</p>
-
-                                    <div v-if="content.primary_benefit" class="mt-5 border-l-4 border-amber-400 pl-4">
-                                        <div class="flex flex-wrap items-center justify-between gap-2">
-                                            <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-800">Primary benefit</p>
-                                            <span v-if="content.additional_benefit_count" class="text-xs font-bold text-amber-900">+{{ content.additional_benefit_count }} more</span>
-                                        </div>
-                                        <h4 class="mt-1 text-lg font-bold text-slate-950">{{ content.primary_benefit.title }}</h4>
-                                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ scholarshipBenefitFacts(content.primary_benefit).map((fact) => fact.value).join(' / ') || content.primary_benefit.display_summary }}</p>
-                                    </div>
-
-                                    <div class="mt-5 flex flex-wrap items-center gap-x-5">
-                                        <a :href="navigation.find((item) => item.key === 'award')?.href" class="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-slate-800 hover:text-slate-950 hover:underline" @click="openPreviewSection($event, 'award')">
-                                            See benefits and terms <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                        </a>
-                                        <a v-if="applicationGuideHref && !decision.has_applied" :href="applicationGuideHref" class="inline-flex min-h-11 items-center gap-2 text-sm font-bold text-slate-800 hover:text-slate-950 hover:underline" @click="openPreviewSection($event, 'application')">
-                                            See how to apply <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                        </a>
-                                    </div>
-                                </div>
-
-                                <figure :class="['relative min-h-56 overflow-hidden bg-slate-900', hasDistinctOverviewImage ? 'lg:min-h-full' : 'lg:hidden']">
-                                    <img :src="sectionVisual.image" :alt="sectionVisual.alt" class="absolute inset-0 h-full w-full object-cover">
-                                    <div class="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-transparent"></div>
-                                    <figcaption class="absolute inset-x-0 bottom-0 p-5 text-sm font-bold text-white">{{ sectionVisual.caption }}</figcaption>
-                                </figure>
-                            </div>
-                        </section>
-
-                    </template>
+                    <ScholarshipOverview
+                        v-if="isOverview"
+                        :content="content"
+                        :navigation="navigation"
+                        :has-applied="Boolean(decision.has_applied)"
+                        :preview="isPreview"
+                        data-scholarship-overview
+                        @navigate="openPreviewSection"
+                    />
 
                     <ScholarshipEligibilityPanel
                         v-else-if="activeView === 'eligibility'"

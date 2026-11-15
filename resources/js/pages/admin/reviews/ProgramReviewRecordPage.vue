@@ -6,8 +6,8 @@ import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
 import AdminLoadState from '../components/AdminLoadState.vue';
-import EducationEligibilitySummary from '../../../components/EducationEligibilitySummary.vue';
-import RecipientAgreementDetails from '../../../components/RecipientAgreementDetails.vue';
+import ProgramReviewDetailsModal from './ProgramReviewDetailsModal.vue';
+import { programReviewSections } from '../../../support/adminProgramReview.js';
 import { useAdminResource } from '../../../composables/useAdminResource.js';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { reviewErrorMessage, reviewRequirementItems, reviewStatusLabel } from '../../../support/adminReviewPresentation.js';
@@ -27,6 +27,8 @@ const program = ref(null);
 const decision = ref('published');
 const notes = ref('');
 const stale = ref(false);
+const showDetails = ref(false);
+const detailsSection = ref('overview');
 const requirements = computed(() => reviewRequirementItems(program.value?.requirements));
 const statusClass = computed(() => program.value?.status === 'published' ? 'bg-emerald-100 text-emerald-800' : program.value?.status === 'rejected' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-700');
 const inReview = computed(() => ['pending_review', 'published', 'rejected'].includes(program.value?.status));
@@ -71,44 +73,45 @@ async function saveDecision() {
 function continueReview() {
     document.getElementById('publication-decision')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
+function openDetails(section = 'overview') {
+    detailsSection.value = section;
+    showDetails.value = true;
+}
 onMounted(loadRecord);
 </script>
 
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
         <AdminReviewNavigation :back-url="navigation.backUrl" :next="navigation.next.value" :loading="navigation.loading.value" :error="navigation.error.value" @retry="navigation.load" />
-        <AdminWorkspaceHeader eyebrow="Program review" title="Publication record" description="Check program details and applicant-facing terms." icon="fa-solid fa-graduation-cap" />
+        <AdminWorkspaceHeader eyebrow="Program review" title="Review a scholarship program" description="Inspect the submitted offer, then record the publication decision." icon="fa-solid fa-graduation-cap" />
         <section v-if="loading || loadError" class="admin-panel mt-4 overflow-hidden"><AdminLoadState :loading="loading" :error="loadError" loading-message="Loading program record..." error-title="Publication record unavailable" @retry="loadRecord" /></section>
         <template v-else-if="program">
-            <AdminReviewGuide :workflow="program.review_workflow" kind="program" @continue="continueReview" />
             <p v-if="successMessage" class="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800" role="status">{{ successMessage }}</p>
-            <section class="admin-panel mt-4 overflow-hidden">
-                <div class="flex items-center gap-4 border-b border-slate-200 px-6 py-5"><span class="relative grid h-16 w-16 shrink-0 place-items-center overflow-hidden border border-slate-200 bg-slate-100 text-slate-500"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><img v-if="program.logo_url" :src="program.logo_url" :alt="`${program.title} logo`" class="absolute inset-0 h-full w-full bg-white object-contain p-1" @error="$event.currentTarget.remove()"></span><div class="min-w-0 flex-1"><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Scholarship program</p><h2 class="review-text mt-1 text-xl font-black text-slate-950">{{ program.title }}</h2><p class="review-text mt-1 text-sm text-slate-500">{{ program.provider }}</p></div><span :class="['shrink-0 px-3 py-1.5 text-xs font-bold uppercase', statusClass]">{{ reviewStatusLabel(program.status, 'programs') }}</span></div>
-                <dl class="grid grid-cols-4 divide-x divide-slate-200"><div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Category</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ program.category || 'Not specified' }}</dd></div><div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Application period</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ program.application_opens_at || 'Not set' }} to {{ program.deadline || 'Not set' }}</dd></div><div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Available slots</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ program.slots_available ?? 'Not limited' }}</dd></div><div class="px-5 py-4"><dt class="text-xs font-semibold text-slate-500">Minimum grade</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ program.minimum_grade_label || 'Not required' }}</dd></div></dl>
+            <section class="admin-panel mt-4 overflow-hidden rounded-sm" data-program-review-summary>
+                <div class="flex items-center gap-4 border-b border-slate-200 px-6 py-5"><span class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-sm border border-slate-200 bg-slate-50 text-slate-500"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i><img v-if="program.logo_url" :src="program.logo_url" :alt="`${program.title} logo`" class="absolute inset-0 h-full w-full bg-white object-contain p-1" @error="$event.currentTarget.remove()"></span><div class="min-w-0 flex-1"><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Submitted program</p><h2 class="review-text mt-1 text-xl font-bold text-slate-950">{{ program.title }}</h2><p class="review-text mt-1 text-sm text-slate-500">{{ program.provider }}</p></div><span :class="['shrink-0 rounded-sm px-3 py-1.5 text-xs font-bold uppercase', statusClass]">{{ reviewStatusLabel(program.status, 'programs') }}</span></div>
+                <dl class="grid grid-cols-4 divide-x divide-slate-200 bg-slate-50/70"><div class="px-6 py-3.5"><dt class="text-xs text-slate-500">Application period</dt><dd class="mt-1 text-sm font-semibold text-slate-950">{{ program.application_opens_at || 'Not set' }} to {{ program.deadline || 'Not set' }}</dd></div><div class="px-6 py-3.5"><dt class="text-xs text-slate-500">Available slots</dt><dd class="mt-1 text-sm font-semibold text-slate-950">{{ program.slots_available ?? 'Not limited' }}</dd></div><div class="px-6 py-3.5"><dt class="text-xs text-slate-500">Required files</dt><dd class="mt-1 text-sm font-semibold text-slate-950">{{ requirements.length }} listed</dd></div><div class="px-6 py-3.5"><dt class="text-xs text-slate-500">Provider verification</dt><dd class="mt-1 text-sm font-semibold text-slate-950">{{ program.provider_verification_status === 'approved' ? 'Verified organization' : 'Needs verification' }}</dd></div></dl>
             </section>
-            <section class="admin-panel mt-4 divide-y divide-slate-200">
-                <div class="px-6 py-5"><h2 class="flex items-center gap-2 font-black text-slate-950"><i class="fa-solid fa-align-left text-sm text-slate-500" aria-hidden="true"></i>Program summary</h2><p class="mt-2 max-w-5xl whitespace-pre-line text-sm leading-6 text-slate-600">{{ program.description || 'No description provided.' }}</p></div>
-                <div class="px-6 py-5"><h2 class="flex items-center gap-2 font-black text-slate-950"><i class="fa-solid fa-list-check text-sm text-slate-500" aria-hidden="true"></i>Eligibility and required files</h2><p class="mt-2 text-sm leading-6 text-slate-600">{{ program.eligibility || 'No general eligibility note.' }}</p><ul v-if="requirements.length" class="mt-3 list-inside list-disc space-y-1 text-sm text-slate-700"><li v-for="(requirement, index) in requirements" :key="index" class="review-text">{{ requirement }}</li></ul><p v-else class="mt-3 text-sm text-slate-500">No required files listed.</p></div>
-                <div v-if="program.education_eligibility_policy?.requires_completed_qualification || program.education_eligibility_policy?.enrollment_statuses?.length" class="px-6 py-5"><h2 class="text-sm font-bold text-slate-950">Qualification and enrollment rules</h2><EducationEligibilitySummary :policy="program.education_eligibility_policy" :modes="program.eligibility_rule_modes" /></div>
-                <details class="group px-6 py-5">
-                    <summary class="flex cursor-pointer list-none items-center justify-between font-black text-slate-950"><span class="flex items-center gap-2"><i class="fa-solid fa-file-contract text-sm text-slate-500" aria-hidden="true"></i>Applicant terms and support</span><i class="fa-solid fa-chevron-down text-xs text-slate-400 group-open:rotate-180" aria-hidden="true"></i></summary>
-                    <dl class="mt-4 divide-y divide-slate-200 border-y border-slate-200 text-sm">
-                        <div class="grid grid-cols-[12rem_minmax(0,1fr)] gap-6 py-3"><dt class="font-bold text-slate-700">Benefits</dt><dd class="text-slate-600">{{ program.benefit_summary || 'Not specified' }}</dd></div>
-                        <div class="grid grid-cols-[12rem_minmax(0,1fr)] gap-6 py-4"><dt class="font-bold text-slate-700">Recipient agreement</dt><dd class="min-w-0"><RecipientAgreementDetails :scholarship="program" /></dd></div>
-                        <div class="grid grid-cols-[12rem_minmax(0,1fr)] gap-6 py-3"><dt class="font-bold text-slate-700">Provider handoff</dt><dd class="whitespace-pre-line text-slate-600">{{ program.handoff_instructions || 'No external handoff.' }}</dd></div>
-                    </dl>
-                </details>
-            </section>
-            <form v-if="inReview" id="publication-decision" class="admin-panel mt-4 p-6 scroll-mt-5" :aria-busy="saving" @submit.prevent="saveDecision">
-                <div class="flex items-start justify-between gap-8"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Decision</p><h2 class="mt-0.5 text-lg font-black text-slate-950">Record publication decision</h2><p class="mt-0.5 text-sm text-slate-500">Publishing makes the program visible to applicants.</p></div></div><button type="submit" :disabled="!canSave" class="bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{{ saving ? 'Saving...' : 'Save decision' }}</button></div>
-                <div v-if="errorMessage" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert"><p>{{ errorMessage }}</p><button v-if="stale" type="button" class="mt-2 underline" @click="loadRecord({ preserveDraft: true })">Reload current record and keep my note</button></div>
-                <p v-if="program.can_review === false" class="mt-4 text-sm font-semibold text-slate-600">This is an oversight view. The Review Officer records the publication decision.</p>
-                <fieldset :disabled="saving || program.can_review === false" class="mt-5 grid grid-cols-[14rem_minmax(0,1fr)] gap-4">
-                    <label><span class="mb-1.5 block text-sm font-bold text-slate-700">Outcome</span><select v-model="decision" class="h-11 w-full border border-slate-300 bg-white px-3"><option value="published" :disabled="program.review_workflow?.ready !== true">Publish</option><option value="rejected">Return to provider</option><option value="pending_review">Keep in review</option></select><p v-if="program.review_workflow?.ready !== true" class="mt-2 text-xs text-amber-800">Resolve the publication issues above before publishing.</p></label>
-                    <label><span class="mb-1.5 block text-sm font-bold text-slate-700">Review note <span v-if="decision === 'rejected'" class="text-rose-700">required</span></span><textarea v-model="notes" :required="decision === 'rejected'" rows="3" maxlength="1500" class="w-full border border-slate-300 px-3 py-2" placeholder="State what must be corrected."></textarea></label>
-                </fieldset>
-            </form>
-            <section v-else class="admin-panel mt-4 px-6 py-5"><h2 class="text-sm font-bold text-slate-950">Not in publication review</h2><p class="mt-1 text-sm text-slate-600">This record is read-only until it enters the publication review workflow.</p></section>
+            <AdminReviewGuide :workflow="program.review_workflow" kind="program" @continue="continueReview" />
+            <div class="mt-4 grid grid-cols-[minmax(0,1.1fr)_minmax(23rem,0.9fr)] items-start gap-4" data-program-review-layout>
+                <section class="admin-panel overflow-hidden rounded-sm" aria-labelledby="program-information-title">
+                    <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-5"><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Inspect the offer</p><h2 id="program-information-title" class="mt-1 text-lg font-bold text-slate-950">Program information</h2><p class="mt-1 text-sm text-slate-500">Open one section at a time without leaving this review.</p></div><button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-sm border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950" aria-haspopup="dialog" :aria-expanded="showDetails" @click="openDetails()">Open details<i class="fa-solid fa-expand text-xs" aria-hidden="true"></i></button></header>
+                    <div class="divide-y divide-slate-200"><button v-for="section in programReviewSections" :key="section.key" type="button" class="flex w-full items-center gap-4 px-6 py-4 text-left hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-slate-950" aria-haspopup="dialog" :aria-label="`Open ${section.title.toLowerCase()}`" @click="openDetails(section.key)"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-500"><i :class="section.icon" aria-hidden="true"></i></span><span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">{{ section.title }}</span><span class="mt-1 block text-xs leading-5 text-slate-500">{{ section.description }}</span></span><i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i></button></div>
+                </section>
+                <form v-if="inReview && program.can_review !== false" id="publication-decision" class="admin-panel scroll-mt-5 overflow-hidden rounded-sm" :aria-busy="saving" @submit.prevent="saveDecision">
+                    <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-950 text-amber-300"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Publication decision</p><h2 class="mt-1 text-lg font-bold text-slate-950">Record the review outcome</h2></div></header>
+                    <div class="space-y-5 px-6 py-5">
+                        <div v-if="errorMessage" class="border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert"><p>{{ errorMessage }}</p><button v-if="stale" type="button" class="mt-2 underline" @click="loadRecord({ preserveDraft: true })">Reload current record and keep my note</button></div>
+                        <p class="text-sm leading-6 text-slate-600">Inspect the program details before deciding. Publishing makes this offer visible to applicants.</p>
+                        <fieldset :disabled="saving" class="space-y-5">
+                            <label class="block"><span class="mb-2 block text-sm font-bold text-slate-700">Outcome</span><select v-model="decision" class="h-11 w-full rounded-sm border border-slate-300 bg-white px-3"><option value="published" :disabled="program.review_workflow?.ready !== true">Publish</option><option value="rejected">Return to provider</option><option value="pending_review">Keep in review</option></select><p v-if="program.review_workflow?.ready !== true" class="mt-2 text-xs leading-5 text-amber-800">Resolve the publication issues above before publishing.</p></label>
+                            <label class="block"><span class="mb-2 block text-sm font-bold text-slate-700">Review note <span class="text-xs font-normal text-slate-500">{{ decision === 'rejected' ? '(required)' : '(optional)' }}</span></span><textarea v-model="notes" :required="decision === 'rejected'" rows="5" maxlength="1500" class="w-full rounded-sm border border-slate-300 px-3 py-2 text-sm leading-6" :placeholder="decision === 'rejected' ? 'Explain what the provider needs to correct.' : 'Add context for this publication decision.'"></textarea></label>
+                        </fieldset>
+                    </div>
+                    <footer class="flex items-center justify-between gap-4 border-t border-slate-200 bg-slate-50 px-6 py-4"><p class="text-xs leading-5 text-slate-500">You will confirm the outcome before it is saved.</p><button type="submit" :disabled="!canSave" class="inline-flex h-11 shrink-0 items-center gap-2 rounded-sm bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50"><i class="fa-solid fa-clipboard-check text-xs text-amber-300" aria-hidden="true"></i>{{ saving ? 'Saving...' : 'Save decision' }}</button></footer>
+                </form>
+                <section v-else id="publication-decision" class="admin-panel scroll-mt-5 rounded-sm p-6"><span class="grid h-10 w-10 place-items-center rounded-sm bg-slate-100 text-slate-500"><i class="fa-solid fa-lock" aria-hidden="true"></i></span><h2 class="mt-4 text-lg font-bold text-slate-950">{{ program.can_review === false ? 'Publication oversight' : 'Not in publication review' }}</h2><p class="mt-2 text-sm leading-6 text-slate-600">{{ program.can_review === false ? 'This is a read-only view. The Review Officer records the publication decision. You can inspect all program details without changing the outcome.' : 'This record is read-only until it enters the publication review workflow. The submitted program details remain available.' }}</p></section>
+            </div>
+            <ProgramReviewDetailsModal :open="showDetails" :program="program" :section="detailsSection" @close="showDetails = false" />
         </template>
     </AdminWorkspacePage>
 </template>

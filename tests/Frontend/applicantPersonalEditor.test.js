@@ -83,8 +83,11 @@ test('required personal details stay visible and optional name fields stay optio
     assert.doesNotMatch(html, /<details/);
     assert.match(html, /type="date"[^>]+min="1906-10-29"[^>]+max="2026-10-29"/);
     assert.match(html, /type="tel"[^>]+inputmode="tel"/);
-    const minor = await render({ age: 16, isMinor: true });
+    const minor = await render({ age: 16, guardianRequired: true });
     assert.match(minor, /16 years old.*Guardian details required/);
+    const eighteen = await render({ age: 18, guardianRequired: true });
+    assert.match(eighteen, /18 years old.*Guardian details required/);
+    assert.doesNotMatch(html, /Guardian details required/);
 });
 
 test('the page keeps existing photo actions, draft sanitizers and section save wiring', () => {

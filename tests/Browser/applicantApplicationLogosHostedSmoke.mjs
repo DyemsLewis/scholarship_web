@@ -36,9 +36,9 @@ source = source.slice(0, start) + String.raw`
             assert.equal(program.image_url, application.scholarship.logo_url);
             assert.equal(program.logo_url, program.image_url);
             assert.equal(program.cover_image_url, application.scholarship.cover_image_url);
-            await navigate('/dashboard/applications/' + application.id + suffix, '!!document.querySelector("[data-application-detail-header] figcaption img")');
-            await wait(() => client.evaluate('(()=>{const i=document.querySelector("[data-application-detail-header] figcaption img");return i.complete && i.naturalWidth>0})()'), 'application header logo');
-            const header = await client.evaluate('(()=>{const h=document.querySelector("[data-application-detail-header]");return {logo:h.querySelector("figcaption img").currentSrc,visual:h.querySelector("figure>img").currentSrc,overflow:document.documentElement.scrollWidth>innerWidth+2}})()');
+            await navigate('/dashboard/applications/' + application.id + suffix, '!!document.querySelector("[data-application-program-logo]")');
+            await wait(() => client.evaluate('(()=>{const i=document.querySelector("[data-application-program-logo]");return i.complete && i.naturalWidth>0})()'), 'application header logo');
+            const header = await client.evaluate('(()=>{const h=document.querySelector("[data-application-detail-header]");return {logo:h.querySelector("[data-application-program-logo]").currentSrc,visual:h.querySelector("figure>img").currentSrc,overflow:document.documentElement.scrollWidth>innerWidth+2}})()');
             assert.equal(header.logo, program.logo_url);
             assert.notEqual(header.visual, program.logo_url);
             assert.equal(header.overflow, false);

@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -104,10 +105,13 @@ onBeforeUnmount(() => {
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Support workspace</p><h1 id="support-directory-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-1 text-sm text-slate-600">{{ pageCopy.description }}</p></div></div>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="support" auto-offer />
                         <a href="/provider/workspaces/support/report-platform-issue" class="inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800">
                             <i class="fa-solid fa-triangle-exclamation text-amber-300" aria-hidden="true"></i>
                             Report platform issue
                         </a>
+                        </div>
                     </div>
                 </header>
 

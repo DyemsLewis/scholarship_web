@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
@@ -158,10 +159,13 @@ onBeforeUnmount(() => {
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                     <div class="flex min-h-20 items-center justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">{{ pageCopy.eyebrow }}</p><h1 id="billing-directory-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p></div></div>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="billing" auto-offer />
                         <a href="/provider/workspaces/billing/services" class="inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">
                             Browse services
                             <i class="fa-solid fa-arrow-right text-xs text-amber-300" aria-hidden="true"></i>
                         </a>
+                        </div>
                     </div>
                 </header>
 

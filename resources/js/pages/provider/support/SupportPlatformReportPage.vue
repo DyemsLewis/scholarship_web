@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
@@ -65,8 +66,9 @@ onMounted(loadForm);
             <div class="provider-service-workspace mx-auto max-w-[94rem]">
                 <a href="/provider/workspaces/support/platform" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to platform reports</a>
 
-                <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
+                <header class="mt-4 flex items-center justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                     <div class="flex items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Platform support</p><h1 id="platform-report-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Report a platform issue</h1><p class="mt-1 text-sm text-slate-600">Describe one issue so platform support can investigate it clearly.</p></div></div>
+                    <WorkspaceGuide workspace="support" />
                 </header>
 
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center shadow-sm"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading report form...</p></div>

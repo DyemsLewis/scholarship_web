@@ -77,7 +77,7 @@ test('custom or legacy selections require review rather than being guessed and e
 test('cleared restrictions require explicit replacement and save cannot silently open them', () => {
     const builder = readFileSync(new URL('../../resources/js/pages/provider/programs/ProgramFormPage.vue', import.meta.url), 'utf8');
     const picker = readFileSync(new URL('../../resources/js/pages/provider/programs/components/EligibilityOptionPicker.vue', import.meta.url), 'utf8');
-    assert.match(builder, /@change="changeEducationLevel\(value, \$event\)"/);
+    assert.match(builder, /@update:model-value="changeEducationLevels"/);
     assert.match(builder, /Keep current settings/);
     assert.match(builder, /if \(!confirmed \|\| isSaving.value \|\| isReadOnly.value\) return/);
     assert.match(builder, /async function save[^]*?if \(educationChoicesNeedReview.value\)/);
@@ -85,7 +85,7 @@ test('cleared restrictions require explicit replacement and save cannot silently
     assert.match(builder, /v-model:needs-choice="yearsNeedChoice" require-explicit-open open-value="Any"/);
     assert.match(picker, /props.requireExplicitOpen && !eligibilityListValues\(updated\).length/);
     assert.match(picker, /data-selection-field/);
-    assert.match(picker, /v-if="optionsOpen"/);
+    assert.match(picker, /<EligibilityOptionsModal :open="optionsOpen"/);
 });
 
 test('removing the last value detects an empty list before parent v-model props update', () => {
@@ -94,9 +94,11 @@ test('removing the last value detects an empty list before parent v-model props 
     let emitted;
     const model = { get value() { return 'STEM'; }, set value(value) { emitted = value; } };
     const needsChoice = { value: false };
-    new Function('value', 'values', 'model', 'needsChoice', 'props', 'eligibilityListValues', 'error', body)(
-        'STEM', { value: ['STEM'] }, model, needsChoice, { requireExplicitOpen: true }, eligibilityListValues, { value: '' },
+    let warned = false;
+    new Function('value', 'values', 'model', 'needsChoice', 'props', 'eligibilityListValues', 'error', 'warnAboutChoice', body)(
+        'STEM', { value: ['STEM'] }, model, needsChoice, { requireExplicitOpen: true }, eligibilityListValues, { value: '' }, () => { warned = true; },
     );
     assert.equal(emitted, '');
     assert.equal(needsChoice.value, true);
+    assert.equal(warned, true);
 });

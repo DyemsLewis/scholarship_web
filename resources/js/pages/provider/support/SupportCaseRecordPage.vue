@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, ref } from 'vue';
@@ -162,7 +163,10 @@ const originatingQueue = staffQueueReturn(window, 'providerSupport');
                     <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
                         <div class="flex items-center justify-between gap-8">
                             <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-headset" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Support case</p><h1 id="support-case-title" class="service-page-title mt-1 service-text font-display text-2xl font-bold tracking-tight text-slate-950">{{ report.subject }}</h1><p class="mt-1 text-sm text-slate-600">{{ report.category_label }} · Received {{ report.created_at }}</p></div></div>
-                            <span :class="['inline-flex shrink-0 border px-3 py-2 text-xs font-bold uppercase tracking-wide', stateClass(report.work_state)]">{{ report.work_label }}</span>
+                            <div class="flex shrink-0 items-center gap-3">
+                                <WorkspaceGuide workspace="support" />
+                                <span :class="['inline-flex shrink-0 border px-3 py-2 text-xs font-bold uppercase tracking-wide', stateClass(report.work_state)]">{{ report.work_label }}</span>
+                            </div>
                         </div>
                     </header>
 

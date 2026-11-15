@@ -5,6 +5,7 @@ import WorkspaceTextSummary from '../../../components/workspace-dashboard/Worksp
 import { computed, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import LocationMapLink from '../../../components/LocationMapLink.vue';
 import BenefitDeliveryReportDialog from '../../../components/benefit-delivery/BenefitDeliveryReportDialog.vue';
 import BenefitDeliveryReportPanel from '../../../components/benefit-delivery/BenefitDeliveryReportPanel.vue';
@@ -222,7 +223,7 @@ onMounted(loadRecord);
 
                 <template v-else-if="release">
                     <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
-                        <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="release-record-title" class="monitoring-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Manage benefit release</h1><p class="mt-1 text-sm leading-6 text-slate-600">Record one recipient result or resolve one reported issue at a time.</p></div></div><span class="border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-700">{{ release.status_label }}</span></div>
+                        <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="release-record-title" class="monitoring-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Manage benefit release</h1><p class="mt-1 text-sm leading-6 text-slate-600">Record one recipient result or resolve one reported issue at a time.</p></div></div><div class="flex shrink-0 items-center gap-3"><WorkspaceGuide workspace="releases" /><span class="border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-bold uppercase tracking-wide text-slate-700">{{ release.status_label }}</span></div></div>
                     </header>
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">

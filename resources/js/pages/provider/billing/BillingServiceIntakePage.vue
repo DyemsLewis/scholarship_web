@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import { labelFromKey } from '../../../support/display';
@@ -141,6 +142,7 @@ onMounted(loadIntake);
                     <header class="mt-4 flex items-center justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-list" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Service request</p><h1 id="intake-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.intake.description }}</p></div></div>
                         <div class="shrink-0 text-right">
+                            <WorkspaceGuide workspace="billing" />
                             <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">One-time fee</p>
                             <p class="mt-1 text-xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p>
                             <p class="mt-1 text-xs text-slate-500">No payment yet</p>

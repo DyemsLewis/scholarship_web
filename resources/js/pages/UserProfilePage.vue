@@ -40,7 +40,7 @@ import { profileValueLabel } from '../support/applicantProfileLabels';
 import { enrollmentStatusOptions, pendingStudyStatuses } from '../support/educationEligibilityPolicy';
 import { hasLocationPin } from '../support/locationPins';
 import { profileFormHasChanges } from '../support/profileFormChanges';
-import { preparationQuery, withPreparationContext } from '../support/scholarshipPreparationContext';
+import { preparationQuery } from '../support/scholarshipPreparationContext';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -53,7 +53,6 @@ const form = ref(emptyForm());
 const profileSearchParams = new URLSearchParams(window.location.search);
 const preparationParams = preparationQuery(window.location.search);
 const preparationContext = ref(null);
-const contextualHref = (href) => withPreparationContext(href, preparationContext.value?.scholarship_id, preparationContext.value?.return_section);
 const requestedProfileSection = profileSearchParams.get('section');
 const requestedEvidenceType = ref(profileSearchParams.get('evidence') || '');
 const editableProfileSectionIds = ['personal', 'academic', 'household', 'location', 'verification'];
@@ -80,14 +79,6 @@ let locationHierarchyRequestId = 0;
 const savedFormSnapshot = ref('');
 const fieldErrors = ref({});
 const profileValidationAlert = ref(null);
-const matchSummary = ref({
-    available_programs: 0,
-    eligible_programs: 0,
-    strong_matches: 0,
-    needs_review: 0,
-    blocked_programs: 0,
-    top_gaps: [],
-});
 const verificationDocuments = ref([]);
 const academicOcr = ref({
     enabled: false,
@@ -105,7 +96,6 @@ const evidenceRefreshRequired = ref(false);
 const evidenceRefreshing = ref(false);
 const evidenceSuccess = ref('');
 const previewDocument = ref(null);
-const preparedDocumentsCount = ref(0);
 const platformActiveScholarships = ref([]);
 const {
     confirmation,
@@ -344,7 +334,6 @@ const profileSections = [
 
 const courseRequiredLevels = ['senior_high_school', 'college', 'tvet'];
 const gradesRequiredLevels = ['elementary', 'junior_high_school', 'senior_high_school', 'college', 'tvet', 'als', 'other'];
-const guardianRequiredLevels = ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'];
 const pendingStudies = computed(() => pendingStudyStatuses.includes(form.value.enrollment_status));
 const requiresProgramPath = computed(() => courseRequiredLevels.includes(form.value.education_level) && !pendingStudies.value);
 const requiresGrades = computed(() => gradesRequiredLevels.includes(form.value.education_level));
@@ -466,10 +455,7 @@ const verificationDocumentOptions = computed(() => (user.value?.profile_evidence
         };
     }));
 const applicantAge = computed(() => calculateAge(form.value.birthdate));
-const isMinor = computed(() => applicantAge.value !== null && applicantAge.value < 18);
-const needsGuardianContext = computed(() => isMinor.value
-    || guardianRequiredLevels.includes(form.value.education_level)
-    || ['parent_guardian', 'relative', 'school_representative', 'other'].includes(form.value.account_managed_by));
+const needsGuardianContext = computed(() => applicantAge.value !== null && applicantAge.value >= 0 && applicantAge.value <= 18);
 const hasGuardianDetails = computed(() => [
     form.value.guardian_name,
     form.value.guardian_relationship,
@@ -1146,13 +1132,9 @@ const coursePathOptions = computed(() => {
             return [];
     }
 });
-const guardianRequirementLabel = computed(() => {
-    if (isMinor.value) {
-        return 'Required for a learner under 18';
-    }
-
-    return needsGuardianContext.value ? 'Required for this profile' : 'Optional contact';
-});
+const guardianRequirementLabel = computed(() => needsGuardianContext.value
+    ? 'Required for applicants aged 18 and under.'
+    : 'Optional. Provide these details if a scholarship provider requests them.');
 const applicantProfileRecord = computed(() => ({
     name: user.value?.name || 'Student applicant',
     initials: profileInitials.value,
@@ -1161,6 +1143,7 @@ const applicantProfileRecord = computed(() => ({
         .filter(hasValue).join(' - '),
 }));
 const applicantProfileSections = computed(() => applicantProfileDetails(user.value, {
+    combineResidence: true,
     requiresGuardian: savedProfileReadiness.value?.requires_guardian,
     labels: {
         gender: genderLabel, citizenship: citizenshipLabel, accountManager: accountManagerLabel,
@@ -1779,7 +1762,6 @@ async function uploadVerificationDocument(documentType, event) {
 
         applyAcademicResponse(response.data, { syncAcademic: documentType === 'academic_record' });
         evidenceSuccess.value = response.data.message || 'Record saved. Awaiting review.';
-        preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (error) {
         evidenceRefreshRequired.value = error.response?.status === 409;
         errorMessage.value = Object.values(error.response?.data?.errors ?? {})[0]?.[0]
@@ -1837,7 +1819,6 @@ async function deleteVerificationDocument(document) {
 
         applyAcademicResponse(response.data, { syncAcademic: isAcademicRecord });
         evidenceSuccess.value = response.data.message || 'Record removed.';
-        preparedDocumentsCount.value = response.data.prepared_documents_count ?? preparedDocumentsCount.value;
     } catch (error) {
         evidenceRefreshRequired.value = error.response?.status === 409;
         errorMessage.value = error.response?.data?.message ?? 'Unable to remove this record. Please try again.';
@@ -1875,10 +1856,8 @@ async function loadProfile() {
         fillForm(response.data.user);
         savedProfileReadiness.value = response.data.profile_readiness ?? null;
         await loadApplicantLocationHierarchy();
-        matchSummary.value = response.data.match_summary ?? matchSummary.value;
         platformActiveScholarships.value = response.data.platform_active_scholarships ?? [];
         verificationDocuments.value = response.data.verification_documents ?? [];
-        preparedDocumentsCount.value = response.data.prepared_documents_count ?? 0;
         academicOcr.value = response.data.academic_ocr ?? academicOcr.value;
         markFormSaved();
     } catch (error) {
@@ -1922,7 +1901,6 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
         fillForm(response.data.user);
         savedProfileReadiness.value = response.data.profile_readiness ?? null;
         await loadApplicantLocationHierarchy();
-        matchSummary.value = response.data.match_summary ?? matchSummary.value;
         platformActiveScholarships.value = response.data.platform_active_scholarships ?? platformActiveScholarships.value;
         markFormSaved();
         if (requireComplete) {
@@ -2160,15 +2138,15 @@ watch(() => form.value.grading_scale, (scale) => {
                             <ApplicantProfileReadiness :state="profileOverview" @continue="continueProfileOverview" />
                         </template>
                         <template #details>
-                            <ApplicantProfileDetails :sections="applicantProfileSections" editable @edit="openProfileEditor" />
+                            <ApplicantProfileDetails :sections="applicantProfileSections" editable tinted-headers @edit="openProfileEditor" />
                         </template>
                     </ApplicantProfileRecord>
 
-                    <section class="student-card overflow-hidden rounded-md border-slate-300">
+                    <section data-profile-verification class="student-card overflow-hidden rounded-md border-slate-300">
                         <header class="flex flex-col gap-2 border-b border-slate-200 bg-slate-50/70 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                             <div>
-                                <p class="text-sm font-bold text-slate-950">Profile resources</p>
-                                <p class="mt-1 text-xs text-slate-500">Supporting records and reusable application files.</p>
+                                <h2 class="text-base font-bold text-slate-950">Documents and verification</h2>
+                                <p class="mt-1 text-xs text-slate-500">Supporting records used to verify your profile.</p>
                             </div>
                         </header>
                         <div class="divide-y divide-slate-200">
@@ -2178,22 +2156,10 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <span class="shrink-0 text-xs font-bold text-slate-600">{{ verificationStatusLabel(profileVerificationStatus) }}</span>
                                 <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
                             </button>
-                            <a :href="contextualHref('/dashboard/documents')" class="flex items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-700"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span>
-                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Prepared documents</span><span class="mt-1 block text-xs text-slate-500">Reusable files for future applications</span></span>
-                                <span class="shrink-0 text-xs font-bold text-slate-600">{{ preparedDocumentsCount }} saved</span>
-                                <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
-                            </a>
-                            <a href="/dashboard/scholarships" class="flex items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 sm:px-5">
-                                <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-graduation-cap" aria-hidden="true"></i></span>
-                                <span class="min-w-0 flex-1"><span class="block text-sm font-bold text-slate-950">Eligible scholarships</span><span class="mt-1 block text-xs text-slate-500">Programs currently matching your saved details</span></span>
-                                <span class="shrink-0 text-xs font-bold text-slate-600">{{ matchSummary.eligible_programs }} match{{ matchSummary.eligible_programs === 1 ? '' : 'es' }}</span>
-                                <i class="fa-solid fa-chevron-right text-xs text-slate-400" aria-hidden="true"></i>
-                            </a>
                         </div>
                     </section>
 
-                    <PrivacyNoticeCard context="profile" compact />
+                    <PrivacyNoticeCard context="profile" inline />
                 </div>
 
                 <ApplicantProfileEditModal
@@ -2246,7 +2212,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             :uploading-photo="isUploadingProfilePhoto"
                             :deleting-photo="isDeletingProfilePhoto"
                             :age="applicantAge"
-                            :is-minor="isMinor"
+                            :guardian-required="needsGuardianContext"
                             :birthdate-min="birthdateMinimumValue"
                             :birthdate-max="birthdateMaximumValue"
                             :gender-options="genderOptions"

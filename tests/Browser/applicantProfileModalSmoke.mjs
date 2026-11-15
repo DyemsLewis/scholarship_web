@@ -275,7 +275,7 @@ async function main() {
                 clippedFields: [...document.querySelectorAll('[data-profile-field] dd')].some((field) => field.scrollWidth > field.clientWidth + 2),
             };
         })()`);
-        if (JSON.stringify(details.ids) !== JSON.stringify(['personal', 'academic', 'household', 'location'])) fail(`Profile detail sections are missing or out of order: ${JSON.stringify(details)}`);
+        if (JSON.stringify(details.ids) !== JSON.stringify(['personal', 'academic', 'household'])) fail(`Profile detail sections are missing or out of order: ${JSON.stringify(details)}`);
         if (!details.fullWidth || !details.aligned || details.clippedFields) fail(`Profile field alignment or wrapping is incorrect: ${JSON.stringify(details)}`);
         const expectedColumns = viewportWidth >= 1024 ? 3 : viewportWidth >= 640 ? 2 : 1;
         if (details.columns.some((columns) => columns !== expectedColumns)) fail(`Profile fields have inconsistent column counts: ${JSON.stringify(details)}`);
@@ -286,7 +286,7 @@ async function main() {
             await writeFile(path.resolve(detailsScreenshotPath), Buffer.from(screenshot.data, 'base64'));
         }
         if (addressScreenshotPath) {
-            await client.evaluate("document.querySelector('[data-profile-section=\"location\"]').scrollIntoView({ block: 'start' })");
+            await client.evaluate("document.querySelector('[data-profile-group=\"location\"]').scrollIntoView({ block: 'start' })");
             const screenshot = await client.send('Page.captureScreenshot', { format: 'png' });
             await writeFile(path.resolve(addressScreenshotPath), Buffer.from(screenshot.data, 'base64'));
         }
@@ -347,12 +347,14 @@ async function main() {
         for (const [index, [section, expectedTitle]] of expectedSections.entries()) {
             const backgroundBefore = verifyBackground ? await client.evaluate('window.__profileBackground()') : null;
             const opened = await client.evaluate(`(() => {
-                const editButtons = [...document.querySelectorAll('button')]
-                    .filter((button) => button.offsetParent !== null && button.innerText.trim() === 'Edit');
-                editButtons[${index}]?.click();
-                return editButtons.length;
+                const selector = ${JSON.stringify(section)} === 'location'
+                    ? '[data-profile-group="location"] button'
+                    : '[data-profile-section="${section}"] > header button';
+                const button = document.querySelector(selector);
+                button?.click();
+                return Boolean(button);
             })()`);
-            if (opened <= index) fail(`Edit button ${index + 1} was not found. Buttons: ${buttonLabels.join(', ')}`);
+            if (!opened) fail(`Edit button for ${section} was not found. Buttons: ${buttonLabels.join(', ')}`);
 
             try {
                 await waitFor(() => client.evaluate("Boolean(document.querySelector('[role=\"dialog\"][aria-labelledby=\"profile-editor-title\"]'))"), `${section} profile edit modal`);

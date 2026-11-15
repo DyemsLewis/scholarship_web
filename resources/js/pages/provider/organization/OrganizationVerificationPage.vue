@@ -2,6 +2,7 @@
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import ProviderActionDialog from '../../../components/ProviderActionDialog.vue';
 import { labelFromKey } from '../../../support/display';
 import { providerProofUploadType } from '../../../support/providerVerification.js';
@@ -162,7 +163,10 @@ onMounted(loadVerification);
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-building-shield" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="organization-verification-title" class="settings-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Legal verification</h1><p class="mt-1 text-sm leading-6 text-slate-600">Maintain the registered organization details and supporting proof.</p></div></div>
-                        <span v-if="profile" :class="['inline-flex border px-3 py-2 text-xs font-bold uppercase tracking-wide', verificationClass(profile.verification_status)]">{{ profile.verification_status_label }}</span>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="organization-profile" />
+                            <span v-if="profile" :class="['inline-flex border px-3 py-2 text-xs font-bold uppercase tracking-wide', verificationClass(profile.verification_status)]">{{ profile.verification_status_label }}</span>
+                        </div>
                     </div>
                 </header>
 

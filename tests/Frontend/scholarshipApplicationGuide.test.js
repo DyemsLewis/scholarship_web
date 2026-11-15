@@ -45,7 +45,10 @@ const render = (preparation = fixture()) => renderToString(createSSRApp({ render
 test('the overview links to the guide while the application section owns the instructions and checklist', () => {
     assert.match(page, /:preparation="detail.preparation"/);
     const overview = page.slice(page.indexOf('data-scholarship-section-content'), page.indexOf('<ScholarshipEligibilityPanel'));
-    assert.match(overview, /See how to apply/);
+    assert.match(overview, /<ScholarshipOverview/);
+    const overviewComponent = readFileSync(new URL('../../resources/js/components/ScholarshipOverview.vue', import.meta.url), 'utf8');
+    assert.match(overviewComponent, /See how to apply/);
+    assert.match(overviewComponent, /section: 'application'/);
     assert.doesNotMatch(overview, /<ScholarshipApplicationGuide/);
     assert.match(page, /v-else-if="isApplicationView"[\s\S]*?<ScholarshipApplicationGuide[\s\S]*?<template #action>[\s\S]*?<ScholarshipDetailAction[\s\S]*?<ScholarshipApplicationRequirements/);
     assert.match(page, /@navigate="openPreviewSection"/);

@@ -1582,7 +1582,7 @@ watch(selectedScholarship, (scholarship) => {
                                 class="overflow-hidden rounded-lg border border-slate-200 border-t-4 border-t-slate-900 bg-white shadow-sm transition hover:border-slate-300 hover:shadow-md"
                             >
                                 <div class="p-4 sm:p-5">
-                                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                                    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                                         <div class="flex min-w-0 gap-3.5">
                                             <img
                                                 :src="application.scholarship?.image_url || '/uploads/scholarship-default.jpg'"
@@ -1601,8 +1601,8 @@ watch(selectedScholarship, (scholarship) => {
                                                 </p>
                                             </div>
                                         </div>
-                                        <div class="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
-                                            <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+                                        <div class="flex w-full flex-col gap-2 xl:w-auto xl:shrink-0 xl:items-end">
+                                            <div class="flex flex-wrap items-center gap-2 xl:justify-end">
                                                 <span :class="['w-fit rounded-md px-2.5 py-1 text-xs font-bold uppercase', statusClass(application.status)]">
                                                     {{ applicationStatusLabel(application) }}
                                                 </span>
@@ -1619,23 +1619,25 @@ watch(selectedScholarship, (scholarship) => {
                                                     Correction sent
                                                 </span>
                                             </div>
-                                            <a
-                                                :href="applicationActionUrl(application)"
-                                                data-application-record-link
-                                                class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
-                                            >
-                                                {{ applicationActionLabel(application) }}
-                                                <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                                            </a>
-                                            <a
-                                                v-if="application.recipient_agreement?.status === 'accepted' && application.recipient_monitoring?.eligible"
-                                                :href="`/dashboard/monitoring/${application.id}`"
-                                                data-application-support-link
-                                                class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 sm:w-auto"
-                                            >
-                                                Scholarship Support
-                                                <i class="fa-solid fa-hand-holding-heart text-xs" aria-hidden="true"></i>
-                                            </a>
+                                            <div data-application-card-actions :class="['grid w-full gap-2 xl:w-auto', application.recipient_agreement?.status === 'accepted' && application.recipient_monitoring?.eligible ? 'sm:grid-cols-2' : '']">
+                                                <a
+                                                    :href="applicationActionUrl(application)"
+                                                    data-application-record-link
+                                                    class="inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-transparent bg-slate-950 px-4 text-sm font-bold leading-5 text-white transition hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2"
+                                                >
+                                                    {{ applicationActionLabel(application) }}
+                                                    <i class="fa-solid fa-arrow-right block w-3.5 text-center text-xs leading-none" aria-hidden="true"></i>
+                                                </a>
+                                                <a
+                                                    v-if="application.recipient_agreement?.status === 'accepted' && application.recipient_monitoring?.eligible"
+                                                    :href="`/dashboard/monitoring/${application.id}`"
+                                                    data-application-support-link
+                                                    class="inline-flex h-11 w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-slate-300 bg-white px-4 text-sm font-bold leading-5 text-slate-700 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2"
+                                                >
+                                                    Scholarship Support
+                                                    <i class="fa-solid fa-hand-holding-heart block w-3.5 text-center text-xs leading-none" aria-hidden="true"></i>
+                                                </a>
+                                            </div>
                                         </div>
                                     </div>
 

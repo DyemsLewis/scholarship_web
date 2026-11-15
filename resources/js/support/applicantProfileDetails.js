@@ -11,7 +11,7 @@ export function profileBirthdateLabel(value) {
     return new Intl.DateTimeFormat('en-PH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date);
 }
 
-export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardian, omitUnavailable = false } = {}) {
+export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardian, omitUnavailable = false, combineResidence = false } = {}) {
     const saved = user ?? {};
     const label = (key, value) => {
         if (!hasValue(value)) return '';
@@ -35,9 +35,9 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
         : numericGrade ? `${Number(saved.gwa).toFixed(2)}${saved.grading_scale === 'percentage' ? '%' : ''}` : '';
     const academicScale = label('gradingScale', saved.grading_scale);
     const guardianRequired = typeof requiresGuardian === 'boolean' ? requiresGuardian
-        : saved.is_minor === true || (hasValue(saved.age) && Number(saved.age) < 18)
-            || ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'].includes(level)
-            || ['parent_guardian', 'relative', 'school_representative', 'other'].includes(saved.account_managed_by);
+        : hasValue(saved.age) && Number.isFinite(Number(saved.age))
+            ? Number(saved.age) >= 0 && Number(saved.age) <= 18
+            : saved.is_minor === true;
     const guardianProvided = ['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'].some((key) => hasValue(saved[key]))
         || saved.guardian_is_account_owner === true;
     const generalAddress = [saved.city, saved.province, saved.region].filter(hasValue).join(', ');
@@ -101,7 +101,7 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
                 ] },
                 ...(guardianRequired || guardianProvided ? [{
                     id: 'guardian', title: 'Parent or guardian',
-                    description: guardianRequired ? 'Contact for consent and scholarship follow-ups.' : 'Optional trusted contact.',
+                    description: guardianRequired ? 'Required for applicants aged 18 and under.' : 'Optional. Provide these details if a scholarship provider requests them.',
                     items: [
                         item('guardian_name', 'Full name', saved.guardian_name, { span: 'two', detail: saved.guardian_is_account_owner ? 'Manages this account' : '' }),
                         item('guardian_relationship', 'Relationship to learner', label('relationship', saved.guardian_relationship)),
@@ -110,7 +110,7 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
                     ],
                 }] : []),
             ],
-            note: guardianRequired || guardianProvided ? '' : 'A guardian contact is optional for this profile.',
+            note: guardianRequired || guardianProvided ? '' : 'Parent or guardian details are optional. Provide them if a scholarship provider requests them.',
         },
         {
             id: 'location', title: 'Home address', icon: 'fa-solid fa-location-dot',
@@ -128,6 +128,20 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
             },
         },
     ];
+    if (combineResidence) {
+        sections[0].title = 'Personal details';
+        sections[1].title = 'Education';
+        const residence = sections.pop();
+        const household = sections.find((section) => section.id === 'household');
+        household.title = 'Household and residence';
+        household.description = 'Household circumstances, guardian contacts, and where you live.';
+        household.editLabel = 'Edit household';
+        household.groups.push({
+            ...residence.groups[0], title: residence.title, description: residence.description,
+            editSection: 'location', editLabel: 'Edit address', headingId: 'profile-record-location-title',
+        });
+        household.map = residence.map;
+    }
     if (!omitUnavailable) return sections;
     // A redacted field is not a missing applicant detail. Keep role-specific exclusions intact.
     return sections.map((section) => ({

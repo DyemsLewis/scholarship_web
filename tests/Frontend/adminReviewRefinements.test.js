@@ -65,7 +65,7 @@ test('text and array requirements render as whole file names, not one badge per 
     assert.deepEqual(reviewRequirementItems(['Enrollment certificate', '', null, ' Report card ']), ['Enrollment certificate', 'Report card']);
     assert.deepEqual(reviewRequirementItems(null), []);
     assert.deepEqual(reviewRequirementItems('Income proof, if applicable'), ['Income proof, if applicable']);
-    assert.match(read('ProgramReviewRecordPage'), /v-for="\(requirement, index\) in requirements"/);
+    assert.match(read('ProgramReviewDetailsModal'), /v-for="\(requirement, index\) in group.items"/);
 });
 
 for (const [name, key, fn, path] of [
@@ -133,6 +133,18 @@ test('draft and closed programs remain read-only and zero slots are not shown as
     assert.ok(read('ProgramReviewRecordPage').includes("program.slots_available ?? 'Not limited'"));
 });
 
+test('program details are read-only and opening a section preserves the publication draft', async () => {
+    const state = harness('ProgramReviewRecordPage', 'loadRecord, openDetails, showDetails, detailsSection, notes, decision', { scholarship: { status: 'pending_review', review_workflow: { ready: true, token: 'current-review' } } }, '/admin/workspaces/reviews/programs/4');
+    await state.loadRecord(); state.notes.value = 'Unsaved publication note'; state.decision.value = 'rejected';
+    for (const section of ['overview', 'eligibility', 'benefits', 'application', 'selection']) {
+        state.openDetails(section);
+        assert.equal(state.showDetails.value, true); assert.equal(state.detailsSection.value, section);
+        assert.equal(state.notes.value, 'Unsaved publication note'); assert.equal(state.decision.value, 'rejected');
+        state.showDetails.value = false;
+    }
+    assert.equal(state.writes.length, 0); assert.equal(state.gets.length, 1);
+});
+
 test('final profile verification requires all evidence and conditional review notes without editing grades', async () => {
     const state = harness('ApplicantReviewRecordPage', 'loadRecord, applicant, decision, notes, canSave, noteRequired', { applicant: structuredClone(applicant) });
     await state.loadRecord(); assert.equal(state.canSave.value, true);
@@ -157,6 +169,18 @@ test('photo reviews cannot overlap a profile decision and do not erase unsaved f
     state.window.axios.patch = async () => { throw { response: { data: { message: 'Photo review unavailable' } } }; };
     state.photoReason.value = 'Please use a clearer photo.'; await state.reviewPhoto('request_replacement');
     assert.equal(state.photoError.value, 'Photo review unavailable'); assert.equal(state.photoReason.value, 'Please use a clearer photo.');
+});
+
+test('profile and photo inspection preserve final notes and cannot overlap an evidence dialog', async () => {
+    const state = harness('ApplicantReviewRecordPage', 'loadRecord, openProfile, openEvidence, notes, photoReason, decision, showProfile, profileSection, selectedDocumentId', { applicant: structuredClone(applicant) });
+    await state.loadRecord(); state.notes.value = 'Unsaved final profile note'; state.photoReason.value = 'Unsaved photo replacement reason'; state.decision.value = 'rejected';
+    state.openProfile('photo'); assert.equal(state.showProfile.value, true); assert.equal(state.profileSection.value, 'photo');
+    state.openEvidence(applicant.verification_documents[0]); assert.equal(state.selectedDocumentId.value, null);
+    state.showProfile.value = false; state.openEvidence(applicant.verification_documents[0]);
+    state.openProfile(); assert.equal(state.showProfile.value, false);
+    state.selectedDocumentId.value = null; state.openProfile(); assert.equal(state.profileSection.value, 'personal');
+    assert.equal(state.notes.value, 'Unsaved final profile note'); assert.equal(state.photoReason.value, 'Unsaved photo replacement reason'); assert.equal(state.decision.value, 'rejected');
+    assert.equal(state.writes.length, 0);
 });
 
 test('a profile save in progress also blocks photo review', async () => {

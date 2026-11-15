@@ -2,6 +2,7 @@
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
 import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
 import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
@@ -163,7 +164,10 @@ onBeforeUnmount(() => {
                                 <p class="mt-1 text-sm text-slate-600">{{ pageCopy.description }}</p>
                             </div>
                         </div>
-                        <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800" @click="openSessionModal()"><i class="fa-solid fa-calendar-plus text-[10px]" aria-hidden="true"></i>Schedule activity</button>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="selection" :auto-offer="!showSessionModal && pageQuery.get('create_session') !== '1'" />
+                            <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800" @click="openSessionModal()"><i class="fa-solid fa-calendar-plus text-[10px]" aria-hidden="true"></i>Schedule activity</button>
+                        </div>
                     </div>
                     <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>

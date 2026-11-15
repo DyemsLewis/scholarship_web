@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
@@ -54,6 +55,7 @@ onMounted(loadService);
                         <div class="flex items-center justify-between gap-10 px-7 py-6">
                             <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">{{ plan.category }}</p><h1 id="service-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ plan.description }}</p></div></div>
                             <div class="shrink-0 text-right">
+                                <WorkspaceGuide workspace="billing" />
                                 <p class="text-xs font-bold uppercase tracking-[0.15em] text-slate-600">One-time fee</p>
                                 <p class="mt-1 text-2xl font-bold text-slate-950">{{ money(plan.amount, plan.currency) }}</p>
                                 <a :href="`/provider/workspaces/billing/services/${plan.code}/request`" class="mt-3 inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">

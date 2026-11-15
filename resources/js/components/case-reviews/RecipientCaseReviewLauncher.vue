@@ -1,6 +1,7 @@
 <script setup>
 import { onBeforeUnmount, ref } from 'vue';
 import RecipientCaseReviewDialog from './RecipientCaseReviewDialog.vue';
+import FeedbackAlertModal from '../FeedbackAlertModal.vue';
 import { concernError } from '../../support/agreementConcerns.js';
 const props = defineProps({ readUrl: { type: String, required: true } });
 const selected = ref(null), loading = ref(false), error = ref('');
@@ -13,4 +14,4 @@ async function show() {
 }
 onBeforeUnmount(() => { version++; });
 </script>
-<template><div class="border-t border-slate-200 pt-4"><button type="button" :disabled="loading" class="inline-flex min-h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 disabled:opacity-40" @click="show"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i>{{ loading ? 'Opening review...' : 'Case review and appeals' }}</button><p v-if="error" role="alert" class="mt-2 text-sm text-amber-900">{{ error }}</p><RecipientCaseReviewDialog :open="!!selected" :record="selected" @close="selected = null" /></div></template>
+<template><div class="border-t border-slate-200 pt-4"><button type="button" :disabled="loading" class="inline-flex min-h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 disabled:opacity-40" @click="show"><i class="fa-solid fa-scale-balanced" aria-hidden="true"></i>{{ loading ? 'Opening review...' : 'Case review and appeals' }}</button><FeedbackAlertModal v-model="error" title="Case review unavailable" retry-label="Try again" :busy="loading" @retry="show" /><RecipientCaseReviewDialog :open="!!selected" :record="selected" @close="selected = null" /></div></template>

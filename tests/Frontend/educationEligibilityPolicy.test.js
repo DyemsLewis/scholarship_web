@@ -68,14 +68,15 @@ for (const path of ['../../resources/js/pages/provider/programs/components/Educa
     });
 }
 
-test('builder restores and serializes the policy, validates it before continuing and keeps controls behind one disclosure', () => {
+test('builder restores and serializes the policy, validates it before continuing and keeps controls in a modal', () => {
     const page = readFileSync(new URL('../../resources/js/pages/provider/programs/ProgramFormPage.vue', import.meta.url), 'utf8');
     const editor = readFileSync(new URL('../../resources/js/pages/provider/programs/components/EducationEligibilityPolicyEditor.vue', import.meta.url), 'utf8');
     assert.match(page, /educationEligibilityPolicy: normalizeEducationPolicy\(program.education_eligibility_policy\)/);
     assert.match(page, /education_eligibility_policy: JSON.stringify\(normalizeEducationPolicy\(form.value.educationEligibilityPolicy\)\)/);
     assert.match(page, /!educationPolicyError\(form.value.educationEligibilityPolicy, form.value.eligibilityConditions\)/);
     assert.match(page, /eligibility\|education_eligibility_policy\|eligible_/);
-    assert.match(editor, /<details data-education-policy-editor :open="configured"/);
+    assert.match(editor, /<EligibilityOptionsModal :open="open"/);
+    assert.match(editor, /educationPolicyError\(draft.value, props.conditions\)/);
     assert.match(editor, /current-study filters/);
     assert.doesNotMatch(editor, /gradient|rounded-xl|shadow-/);
 });

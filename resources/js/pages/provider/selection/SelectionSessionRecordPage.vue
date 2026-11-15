@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
@@ -255,6 +256,7 @@ const backToQueue = staffQueueReturn(window, 'selection', '/provider/workspaces/
                         <div class="flex items-center justify-between gap-8">
                             <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">{{ labelize(session.stage_key) }} session</p><h1 id="session-record-title" class="application-page-title mt-1 application-text font-display text-2xl font-bold tracking-tight text-slate-950">{{ session.title }}</h1><p class="mt-1 application-text text-sm text-slate-600">{{ session.program?.title }} · {{ formatDate(session.starts_at) }}</p></div></div>
                             <div class="flex shrink-0 items-center gap-2">
+                                <WorkspaceGuide workspace="selection" />
                                 <span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', statusClass(session.status)]">{{ labelize(session.status) }}</span>
                                 <a v-if="session.status === 'draft'" :href="`/provider/workspaces/selection/sessions/${session.id}/edit`" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950"><i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>Edit</a>
                                 <button v-if="session.status === 'draft'" type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="actionBusy" @click="publishSession"><i class="fa-solid fa-paper-plane text-[10px]" aria-hidden="true"></i>Publish</button>

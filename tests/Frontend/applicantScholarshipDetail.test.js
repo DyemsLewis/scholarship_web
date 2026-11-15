@@ -5,6 +5,7 @@ import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 
 const filename = new URL('../../resources/js/pages/UserScholarshipDetailPage.vue', import.meta.url);
 const source = readFileSync(filename, 'utf8');
+const overview = readFileSync(new URL('../../resources/js/components/ScholarshipOverview.vue', import.meta.url), 'utf8');
 
 test('applicant scholarship details page compiles', () => {
     const { descriptor, errors } = parse(source, { filename: 'UserScholarshipDetailPage.vue' });
@@ -32,10 +33,11 @@ test('scholarship details use a focused visual hierarchy', () => {
     assert.match(source, /<ScholarshipApplicationRequirements/);
     assert.match(source, /data-scholarship-application-process/);
     assert.match(source, /data-scholarship-provider/);
-    assert.match(source, /content\.primary_benefit/);
+    assert.match(source, /<ScholarshipOverview/);
+    assert.match(overview, /content\.primary_benefit/);
     assert.match(source, /scholarshipVisual\.hero/);
     assert.match(source, /sectionVisual\.image/);
-    assert.match(source, /See benefits and terms/);
+    assert.match(overview, /See benefits and terms/);
     assert.doesNotMatch(source, /lg:min-h-\[390px\]/);
     assert.doesNotMatch(source, /factIcon/);
     assert.doesNotMatch(source, /decisionIcon/);

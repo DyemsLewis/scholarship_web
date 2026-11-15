@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import WorkspaceDashboardHeader from '../../../components/workspace-dashboard/WorkspaceDashboardHeader.vue';
 import WorkspaceMetricStrip from '../../../components/workspace-dashboard/WorkspaceMetricStrip.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { providerDashboardQueueLink } from '../../../support/workspaceDashboard.js';
 
 const context = ref({ organization_name: '', access_scope: 'all' });
@@ -80,7 +81,14 @@ onMounted(loadDashboard);
 
         <section class="student-page" aria-labelledby="coordinator-dashboard-title">
             <div class="provider-dashboard mx-auto max-w-[94rem]">
-                <WorkspaceDashboardHeader :workspace="dashboardWorkspace" :primary-action="{ label: 'Open programs', url: '/provider/programs', icon: 'fa-solid fa-folder-open' }" />
+                <WorkspaceDashboardHeader :workspace="dashboardWorkspace">
+                    <template #actions>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="programs" auto-offer />
+                            <a href="/provider/programs" class="workspace-dashboard-action inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800">Open programs <i class="fa-solid fa-folder-open text-xs text-amber-300" aria-hidden="true"></i></a>
+                        </div>
+                    </template>
+                </WorkspaceDashboardHeader>
 
                 <div v-if="errorMessage" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">
                     {{ errorMessage }}

@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref, useId, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
+import FeedbackAlertModal from './FeedbackAlertModal.vue';
 import LocationPinField from './LocationPinField.vue';
 import { citiesForLocation, findLocationOption, findPhilippineRegion, philippineRegionOptions, provincesForRegion } from '../support/philippineLocations';
 import { emptyVenueAddress, venueAddressText } from '../support/venueAddress';
@@ -17,6 +18,7 @@ const id = useId();
 const fields = computed(() => ({ ...emptyVenueAddress(), venue: props.venue, ...props.modelValue }));
 const required = computed(() => Boolean(props.modelValue) || !props.address);
 const provinces = ref([]), cities = ref([]), loading = ref(false), error = ref('');
+const useManualLocation = ref(false);
 const pinValues = ref({});
 const fieldClass = 'mt-1.5 h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 disabled:bg-slate-50';
 let version = 0;
@@ -42,7 +44,7 @@ function pin(key, value) {
 async function loadOptions() {
     const current = ++version;
     const region = findPhilippineRegion(fields.value.region);
-    provinces.value = []; cities.value = []; error.value = '';
+    provinces.value = []; cities.value = []; error.value = ''; useManualLocation.value = false;
     if (!region) { loading.value = false; return; }
     loading.value = true;
     try {
@@ -53,10 +55,14 @@ async function loadOptions() {
         const cityOptions = province ? await citiesForLocation(region.code, province.code) : [];
         if (current === version) cities.value = cityOptions;
     } catch {
-        if (current === version) error.value = 'Location lists could not load. Enter the province and city, or try again.';
+        if (current === version) { useManualLocation.value = true; error.value = 'Location lists could not load. Enter the province and city, or try again.'; }
     } finally { if (current === version) loading.value = false; }
 }
-watch(() => [fields.value.region, fields.value.province], loadOptions, { immediate: true });
+watch(() => [fields.value.region, fields.value.province], (current, previous) => {
+    if (useManualLocation.value && previous && current[0] === previous[0]) return;
+    loadOptions();
+}, { immediate: true });
+onBeforeUnmount(() => { version++; });
 </script>
 
 <template>
@@ -66,10 +72,10 @@ watch(() => [fields.value.region, fields.value.province], loadOptions, { immedia
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-venue`">Venue / building / room<input :id="`${id}-venue`" :value="fields.venue" :required="required" maxlength="120" :class="fieldClass" placeholder="Example: Student Services Office, Room 201" @input="change('venue', $event.target.value)"></label>
         <div class="grid min-w-0 gap-4 sm:grid-cols-3">
             <label class="min-w-0 text-xs font-bold text-slate-700" :for="`${id}-region`">Region<select :id="`${id}-region`" :value="fields.region" :required="required" :class="fieldClass" @change="change('region', $event.target.value)"><option value="">Select region</option><option v-for="option in philippineRegionOptions" :key="option.code" :value="option.value">{{ option.label }}</option></select></label>
-            <label class="min-w-0 text-xs font-bold text-slate-700" :for="`${id}-province`">Province<input v-if="error" :id="`${id}-province`" :value="fields.province" :required="required" maxlength="100" :class="fieldClass" @input="change('province', $event.target.value)"><select v-else :id="`${id}-province`" :value="fields.province" :required="required" :disabled="!fields.region || loading" :class="fieldClass" @change="change('province', $event.target.value)"><option value="">{{ loading ? 'Loading...' : 'Select province' }}</option><option v-if="fields.province && !provinces.some(o=>o.value===fields.province)" :value="fields.province">{{ fields.province }}</option><option v-for="option in provinces" :key="option.code" :value="option.value">{{ option.label }}</option></select></label>
-            <label class="min-w-0 text-xs font-bold text-slate-700" :for="`${id}-city`">City / municipality<input v-if="error" :id="`${id}-city`" :value="fields.city" :required="required" maxlength="100" :class="fieldClass" @input="change('city', $event.target.value)"><select v-else :id="`${id}-city`" :value="fields.city" :required="required" :disabled="!fields.province || loading" :class="fieldClass" @change="change('city', $event.target.value)"><option value="">{{ loading ? 'Loading...' : 'Select city / municipality' }}</option><option v-if="fields.city && !cities.some(o=>o.value===fields.city)" :value="fields.city">{{ fields.city }}</option><option v-for="option in cities" :key="option.code" :value="option.value">{{ option.label }}</option></select></label>
+            <label class="min-w-0 text-xs font-bold text-slate-700" :for="`${id}-province`">Province<input v-if="useManualLocation" :id="`${id}-province`" :value="fields.province" :required="required" maxlength="100" :class="fieldClass" @input="change('province', $event.target.value)"><select v-else :id="`${id}-province`" :value="fields.province" :required="required" :disabled="!fields.region || loading" :class="fieldClass" @change="change('province', $event.target.value)"><option value="">{{ loading ? 'Loading...' : 'Select province' }}</option><option v-if="fields.province && !provinces.some(o=>o.value===fields.province)" :value="fields.province">{{ fields.province }}</option><option v-for="option in provinces" :key="option.code" :value="option.value">{{ option.label }}</option></select></label>
+            <label class="min-w-0 text-xs font-bold text-slate-700" :for="`${id}-city`">City / municipality<input v-if="useManualLocation" :id="`${id}-city`" :value="fields.city" :required="required" maxlength="100" :class="fieldClass" @input="change('city', $event.target.value)"><select v-else :id="`${id}-city`" :value="fields.city" :required="required" :disabled="!fields.province || loading" :class="fieldClass" @change="change('city', $event.target.value)"><option value="">{{ loading ? 'Loading...' : 'Select city / municipality' }}</option><option v-if="fields.city && !cities.some(o=>o.value===fields.city)" :value="fields.city">{{ fields.city }}</option><option v-for="option in cities" :key="option.code" :value="option.value">{{ option.label }}</option></select></label>
         </div>
-        <p v-if="error" class="text-xs leading-5 text-amber-800" role="status">{{ error }} <button type="button" class="font-bold underline" @click="loadOptions">Try again</button></p>
+        <FeedbackAlertModal v-model="error" title="Venue location lists unavailable" retry-label="Try again" :busy="loading" @retry="loadOptions" />
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-barangay`">Barangay <span class="font-normal text-slate-500">(optional)</span><input :id="`${id}-barangay`" :value="fields.barangay" maxlength="100" :class="fieldClass" @input="change('barangay', $event.target.value)"></label>
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-street`">Street / address details <span class="font-normal text-slate-500">(optional)</span><input :id="`${id}-street`" :value="fields.street" maxlength="160" :class="fieldClass" placeholder="Street and building number" @input="change('street', $event.target.value)"></label>
         <LocationPinField :address="venueAddressText(modelValue) || address || venue" :latitude="modelValue ? fields.latitude : latitude" :longitude="modelValue ? fields.longitude : longitude" title="Venue location" @update:latitude="pin('latitude', $event)" @update:longitude="pin('longitude', $event)" />

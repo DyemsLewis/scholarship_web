@@ -10,6 +10,7 @@ import ApplicantProfileRecord from '../../../components/profile/ApplicantProfile
 import ApplicantProfileDetails from '../../../components/profile/ApplicantProfileDetails.vue';
 import ApplicantEvidenceReviewDialog from './ApplicantEvidenceReviewDialog.vue';
 import ApplicantEvidenceHistory from './ApplicantEvidenceHistory.vue';
+import ApplicantVerificationProfileModal from './ApplicantVerificationProfileModal.vue';
 import { applicantProfileDetails } from '../../../support/applicantProfileDetails';
 import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
 import AdminLoadState from '../components/AdminLoadState.vue';
@@ -39,6 +40,8 @@ const evidenceSaving = ref(false);
 const historyVersion = ref(0);
 const recordStale = ref(false);
 const evidenceFilter = ref('attention');
+const showProfile = ref(false);
+const profileSection = ref('personal');
 const reviewRows = computed(() => evidenceRows(applicant.value));
 const outstandingRows = computed(() => reviewRows.value.filter((row) => !row.retired && row.state.key !== 'accepted'));
 const visibleRows = computed(() => evidenceFilter.value === 'all' ? reviewRows.value : outstandingRows.value);
@@ -103,8 +106,14 @@ async function saveDecision() {
 }
 
 function openEvidence(document) {
-    if (!ready.value || busy.value || !document) return;
+    if (!ready.value || busy.value || showProfile.value || !document) return;
     selectedDocumentId.value = document.id;
+}
+
+function openProfile(section = 'personal') {
+    if (!ready.value || busy.value || selectedDocument.value) return;
+    profileSection.value = section;
+    showProfile.value = true;
 }
 
 function handleDecisionChange() {
@@ -182,11 +191,10 @@ onMounted(loadRecord);
 <template>
     <AdminWorkspacePage workspace="review_officer" class="admin-review-workspace">
         <AdminReviewNavigation :back-url="navigation.backUrl" :next="navigation.next.value" :loading="navigation.loading.value" :error="navigation.error.value" @retry="navigation.load" />
-        <AdminWorkspaceHeader eyebrow="Applicant verification" title="Applicant profile record" description="Compare identity, school, household, and residence details with supporting evidence." icon="fa-solid fa-user-check" />
+        <AdminWorkspaceHeader eyebrow="Applicant verification" title="Verify an applicant profile" description="Compare the supporting evidence, then record the overall profile outcome." icon="fa-solid fa-user-check" />
         <section v-if="loading || loadError" class="admin-panel mt-4"><AdminLoadState :loading="loading" :error="loadError" loading-message="Loading applicant record..." @retry="loadRecord" /></section>
         <template v-else-if="applicant">
             <p v-if="successMessage" role="status" class="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{{ successMessage }}</p>
-            <AdminReviewGuide :workflow="applicant.review_workflow" kind="applicant" @continue="continueReview" />
             <ApplicantProfileRecord
                 class="mt-4"
                 :record="applicantProfileRecord"
@@ -196,54 +204,56 @@ onMounted(loadRecord);
                 :show-trust-notice="false"
                 show-data-source-notice
             >
-                <template #details><details><summary class="cursor-pointer px-5 py-3 text-sm font-bold text-slate-600">View complete applicant profile</summary><ApplicantProfileDetails :sections="applicantProfileSections" /></details></template>
+                <template #actions><button type="button" :disabled="busy" class="inline-flex h-10 items-center gap-2 rounded-sm border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950 disabled:opacity-40" aria-label="View complete applicant profile" aria-haspopup="dialog" @click="openProfile()"><i class="fa-regular fa-address-card text-xs" aria-hidden="true"></i>View profile</button><button type="button" :disabled="busy" class="inline-flex h-10 items-center gap-2 rounded-sm bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-40" aria-haspopup="dialog" @click="openProfile('photo')"><i class="fa-solid fa-image-portrait text-xs text-amber-300" aria-hidden="true"></i>Review photo</button></template>
+                <template #details><dl class="grid grid-cols-4 divide-x divide-slate-200" data-applicant-verification-summary><div class="min-w-0 px-5 py-3.5"><dt class="text-xs text-slate-500">School / institution</dt><dd class="mt-1 break-words text-sm font-semibold text-slate-950">{{ applicant.school || 'Not provided' }}</dd></div><div class="min-w-0 px-5 py-3.5"><dt class="text-xs text-slate-500">Contact email</dt><dd class="mt-1 break-words text-sm font-semibold text-slate-950">{{ applicant.email || 'Not provided' }}</dd></div><div class="px-5 py-3.5"><dt class="text-xs text-slate-500">Required evidence</dt><dd class="mt-1 text-sm font-semibold text-slate-950">{{ applicant.evidence_review?.accepted_count ?? 0 }} of {{ applicant.evidence_review?.required_count ?? 0 }} accepted</dd></div><div class="px-5 py-3.5"><dt class="text-xs text-slate-500">Photo review</dt><dd class="mt-1 text-sm font-semibold text-slate-950">{{ documentLabel(applicant.profile_photo_review_status || 'Not checked') }}</dd></div></dl></template>
             </ApplicantProfileRecord>
+
+            <AdminReviewGuide :workflow="applicant.review_workflow" kind="applicant" @continue="continueReview" />
 
             <p v-if="applicant.evidence_review?.legacy_profile_approval" class="mt-4 border border-slate-200 bg-slate-50 px-5 py-3 text-sm text-slate-600"><strong>Earlier verified profile.</strong> The existing approval is retained. A new verification decision requires individual reviews of the current required documents.</p>
 
-            <section id="supporting-evidence" class="admin-panel mt-4 scroll-mt-5 overflow-hidden">
+            <div class="mt-4 space-y-4" data-applicant-verification-layout>
+            <section id="supporting-evidence" class="admin-panel scroll-mt-5 overflow-hidden rounded-sm">
                 <header class="flex items-center justify-between gap-5 border-b border-slate-200 px-6 py-4"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-shield" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.14em] text-amber-700">Step 1 · Check the evidence</p><h2 class="mt-0.5 font-black text-slate-950">Supporting evidence</h2><p class="mt-0.5 text-sm text-slate-500">Check each saved claim against its file. OCR results are not verified values.</p></div></div><div class="shrink-0 text-right"><p class="text-sm font-black text-slate-950">{{ applicant.evidence_review?.accepted_count ?? 0 }} of {{ applicant.evidence_review?.required_count ?? 0 }} accepted</p><p class="mt-1 text-xs text-slate-500">Required documents</p></div></header>
-                <div class="flex items-center gap-2 border-b border-slate-200 px-6 py-3" aria-label="Evidence filter"><button type="button" :aria-pressed="evidenceFilter === 'attention'" class="staff-row-action px-3 py-2 text-xs" @click="evidenceFilter = 'attention'">Needs attention ({{ outstandingRows.length }})</button><button type="button" :aria-pressed="evidenceFilter === 'all'" class="staff-row-action px-3 py-2 text-xs" @click="evidenceFilter = 'all'">All evidence ({{ reviewRows.length }})</button></div>
-                <div v-if="visibleRows.length" class="staff-table-viewport staff-table-viewport--compact"><table class="portal-data-table table-fixed min-w-[56rem]">
-                    <colgroup><col><col class="w-64"><col class="w-44"></colgroup>
-                    <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><tr><th class="px-6 py-3">Evidence</th><th class="px-4 py-3">Document decision</th><th class="px-6 py-3 text-right">Action</th></tr></thead>
+                <div class="flex items-center gap-2 border-b border-slate-200 px-6 py-3" aria-label="Evidence filter"><button type="button" :aria-pressed="evidenceFilter === 'attention'" :class="['rounded-sm border px-3 py-2 text-xs font-bold', evidenceFilter === 'attention' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 bg-white text-slate-600']" @click="evidenceFilter = 'attention'">Needs attention ({{ outstandingRows.length }})</button><button type="button" :aria-pressed="evidenceFilter === 'all'" :class="['rounded-sm border px-3 py-2 text-xs font-bold', evidenceFilter === 'all' ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 bg-white text-slate-600']" @click="evidenceFilter = 'all'">All evidence ({{ reviewRows.length }})</button></div>
+                <div v-if="visibleRows.length" class="staff-table-viewport staff-table-viewport--compact"><table class="portal-data-table w-full table-fixed">
+                    <colgroup><col><col class="w-44"><col class="w-24"></colgroup>
+                    <thead class="bg-slate-50 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500"><tr><th scope="col" class="px-5 py-3">Supporting record</th><th scope="col" class="px-4 py-3">Review status</th><th scope="col" class="px-5 py-3 text-right">Review</th></tr></thead>
                     <tbody class="divide-y divide-slate-200"><tr v-for="row in visibleRows" :key="row.type" class="align-middle">
-                        <td class="px-6 py-4"><p class="text-sm font-bold text-slate-950">{{ row.label }} <span class="ml-1 text-[10px] font-normal text-slate-500">{{ row.retired ? 'Retired' : row.required ? 'Required' : 'Optional' }}</span></p><p v-if="row.document?.original_name" class="review-text mt-0.5 text-xs text-slate-500" data-file-name>{{ row.document.original_name }}</p></td>
+                        <td class="px-5 py-4" :title="row.document?.original_name"><p class="review-text text-sm font-bold text-slate-950">{{ row.label }}</p><p class="mt-1 text-xs text-slate-500">{{ row.retired ? 'Retired' : row.required ? 'Required' : 'Optional' }}</p></td>
                         <td class="px-4 py-4"><span :class="['inline-block px-2 py-1 text-xs font-bold', row.state.class]">{{ row.state.label }}</span><p v-if="applicant.review_workflow?.changed_keys?.includes('evidence:' + row.type)" class="mt-1 text-xs font-bold text-amber-800">Updated since last decision</p><p v-else-if="row.document?.reviewed_at" class="mt-1 text-xs text-slate-500">{{ row.document.reviewed_by || 'Reviewer' }} · {{ evidenceReviewDate(row.document.reviewed_at) }}</p></td>
-                        <td class="px-6 py-4 text-right"><div v-if="row.document" class="flex justify-end gap-2"><a v-if="row.document.file_available !== false" :href="row.document.view_url" data-file-preview="true" :data-file-name="row.document.original_name" class="staff-row-action h-10 w-10" :aria-label="`Preview ${row.label}`" title="Preview evidence"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i></a><button type="button" :disabled="busy" class="staff-row-action h-10 px-3 text-xs" @click="openEvidence(row.document)">{{ row.retired || !canReviewEvidence || row.state.key === 'accepted' ? 'Details' : 'Review' }}</button></div></td>
+                        <td class="px-5 py-4 text-right"><button v-if="row.document" type="button" :disabled="busy" class="staff-row-action h-10 w-10 rounded-sm" :aria-label="`${row.retired || !canReviewEvidence || row.state.key === 'accepted' ? 'View' : 'Review'} ${row.label}`" :title="row.retired || !canReviewEvidence || row.state.key === 'accepted' ? 'View document review' : 'Review document'" @click="openEvidence(row.document)"><i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></button><span v-else class="text-xs text-slate-400">No file</span></td>
                     </tr></tbody>
                 </table></div><p v-else class="px-6 py-8 text-center text-sm font-semibold text-slate-500">{{ evidenceFilter === 'attention' && reviewRows.length ? 'No outstanding evidence in this view. Current acceptances are kept in All evidence.' : 'No supporting evidence has been uploaded.' }}</p>
                 <p class="border-t border-slate-200 bg-slate-50 px-6 py-3 text-xs text-slate-500">Accepting a document does not verify the profile. Finish the separate profile decision after reviewing every required record.</p>
             </section>
 
-            <details class="admin-panel mt-4 p-6" :aria-busy="photoSaving">
-                <summary class="cursor-pointer text-sm font-bold text-slate-700">Applicant photo review <span class="ml-2 font-normal text-slate-500">{{ documentLabel(applicant.profile_photo_review_status || 'Not checked') }}</span></summary>
-                <div class="mt-5">
-                <div class="flex items-start justify-between gap-6"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-image-portrait" aria-hidden="true"></i></span><div><h2 class="font-black text-slate-950">Applicant photo</h2><p class="mt-0.5 text-sm text-slate-500">Check that the image clearly identifies the applicant.</p></div></div><span class="bg-slate-100 px-2.5 py-1.5 text-xs font-bold uppercase text-slate-700">{{ documentLabel(applicant.profile_photo_review_status || 'Not checked') }}</span></div>
-                <a v-if="applicant.profile_photo_url" :href="applicant.profile_photo_url" data-file-preview="true" :data-file-name="`${applicant.name || 'Applicant'} photo`" class="mt-4 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-slate-700"><i class="fa-solid fa-eye" aria-hidden="true"></i>Preview photo</a>
-                <p v-if="applicant.profile_photo_review_note" class="mt-2 text-sm text-slate-600">{{ applicant.profile_photo_review_note }}</p>
-                <fieldset :disabled="busy || !canReviewEvidence" class="mt-4 flex items-end gap-3">
-                    <label class="min-w-0 flex-1"><span class="mb-1.5 block text-sm font-bold text-slate-700">Replacement reason</span><input v-model="photoReason" type="text" maxlength="1000" class="h-11 w-full border border-slate-300 px-3" placeholder="Required only when requesting a replacement"></label>
-                    <button type="button" :disabled="busy || !photoReason.trim()" class="h-11 border border-slate-300 bg-white px-4 text-sm font-bold disabled:opacity-40" @click="reviewPhoto('request_replacement')">Request replacement</button>
-                    <button type="button" :disabled="busy || !applicant.profile_photo_url" class="h-11 bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-40" @click="reviewPhoto('approve')">{{ photoSaving ? 'Saving...' : 'Approve photo' }}</button>
-                </fieldset>
-                <div v-if="photoError" role="alert" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800"><p>{{ photoError }}</p><button v-if="recordStale" type="button" class="mt-2 underline" @click="reloadEvidence">Reload current record</button></div>
+            <form v-if="canReviewEvidence" id="final-profile-verification" class="admin-panel scroll-mt-5 overflow-hidden rounded-sm" :aria-busy="saving" @submit.prevent="saveDecision">
+                <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-950 text-amber-300"><i class="fa-solid fa-user-check" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Step 2 · Final profile decision</p><h2 class="mt-1 text-lg font-bold text-slate-950">Record profile verification</h2></div></header>
+                <div class="space-y-5 px-6 py-5">
+                    <p v-if="!evidenceReady" class="rounded-sm border-l-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">Verification is not ready. {{ missingEvidence.length ? missingEvidence.length + ' required document(s) still need uploading. ' : '' }}Review and accept all current required documents. You can still request corrections or keep the review open.</p>
+                    <p v-else class="flex items-start gap-2 text-sm leading-6 text-emerald-800"><i class="fa-solid fa-check mt-1.5 shrink-0" aria-hidden="true"></i>All required evidence is accepted. Complete the final profile decision.</p>
+                    <fieldset :disabled="busy" class="space-y-5">
+                        <label class="block"><span class="mb-2 block text-sm font-bold text-slate-700">Outcome</span><select v-model="decision" class="h-11 w-full rounded-sm border border-slate-300 bg-white px-3 text-sm" @change="handleDecisionChange"><option value="approved" :disabled="!evidenceReady || missingEvidence.length > 0">Verify profile</option><option value="rejected">Request profile correction</option><option value="pending">{{ verificationStatus === 'approved' ? 'Reopen review' : 'Keep under review' }}</option></select></label>
+                        <label class="block"><span class="mb-2 block text-sm font-bold text-slate-700">Review note <span :class="['text-xs font-normal', noteRequired ? 'text-amber-800' : 'text-slate-500']">{{ noteRequired ? '(required)' : '(optional)' }}</span></span><textarea v-model="notes" rows="5" maxlength="1500" :required="noteRequired" class="w-full rounded-sm border border-slate-300 px-3 py-2 text-sm leading-6" placeholder="State what needs correction or why the review was reopened."></textarea></label>
+                    </fieldset>
+                    <div v-if="errorMessage" role="alert" class="border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800"><p>{{ errorMessage }}</p><button v-if="recordStale" type="button" class="mt-2 underline underline-offset-2" @click="reloadEvidence">Reload current evidence</button></div>
                 </div>
-            </details>
-
-            <form id="final-profile-verification" class="admin-panel mt-4 p-6" :aria-busy="saving" @submit.prevent="saveDecision">
-                <div class="flex items-start justify-between gap-8"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Step 2 · Final profile decision</p><h2 class="mt-0.5 text-lg font-black text-slate-950">Record profile verification</h2><p class="mt-0.5 text-sm text-slate-500">Record the overall profile outcome after the individual evidence reviews.</p></div></div><button type="submit" :disabled="!canSave || !canReviewEvidence" class="bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{{ saving ? 'Saving...' : 'Save decision' }}</button></div>
-                <p v-if="!evidenceReady" class="mt-4 border-l-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950">Verification is not ready. {{ missingEvidence.length ? missingEvidence.length + ' required document(s) still need uploading. ' : '' }}Review and accept all current required documents above. Requesting a correction or reopening is still available.</p>
-                <p v-else class="mt-4 flex items-center gap-2 text-sm font-bold text-emerald-800"><i class="fa-solid fa-check" aria-hidden="true"></i>All required evidence is accepted. Complete the final profile decision.</p>
-                <fieldset :disabled="busy || !canReviewEvidence">
-                    <div class="mt-5">
-                        <label><span class="mb-1.5 block text-sm font-bold text-slate-700">Outcome</span><select v-model="decision" class="h-11 w-full border border-slate-300 bg-white px-3" @change="handleDecisionChange"><option value="approved">Verify profile</option><option value="rejected">Request profile correction</option><option value="pending">{{ verificationStatus === 'approved' ? 'Reopen review' : 'Keep under review' }}</option></select></label>
-                    </div>
-                    <label class="mt-4 block"><span class="mb-1.5 block text-sm font-bold text-slate-700">Review note <span v-if="noteRequired" class="text-rose-700">required</span><span v-else class="font-normal text-slate-500">(optional)</span></span><textarea v-model="notes" rows="3" maxlength="1500" :required="noteRequired" class="w-full border border-slate-300 px-3 py-2" placeholder="State what needs correction or why the review was reopened."></textarea></label>
-                </fieldset>
-                <div v-if="errorMessage" role="alert" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800"><p>{{ errorMessage }}</p><button v-if="recordStale" type="button" class="mt-2 underline underline-offset-2" @click="reloadEvidence">Reload current evidence</button></div>
+                <footer class="flex items-center justify-between gap-4 border-t border-slate-200 bg-slate-50 px-6 py-4"><p class="text-xs leading-5 text-slate-500">Profile verification is not a scholarship award.</p><button type="submit" :disabled="!canSave" class="inline-flex h-11 shrink-0 items-center gap-2 rounded-sm bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-50"><i class="fa-solid fa-clipboard-check text-xs text-amber-300" aria-hidden="true"></i>{{ saving ? 'Saving...' : 'Save decision' }}</button></footer>
             </form>
+            <section v-else id="final-profile-verification" class="admin-panel scroll-mt-5 rounded-sm p-6"><span class="grid h-10 w-10 place-items-center rounded-sm bg-slate-100 text-slate-500"><i class="fa-solid fa-lock" aria-hidden="true"></i></span><h2 class="mt-4 text-lg font-bold text-slate-950">Verification oversight</h2><p class="mt-2 text-sm leading-6 text-slate-600">This record is read-only. The Review Officer reviews evidence and records the final profile verification. You can inspect the profile, files, and review history.</p></section>
+            </div>
             <ApplicantEvidenceHistory :applicant="applicant" :version="historyVersion" />
+            <ApplicantVerificationProfileModal :open="showProfile" :applicant="applicant" :sections="applicantProfileSections" :initial-section="profileSection" :busy="photoSaving" @close="showProfile = false">
+                <template #default="{ section }"><ApplicantProfileDetails :sections="[section]" /></template>
+                <template #photo>
+                    <div class="flex items-start justify-between gap-5"><div><h3 class="text-lg font-bold text-slate-950">Applicant photo review</h3><p class="mt-1 text-sm text-slate-500">Check that the image clearly identifies the applicant.</p></div><span class="rounded-sm bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{{ documentLabel(applicant.profile_photo_review_status || 'Not checked') }}</span></div>
+                    <div class="mt-6 grid grid-cols-[14rem_minmax(0,1fr)] items-start gap-7">
+                        <div><div class="relative grid aspect-square place-items-center overflow-hidden rounded-sm border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user text-5xl" aria-hidden="true"></i><img v-if="applicant.profile_photo_url" :src="applicant.profile_photo_url" :alt="`${applicant.name} applicant photo`" class="absolute inset-0 h-full w-full object-contain" @error="$event.currentTarget.remove()"></div><a v-if="applicant.profile_photo_url" :href="applicant.profile_photo_url" data-file-preview="true" :data-file-name="`${applicant.name || 'Applicant'} photo`" class="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-bold text-slate-700"><i class="fa-solid fa-expand text-xs" aria-hidden="true"></i>Preview photo</a></div>
+                        <div class="space-y-5"><p v-if="applicant.profile_photo_review_note" class="whitespace-pre-line text-sm leading-6 text-slate-600">{{ applicant.profile_photo_review_note }}</p><fieldset :disabled="busy || !canReviewEvidence" class="space-y-5"><label class="block"><span class="mb-2 block text-sm font-bold text-slate-700">Replacement reason</span><textarea v-model="photoReason" rows="3" maxlength="1000" class="w-full rounded-sm border border-slate-300 px-3 py-2 text-sm leading-6" placeholder="Required only when requesting a replacement"></textarea></label><div class="flex items-center gap-3"><button type="button" :disabled="busy || !photoReason.trim()" class="h-11 rounded-sm border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40" @click="reviewPhoto('request_replacement')">Request replacement</button><button type="button" :disabled="busy || !applicant.profile_photo_url" class="h-11 rounded-sm bg-slate-950 px-4 text-sm font-bold text-white disabled:opacity-40" @click="reviewPhoto('approve')">{{ photoSaving ? 'Saving...' : 'Approve photo' }}</button></div></fieldset><p v-if="!canReviewEvidence" class="text-sm text-slate-500">This is a read-only photo record.</p><div v-if="photoError" role="alert" class="border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800"><p>{{ photoError }}</p><button v-if="recordStale" type="button" class="mt-2 underline" @click="reloadEvidence">Reload current record</button></div></div>
+                    </div>
+                </template>
+            </ApplicantVerificationProfileModal>
             <ApplicantEvidenceReviewDialog :document="selectedDocument" :applicant="applicant" :allowed="canReviewEvidence" @close="selectedDocumentId = null" @saved="evidenceSaved" @reload="reloadEvidence" @busy="evidenceSaving = $event" />
         </template>
     </AdminWorkspacePage>

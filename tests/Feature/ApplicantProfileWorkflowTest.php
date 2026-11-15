@@ -202,7 +202,8 @@ class ApplicantProfileWorkflowTest extends TestCase
         $applicant->studentProfile()->update(['account_managed_by' => 'parent_guardian']);
         $guardianManagedMissingFields = collect($applicant->fresh()->applicantProfileReadiness()['missing'])->pluck('key');
 
-        $this->assertContains('guardian_email', $guardianManagedMissingFields);
+        $this->assertNotContains('guardian_email', $guardianManagedMissingFields);
+        $this->assertFalse($applicant->fresh()->applicantProfileReadiness()['requires_guardian']);
     }
 
     public function test_profile_endpoint_returns_catalog_matches_and_saved_preferences(): void

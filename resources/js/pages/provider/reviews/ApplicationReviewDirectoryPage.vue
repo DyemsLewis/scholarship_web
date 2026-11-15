@@ -2,6 +2,7 @@
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
 import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
 import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
@@ -167,10 +168,13 @@ onBeforeUnmount(() => {
                                 <p class="mt-2 text-sm leading-6 text-slate-600">{{ pageCopy.description }}</p>
                             </div>
                         </div>
-                        <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
-                            <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Program access</p>
-                            <p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p>
-                            <p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p>
+                        <div class="flex shrink-0 items-center gap-5">
+                            <WorkspaceGuide workspace="reviews" auto-offer />
+                            <div v-if="workspace" class="border-l border-slate-200 pl-5 text-right">
+                                <p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Program access</p>
+                                <p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p>
+                                <p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p>
+                            </div>
                         </div>
                     </div>
                     <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />

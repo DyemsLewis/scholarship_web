@@ -6,6 +6,7 @@ import BenefitReceiptResponseModal from './BenefitReceiptResponseModal.vue';
 import BenefitPayoutDetailsModal from './BenefitPayoutDetailsModal.vue';
 import BenefitFollowUpPanel from '../benefit-delivery/BenefitFollowUpPanel.vue';
 import { checkInStatusClass } from '../../support/checkInStatus.js';
+import { benefitNextStep, benefitMethodIcon } from '../../support/benefitReleasePresentation.js';
 
 const props = defineProps({
     release: { type: Object, required: true },
@@ -19,27 +20,7 @@ const payoutOpen = ref(false);
 const delivery = computed(() => props.release.delivery);
 const payout = computed(() => props.release.payout);
 const needsPayout = computed(() => ['required', 'correction_requested'].includes(payout.value?.status));
-const nextStep = computed(() => {
-    if (payout.value?.status === 'correction_requested') return {
-        title: 'Correct your payout details',
-        description: payout.value.correction_label || 'The provider asked for updated payout details.',
-    };
-    if (needsPayout.value) return {
-        title: 'Enter your payout details',
-        description: payout.value.method === 'e_wallet'
-            ? 'Tell the provider which wallet should receive this benefit. The transfer happens outside the portal.'
-            : 'Tell the provider which bank account should receive this benefit. The transfer happens outside the portal.',
-    };
-    if (payout.value?.status === 'submitted') return {
-        title: 'Payout details submitted',
-        description: 'The provider needs to verify your details before recording the transfer. No money has been sent through the portal.',
-    };
-    if (payout.value?.status === 'approved') return {
-        title: 'Payout details approved',
-        description: 'Wait for the provider to send the benefit. Approval does not mean the transfer has been sent.',
-    };
-    return delivery.value;
-});
+const nextStep = computed(() => benefitNextStep(props.release));
 const collection = computed(() => props.release.release_method === 'in_person');
 const hasVenue = computed(() => !!props.release.location || (props.release.latitude != null && props.release.longitude != null));
 const included = computed(() => [...new Set((props.release.benefits ?? []).map((item) => item.title).filter(Boolean))]);
@@ -61,31 +42,37 @@ const instructions = computed(() => delivery.value.key !== 'inactive' && (props.
         <BenefitFollowUpPanel v-if="release.follow_up" :key="release.record_id" :follow-up="release.follow_up" :context="release.title" @saved="emit('refresh')" />
 
         <article class="overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm">
-            <header class="flex items-start gap-3 px-4 py-4 sm:gap-4 sm:px-6 sm:py-5">
-                <span class="grid h-11 w-11 shrink-0 place-items-center rounded-sm bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span>
-                <div class="min-w-0">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-800">Benefit release</p>
-                    <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <h2 class="break-words font-display text-xl font-bold text-slate-950 sm:text-2xl">{{ release.title }}</h2>
-                        <span :class="['rounded-sm border px-2 py-0.5 text-xs font-bold', checkInStatusClass(delivery.tone)]">{{ delivery.label }}</span>
+            <header class="flex flex-col gap-4 bg-portal-navy px-5 py-5 text-white sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:px-6">
+                <div class="flex min-w-0 items-start gap-3 sm:gap-4">
+                    <span class="grid h-11 w-11 shrink-0 place-items-center rounded-sm border border-white/15 bg-white/10 text-amber-300"><i :class="[benefitMethodIcon(release.release_method), 'leading-none']" aria-hidden="true"></i></span>
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">Benefit release</p>
+                        <h2 class="mt-1 break-words font-display text-xl font-bold leading-snug sm:text-2xl">{{ release.title }}</h2>
+                        <span :class="['mt-3 inline-flex rounded-sm border px-2 py-0.5 text-xs font-bold', checkInStatusClass(delivery.tone)]">{{ delivery.label }}</span>
                     </div>
+                </div>
+                <div v-if="release.amount_label" class="shrink-0 pl-14 sm:pl-0 sm:text-right">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-slate-300">Release amount</p>
+                    <p class="mt-1 font-display text-2xl font-bold tabular-nums">{{ release.amount_label }}</p>
                 </div>
             </header>
 
-            <div class="grid border-t border-slate-200 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-                <section data-benefit-next-step :class="['border-b border-slate-200 p-4 sm:px-6 sm:py-5 md:order-2 md:border-b-0 md:border-l', release.can_respond || needsPayout ? 'bg-amber-50' : 'bg-slate-50']">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">Your next step</p>
-                    <h3 class="mt-1 text-lg font-bold text-slate-950">{{ nextStep.title }}</h3>
-                    <p class="mt-1 text-sm leading-6 text-slate-700">{{ nextStep.description }}</p>
-                    <p v-if="payout?.submitted_label" class="mt-1 text-xs text-slate-600">Submitted {{ payout.submitted_label }}</p>
-                    <div v-if="payout?.submit_url || release.can_respond || canReport || delivery.key === 'issue_open'" class="mt-4 flex flex-wrap gap-2">
+            <div>
+                <section data-benefit-next-step :class="['grid items-start gap-4 border-b border-slate-200 px-5 py-4 sm:px-6 sm:py-5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center xl:gap-8', release.can_respond || needsPayout ? 'bg-amber-50' : 'bg-slate-50']">
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Your next step</p>
+                        <h3 class="mt-1 text-lg font-bold text-slate-950">{{ nextStep.title }}</h3>
+                        <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-700">{{ nextStep.description }}</p>
+                        <p v-if="payout?.submitted_label" class="mt-2 text-xs text-slate-500">Payout details submitted {{ payout.submitted_label }}</p>
+                    </div>
+                    <div v-if="payout?.submit_url || release.can_respond || canReport || delivery.key === 'issue_open'" class="flex flex-col gap-2 sm:flex-row sm:flex-wrap xl:max-w-sm xl:justify-end">
                         <button v-if="payout?.submit_url" type="button" :class="['student-button', needsPayout ? 'student-button-primary' : 'student-button-secondary']" @click="payoutOpen = true">
                             <i class="fa-solid fa-lock text-xs" aria-hidden="true"></i> {{ payout.status === 'required' ? 'Enter payout details' : needsPayout ? 'Update payout details' : 'Replace details' }}
                         </button>
-                        <button v-if="release.can_respond" type="button" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-sm bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800" @click="responseOpen = true">
+                        <button v-if="release.can_respond" type="button" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2" @click="responseOpen = true">
                             <i class="fa-solid fa-check text-xs" aria-hidden="true"></i> Confirm receipt
                         </button>
-                        <button v-if="canReport" type="button" class="inline-flex min-h-11 items-center gap-2 rounded-sm border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-100" @click="emit('report')">
+                        <button v-if="canReport" type="button" class="inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2" @click="emit('report')">
                             Report a problem
                         </button>
                         <a v-if="delivery.key === 'issue_open'" href="#benefit-delivery-reports" class="inline-flex min-h-11 items-center gap-2 rounded-sm border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-100">
@@ -94,18 +81,18 @@ const instructions = computed(() => delivery.value.key !== 'inactive' && (props.
                     </div>
                 </section>
 
-                <section data-benefit-delivery-details class="min-w-0 p-4 sm:px-6 sm:py-5 md:order-1">
+                <section data-benefit-delivery-details class="min-w-0 px-5 py-5 sm:px-6">
                     <h3 class="font-bold text-slate-950">Delivery details</h3>
-                    <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
-                        <div>
+                    <dl :class="['mt-4 grid gap-4 sm:grid-cols-2 sm:gap-6', collection && (hasVenue || ['scheduled', 'ready'].includes(delivery.key)) ? 'xl:grid-cols-3' : '']">
+                        <div class="min-w-0">
                             <dt class="student-detail-label">{{ delivery.date_label ? delivery.date_caption : 'Release date' }}</dt>
                             <dd class="mt-1 text-sm font-bold text-slate-950">{{ delivery.date_label || 'Not scheduled' }}</dd>
                         </div>
-                        <div>
+                        <div class="min-w-0">
                             <dt class="student-detail-label">Delivery method</dt>
                             <dd class="mt-1 text-sm font-bold text-slate-950">{{ release.release_method_label }}</dd>
                         </div>
-                        <div v-if="collection && (hasVenue || ['scheduled', 'ready'].includes(delivery.key))" class="col-span-2">
+                        <div v-if="collection && (hasVenue || ['scheduled', 'ready'].includes(delivery.key))" class="min-w-0 sm:col-span-2 xl:col-span-1">
                             <dt class="student-detail-label">Collection venue</dt>
                             <dd class="mt-1 break-words text-sm font-bold text-slate-950">{{ release.location || (hasVenue ? 'Pinned location' : 'Awaiting provider details') }}</dd>
                             <LocationMapLink v-if="hasVenue" :address="release.location || ''" :latitude="release.latitude" :longitude="release.longitude" :title="release.title" />
@@ -124,7 +111,6 @@ const instructions = computed(() => delivery.value.key !== 'inactive' && (props.
                 <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                         <h3 class="font-bold text-slate-950">What this release includes</h3>
-                        <span v-if="release.amount_label" class="font-bold text-slate-950">{{ release.amount_label }}</span>
                     </div>
                     <p v-if="release.benefit_description" class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{{ release.benefit_description }}</p>
                     <ul v-if="included.length" class="mt-2 list-disc space-y-0.5 pl-4 text-sm text-slate-700">
@@ -134,7 +120,7 @@ const instructions = computed(() => delivery.value.key !== 'inactive' && (props.
                 </div>
             </section>
 
-            <section v-if="instructions" class="flex items-start gap-3 px-4 py-4 sm:px-6">
+            <section v-if="instructions" data-benefit-instructions class="flex items-start gap-3 bg-slate-50/60 px-4 py-4 sm:px-6">
                 <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600"><i class="fa-solid fa-list-check text-xs" aria-hidden="true"></i></span>
                 <div class="min-w-0">
                     <h3 class="font-bold text-slate-950">Provider instructions</h3>

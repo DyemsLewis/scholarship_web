@@ -1,5 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import FeedbackAlertModal from './FeedbackAlertModal.vue';
+const providerAlerts = window.portalUser?.role === 'provider';
 
 const NOTIFICATION_SYNC_EVENT = 'portal-notifications:sync';
 
@@ -26,6 +28,7 @@ const isOpen = ref(false);
 const isLoading = ref(false);
 const isMarkingAllRead = ref(false);
 const errorMessage = ref('');
+const loadFailed = ref(false);
 const notifications = ref([]);
 const unreadCount = ref(0);
 const root = ref(null);
@@ -61,7 +64,7 @@ function applyNotificationList(items, count) {
         : notifications.value.filter((item) => !item.is_read).length;
 }
 
-async function loadNotifications({ silent = false } = {}) {
+async function loadNotifications({ silent = false, interactive = false } = {}) {
     if (!silent) {
         isLoading.value = true;
     }
@@ -71,8 +74,10 @@ async function loadNotifications({ silent = false } = {}) {
     try {
         const response = await window.axios.get('/notifications');
         applyNotificationList(response.data.notifications ?? [], response.data.unread_count);
+        loadFailed.value = false;
     } catch (error) {
-        errorMessage.value = 'Unable to load notifications right now.';
+        loadFailed.value = true;
+        if (!providerAlerts || interactive) errorMessage.value = 'Unable to load notifications right now.';
     } finally {
         if (!silent) {
             isLoading.value = false;
@@ -84,7 +89,7 @@ function toggleDropdown() {
     isOpen.value = !isOpen.value;
 
     if (isOpen.value) {
-        loadNotifications({ silent: notifications.value.length > 0 });
+        loadNotifications({ silent: notifications.value.length > 0, interactive: true });
     }
 }
 
@@ -249,6 +254,7 @@ onBeforeUnmount(() => {
 
 <template>
     <div ref="root" :class="['relative', isSidebar ? 'w-full' : '']">
+        <FeedbackAlertModal v-if="providerAlerts" v-model="errorMessage" title="Notification action unavailable" retry-label="Refresh notifications" :busy="isLoading || isMarkingAllRead" @retry="loadNotifications({ interactive: true })" />
         <button
             type="button"
             :class="buttonClasses"
@@ -326,7 +332,7 @@ onBeforeUnmount(() => {
                             <button
                                 type="button"
                                 class="rounded-md px-2.5 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
-                                @click.stop="loadNotifications"
+                                @click.stop="loadNotifications({ interactive: true })"
                             >
                                 Refresh
                             </button>
@@ -347,10 +353,11 @@ onBeforeUnmount(() => {
                         Loading notifications...
                     </div>
 
-                    <div v-else-if="errorMessage" class="px-4 py-5 text-sm text-rose-700">
+                    <div v-else-if="errorMessage && !providerAlerts" class="px-4 py-5 text-sm text-rose-700">
                         {{ errorMessage }}
                     </div>
 
+                    <div v-else-if="providerAlerts && loadFailed && notifications.length === 0" class="px-4 py-5"><button type="button" class="text-sm font-bold text-slate-700 underline" @click="loadNotifications({ interactive: true })">Retry loading notifications</button></div>
                     <div v-else-if="notifications.length === 0" class="px-4 py-5 text-sm text-slate-500">
                         You are all caught up.
                     </div>

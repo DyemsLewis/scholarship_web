@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../../components/provider/WorkspaceGuide.vue';
 import { staffQueueLink, staffQueueReturn } from '../../../../support/staffQueueState.js';
 import { computed } from 'vue';
 import { formatServiceDateTime } from '../../../../composables/useProviderServiceWorkspace.js';
@@ -71,7 +72,10 @@ function serviceRecordLink(href) {
                 <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
                     <div class="flex min-h-24 items-center justify-between gap-8 px-7 py-5">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div class="min-w-0"><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Service workspace</p><h1 id="service-record-title" class="service-page-title mt-1 service-text font-display text-2xl font-bold tracking-tight text-slate-950">{{ purchase?.plan_name || 'Service request' }}</h1><p class="mt-1 max-w-3xl text-sm leading-6 text-slate-600">{{ purchase?.plan_description || workspace.headerDescription }}</p></div></div>
-                        <span v-if="purchase" :class="['inline-flex shrink-0 border px-3 py-2 text-xs font-bold uppercase tracking-wide', statusClass(purchase)]">{{ statusLabel(purchase) }}</span>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="billing" />
+                            <span v-if="purchase" :class="['inline-flex shrink-0 border px-3 py-2 text-xs font-bold uppercase tracking-wide', statusClass(purchase)]">{{ statusLabel(purchase) }}</span>
+                        </div>
                     </div>
                     <div v-if="purchase" class="grid grid-cols-3 divide-x divide-slate-200 border-t border-slate-200 bg-slate-50">
                         <div class="px-6 py-3.5">

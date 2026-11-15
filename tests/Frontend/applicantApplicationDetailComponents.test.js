@@ -8,6 +8,8 @@ const components = [
     '../../resources/js/components/application-detail/ApplicationDecisionBanner.vue',
     '../../resources/js/components/application-detail/ApplicantApplicationShell.vue',
     '../../resources/js/components/application-detail/ApplicationProgressRecord.vue',
+    '../../resources/js/components/application-detail/ApplicationOverviewRecord.vue',
+    '../../resources/js/components/ScholarshipOverview.vue',
     '../../resources/js/components/application-detail/ApplicationSubmissionSnapshot.vue',
     '../../resources/js/components/application-detail/ApplicationDocumentList.vue',
     '../../resources/js/components/application-detail/ApplicationCorrectionDialog.vue',
@@ -61,8 +63,9 @@ test('the overview keeps one primary action and delegates detail views to focuse
     assert.match(shell, /sectionVisuals/);
     assert.match(shell, /application-documents\.jpg/);
     assert.match(shell, /filipino-students-workshop\.jpg/);
-    assert.match(shell, /lg:min-h-\[12rem\]/);
-    assert.match(shell, /lg:grid-cols-\[minmax\(0,1\.35fr\)_minmax\(22rem,0\.65fr\)\]/);
+    assert.match(shell, /lg:grid-cols-\[minmax\(0,1\.65fr\)_minmax\(16rem,1fr\)\]/);
+    assert.match(shell, /data-application-program-logo/);
+    assert.match(shell, /data-application-cover/);
     assert.match(shell, /detail\.page\.title/);
     assert.ok(shell.indexOf('detail.page.title') > shell.indexOf('</header>'));
     assert.match(shell, /v-if="detail\.view !== 'summary'"/);

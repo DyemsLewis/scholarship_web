@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
@@ -199,7 +200,10 @@ onMounted(loadForm);
                 <a href="/provider/workspaces/selection/active" class="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to sessions</a>
 
                 <header class="provider-hero task-page-header border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
+                    <div class="flex items-center justify-between gap-5">
                     <div class="flex items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Session setup</p><h1 id="session-form-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageTitle }}</h1><p class="mt-1 text-sm text-slate-600">Set the schedule first, then add the attendance instructions.</p></div></div>
+                        <WorkspaceGuide workspace="selection" />
+                    </div>
                 </header>
 
                 <div v-if="errorMessage" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>

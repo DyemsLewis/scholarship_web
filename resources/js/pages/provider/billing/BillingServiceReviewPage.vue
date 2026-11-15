@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -154,10 +155,13 @@ const backToServices = staffQueueReturn(window, 'providerBilling', '/provider/wo
 
                     <header class="mt-4 flex items-center justify-between gap-8 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Review before payment</p><h1 id="review-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ plan.name }}</h1><p class="mt-1 text-sm leading-6 text-slate-600">Confirm the service details and contact before opening checkout.</p></div></div>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="billing" />
                         <a v-if="serviceRequest.editable" :href="serviceRequest.edit_url" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950">
                             <i class="fa-solid fa-pen text-[10px]" aria-hidden="true"></i>
                             Edit details
                         </a>
+                        </div>
                     </header>
 
                     <div v-if="notice" :class="['mt-4 border px-5 py-4 text-sm font-semibold', notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : notice.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-slate-300 bg-white text-slate-700']">

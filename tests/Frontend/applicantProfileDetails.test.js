@@ -27,6 +27,32 @@ test('saved details have four full-width sections in applicant review order', ()
     assert.equal(findField(sections, 'birthdate').detail, '18 years old');
 });
 
+test('the applicant page combines household and residence without losing fields or address editing', () => {
+    const profile = savedProfile();
+    const before = JSON.stringify(profile);
+    const original = applicantProfileDetails(profile);
+    const combined = applicantProfileDetails(profile, { combineResidence: true });
+    assert.deepEqual(combined.map((section) => section.title), ['Personal details', 'Education', 'Household and residence']);
+    assert.deepEqual(combined.flatMap((section) => section.groups.flatMap((group) => group.items.map((field) => field.key))), original.flatMap((section) => section.groups.flatMap((group) => group.items.map((field) => field.key))));
+    const household = findSection(combined, 'household');
+    assert.equal(household.editLabel, 'Edit household');
+    assert.equal(household.groups.at(-1).title, 'Home address');
+    assert.equal(household.groups.at(-1).editSection, 'location');
+    assert.equal(household.map.latitude, profile.latitude);
+    assert.equal(household.map.hasPin, true);
+    assert.equal(JSON.stringify(profile), before);
+});
+
+test('guardian presentation follows the 18-and-under rule rather than school or account management', () => {
+    const emptyGuardian = { guardian_name: '', guardian_relationship: '', guardian_contact: '', guardian_email: '', guardian_is_account_owner: false };
+    for (const age of [17, 18, 19, 25]) {
+        const profile = { ...savedProfile(), ...emptyGuardian, age, is_minor: age < 18, account_managed_by: 'parent_guardian' };
+        const household = findSection(applicantProfileDetails(profile), 'household');
+        assert.equal(household.groups.some((group) => group.id === 'guardian'), age <= 18);
+        if (age > 18) assert.match(household.note, /optional.*provider requests/i);
+    }
+});
+
 test('record formatting uses the saved payload without mutating or reading an editor draft', () => {
     const saved = Object.freeze(savedProfile());
     const before = JSON.stringify(saved);
@@ -154,11 +180,12 @@ test('the detailed record compiles with consistent field grids and read-only map
     assert.match(source, /grid-cols-1[^]*?lg:grid-cols-3/);
     assert.doesNotMatch(source, /lg:grid-cols-2|line-clamp|truncate|\bpicker\b/);
     assert.match(source, /<LocationMapLink/);
-    assert.match(source, /:aria-label="`Edit/);
+    assert.match(source, /:aria-label="section.editLabel \|\| `Edit/);
     assert.match(source, /Not provided/);
     const page = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
     const mapper = page.slice(page.indexOf('const applicantProfileSections = computed'), page.indexOf('const yearLevelOptions'));
     assert.match(mapper, /applicantProfileDetails\(user\.value/);
+    assert.match(mapper, /combineResidence: true/);
     assert.doesNotMatch(mapper, /form\.value/);
     assert.match(page, /<template #details>\s*<ApplicantProfileDetails/);
 });

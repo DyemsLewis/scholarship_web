@@ -1,9 +1,10 @@
 <script setup>
 import { computed } from 'vue';
 import BenefitReleaseRecord from './BenefitReleaseRecord.vue';
+import BenefitReleaseCard from './BenefitReleaseCard.vue';
 import BenefitDeliveryReportPanel from '../benefit-delivery/BenefitDeliveryReportPanel.vue';
 import RecipientCaseReviewPanel from '../case-reviews/RecipientCaseReviewPanel.vue';
-import { checkInStatusClass } from '../../support/checkInStatus.js';
+import { benefitReleaseGroups } from '../../support/benefitReleasePresentation.js';
 
 const props = defineProps({
     content: { type: Object, required: true },
@@ -12,14 +13,9 @@ const props = defineProps({
 });
 const emit = defineEmits(['refresh']);
 
-const groups = computed(() => [
-    { key: 'follow_up', title: 'Reply about a missed benefit', icon: 'fa-solid fa-comment-dots', action: 'Open follow-up', attention: true },
-    { key: 'action_required', title: 'Confirm what you received', icon: 'fa-solid fa-receipt', action: 'Review release', attention: true },
-    { key: 'payout_required', title: 'Payout details needed', icon: 'fa-solid fa-lock', action: 'Open release', attention: true },
-    { key: 'upcoming', title: 'Upcoming releases', icon: 'fa-regular fa-calendar-check', action: 'View release' },
-    { key: 'in_progress', title: 'Release updates', icon: 'fa-solid fa-arrows-rotate', action: 'View update' },
-    { key: 'completed', title: 'Past releases', icon: 'fa-solid fa-clock-rotate-left', action: 'View record' },
-].map((group) => ({ ...group, releases: props.content.directory[group.key] ?? [] })).filter((group) => group.releases.length));
+const allGroups = computed(() => benefitReleaseGroups(props.content.directory));
+const groups = computed(() => allGroups.value.filter((group) => group.releases.length));
+const total = computed(() => allGroups.value.reduce((sum, group) => sum + group.releases.length, 0));
 </script>
 
 <template>
@@ -42,6 +38,20 @@ const groups = computed(() => [
     </BenefitDeliveryReportPanel>
 
     <div v-else data-monitoring-benefits class="mt-4 space-y-4">
+        <section data-benefit-directory-header class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
+            <header class="relative isolate overflow-hidden bg-portal-navy px-5 py-5 text-white sm:px-6">
+                <div class="relative z-10 max-w-2xl">
+                    <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Your scholarship benefits</p>
+                    <h2 class="mt-1 font-display text-xl font-bold sm:text-2xl">Benefit releases</h2>
+                    <p class="mt-2 max-w-xl text-sm leading-6 text-slate-200">{{ content.one_time ? 'Track your one-time award, review the delivery details, and confirm it only after it arrives.' : 'See what is coming, check the provider\'s instructions, and confirm what you actually receive.' }}</p>
+                </div>
+                <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-0 hidden w-2/5 md:block"><img :src="'/images/filipino-students-group-study.jpg'" alt="" class="h-full w-full object-cover opacity-40"><div class="absolute inset-0 bg-linear-to-r from-portal-navy via-portal-navy/50 to-portal-navy/20"></div></div>
+            </header>
+            <dl v-if="total" data-benefit-summary class="grid grid-cols-3 divide-x divide-slate-200">
+                <div v-for="group in allGroups" :key="group.key" class="px-3 py-3 sm:px-5 sm:py-4"><dt class="text-[10px] font-bold leading-4 text-slate-500 sm:text-xs">{{ group.title }}</dt><dd :class="['mt-1 text-xl font-bold tabular-nums', group.attention && group.releases.length ? 'text-amber-800' : 'text-slate-950']">{{ group.releases.length }}</dd></div>
+            </dl>
+        </section>
+
         <section v-if="content.empty" class="flex items-start gap-3 rounded-md border border-slate-300 bg-white p-5 shadow-sm sm:px-6">
             <span class="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span>
             <div>
@@ -59,35 +69,18 @@ const groups = computed(() => [
         >
             <component
                 :is="group.key === 'completed' ? 'summary' : 'header'"
-                :class="['flex list-none items-center justify-between gap-3 px-4 py-3 sm:px-6 [&::-webkit-details-marker]:hidden',
-                    group.key === 'completed' ? 'cursor-pointer' : '',
-                    group.attention ? 'bg-amber-50' : 'bg-slate-50']"
+                :class="['flex list-none items-start justify-between gap-3 px-4 py-4 sm:px-5 [&::-webkit-details-marker]:hidden', group.key === 'completed' ? 'cursor-pointer' : '', group.attention ? 'bg-amber-50/60' : 'bg-slate-50']"
             >
-                <div class="flex items-center gap-3">
-                    <span :class="['grid h-8 w-8 shrink-0 place-items-center rounded-sm text-xs', group.attention ? 'bg-amber-100 text-amber-800' : 'bg-slate-200/70 text-slate-600']"><i :class="group.icon" aria-hidden="true"></i></span>
-                    <h3 class="font-bold text-slate-950">{{ group.title }}</h3>
+                <div class="min-w-0">
+                    <h3 class="text-base font-bold text-slate-950">{{ group.title }}</h3>
+                    <p class="mt-1 text-xs leading-5 text-slate-500">{{ group.description }}</p>
                 </div>
                 <span class="flex shrink-0 items-center gap-2 text-xs font-semibold text-slate-600">
                     {{ group.releases.length }} {{ group.releases.length === 1 ? 'release' : 'releases' }}
                     <i v-if="group.key === 'completed'" class="fa-solid fa-chevron-down transition group-open:rotate-180" aria-hidden="true"></i>
                 </span>
             </component>
-            <article v-for="release in group.releases" :key="release.record_key" class="grid gap-3 border-t border-slate-200 px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6 sm:px-6">
-                <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                        <h4 class="break-words font-bold text-slate-950">{{ release.title }}</h4>
-                        <span :class="['rounded-sm border px-2 py-0.5 text-xs font-bold', checkInStatusClass(release.delivery.tone)]">{{ release.delivery.label }}</span>
-                        <span v-if="release.payout_status === 'submitted'" class="rounded-sm border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-bold text-slate-700">Payout details submitted</span>
-                        <span v-else-if="release.payout_status === 'approved'" class="rounded-sm border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-bold text-emerald-800">Payout details approved</span>
-                        <span v-else-if="release.payout_status === 'correction_requested'" class="rounded-sm border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-900">Correction requested</span>
-                    </div>
-                    <p v-if="release.delivery.date_label" class="mt-1.5 text-sm text-slate-600">{{ release.delivery.date_caption }}: {{ release.delivery.date_label }}</p>
-                    <p class="mt-0.5 text-sm text-slate-600">{{ release.method_label }}<span v-if="release.amount_label"> &middot; {{ release.amount_label }}</span></p>
-                </div>
-                <a :href="release.href" :class="['inline-flex min-h-11 items-center justify-center gap-2 rounded-sm border px-4 text-sm font-bold', group.attention ? 'border-slate-950 bg-slate-950 text-white hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-50']">
-                    {{ group.action }}<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                </a>
-            </article>
+            <BenefitReleaseCard v-for="release in group.releases" :key="release.record_key" :release="release" :attention="group.attention" embedded />
         </component>
 
         <BenefitDeliveryReportPanel :history-url="`/dashboard/applications/${applicationId}/delivery-reports`" @status-change="emit('refresh')" />

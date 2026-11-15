@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../components/provider/WorkspaceGuide.vue';
 import StaffTableIdentity from '../../components/StaffTableIdentity.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from './ProviderSidebar.vue';
@@ -18,6 +19,9 @@ const overview = ref({
 });
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 5));
+const canManagePrograms = computed(() => user.value?.permissions?.includes('manage_programs') ?? false);
+const canOpenProgramRecords = computed(() => ['manage_programs', 'verify_applications', 'manage_selection_activities', 'record_final_decisions', 'manage_recipients', 'manage_monitoring', 'manage_benefit_releases']
+    .some(permission => user.value?.permissions?.includes(permission)));
 const showAllQueues = ref(false);
 const visibleQueues = computed(() => showAllQueues.value
     ? overview.value.attention_workspaces
@@ -112,11 +116,12 @@ onMounted(loadDashboard);
                 <WorkspaceDashboardHeader :workspace="dashboardWorkspace">
                     <template #actions>
                         <div class="provider-dashboard-header-actions flex min-w-0 items-center gap-5">
+                            <WorkspaceGuide workspace="manager" auto-offer />
                             <div v-if="overview.organization_name" class="provider-dashboard-organization min-w-0 text-right">
                                 <p class="workspace-dashboard-label font-bold uppercase text-slate-600">Organization</p>
                                 <p class="workspace-dashboard-text mt-1 text-sm font-bold text-slate-800">{{ overview.organization_name }}</p>
                             </div>
-                            <a href="/provider/programs" class="workspace-dashboard-action inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-folder-open text-xs text-amber-300" aria-hidden="true"></i>Open programs</a>
+                            <a v-if="overview.primary_action" :href="overview.primary_action.href" class="workspace-dashboard-action inline-flex h-11 shrink-0 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-arrow-right text-xs text-amber-300" aria-hidden="true"></i>{{ overview.primary_action.label }}</a>
                         </div>
                     </template>
                 </WorkspaceDashboardHeader>
@@ -150,8 +155,8 @@ onMounted(loadDashboard);
                         </button>
                     </section>
 
-                    <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="program-snapshot-title">
-                        <header class="workspace-dashboard-section-header flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4"><div class="workspace-dashboard-heading flex min-w-0 items-center gap-3"><span class="workspace-dashboard-icon grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-graduation-cap text-sm" aria-hidden="true"></i></span><div class="min-w-0"><h2 id="program-snapshot-title" class="text-base font-bold text-slate-950">Program snapshot</h2><p class="mt-1 text-xs text-slate-600">Recently updated scholarship programs.</p></div></div><a href="/provider/programs" class="workspace-dashboard-action inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-amber-700">View all programs <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></header>
+                    <section v-if="canOpenProgramRecords" class="mt-4 border border-slate-200 bg-white shadow-sm" aria-labelledby="program-snapshot-title">
+                        <header class="workspace-dashboard-section-header flex items-center justify-between gap-6 border-b border-slate-200 px-6 py-4"><div class="workspace-dashboard-heading flex min-w-0 items-center gap-3"><span class="workspace-dashboard-icon grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-graduation-cap text-sm" aria-hidden="true"></i></span><div class="min-w-0"><h2 id="program-snapshot-title" class="text-base font-bold text-slate-950">Program snapshot</h2><p class="mt-1 text-xs text-slate-600">Recently updated scholarship programs.</p></div></div><a v-if="canManagePrograms" href="/provider/programs" class="workspace-dashboard-action inline-flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-amber-700">View all programs <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></header>
                         <div v-if="recentPrograms.length" class="staff-table-viewport staff-table-viewport--compact">
                             <table class="w-full min-w-[850px] table-fixed border-collapse text-left">
                                 <colgroup><col class="w-[38%]"><col class="w-[18%]"><col class="w-[16%]"><col><col class="w-20"></colgroup>
@@ -174,7 +179,7 @@ onMounted(loadDashboard);
                                 </tbody>
                             </table>
                         </div>
-                        <div v-else class="px-6 py-10 text-center"><span class="mx-auto grid h-11 w-11 place-items-center bg-slate-100 text-slate-400" aria-hidden="true"><i class="fa-solid fa-graduation-cap"></i></span><p class="mt-3 text-sm font-bold text-slate-800">No scholarship program has been created.</p><a href="/provider/programs/create" class="mt-3 inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white"><i class="fa-solid fa-plus text-[10px] text-amber-300" aria-hidden="true"></i>Create a program</a></div>
+                        <div v-else class="px-6 py-10 text-center"><span class="mx-auto grid h-11 w-11 place-items-center bg-slate-100 text-slate-400" aria-hidden="true"><i class="fa-solid fa-graduation-cap"></i></span><p class="mt-3 text-sm font-bold text-slate-800">No programs are available to this account.</p><a v-if="canManagePrograms" href="/provider/programs/create" class="mt-3 inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white"><i class="fa-solid fa-plus text-[10px] text-amber-300" aria-hidden="true"></i>Create a program</a></div>
                     </section>
                 </template>
             </div>

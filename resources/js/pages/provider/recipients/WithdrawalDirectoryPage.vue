@@ -2,6 +2,7 @@
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
 import WithdrawalRequestDialog from '../../../components/withdrawals/WithdrawalRequestDialog.vue';
 import { useWithdrawalList } from '../../../composables/useWithdrawalList.js';
@@ -48,7 +49,13 @@ onBeforeUnmount(() => { invalidate(); openVersion++; window.clearTimeout(timer);
 
 <template>
     <main class="student-shell"><ProviderSidebar /><section class="student-page" aria-labelledby="withdrawal-queue-title"><div class="provider-application-workspace mx-auto max-w-[94rem]">
-        <header class="flex items-center justify-between gap-6 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm"><div class="flex items-start gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Recipient management</p><h1 id="withdrawal-queue-title" class="mt-1 font-display text-2xl font-bold text-slate-950">Withdrawal requests</h1><p class="mt-2 text-sm text-slate-600">Review requests to leave an accepted scholarship. Pending requests do not pause support.</p></div></div><a href="/provider/workspaces/recipients/active" class="inline-flex min-h-10 shrink-0 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700">Active recipients<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a></header>
+        <header class="flex items-center justify-between gap-6 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
+            <div class="flex min-w-0 items-start gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Recipient management</p><h1 id="withdrawal-queue-title" class="mt-1 font-display text-2xl font-bold text-slate-950">Withdrawal requests</h1><p class="mt-2 text-sm text-slate-600">Review requests to leave an accepted scholarship. Pending requests do not pause support.</p></div></div>
+            <div class="flex shrink-0 items-center gap-3">
+                <WorkspaceGuide workspace="recipients" :auto-offer="!initialId && !selected && !opening" />
+                <a href="/provider/workspaces/recipients/active" class="inline-flex min-h-10 shrink-0 items-center gap-2 border border-slate-300 px-4 text-sm font-bold text-slate-700">Active recipients<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+            </div>
+        </header>
         <p v-if="success" role="status" class="mt-4 border border-emerald-200 bg-emerald-50 px-5 py-3 text-sm text-emerald-900">{{ success }}</p>
         <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Withdrawal request queue">
             <div class="grid grid-cols-[minmax(0,1fr)_16rem_14rem] gap-3 border-b border-slate-200 p-4"><label><span class="mb-1.5 block text-xs font-bold text-slate-600">Find a request</span><input v-model="search" type="search" maxlength="160" placeholder="Applicant or program name" class="h-11 w-full border border-slate-300 px-3 text-sm"></label><label><span class="mb-1.5 block text-xs font-bold text-slate-600">Program</span><select v-model="program" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option value="">All assigned programs</option><option v-for="item in programs" :key="item.id" :value="item.id">{{ item.title }}</option></select></label><label><span class="mb-1.5 block text-xs font-bold text-slate-600">Request status</span><select v-model="status" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option v-for="item in withdrawalStatuses" :key="item.value" :value="item.value">{{ item.label }}</option></select></label></div>

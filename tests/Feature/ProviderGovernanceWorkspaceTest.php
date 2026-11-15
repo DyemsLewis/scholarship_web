@@ -84,6 +84,49 @@ class ProviderGovernanceWorkspaceTest extends TestCase
         $this->assertSame('unassigned', $coverage->firstWhere('permission', 'verify_applications')['status']);
     }
 
+    public function test_dashboard_actions_follow_actual_permissions_without_granting_program_access(): void
+    {
+        foreach ([
+            [User::PROVIDER_GOVERNANCE_PERMISSIONS, '/provider/workspaces/team'],
+            [['manage_profile'], '/provider/workspaces/organization-profile'],
+            [['manage_team'], '/provider/workspaces/team'],
+            [User::PROVIDER_PERMISSIONS, '/provider/programs'],
+            [['verify_applications', 'manage_selection_activities'], '/provider/workspaces/reviews/all'],
+        ] as [$permissions, $expected]) {
+            $owner = User::factory()->create(['role' => 'provider', 'permissions' => $permissions]);
+            $response = $this->actingAs($owner)->getJson('/provider/dashboard/data')
+                ->assertOk()
+                ->assertJsonPath('manager_overview.primary_action.href', $expected)
+                ->assertJsonPath('manager_overview.priority_action.href', $expected);
+
+            $this->get($response->json('manager_overview.primary_action.href'))->assertStatus(
+                in_array($expected, ['/provider/workspaces/team', '/provider/workspaces/organization-profile'], true) ? 302 : 200,
+            );
+            $this->assertSame($permissions, $owner->fresh()->permissions);
+            if (! in_array('manage_programs', $permissions, true)) {
+                $this->get('/provider/programs?page=1')->assertForbidden();
+            } else {
+                $this->get('/provider/programs?page=1')->assertOk();
+            }
+        }
+    }
+
+    public function test_unapproved_operational_staff_receive_a_profile_link_not_a_blocked_queue(): void
+    {
+        $owner = $this->governanceOwner();
+        $owner->providerProfile()->update(['verification_status' => 'pending']);
+        $staff = User::factory()->create([
+            'role' => 'provider', 'parent_account_id' => $owner->id,
+            'permissions' => ['verify_applications', 'manage_selection_activities'],
+        ]);
+
+        $this->actingAs($staff)->getJson('/provider/dashboard/data')->assertOk()
+            ->assertJsonPath('manager_overview.primary_action.href', '/provider/account')
+            ->assertJsonPath('manager_overview.priority_action.href', '/provider/account');
+        $this->get('/provider/account')->assertOk();
+        $this->get('/provider/workspaces/reviews/all')->assertForbidden();
+    }
+
     public function test_owner_can_explicitly_switch_between_solo_and_governance_models(): void
     {
         $owner = $this->governanceOwner();

@@ -11,7 +11,7 @@ const props = defineProps({
     uploadingPhoto: { type: Boolean, default: false },
     deletingPhoto: { type: Boolean, default: false },
     age: { type: Number, default: null },
-    isMinor: { type: Boolean, default: false },
+    guardianRequired: { type: Boolean, default: false },
     birthdateMin: { type: String, required: true },
     birthdateMax: { type: String, required: true },
     genderOptions: { type: Array, required: true },
@@ -87,7 +87,7 @@ watch(() => props.photoUrl, () => { photoUnavailable.value = false; });
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-3">
                 <div class="min-w-0">
                     <label :class="labelClass" for="profile-birthdate">Date of birth</label><input id="profile-birthdate" v-model="form.birthdate" type="date" :min="birthdateMin" :max="birthdateMax" required :class="inputClass">
-                    <p v-if="age !== null" class="mt-1 text-xs leading-5 text-slate-500">{{ age }} years old<span v-if="isMinor">. Guardian details required.</span></p>
+                    <p v-if="age !== null" class="mt-1 text-xs leading-5 text-slate-500">{{ age }} years old<span v-if="guardianRequired">. Guardian details required.</span></p>
                 </div>
                 <div class="min-w-0"><label :class="labelClass" for="profile-gender">Gender <span class="font-normal text-slate-400">(optional)</span></label><select id="profile-gender" v-model="form.gender" :class="inputClass"><option value="">Select gender</option><option v-for="option in genderOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
                 <div class="min-w-0"><label :class="labelClass" for="profile-citizenship">Citizenship</label><select id="profile-citizenship" v-model="form.citizenship_status" required :class="inputClass"><option value="">Select citizenship</option><option v-for="option in citizenshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>

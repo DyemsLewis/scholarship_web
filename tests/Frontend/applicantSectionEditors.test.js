@@ -182,11 +182,13 @@ test('early learning and pass-fail paths do not add unnecessary numeric-grade fi
 
 test('required guardians stay visible; optional guardians can be added without clutter', async () => {
     const props = householdProps();
-    const required = await render(household, { ...props, guardianRequired: true, guardianReason: 'Required for a learner under 18' });
+    const required = await render(household, { ...props, guardianRequired: true, guardianReason: 'Required for applicants aged 18 and under.' });
     assert.match(required, /<section data-guardian-section/);
-    assert.match(required, /Required for a learner under 18/);
+    assert.match(required, /Required for applicants aged 18 and under/);
     for (const id of ['guardian', 'guardian-relationship', 'guardian-contact', 'guardian-email']) assert.match(required, new RegExp(`id="profile-${id}"[^>]+required`));
     const optional = await render(household, props);
+    assert.match(optional, /Optional for applicants aged 19 and above/);
+    assert.match(optional, /if a scholarship provider requests them/);
     assert.match(optional, /<details data-guardian-section(?![^>]* open)/);
     assert.doesNotMatch(optional.match(/id="profile-guardian-email"[^>]*>/)[0], /required/);
     const saved = await render(household, { ...props, hasGuardianDetails: true });

@@ -168,9 +168,17 @@ trait HandlesProviderReporting
                 'support', 'billing-requests', 'billing-action',
             ], true))
             ->first();
+        $defaultAction = match (true) {
+            $actor->hasPortalPermission('manage_programs') => ['label' => 'Review programs', 'href' => '/provider/programs'],
+            $actor->hasPortalPermission('manage_team') => ['label' => 'Review team access', 'href' => '/provider/workspaces/team'],
+            $actor->hasPortalPermission('manage_profile') => ['label' => 'Review organization profile', 'href' => '/provider/workspaces/organization-profile'],
+            $organizationApproved && $workspaceItems->isNotEmpty() => ['label' => 'Open workspace', 'href' => $workspaceItems->first()['href']],
+            default => ['label' => 'Open my profile', 'href' => '/provider/account'],
+        };
 
         return [
             'organization_name' => $owner->provider_name ?: $owner->name,
+            'primary_action' => $defaultAction,
             'summary' => [
                 'programs' => $scholarships->count(),
                 'published_programs' => $scholarships->where('status', 'published')->count(),
@@ -192,8 +200,7 @@ trait HandlesProviderReporting
                     'title' => 'No workflow needs immediate attention',
                     'description' => 'Use the sidebar to review a specific operating area.',
                     'count' => 0,
-                    'label' => 'Review programs',
-                    'href' => '/provider/programs',
+                    ...$defaultAction,
                 ],
             'attention_workspaces' => $workspaceItems
                 ->filter(fn (array $item): bool => $item['count'] > 0)

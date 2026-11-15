@@ -230,20 +230,36 @@ async function saveManualGrade(requirement, index) {
             All check-ins
         </a>
 
-        <article :class="['overflow-hidden rounded-md border bg-white shadow-sm', record.preparation ? 'border-amber-300' : 'border-slate-300']" aria-labelledby="check-in-record-title">
-            <header :class="['flex flex-wrap items-start justify-between gap-3 border-l-4 px-5 py-5 sm:px-6', record.preparation ? 'border-amber-400' : 'border-slate-700']">
-                <div class="min-w-0">
-                    <div class="flex flex-wrap items-center gap-2.5">
-                        <p class="text-[10px] font-bold uppercase tracking-widest text-amber-800">{{ record.handoff ? 'In-person check-in' : record.record_type_label }}</p>
-                        <span :class="['border px-2 py-1 text-[10px] font-bold uppercase', checkInStatusClass(record.state_tone)]">{{ record.state_label }}</span>
+        <article class="overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm" aria-labelledby="check-in-record-title">
+            <header class="flex flex-col gap-4 bg-portal-navy px-5 py-5 text-white sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:px-6">
+                <div class="flex min-w-0 items-start gap-3 sm:gap-4">
+                    <span class="grid h-11 w-11 shrink-0 place-items-center rounded-sm border border-white/15 bg-white/10 text-amber-300"><i :class="[record.handoff ? 'fa-regular fa-calendar-check' : 'fa-solid fa-list-check', 'leading-none']" aria-hidden="true"></i></span>
+                    <div class="min-w-0">
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">{{ record.handoff ? 'In-person check-in' : record.record_type_label }}</p>
+                        <h2 id="check-in-record-title" class="mt-1 break-words font-display text-xl font-bold leading-snug sm:text-2xl">{{ record.title }}</h2>
+                        <p v-if="record.period_label" class="mt-1.5 break-words text-sm text-slate-200">{{ record.period_label }}</p>
+                        <span :class="['mt-3 inline-flex rounded-sm border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', checkInStatusClass(record.state_tone)]">{{ record.state_label }}</span>
                     </div>
-                    <h2 id="check-in-record-title" class="mt-1.5 break-words font-display text-2xl font-bold leading-tight text-slate-950">{{ record.title }}</h2>
-                    <p v-if="record.period_label" class="mt-1 text-sm text-slate-600">{{ record.period_label }}</p>
                 </div>
-                <button v-if="record.monitoring_case?.history?.length || record.monitoring_case?.exception_context" type="button" class="student-button student-button-secondary" @click="historyOpen = true">
-                    <i class="fa-solid fa-clock-rotate-left text-xs" aria-hidden="true"></i> Case history
+                <button v-if="record.monitoring_case?.history?.length || record.monitoring_case?.exception_context" type="button" class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-white/25 bg-white/10 px-4 text-sm font-bold text-white hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-portal-navy" @click="historyOpen = true">
+                    <i class="fa-solid fa-clock-rotate-left text-xs leading-none" aria-hidden="true"></i> Case history
                 </button>
             </header>
+            <section v-if="isPast || record.guidance" data-check-in-next-step :class="['flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:px-6 sm:py-5', !isPast && record.guidance?.actor === 'applicant' ? 'bg-amber-50' : 'bg-slate-50']">
+                <div class="min-w-0">
+                    <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{{ isPast ? 'Recorded outcome' : 'Your next step' }}</p>
+                    <h3 class="mt-1 text-lg font-bold text-slate-950">{{ isPast ? record.state_label : record.guidance.title }}</h3>
+                    <template v-if="record.preparation && record.guidance?.key === 'attend_handoff'">
+                        <p v-if="record.handoff?.rescheduled" class="mt-1 text-sm font-semibold leading-6 text-amber-800">Use the new time and venue shown below.</p>
+                        <p class="mt-1 text-sm leading-6 text-slate-700">Bring the listed documents. If you cannot attend, contact the provider before your appointment.</p>
+                    </template>
+                    <template v-else>
+                        <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-700">{{ isPast ? (record.monitoring_case?.decision_reason || 'No further action is needed for this check-in.') : record.guidance.description }}</p>
+                        <p v-if="!isPast && record.monitoring_case?.attendance_status === 'attended'" class="mt-2 text-xs font-semibold text-slate-600">Attendance recorded: {{ record.monitoring_case.attendance_label }}</p>
+                    </template>
+                </div>
+                <span v-if="!isPast && record.guidance.actor_label" class="inline-flex w-fit shrink-0 rounded-sm border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">Next step: {{ record.guidance.actor_label }}</span>
+            </section>
             <dl v-if="record.handoff || record.effective_due_label || record.due_label" data-check-in-appointment class="grid gap-px border-t border-slate-200 bg-slate-200 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                 <div class="flex min-w-0 items-start gap-3 bg-slate-50 px-5 py-4 sm:px-6">
                     <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-white text-slate-700 ring-1 ring-slate-200"><i class="fa-regular fa-calendar" aria-hidden="true"></i></span>
@@ -274,35 +290,19 @@ async function saveManualGrade(requirement, index) {
             </div>
         </article>
 
-        <div :class="['grid items-start gap-4', isPast || record.guidance ? 'xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]' : '']">
-            <section v-if="isPast || record.guidance" data-check-in-next-step class="flex min-w-0 items-start gap-3 rounded-md border border-slate-300 bg-white px-5 py-4 shadow-sm xl:col-start-2 xl:row-start-1">
-                <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-sm border', checkInStatusClass(record.state_tone)]"><i :class="isPast ? 'fa-solid fa-list-check' : record.guidance.actor === 'applicant' ? 'fa-solid fa-arrow-right' : 'fa-regular fa-clock'" aria-hidden="true"></i></span>
-                <div class="min-w-0">
-                    <p class="text-[10px] font-bold uppercase tracking-widest text-slate-600">{{ isPast ? 'Recorded outcome' : 'Next step: ' + record.guidance.actor_label }}</p>
-                    <h3 class="mt-1 text-base font-bold text-slate-950">{{ isPast ? record.state_label : record.guidance.title }}</h3>
-                    <template v-if="record.preparation && record.guidance?.key === 'attend_handoff'">
-                        <p v-if="record.handoff?.rescheduled" class="mt-1 text-sm font-semibold leading-6 text-amber-800">Use the new time and venue shown above.</p>
-                        <p class="mt-1 text-sm leading-6 text-slate-600">If you cannot attend, contact the provider before your appointment.</p>
-                    </template>
-                    <template v-else>
-                        <p class="mt-1 text-sm leading-6 text-slate-600">{{ isPast ? (record.monitoring_case?.decision_reason || 'No further action is needed for this check-in.') : record.guidance.description }}</p>
-                        <p v-if="!isPast && record.monitoring_case?.attendance_status === 'attended'" class="mt-2 text-xs font-semibold text-slate-600">Attendance recorded: {{ record.monitoring_case.attendance_label }}</p>
-                    </template>
-                </div>
-            </section>
-
-            <section class="min-w-0 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm xl:col-start-1 xl:row-start-1" aria-label="Check-in checklist">
+        <div class="space-y-4">
+            <section class="min-w-0 overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm" aria-label="Check-in checklist">
                 <div v-for="group in groups" :key="group.key" :data-check-in-preparation="group.key === 'documents' ? '' : null" class="border-b border-slate-200 last:border-b-0">
-                    <header class="border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-6">
-                        <h3 class="font-display text-lg font-bold text-slate-950">{{ group.title }}</h3>
-                        <p class="mt-1 text-sm text-slate-600">{{ group.description }}</p>
+                    <header class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+                        <div class="min-w-0"><h3 class="text-base font-bold text-slate-950">{{ group.title }}</h3><p class="mt-1 text-sm leading-6 text-slate-600">{{ group.description }}</p></div>
+                        <span class="shrink-0 text-xs font-semibold text-slate-500">{{ group.items.length }} {{ group.items.length === 1 ? 'item' : 'items' }}</span>
                     </header>
                     <div v-if="group.items.length" class="divide-y divide-slate-200">
                         <article v-for="{ requirement, index } in group.items" :key="requirementKey(requirement, index)">
                             <button type="button" class="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 sm:px-6" :aria-expanded="expandedRequirement === requirementKey(requirement, index)" @click="toggleRequirement(requirement, index)">
                                 <span class="flex min-w-0 items-center gap-3">
                                     <span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-700">
-                                        <i :class="requirement.icon || 'fa-solid fa-file-lines'" class="text-sm" aria-hidden="true"></i>
+                                        <i :class="requirement.icon || 'fa-solid fa-file-lines'" class="text-sm leading-none" aria-hidden="true"></i>
                                     </span>
                                     <span class="min-w-0">
                                         <span class="flex flex-wrap items-center gap-2">

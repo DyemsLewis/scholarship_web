@@ -12,6 +12,10 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    inline: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const showPrivacyNotice = ref(false);
@@ -42,8 +46,13 @@ function requestPrivacyHelp() {
 </script>
 
 <template>
+    <footer v-if="inline" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-1 text-xs leading-5 text-slate-500">
+        <p class="flex items-center gap-2"><i class="fa-solid fa-lock text-[10px]" aria-hidden="true"></i>Your profile is not public.</p>
+        <button type="button" class="font-semibold text-slate-700 underline decoration-amber-400 underline-offset-4 hover:text-slate-950" @click="showPrivacyNotice = true">Who can access this?</button>
+        <TermsModal v-model="showPrivacyNotice" context="privacy" />
+    </footer>
     <section
-        v-if="compact"
+        v-else-if="compact"
         class="mt-4 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"
     >
         <div class="flex min-w-0 items-center gap-3">

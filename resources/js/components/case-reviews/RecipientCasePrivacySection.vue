@@ -1,5 +1,6 @@
 <script setup>
 import { confirmOutcome } from '../../support/outcomeConfirmation.js';
+import FeedbackAlertModal from '../FeedbackAlertModal.vue';
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useConcernMutation } from '../../composables/useConcernMutation.js';
 import { concernDate, concernError } from '../../support/agreementConcerns.js';
@@ -23,7 +24,7 @@ async function load(page = 1, accessPage = 1) {
         if (token !== version) return;
         privacy.value = data.privacy; access.value = data.access; reset(); confirmed.value = false;
     } catch (failure) { if (token === version) loadError.value = concernError(failure); }
-    finally { if (token === version) { loading.value = false; await nextTick(); (section.value?.querySelector('form select:enabled') || section.value)?.focus({ preventScroll: true }); } }
+    finally { if (token === version) { loading.value = false; if (!loadError.value) { await nextTick(); (section.value?.querySelector('form select:enabled') || section.value)?.focus({ preventScroll: true }); } } }
 }
 function open(event) { if (event.target.open && !privacy.value && !loading.value) load(); }
 async function begin() {
@@ -46,7 +47,7 @@ onBeforeUnmount(() => { version++; reset(); emit('dirty-change', false); emit('b
         <summary class="cursor-pointer text-sm font-bold"><i class="fa-solid fa-lock mr-2 text-slate-500" aria-hidden="true"></i>Privacy &amp; access</summary>
         <div class="mt-4 space-y-4">
             <p v-if="loading" role="status" class="text-sm text-slate-500">Loading privacy information...</p>
-            <p v-if="loadError" role="alert" class="text-sm text-amber-900">{{ loadError }} <button type="button" :disabled="locked" class="font-bold underline" @click="load()">Try again</button></p>
+            <FeedbackAlertModal v-model="loadError" title="Privacy information unavailable" retry-label="Try again" :busy="locked" @retry="load()" />
             <template v-if="privacy">
                 <div class="border-l-2 border-slate-400 bg-slate-50 px-3 py-3"><p class="text-sm font-bold">{{ privacy.sharing_label }}</p><p class="mt-1 text-xs leading-5 text-slate-600">{{ privacy.notice }}</p></div>
                 <p class="text-xs text-slate-500">{{ privacy.assessment_state_label }}. {{ privacy.audit_retention_hold ? 'Access-log retention is on hold until explicitly released.' : `Access metadata is normally retained for ${privacy.audit_retention_days} days.` }}</p>
@@ -66,7 +67,7 @@ onBeforeUnmount(() => { version++; reset(); emit('dirty-change', false); emit('b
                     <label class="block text-xs font-bold">Recheck date<input v-model="recheck" type="date" required class="mt-2 block h-11 w-full border border-slate-300 bg-white px-3 text-sm font-normal"><span class="mt-1 block font-normal text-slate-500">Within one year. A later case change supersedes this assessment.</span></label>
                     <label class="flex items-start gap-3 text-xs leading-5"><input v-model="hold" type="checkbox" class="mt-0.5 h-4 w-4 shrink-0"><span>Keep case access logs beyond routine retention while the documented review requires them. Unchecking explicitly releases an existing hold; it does not delete case records.</span></label>
                     <label class="flex items-start gap-3 bg-slate-50 p-3 text-xs leading-5"><input v-model="confirmed" required type="checkbox" class="mt-0.5 h-4 w-4 shrink-0"><span>I reviewed this case and understand that this assessment does not share data, authorize a blacklist, or decide an application.</span></label>
-                </fieldset><p v-if="error" role="alert" class="mt-3 text-sm leading-6 text-amber-950">{{ error }} <button v-if="stale" type="button" :disabled="locked" class="font-bold underline" @click="load()">Reload privacy status</button></p><div class="mt-4 flex flex-wrap justify-end gap-2"><button type="button" :disabled="locked" class="min-h-10 border border-slate-300 px-3 text-xs font-bold" @click="editing = false">Discard assessment</button><button type="submit" data-privacy-save :disabled="!valid" class="min-h-10 bg-slate-950 px-3 text-xs font-bold text-white disabled:opacity-40">{{ busy ? 'Saving...' : 'Save internal assessment' }}</button></div></form>
+                </fieldset><FeedbackAlertModal v-model="error" title="Privacy assessment not saved" :retry-label="stale ? 'Reload privacy status' : ''" :busy="locked" @retry="load()" /><div class="mt-4 flex flex-wrap justify-end gap-2"><button type="button" :disabled="locked" class="min-h-10 border border-slate-300 px-3 text-xs font-bold" @click="editing = false">Discard assessment</button><button type="submit" data-privacy-save :disabled="!valid" class="min-h-10 bg-slate-950 px-3 text-xs font-bold text-white disabled:opacity-40">{{ busy ? 'Saving...' : 'Save internal assessment' }}</button></div></form>
                 <p v-if="saved" role="status" class="text-xs leading-5 text-slate-600">{{ saved }}</p>
             </template>
         </div>

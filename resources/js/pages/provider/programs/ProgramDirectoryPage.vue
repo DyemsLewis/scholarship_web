@@ -1,5 +1,6 @@
 <script setup>
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
@@ -155,6 +156,8 @@ onMounted(() => loadPrograms(queueState.page));
                             </div>
                         </div>
                         <div class="program-page-actions">
+                            <WorkspaceGuide v-if="!isMonitoringDirectory" workspace="programs" auto-offer />
+                            <WorkspaceGuide v-if="isMonitoringDirectory" workspace="monitoring" auto-offer />
                             <div v-if="context.organization_name" class="min-w-0 max-w-56 border-l border-slate-200 pl-5 text-right">
                                 <p class="program-label font-bold uppercase text-slate-600">Organization</p>
                                 <p class="program-text mt-1 text-sm font-semibold text-slate-800">{{ context.organization_name }}</p>

@@ -3,6 +3,7 @@ import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { providerProgramQueueLink } from '../../../support/staffQueueState.js';
 
@@ -133,7 +134,10 @@ onBeforeUnmount(() => {
                 <div v-if="errorMessage" class="mb-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
 
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
+                    <div class="flex items-center justify-between gap-5">
                     <div class="flex items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-calendar-plus" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="schedule-release-title" class="monitoring-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Schedule a benefit release</h1><p class="mt-1 text-sm leading-6 text-slate-600">Set the distribution details, then choose recipients who are ready.</p></div></div>
+                        <WorkspaceGuide workspace="releases" />
+                    </div>
                 </header>
 
                 <form class="mt-4" @submit.prevent="confirmation = true">

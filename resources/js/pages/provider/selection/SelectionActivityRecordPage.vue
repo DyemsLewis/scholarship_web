@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -196,7 +197,7 @@ onMounted(loadRecord);
 
                 <template v-else-if="application">
                     <header class="provider-hero task-page-header border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">
-                        <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Selection outcome</p><h1 id="selection-outcome-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Review applicant result</h1><p class="mt-1 text-sm text-slate-600">Confirm the completed activity, then record one outcome.</p></div></div><button v-if="decisionReopen.can_reopen" type="button" class="h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="showReopenDialog = true"><i class="fa-solid fa-rotate-left mr-2" aria-hidden="true"></i>Reopen {{ decisionReopen.stage_label }}</button></div>
+                        <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Selection outcome</p><h1 id="selection-outcome-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Review applicant result</h1><p class="mt-1 text-sm text-slate-600">Confirm the completed activity, then record one outcome.</p></div></div><div class="flex shrink-0 items-center gap-3"><WorkspaceGuide workspace="selection" /><button v-if="decisionReopen.can_reopen" type="button" class="h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="showReopenDialog = true"><i class="fa-solid fa-rotate-left mr-2" aria-hidden="true"></i>Reopen {{ decisionReopen.stage_label }}</button></div></div>
                     </header>
 
                     <ProviderNextStep :step="nextStep" />

@@ -2,6 +2,7 @@
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import StaffTableLoadError from '../../../components/StaffTableLoadError.vue';
 import ProviderProgramQueueContext from '../../../components/ProviderProgramQueueContext.vue';
 import { createStaffQueueState, providerProgramQueueLink } from '../../../support/staffQueueState.js';
@@ -119,7 +120,7 @@ onBeforeUnmount(() => {
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-hand-holding-dollar" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Benefit distribution</p><h1 id="release-directory-title" class="monitoring-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">{{ pageCopy.title }}</h1><WorkspaceTextSummary class="mt-1 text-sm leading-6 text-slate-600" :text="pageCopy.description" label="details" /></div></div>
-                        <div class="flex items-center gap-4"><div v-if="workspace" class="border-r border-slate-200 pr-5 text-right"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Program access</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div><a :href="providerProgramQueueLink('/provider/workspaces/releases/schedule', selectedProgram)" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-plus text-amber-300" aria-hidden="true"></i>Schedule release</a></div>
+                        <div class="flex shrink-0 items-center gap-4"><WorkspaceGuide workspace="releases" auto-offer /><div v-if="workspace" class="border-r border-slate-200 pr-5 text-right"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Program access</p><p class="mt-1 text-sm font-semibold text-slate-800">{{ workspace.organization_name }}</p><p class="mt-1 text-xs text-slate-500">{{ workspace.program_access_mode === 'selected' ? 'Assigned programs' : 'All programs' }}</p></div><a :href="providerProgramQueueLink('/provider/workspaces/releases/schedule', selectedProgram)" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"><i class="fa-solid fa-plus text-amber-300" aria-hidden="true"></i>Schedule release</a></div>
                     </div>
                     <ProviderProgramQueueContext :program-id="selectedProgram" :programs="programs" class="mt-4" />
                 </header>

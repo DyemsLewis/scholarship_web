@@ -9,6 +9,7 @@ import MonitoringCaseHistoryModal from '../../../components/MonitoringCaseHistor
 import RecipientCheckInAppointment from '../../../components/RecipientCheckInAppointment.vue';
 import LocationMapLink from '../../../components/LocationMapLink.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 
 const cycleId = document.getElementById('app')?.dataset.cycleId;
@@ -357,7 +358,10 @@ onMounted(loadRecord);
                                     <p class="mt-2 text-sm leading-6 text-slate-600">Decide one submitted requirement or follow-up at a time.</p>
                                 </div>
                             </div>
-                            <span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', cycle.status === 'open' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-300 bg-slate-100 text-slate-700']">{{ cycle.status }}</span>
+                            <div class="flex shrink-0 items-center gap-3">
+                                <WorkspaceGuide workspace="monitoring" />
+                                <span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', cycle.status === 'open' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-slate-300 bg-slate-100 text-slate-700']">{{ cycle.status }}</span>
+                            </div>
                         </div>
                     </header>
 

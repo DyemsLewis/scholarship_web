@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -345,6 +346,7 @@ onMounted(loadApplication);
                                 <p class="mt-1 application-text text-sm text-slate-600">{{ scholarship.title }} · Submitted {{ application.submitted_at || 'date unavailable' }}</p>
                             </div>
                             <div class="flex items-center gap-3">
+                                <WorkspaceGuide workspace="reviews" />
                                 <span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', isAssignedToMe ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-100 text-slate-700']">{{ assignmentLabel }}</span>
                                 <button v-if="isUnassigned && isScreening" type="button" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60" :disabled="actionBusy" @click="claimReview"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-user-plus']" aria-hidden="true"></i>Claim review</button>
                             </div>

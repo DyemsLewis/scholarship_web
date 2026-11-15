@@ -12,9 +12,11 @@ const components = [
     '../../resources/js/components/monitoring-detail/SupportCloseoutSummary.vue',
     '../../resources/js/components/monitoring-detail/SupportCloseoutBenefits.vue',
     '../../resources/js/components/monitoring-detail/MonitoringCheckIns.vue',
+    '../../resources/js/components/monitoring-detail/CheckInSummaryCard.vue',
     '../../resources/js/components/monitoring-detail/MonitoringCheckInRecord.vue',
     '../../resources/js/components/monitoring-detail/MonitoringAdjustmentModal.vue',
     '../../resources/js/components/monitoring-detail/MonitoringBenefits.vue',
+    '../../resources/js/components/monitoring-detail/BenefitReleaseCard.vue',
     '../../resources/js/components/monitoring-detail/BenefitReleaseRecord.vue',
     '../../resources/js/components/monitoring-detail/BenefitPayoutDetailsModal.vue',
     '../../resources/js/components/monitoring-detail/BenefitReceiptResponseModal.vue',
@@ -80,7 +82,9 @@ test('monitoring overview uses the dedicated contract and focused hierarchy', ()
     assert.match(overview, /data-overview-schedule/);
     assert.match(overview, /plan\.agreement\.href/);
     assert.ok(overview.indexOf('<MonitoringDecisionBanner') < overview.indexOf('data-overview-schedule'));
-    assert.doesNotMatch(overview, /grid-cols-2/);
+    assert.match(overview, /:decision="decision" illustrated/);
+    assert.match(overview, /data-overview-summary/);
+    assert.doesNotMatch(overview, /xl:grid-cols-\[minmax\(0,1\.65fr\)/);
 
     const banner = readFileSync(new URL('../../resources/js/components/monitoring-detail/MonitoringDecisionBanner.vue', import.meta.url), 'utf8');
     assert.match(banner, /Your next step/);
@@ -120,9 +124,11 @@ test('benefit releases use a focused directory and preserve confirmation and iss
 
     assert.match(page, /<MonitoringBenefits/);
     assert.match(directory, /data-monitoring-benefits/);
-    assert.match(directory, /Upcoming releases/);
-    assert.match(directory, /Release updates/);
-    assert.match(directory, /Past releases/);
+    assert.match(directory, /benefitReleaseGroups/);
+    const presentation = readFileSync(new URL('../../resources/js/support/benefitReleasePresentation.js', import.meta.url), 'utf8');
+    assert.match(presentation, /Needs your attention/);
+    assert.match(presentation, /Scheduled and in progress/);
+    assert.match(presentation, /Past releases/);
     assert.match(record, /data-benefit-release-record/);
     assert.match(record, /What this release includes/);
     assert.match(record, /Provider resolution/);

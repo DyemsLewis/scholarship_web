@@ -4,6 +4,7 @@ import LocationMapLink from '../LocationMapLink.vue';
 defineProps({
     sections: { type: Array, default: () => [] },
     editable: { type: Boolean, default: false },
+    tintedHeaders: { type: Boolean, default: false },
 });
 defineEmits(['edit']);
 const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== '';
@@ -13,22 +14,25 @@ const spanClasses = { two: 'sm:col-span-2 lg:col-span-2', full: 'sm:col-span-2 l
 <template>
     <div data-profile-details class="divide-y divide-slate-200">
         <section v-for="section in sections" :key="section.id" :data-profile-section="section.id" :aria-labelledby="`profile-record-${section.id}-title`" class="px-5 py-5 sm:px-6 sm:py-6">
-            <header class="flex items-start justify-between gap-4">
+            <header :class="['flex items-start justify-between gap-4', tintedHeaders ? '-mx-5 -mt-5 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:-mx-6 sm:-mt-6 sm:px-6' : '']">
                 <div class="flex min-w-0 items-start gap-3">
-                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-sm text-slate-700"><i :class="[section.icon, 'leading-none']" aria-hidden="true"></i></span>
+                    <span :class="['grid h-9 w-9 shrink-0 place-items-center rounded-sm text-sm', tintedHeaders ? 'border border-amber-200/70 bg-amber-50 text-amber-800' : 'bg-slate-100 text-slate-700']"><i :class="[section.icon, 'leading-none']" aria-hidden="true"></i></span>
                     <div class="min-w-0">
                         <h3 :id="`profile-record-${section.id}-title`" class="text-base font-bold leading-5 text-slate-950">{{ section.title }}</h3>
                         <p class="mt-1 text-xs leading-5 text-slate-500">{{ section.description }}</p>
                     </div>
                 </div>
-                <button v-if="editable && section.editable !== false" type="button" class="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2" :aria-label="`Edit ${section.title.toLowerCase()}`" @click="$emit('edit', section.id)"><i class="fa-solid fa-pen text-[10px] leading-none" aria-hidden="true"></i>Edit</button>
+                <button v-if="editable && section.editable !== false" type="button" class="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2" :aria-label="section.editLabel || `Edit ${section.title.toLowerCase()}`" @click="$emit('edit', section.id)"><i class="fa-solid fa-pen text-[10px] leading-none" aria-hidden="true"></i>{{ section.editLabel || 'Edit' }}</button>
             </header>
 
             <div class="mt-5 space-y-5">
                 <div v-for="group in section.groups" :key="group.id" :data-profile-group="group.id" :class="group.title ? 'border-t border-slate-200 pt-5' : ''">
-                    <div v-if="group.title" class="mb-4">
-                        <h4 class="text-sm font-bold text-slate-800">{{ group.title }}</h4>
-                        <p class="mt-1 text-xs leading-5 text-slate-500">{{ group.description }}</p>
+                    <div v-if="group.title" class="mb-4 flex items-start justify-between gap-4">
+                        <div class="min-w-0">
+                            <h4 :id="group.headingId" class="text-sm font-bold text-slate-800">{{ group.title }}</h4>
+                            <p class="mt-1 text-xs leading-5 text-slate-500">{{ group.description }}</p>
+                        </div>
+                        <button v-if="editable && group.editSection" type="button" class="inline-flex min-h-9 shrink-0 items-center justify-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-slate-500 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2" @click="$emit('edit', group.editSection)"><i class="fa-solid fa-pen text-[10px] leading-none" aria-hidden="true"></i>{{ group.editLabel || 'Edit' }}</button>
                     </div>
                     <dl class="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3" data-profile-field-grid>
                         <div v-for="item in group.items" :key="item.key" :data-profile-field="item.key" :class="['min-w-0', spanClasses[item.span] || '']">

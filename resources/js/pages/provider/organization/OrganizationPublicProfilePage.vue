@@ -4,6 +4,7 @@ import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewM
 import CoverImagePickerModal from '../../../components/CoverImagePickerModal.vue';
 import UserProvidersPage from '../../UserProvidersPage.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -137,6 +138,7 @@ onMounted(() => Promise.all([loadProfile(), loadCoverOptions()]));
                     <div class="flex items-center justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-building" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Organization profile</p><h1 id="public-profile-title" class="settings-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Public profile</h1><p class="mt-1 text-sm leading-6 text-slate-600">Control the organization identity applicants see across scholarship pages.</p></div></div>
                         <div class="settings-page-actions flex items-center gap-3">
+                            <WorkspaceGuide workspace="organization-profile" />
                             <button type="button" :disabled="isLoading || !profile" class="inline-flex h-11 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950 disabled:opacity-50" @click="previewOpen = true"><i class="fa-solid fa-eye text-xs" aria-hidden="true"></i>Preview as applicant</button>
                             <button type="submit" form="public-profile-form" :disabled="isLoading || !profile || isSaving || isUploadingLogo || isUpdatingCover" class="inline-flex h-11 items-center gap-2 bg-slate-950 px-5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"><i :class="['fa-solid text-amber-300', isSaving ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>{{ isSaving ? 'Saving...' : 'Save profile' }}</button>
                         </div>

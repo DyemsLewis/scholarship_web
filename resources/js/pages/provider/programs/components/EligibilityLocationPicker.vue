@@ -1,10 +1,11 @@
 <script setup>
 import { onBeforeUnmount, ref } from 'vue';
 import EligibilityOptionPicker from './EligibilityOptionPicker.vue';
+import FeedbackAlertModal from '../../../../components/FeedbackAlertModal.vue';
 import { philippineRegionOptions, provincesForRegion, citiesForLocation } from '../../../../support/philippineLocations';
 
 const model = defineModel({ type: String, default: '' });
-defineProps({ inputClass: { type: String, required: true } });
+defineProps({ inputClass: { type: String, required: true }, disabled: Boolean });
 const region = ref(''); const province = ref(''); const city = ref('');
 const provinces = ref([]); const cities = ref([]);
 const loadingProvinces = ref(false); const loadingCities = ref(false);
@@ -38,7 +39,7 @@ const nameFor = (options, code) => options.find(option => option.code === code)?
 </script>
 
 <template>
-    <EligibilityOptionPicker v-model="model" id="program-eligible-locations" open-label="Nationwide / no location restriction" open-value="Nationwide" :allow-custom="false">
+    <EligibilityOptionPicker v-model="model" id="program-eligible-locations" label="Covered locations" :disabled="disabled" open-label="Nationwide / no location restriction" open-value="Nationwide" :allow-custom="false">
         <template #picker="{ add }">
             <p class="text-xs leading-5 text-slate-500">Add a whole region, a province, or a city. Selecting below does not change coverage until you choose Add.</p>
             <div class="grid grid-cols-3 gap-3">
@@ -58,7 +59,7 @@ const nameFor = (options, code) => options.find(option => option.code === code)?
                     <button type="button" :disabled="!city" class="mt-2 text-xs font-bold text-slate-600 underline underline-offset-2 disabled:opacity-40" @click="add(nameFor(cities, city))">Add city</button>
                 </div>
             </div>
-            <p v-if="error" role="alert" class="text-xs text-rose-700">{{ error }} <button type="button" class="font-bold underline" @click="province ? loadProvince() : loadRegion()">Retry</button></p>
+            <FeedbackAlertModal v-model="error" title="Location options unavailable" retry-label="Retry" :busy="loadingProvinces || loadingCities" @retry="province ? loadProvince() : loadRegion()" />
         </template>
     </EligibilityOptionPicker>
 </template>

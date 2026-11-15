@@ -80,7 +80,8 @@ test('application refinements retain identity, imagery and every summary fact', 
     for (const value of ['Education scholarship', 'Education foundation', 'Waiting for review', 'Submitted Oct 30, 2026', '/program-logo.png', '/images/filipino-campus.jpg', ...snapshot.map((item) => item.value)]) assert.ok(html.includes(value));
     assert.equal((html.match(/<dt\b/g) ?? []).length, 4);
     assert.match(html, /grid-cols-2[^>]*xl:grid-cols-4/);
-    assert.match(html, /lg:min-h-\[12rem\]/);
+    assert.match(html, /bg-portal-navy/);
+    assert.match(html, /data-application-program-logo/);
     assert.ok(html.indexOf('data-application-detail-navigation') < html.indexOf('data-record-section-intro'));
     assert.ok(html.indexOf('data-record-section-intro') < html.indexOf('data-record-content'));
     assert.equal((html.match(/Useful section instructions\./g) ?? []).length, 1);
@@ -97,14 +98,15 @@ test('the applicant sidebar and directory use Scholarship Support at the existin
     assert.match(read('pages/UserMonitoringPage.vue'), /title="Scholarship Support"/);
 });
 
-test('monitoring directories retain their introduction and application link with compact program branding', async () => {
+test('monitoring directories retain compact program branding and let their content own the introduction', async () => {
     const html = await render(MonitoringShell, { detail: monitoringDetail() });
     for (const text of ['Back to Scholarship Support', 'Support record sections', 'Education scholarship', 'Education foundation', 'Support active', 'Application record', '/program-logo.png']) assert.ok(html.includes(text));
     assert.match(html, /href="\/dashboard\/monitoring"/);
     assert.match(html, /href="\/dashboard\/applications\/1"/);
     assert.equal((html.match(/Support active/g) ?? []).length, 1);
-    assert.match(html, /data-record-section-intro/);
-    assert.ok(html.indexOf('data-monitoring-detail-navigation') < html.indexOf('data-record-section-intro'));
+    assert.doesNotMatch(html, /data-record-section-intro|Useful section instructions/);
+    assert.ok(html.indexOf('data-monitoring-detail-navigation') < html.indexOf('data-record-content'));
+    assert.match(read('components/monitoring-detail/MonitoringCheckIns.vue'), /data-check-in-directory-header/);
     assert.doesNotMatch(html, /data-record-snapshot|filipino-students-studying\.jpg|Jan 15, 2027|Dec 11, 2026/);
 });
 
@@ -124,5 +126,5 @@ test('focused monitoring records retain instructions, due dates, release facts a
     assert.match(checkIn, /data-check-in-appointment/);
     assert.match(checkIn, /sm:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1fr\)\]/);
     assert.match(release, /data-benefit-next-step/);
-    assert.match(release, /md:order-1/);
+    assert.ok(release.indexOf('data-benefit-next-step') < release.indexOf('data-benefit-delivery-details'));
 });

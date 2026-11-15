@@ -723,11 +723,18 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public static function applicantRequiresGuardian(?array $payload = null): bool
     {
-        $payload ??= [];
+        $birthdate = $payload['birthdate'] ?? null;
+        if (blank($birthdate)) {
+            return false;
+        }
 
-        return self::applicantIsMinor($payload)
-            || in_array($payload['education_level'] ?? null, ['preschool', 'elementary', 'junior_high_school', 'senior_high_school'], true)
-            || in_array($payload['account_managed_by'] ?? null, ['parent_guardian', 'relative', 'school_representative', 'other'], true);
+        try {
+            $age = CarbonImmutable::parse($birthdate)->age;
+
+            return $age >= 0 && $age <= 18;
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     public function hasCompleteApplicantProfile(): bool

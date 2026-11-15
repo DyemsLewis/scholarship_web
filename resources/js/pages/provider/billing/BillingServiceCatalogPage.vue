@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 
@@ -42,10 +43,13 @@ onMounted(loadCatalog);
                 <header class="border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-6 shadow-sm">
                     <div class="flex items-center justify-between gap-8">
                         <div class="flex min-w-0 items-center gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-handshake-angle" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Platform assistance</p><h1 id="services-title" class="service-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Optional support services</h1><p class="mt-1 text-sm leading-6 text-slate-600">Choose focused help for work your team wants the platform to support.</p></div></div>
+                        <div class="flex shrink-0 items-center gap-3">
+                            <WorkspaceGuide workspace="billing" auto-offer />
                         <a href="/provider/workspaces/billing" class="inline-flex h-11 shrink-0 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-950 hover:text-slate-950">
                             <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                             Request desk
                         </a>
+                        </div>
                     </div>
                 </header>
 

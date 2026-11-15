@@ -1011,6 +1011,7 @@ class ApplicantMonitoringDetailService
                 'status_label' => $release['delivery']['label'],
                 'release_label' => $release['release_label'] ?? null,
                 'amount_label' => $release['amount_label'] ?? null,
+                'release_method' => $release['release_method'] ?? null,
                 'method_label' => $release['release_method_label'] ?? null,
                 'delivery' => $release['delivery'],
                 'payout_status' => $release['payout']['status'] ?? null,

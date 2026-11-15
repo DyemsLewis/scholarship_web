@@ -10,9 +10,11 @@ import { useConfirmationDialog } from '../../../composables/useConfirmationDialo
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import EligibilityRuleModeSelect from './components/EligibilityRuleModeSelect.vue';
 import EducationEligibilityPolicyEditor from './components/EducationEligibilityPolicyEditor.vue';
 import EligibilityOptionPicker from './components/EligibilityOptionPicker.vue';
+import EligibilityCheckboxPicker from './components/EligibilityCheckboxPicker.vue';
 import EligibilityLocationPicker from './components/EligibilityLocationPicker.vue';
 import DocumentRequirementsPicker from './components/DocumentRequirementsPicker.vue';
 import SelectionScoringPreview from './components/SelectionScoringPreview.vue';
@@ -27,6 +29,7 @@ import { organizationProgramLocation, organizationLocationWouldReplace } from '.
 import { hasLocationPin } from '../../../support/locationPins';
 import { programReviewSummary } from '../../../support/programReviewSummary';
 import { programScoringPreview } from '../../../support/programScoringPreview';
+import { normalizeProgramRecipientAgreement } from '../../../support/programRecipientAgreement.js';
 
 const pathMatch = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
 const portalUser = window.portalUser ?? {};
@@ -164,10 +167,7 @@ function emptyForm() {
         handoffLatitude: null, handoffLongitude: null,
         selectionStages: ['screening', 'formal_application', 'decision'],
         reviewRubric: structuredClone(defaultRubric),
-        recipientAgreement: {
-            commitment_type: 'provider_briefing', responsibilities: '', required_evidence: '',
-            release_conditions: '', duration: '', noncompliance_consequence: '', exit_or_exception_process: '',
-        },
+        recipientAgreement: normalizeProgramRecipientAgreement(),
         termsAccepted: false,
         logoPath: '',
         logoUrl: '',
@@ -180,6 +180,7 @@ const programHasLocationPin = computed(() => hasLocationPin(form.value.latitude,
 const coursesNeedChoice = ref(false);
 const yearsNeedChoice = ref(false);
 const educationChangePending = ref(false);
+const eligibilityControlsDisabled = computed(() => isReadOnly.value || isSaving.value || educationChangePending.value);
 const educationReview = ref({ courses: [], years: [] });
 const educationValuesToReview = computed(() => [
     ...educationReview.value.courses.filter(value => eligibilityListValues(form.value.eligibleCourses).includes(value)),
@@ -455,11 +456,10 @@ function toggleArrayValue(field, value) {
         : [...form.value[field], value];
 }
 
-async function changeEducationLevel(value, event) {
+async function changeEducationLevels(nextLevels) {
     const current = [...form.value.eligibleEducationLevels];
-    event.target.checked = current.includes(value);
     if (isReadOnly.value || isSaving.value || educationChangePending.value) return;
-    const next = current.includes(value) ? current.filter(level => level !== value) : [...current, value];
+    const next = [...nextLevels];
     const before = [form.value.eligibleCourses, form.value.eligibleYearLevels];
     const impact = educationSelectionImpact(current, next, ...before);
     if (impact.removedCourses.length || impact.removedYears.length) {
@@ -729,10 +729,7 @@ function fillForm(program) {
         handoffUrl: program.handoff_url ?? '',
         selectionStages: program.selection_stages?.length ? program.selection_stages : ['screening', 'formal_application', 'decision'],
         reviewRubric: program.review_rubric?.length ? program.review_rubric : structuredClone(defaultRubric),
-        recipientAgreement: {
-            ...emptyForm().recipientAgreement,
-            ...(program.recipient_agreement ?? {}),
-        },
+        recipientAgreement: normalizeProgramRecipientAgreement(program.recipient_agreement),
         termsAccepted: false,
         logoPath: program.image_path ?? '',
         logoUrl: program.logo_url ?? program.image_url ?? '',
@@ -998,6 +995,7 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
                         <div class="program-page-actions">
+                            <WorkspaceGuide workspace="programs" />
                             <p v-if="!isLoading" data-program-save-status role="status" aria-live="polite" :class="['inline-flex items-center gap-2 text-xs font-semibold', hasUnsavedChanges ? 'text-amber-800' : 'text-slate-600']">
                                 <i :class="isSaving ? 'fa-solid fa-spinner animate-spin' : hasUnsavedChanges ? 'fa-solid fa-pen' : hasSavedProgram ? 'fa-solid fa-circle-check' : 'fa-regular fa-floppy-disk'" aria-hidden="true"></i>
                                 {{ saveStatus }}
@@ -1204,68 +1202,137 @@ onBeforeUnmount(() => {
                                 </div>
                             </section>
 
-                            <section v-else-if="activeStep === 'eligibility'" class="px-7 py-6">
+                            <section v-else-if="activeStep === 'eligibility'" class="px-7 py-6" data-program-eligibility-editor>
                                 <div class="flex items-start justify-between gap-6">
-                                    <div><h3 class="text-base font-bold text-slate-950">Describe who can apply</h3><p class="mt-1 text-sm text-slate-500">Only add rules that the provider will actually verify.</p></div>
-                                    <p class="shrink-0 text-xs font-semibold text-slate-600" aria-live="polite" data-eligibility-mode-counts>{{ eligibilityCounts.required }} required <span class="mx-2 text-slate-300">/</span> {{ eligibilityCounts.preferred }} preferred</p>
+                                    <div>
+                                        <h3 class="text-base font-bold text-slate-950">Define who can apply</h3>
+                                        <p class="mt-1 text-sm text-slate-500">Choose the rules you will verify. The applicant summary updates automatically.</p>
+                                    </div>
+                                    <p class="shrink-0 rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600" aria-live="polite" data-eligibility-mode-counts>{{ eligibilityCounts.required }} required <span class="mx-2 text-slate-300">/</span> {{ eligibilityCounts.preferred }} preferred</p>
                                 </div>
-                                <p id="eligibility-mode-guide" class="mt-4 border-l-2 border-slate-300 pl-3 text-xs leading-5 text-slate-600"><strong class="text-slate-900">Required</strong> blocks a confirmed mismatch. <strong class="text-slate-900">Preferred</strong> highlights fit without blocking. Leave a rule empty for no restriction.</p>
-                                <div class="mt-6 w-full">
-                                    <div data-program-eligibility-summary>
+                                <p id="eligibility-mode-guide" class="mt-4 text-xs leading-5 text-slate-600"><strong class="text-slate-900">Required</strong> blocks a confirmed mismatch. <strong class="text-slate-900">Preferred</strong> does not block an application. Empty rules remain unrestricted.</p>
+
+                                <section class="mt-6 border-t border-slate-200 pt-5" aria-labelledby="eligibility-study-title" data-eligibility-group="study">
+                                    <header class="mb-5 flex items-start gap-3">
+                                        <span class="program-icon grid size-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600" aria-hidden="true"><i class="fa-solid fa-graduation-cap block text-sm leading-none"></i></span>
+                                        <div><h4 id="eligibility-study-title" class="text-sm font-bold text-slate-950">Study and academic rules</h4><p class="mt-1 text-xs leading-5 text-slate-500">Choose current study levels first. Course and year options follow those selections.</p></div>
+                                    </header>
+                                    <div>
+                                        <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
+                                            <p class="text-xs font-bold text-slate-700">Current study levels</p>
+                                            <EligibilityRuleModeSelect v-if="hasEligibilityRule('education_level')" v-model="form.eligibilityRuleModes.education_level" rule-key="education_level" label="Current study levels" />
+                                            <span v-else class="text-xs text-slate-400">No restriction</span>
+                                        </div>
+                                        <EligibilityCheckboxPicker id="program-study-levels" :model-value="form.eligibleEducationLevels" :options="educationLevels" label="Current study levels" description="Choose current studies, not a completed qualification. Changes may require reviewing course and year selections." :disabled="eligibilityControlsDisabled" @update:model-value="changeEducationLevels" />
+                                        <p class="mt-2 text-xs leading-5 text-slate-500">No restriction allows any current study level. Completed qualifications are configured separately below.</p>
+                                    </div>
+
+                                    <div class="mt-5 grid grid-cols-2 gap-x-6 gap-y-5">
+                                        <div>
+                                            <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
+                                                <label for="program-eligible-courses" class="text-xs font-bold text-slate-700">Courses, tracks, or strands</label>
+                                                <EligibilityRuleModeSelect v-if="hasEligibilityRule('course')" v-model="form.eligibilityRuleModes.course" rule-key="course" label="Courses, tracks, or strands" />
+                                            </div>
+                                            <EligibilityOptionPicker id="program-eligible-courses" label="Courses, tracks, or strands" :disabled="eligibilityControlsDisabled" v-model="form.eligibleCourses" v-model:needs-choice="coursesNeedChoice" require-explicit-open open-value="Any" :options="eligibilityOptions.courses" quick-options :input-class="inputClass" open-label="Any course / strand" custom-label="Add a specific course not listed" />
+                                        </div>
+                                        <div>
+                                            <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
+                                                <label for="program-eligible-years" class="text-xs font-bold text-slate-700">Grade or year levels</label>
+                                                <EligibilityRuleModeSelect v-if="hasEligibilityRule('year_level')" v-model="form.eligibilityRuleModes.year_level" rule-key="year_level" label="Grade or year levels" />
+                                            </div>
+                                            <EligibilityOptionPicker id="program-eligible-years" label="Grade or year levels" :disabled="eligibilityControlsDisabled" v-model="form.eligibleYearLevels" v-model:needs-choice="yearsNeedChoice" require-explicit-open open-value="Any" :options="eligibilityOptions.years" quick-options :input-class="inputClass" :max-length="2000" open-label="Any grade / year level" custom-label="Add an unlisted grade or year level" />
+                                        </div>
+                                    </div>
+                                    <div v-if="educationValuesToReview.length" data-education-value-review class="mt-3 flex items-center justify-between gap-4 border-l-2 border-amber-400 bg-amber-50 p-3 text-xs text-amber-950">
+                                        <p class="leading-5">These custom or older values were kept. Confirm they fit the new education levels: {{ educationValuesToReview.join(', ') }}.</p>
+                                        <button type="button" class="shrink-0 rounded-sm border border-amber-300 bg-white px-3 py-2 font-bold" @click="educationReview = { courses: [], years: [] }">I checked these selections</button>
+                                    </div>
+
+                                    <div class="mt-5">
+                                        <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
+                                            <p class="text-xs font-bold text-slate-700">School types</p>
+                                            <EligibilityRuleModeSelect v-if="hasEligibilityRule('school_type')" v-model="form.eligibilityRuleModes.school_type" rule-key="school_type" label="School types" />
+                                            <span v-else class="text-xs text-slate-400">No restriction</span>
+                                        </div>
+                                        <EligibilityCheckboxPicker id="program-school-types" v-model="form.eligibleSchoolTypes" :options="schoolTypes" label="School types" :disabled="eligibilityControlsDisabled" />
+                                    </div>
+
+                                    <div class="mt-5 grid grid-cols-2 gap-6">
+                                        <div>
+                                            <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
+                                                <label for="program-academic-rule" class="text-xs font-bold text-slate-700">Academic rule</label>
+                                                <EligibilityRuleModeSelect v-if="hasEligibilityRule('academic')" v-model="form.eligibilityRuleModes.academic" rule-key="academic" label="Academic performance" />
+                                            </div>
+                                            <select id="program-academic-rule" v-model="form.minimumGradeScale" :class="inputClass" @change="form.minimumGwa = ''"><option value="">No academic minimum</option><option value="percentage">General average / percentage</option><option value="grade_point">GWA / GPA grade point</option><option value="pass_fail">Pass/fail or competency</option><option value="other">Other / manual review</option></select>
+                                        </div>
+                                        <label v-if="['percentage', 'grade_point'].includes(form.minimumGradeScale)" for="program-academic-minimum">
+                                            <span class="mb-2 flex min-h-8 items-center text-xs font-bold text-slate-700">{{ form.minimumGradeScale === 'grade_point' ? 'Maximum GWA / GPA' : 'Minimum average' }}</span>
+                                            <input id="program-academic-minimum" v-model="form.minimumGwa" type="number" min="0" :max="form.minimumGradeScale === 'grade_point' ? 5 : 100" step="0.01" :class="inputClass">
+                                        </label>
+                                    </div>
+
+                                    <EducationEligibilityPolicyEditor v-model="form.educationEligibilityPolicy" v-model:modes="form.eligibilityRuleModes" :conditions="form.eligibilityConditions" :disabled="eligibilityControlsDisabled" :input-class="inputClass" />
+                                    <div v-if="hasEligibilityRule('enrollment_status') && !form.educationEligibilityPolicy.enrollment_statuses.length" class="mt-4 flex items-center justify-between gap-4 border-t border-slate-200 pt-4">
+                                        <div><p class="text-xs font-bold text-slate-700">Current enrollment</p><p class="mt-1 text-xs text-slate-500">This program already includes an automatic enrollment check.</p></div>
+                                        <EligibilityRuleModeSelect v-model="form.eligibilityRuleModes.enrollment_status" rule-key="enrollment_status" label="Current enrollment" />
+                                    </div>
+                                </section>
+
+                                <section class="mt-6 border-t border-slate-200 pt-5" aria-labelledby="eligibility-access-title" data-eligibility-group="access">
+                                    <header class="mb-5 flex items-start gap-3">
+                                        <span class="program-icon grid size-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600" aria-hidden="true"><i class="fa-solid fa-location-dot block text-sm leading-none"></i></span>
+                                        <div><h4 id="eligibility-access-title" class="text-sm font-bold text-slate-950">Coverage and support rules</h4><p class="mt-1 text-xs leading-5 text-slate-500">Limit location, income, or other scholarship support only when needed.</p></div>
+                                    </header>
+                                    <div>
+                                        <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
+                                            <label for="program-eligible-locations" class="text-xs font-bold text-slate-700">Covered locations</label>
+                                            <EligibilityRuleModeSelect v-if="hasEligibilityRule('location')" v-model="form.eligibilityRuleModes.location" rule-key="location" label="Covered locations" />
+                                        </div>
+                                        <EligibilityLocationPicker v-model="form.eligibleLocations" :disabled="eligibilityControlsDisabled" :input-class="inputClass" />
+                                    </div>
+                                    <div class="mt-5 grid grid-cols-2 gap-6">
+                                        <div>
+                                            <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
+                                                <label for="program-income-rule" class="text-xs font-bold text-slate-700">Household income rule</label>
+                                                <EligibilityRuleModeSelect v-if="hasEligibilityRule('income')" v-model="form.eligibilityRuleModes.income" rule-key="income" label="Household income" />
+                                            </div>
+                                            <select id="program-income-rule" v-model="form.incomeRequirement" :class="inputClass"><option>Any</option><option>Below PHP 10,000</option><option>PHP 10,000 - 20,000</option><option>PHP 20,001 - 40,000</option><option>PHP 40,001 - 60,000</option><option>Above PHP 60,000</option></select>
+                                        </div>
+                                        <div>
+                                            <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
+                                                <p class="text-xs font-bold text-slate-700">Other scholarship support</p>
+                                                <EligibilityRuleModeSelect v-if="hasEligibilityRule('current_scholarship_support')" v-model="form.eligibilityRuleModes.current_scholarship_support" rule-key="current_scholarship_support" label="Other active scholarship support" />
+                                            </div>
+                                            <label class="flex min-h-11 cursor-pointer items-start gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-xs leading-5 text-slate-700">
+                                                <input v-model="form.excludeCurrentRecipients" type="checkbox" class="mt-0.5 border-slate-300 text-slate-950 focus:ring-slate-700">
+                                                Applicant is not receiving another active scholarship
+                                            </label>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <details :open="!useGeneratedEligibilitySummary || customSummaryNeedsReview || eligibilitySummary.length > 5000" class="group mt-6 overflow-hidden rounded-sm border border-slate-200" data-eligibility-summary-panel>
+                                    <summary class="flex cursor-pointer list-none items-center justify-between gap-4 bg-slate-50 px-4 py-4 [&::-webkit-details-marker]:hidden">
+                                        <span class="flex items-center gap-3"><i class="fa-regular fa-file-lines block text-sm leading-none text-slate-500" aria-hidden="true"></i><span><span class="block text-sm font-bold text-slate-950">Applicant-facing summary</span><span class="mt-1 block text-xs text-slate-500">{{ useGeneratedEligibilitySummary ? 'Built automatically from the rules above. Open to review or customize.' : 'Custom wording saved for this program. Keep it consistent with the rules above.' }}</span></span></span>
+                                        <span class="flex shrink-0 items-center gap-3"><span class="rounded-sm border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600">{{ useGeneratedEligibilitySummary ? 'Automatic' : 'Custom' }}</span><i class="fa-solid fa-chevron-down block text-xs leading-none text-slate-400 group-open:rotate-180" aria-hidden="true"></i></span>
+                                    </summary>
+                                    <div class="border-t border-slate-200 px-4 py-4" data-program-eligibility-summary>
                                         <div class="mb-2 flex items-center justify-between gap-4">
                                             <label for="program-eligibility-summary" class="text-xs font-bold text-slate-700">Eligibility summary <span class="text-amber-700">Required</span></label>
                                             <button v-if="useGeneratedEligibilitySummary" type="button" class="text-xs font-bold text-slate-600 underline underline-offset-2" @click="writeCustomEligibilitySummary">Write custom summary</button>
                                             <button v-else type="button" class="text-xs font-bold text-slate-600 underline underline-offset-2" @click="useRuleBasedEligibilitySummary">Use rule-based summary</button>
                                         </div>
-                                        <textarea id="program-eligibility-summary" :value="eligibilitySummary" :readonly="useGeneratedEligibilitySummary" rows="4" maxlength="5000" :class="textareaClass" :placeholder="useGeneratedEligibilitySummary ? 'Configure the rules below to generate the applicant-facing summary.' : 'Describe the eligibility rules and any additional provider conditions.'" @input="form.eligibility = $event.target.value"></textarea>
+                                        <textarea id="program-eligibility-summary" :value="eligibilitySummary" :readonly="useGeneratedEligibilitySummary" rows="4" maxlength="5000" :class="textareaClass" :placeholder="useGeneratedEligibilitySummary ? 'Configure the rules above to generate the applicant-facing summary.' : 'Describe the eligibility rules and any additional provider conditions.'" @input="form.eligibility = $event.target.value"></textarea>
                                         <div class="mt-1 flex items-start justify-between gap-4 text-xs leading-5 text-slate-500">
                                             <p>{{ useGeneratedEligibilitySummary ? 'Updates automatically from your Required and Preferred rules. No need to type them again.' : 'Your existing wording is preserved. Check special conditions against the configured rules before submission.' }}</p>
                                             <span class="shrink-0" :class="eligibilitySummary.length > 5000 ? 'font-bold text-rose-700' : ''">{{ eligibilitySummary.length }} / 5000</span>
                                         </div>
                                         <div v-if="customSummaryNeedsReview" data-eligibility-summary-review class="mt-3 flex items-center justify-between gap-4 border-l-2 border-amber-400 bg-amber-50 px-3 py-3">
-                                            <p class="text-xs leading-5 text-amber-950">Check that this custom summary agrees with the current rules below. This check is required again if the rules or wording change.</p>
+                                            <p class="text-xs leading-5 text-amber-950">Check that this custom summary agrees with the current rules above. Review it again if the rules or wording change.</p>
                                             <button type="button" class="shrink-0 rounded-sm border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-950" @click="reviewedEligibilitySummary = currentEligibilitySummaryKey">I checked my summary</button>
                                         </div>
                                     </div>
-
-                                    <div class="mt-6 border-t border-slate-200 pt-6">
-                                        <div class="flex items-center justify-between gap-4"><p class="text-xs font-bold text-slate-700">Current study levels</p><EligibilityRuleModeSelect v-if="hasEligibilityRule('education_level')" v-model="form.eligibilityRuleModes.education_level" rule-key="education_level" label="Current study levels" /></div>
-                                        <p class="mt-1 text-xs leading-5 text-slate-500">Use these filters for current studies, not a diploma the applicant already completed.</p>
-                                        <div class="mt-3 grid grid-cols-4 gap-2">
-                                            <label v-for="([value, label]) in educationLevels" :key="value" class="flex min-h-11 items-center gap-2 border border-slate-200 px-3 text-xs font-semibold text-slate-700">
-                                                <input type="checkbox" :checked="form.eligibleEducationLevels.includes(value)" :disabled="educationChangePending" class="border-slate-300 text-slate-950 focus:ring-slate-700" @change="changeEducationLevel(value, $event)">
-                                                {{ label }}
-                                            </label>
-                                        </div>
-                                    </div>
-
-                                    <EducationEligibilityPolicyEditor v-model="form.educationEligibilityPolicy" v-model:modes="form.eligibilityRuleModes" :input-class="inputClass" />
-
-                                    <div class="mt-6 grid grid-cols-2 gap-5">
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-courses" class="text-xs font-bold text-slate-700">Courses, tracks, or strands</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('course')" v-model="form.eligibilityRuleModes.course" rule-key="course" label="Courses, tracks, or strands" /></div><EligibilityOptionPicker id="program-eligible-courses" v-model="form.eligibleCourses" v-model:needs-choice="coursesNeedChoice" require-explicit-open open-value="Any" :options="eligibilityOptions.courses" :input-class="inputClass" open-label="Any course / strand" custom-label="Add a specific course not listed" /></div>
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-years" class="text-xs font-bold text-slate-700">Grade or year levels</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('year_level')" v-model="form.eligibilityRuleModes.year_level" rule-key="year_level" label="Grade or year levels" /></div><EligibilityOptionPicker id="program-eligible-years" v-model="form.eligibleYearLevels" v-model:needs-choice="yearsNeedChoice" require-explicit-open open-value="Any" :options="eligibilityOptions.years" :input-class="inputClass" :max-length="2000" open-label="Any grade / year level" custom-label="Add an unlisted grade or year level" /></div>
-                                        <div v-if="educationValuesToReview.length" data-education-value-review class="col-span-2 flex items-center justify-between gap-4 border-l-2 border-amber-400 bg-amber-50 p-3 text-xs text-amber-950"><p class="leading-5">These custom or older values were kept. Confirm they fit the new education levels: {{ educationValuesToReview.join(', ') }}.</p><button type="button" class="shrink-0 rounded-sm border border-amber-300 bg-white px-3 py-2 font-bold" @click="educationReview = { courses: [], years: [] }">I checked these selections</button></div>
-                                        <div class="col-span-2"><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-eligible-locations" class="text-xs font-bold text-slate-700">Covered locations</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('location')" v-model="form.eligibilityRuleModes.location" rule-key="location" label="Covered locations" /></div><EligibilityLocationPicker v-model="form.eligibleLocations" :input-class="inputClass" /></div>
-                                        <div class="col-span-2"><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-income-rule" class="text-xs font-bold text-slate-700">Household income rule</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('income')" v-model="form.eligibilityRuleModes.income" rule-key="income" label="Household income" /></div><select id="program-income-rule" v-model="form.incomeRequirement" :class="inputClass"><option>Any</option><option>Below PHP 10,000</option><option>PHP 10,000 - 20,000</option><option>PHP 20,001 - 40,000</option><option>PHP 40,001 - 60,000</option><option>Above PHP 60,000</option></select></div>
-                                    </div>
-
-                                    <div class="mt-6 border-t border-slate-200 pt-6">
-                                        <div class="flex items-center justify-between gap-4"><p class="text-xs font-bold text-slate-700">School types</p><EligibilityRuleModeSelect v-if="hasEligibilityRule('school_type')" v-model="form.eligibilityRuleModes.school_type" rule-key="school_type" label="School types" /></div>
-                                        <div class="mt-3 grid grid-cols-4 gap-2">
-                                            <label v-for="([value, label]) in schoolTypes" :key="value" class="flex min-h-11 items-center gap-2 border border-slate-200 px-3 text-xs font-semibold text-slate-700">
-                                                <input type="checkbox" :checked="form.eligibleSchoolTypes.includes(value)" class="border-slate-300 text-slate-950 focus:ring-slate-700" @change="toggleArrayValue('eligibleSchoolTypes', value)">
-                                                {{ label }}
-                                            </label>
-                                        </div>
-                                    </div>
-
-                                    <div class="mt-6 grid grid-cols-2 gap-5 border-t border-slate-200 pt-6">
-                                        <div><div class="mb-2 flex min-h-8 items-center justify-between gap-3"><label for="program-academic-rule" class="text-xs font-bold text-slate-700">Academic rule</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('academic')" v-model="form.eligibilityRuleModes.academic" rule-key="academic" label="Academic performance" /></div><select id="program-academic-rule" v-model="form.minimumGradeScale" :class="inputClass" @change="form.minimumGwa = ''"><option value="">No academic minimum</option><option value="percentage">General average / percentage</option><option value="grade_point">GWA / GPA grade point</option><option value="pass_fail">Pass/fail or competency</option><option value="other">Other / manual review</option></select></div>
-                                        <label v-if="['percentage', 'grade_point'].includes(form.minimumGradeScale)"><span class="mb-2 flex min-h-8 items-center text-xs font-bold text-slate-700">{{ form.minimumGradeScale === 'grade_point' ? 'Maximum GWA / GPA' : 'Minimum average' }}</span><input v-model="form.minimumGwa" type="number" min="0" :max="form.minimumGradeScale === 'grade_point' ? 5 : 100" step="0.01" :class="inputClass"></label>
-                                        <div class="col-span-2 flex items-center justify-between gap-4 border-t border-slate-200 py-4"><label class="flex items-center gap-3 text-sm font-semibold text-slate-700"><input v-model="form.excludeCurrentRecipients" type="checkbox" class="border-slate-300 text-slate-950 focus:ring-slate-700">Applicant is not receiving another active scholarship</label><EligibilityRuleModeSelect v-if="hasEligibilityRule('current_scholarship_support')" v-model="form.eligibilityRuleModes.current_scholarship_support" rule-key="current_scholarship_support" label="Other active scholarship support" /></div>
-                                        <div v-if="hasEligibilityRule('enrollment_status') && !form.educationEligibilityPolicy.enrollment_statuses.length" class="col-span-2 flex items-center justify-between gap-4 border-t border-slate-200 py-4"><div><p class="text-sm font-semibold text-slate-700">Current enrollment</p><p class="mt-1 text-xs text-slate-500">This program already includes an automatic enrollment check.</p></div><EligibilityRuleModeSelect v-model="form.eligibilityRuleModes.enrollment_status" rule-key="enrollment_status" label="Current enrollment" /></div>
-                                    </div>
-                                </div>
+                                </details>
                             </section>
 
                             <section v-else-if="activeStep === 'application'" class="px-7 py-6">

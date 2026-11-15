@@ -3,6 +3,7 @@ import WorkspaceTextSummary from '../../../components/workspace-dashboard/Worksp
 import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { showPortalToast } from '../../../support/portalToast';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
@@ -313,6 +314,7 @@ onMounted(loadPlan);
                                 </div>
                             </div>
                             <div class="monitoring-page-actions flex items-center gap-3">
+                                <WorkspaceGuide workspace="monitoring" />
                                 <span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', activePlan ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50 text-slate-600']">{{ savedPlan?.status_label || 'Not saved' }}</span>
                                 <button v-if="activePlan && canPublishCheckIn" type="button" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800" @click="openCheckInEditor"><i class="fa-solid fa-calendar-plus text-[10px] text-amber-300" aria-hidden="true"></i>New check-in</button>
                                 <a href="/provider/monitoring/plans" class="inline-flex h-10 items-center gap-2 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50"><i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i> All plans</a>

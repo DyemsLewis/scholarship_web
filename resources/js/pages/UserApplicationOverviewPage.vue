@@ -1,17 +1,14 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ApplicantApplicationShell from '../components/application-detail/ApplicantApplicationShell.vue';
-import ApplicationProgressRecord from '../components/application-detail/ApplicationProgressRecord.vue';
+import ApplicationOverviewRecord from '../components/application-detail/ApplicationOverviewRecord.vue';
 
 const appElement = document.getElementById('app');
 const applicationId = appElement?.dataset.applicationId;
 const detail = ref(null);
 const isLoading = ref(true);
 const errorMessage = ref('');
-
-const overview = computed(() => detail.value?.content ?? {});
-const recordRows = computed(() => (overview.value.record ?? []).filter((row) => row.label !== 'Submitted'));
 
 async function loadOverview() {
     isLoading.value = true;
@@ -69,68 +66,6 @@ onMounted(loadOverview);
     </main>
 
     <ApplicantApplicationShell v-else-if="detail" :detail="detail">
-        <div class="mt-4 space-y-4">
-            <ApplicationProgressRecord :progress="detail.progress" />
-
-            <section v-if="overview.upcoming_activity && detail.decision?.state !== 'action_required'" class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-                <div class="flex flex-col gap-4 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                    <div class="flex min-w-0 items-start gap-3">
-                        <span class="grid min-h-16 w-16 shrink-0 place-items-center rounded-sm bg-slate-950 text-center text-white">
-                            <span class="px-1 text-xs font-bold leading-4 text-amber-300">NEXT<br>DATE</span>
-                        </span>
-                        <div class="min-w-0">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Upcoming activity</p>
-                            <h2 class="mt-1 text-base font-bold text-slate-950">{{ overview.upcoming_activity.title }}</h2>
-                            <p class="mt-1 text-sm text-slate-600">
-                                {{ overview.upcoming_activity.scheduled_label }}
-                                <span v-if="overview.upcoming_activity.mode_label"> · {{ overview.upcoming_activity.mode_label }}</span>
-                            </p>
-                        </div>
-                    </div>
-                    <a :href="detail.navigation.find((item) => item.key === 'activities')?.href" class="inline-flex min-h-10 items-center justify-center gap-2 rounded-sm border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50">
-                        View activity
-                        <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
-                    </a>
-                </div>
-            </section>
-
-            <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
-                <header class="flex flex-col gap-4 border-b border-slate-200 px-4 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-6">
-                    <div class="flex min-w-0 items-start gap-4">
-                        <span class="grid h-11 w-11 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800">
-                            <i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>
-                        </span>
-                        <div class="min-w-0">
-                            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Latest provider update</p>
-                            <h2 class="mt-1 font-display text-lg font-bold text-slate-950">{{ overview.latest_update.title }}</h2>
-                            <p class="mt-1 max-w-4xl text-sm leading-6 text-slate-600">{{ overview.latest_update.description }}</p>
-                        </div>
-                    </div>
-                    <span class="shrink-0 text-xs font-semibold text-slate-500">{{ overview.latest_update.occurred_at }}</span>
-                </header>
-
-                <dl class="grid bg-slate-50/70 sm:grid-cols-3">
-                    <div
-                        v-for="(row, index) in recordRows"
-                        :key="row.label"
-                        :class="['px-4 py-4 sm:px-6', index ? 'border-t border-slate-200 sm:border-l sm:border-t-0' : '']"
-                    >
-                        <dt class="text-xs font-semibold text-slate-500">{{ row.label }}</dt>
-                        <dd class="mt-1 text-sm font-bold text-slate-950">{{ row.value }}</dd>
-                    </div>
-                </dl>
-
-                <footer class="flex flex-col gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:px-6">
-                    <a :href="overview.links.scholarship" class="inline-flex min-h-10 items-center gap-2 rounded-sm px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">
-                        <i class="fa-solid fa-graduation-cap w-4 text-center text-amber-700" aria-hidden="true"></i>
-                        Scholarship details
-                    </a>
-                    <a v-if="overview.links.provider" :href="overview.links.provider" class="inline-flex min-h-10 items-center gap-2 rounded-sm px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-950">
-                        <i class="fa-solid fa-building w-4 text-center text-amber-700" aria-hidden="true"></i>
-                        Provider profile
-                    </a>
-                </footer>
-            </section>
-        </div>
+        <ApplicationOverviewRecord :detail="detail" class="mt-4" />
     </ApplicantApplicationShell>
 </template>

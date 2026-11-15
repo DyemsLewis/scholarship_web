@@ -12,7 +12,6 @@ const statusClass = computed(() => ({
     attention: 'student-badge-attention',
     critical: 'student-badge-negative',
 }[props.detail.status?.tone] ?? 'bg-slate-100 text-slate-700'));
-const hasSelectedRecord = computed(() => Boolean(props.detail.content?.selected));
 
 function useLogoFallback(event) {
     const image = event.currentTarget;
@@ -58,12 +57,6 @@ function useLogoFallback(event) {
                 </header>
 
                 <ApplicantRecordTabs :items="detail.navigation" label="Support record sections" layout="grid" data-monitoring-detail-navigation />
-
-                <section v-if="!['overview', 'history'].includes(detail.view) && !hasSelectedRecord" class="relative mt-4 overflow-hidden rounded-md border border-slate-300 bg-white px-4 py-3 shadow-sm sm:px-5" data-record-section-intro>
-                    <span class="absolute inset-y-0 left-0 w-1 bg-amber-400" aria-hidden="true"></span>
-                    <h2 class="font-display text-lg font-bold text-slate-950 sm:text-xl">{{ detail.page.title }}</h2>
-                    <p class="mt-1 max-w-3xl text-sm leading-5 text-slate-600">{{ detail.page.description }}</p>
-                </section>
 
                 <slot></slot>
             </div>

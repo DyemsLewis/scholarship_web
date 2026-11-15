@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AuthShell from '../components/AuthShell.vue';
 import ToastMessage from '../components/ToastMessage.vue';
 
@@ -17,6 +17,16 @@ const primaryButtonClass = 'w-full rounded-md bg-slate-900 px-4 py-3 text-sm fon
 
 const showPassword = ref(false);
 const isSubmitting = ref(false);
+const cooldownSeconds = ref(0);
+const submitLabel = computed(() => {
+    if (cooldownSeconds.value > 0) {
+        const minutes = Math.floor(cooldownSeconds.value / 60);
+        const seconds = String(cooldownSeconds.value % 60).padStart(2, '0');
+        return `Try again in ${minutes}:${seconds}`;
+    }
+
+    return isSubmitting.value ? 'Signing in...' : 'Log in to portal';
+});
 const toast = ref({
     show: false,
     type: 'success',
@@ -26,6 +36,27 @@ const toast = ref({
 
 let toastTimer = null;
 let redirectTimer = null;
+let cooldownTimer = null;
+
+function startCooldown(response) {
+    window.clearInterval(cooldownTimer);
+    const retryAfter = response.data?.retry_after ?? response.headers?.['retry-after'] ?? 60;
+    let seconds = Number(retryAfter);
+    if (!Number.isFinite(seconds)) seconds = (Date.parse(retryAfter) - Date.now()) / 1000;
+    if (!Number.isFinite(seconds)) seconds = 60;
+    const availableAt = Date.now() + Math.max(1, Math.ceil(seconds)) * 1000;
+
+    // A deadline stays accurate when the browser pauses timers in a background tab.
+    const updateCountdown = () => {
+        cooldownSeconds.value = Math.max(0, Math.ceil((availableAt - Date.now()) / 1000));
+        if (cooldownSeconds.value === 0) {
+            window.clearInterval(cooldownTimer);
+            cooldownTimer = null;
+        }
+    };
+    updateCountdown();
+    cooldownTimer = window.setInterval(updateCountdown, 1000);
+}
 
 function showToast(type, title, message) {
     if (toastTimer) {
@@ -53,6 +84,10 @@ function closeToast() {
 }
 
 async function submitForm() {
+    if (isSubmitting.value || cooldownSeconds.value > 0) {
+        return;
+    }
+
     if (!formElement.value?.reportValidity()) {
         return;
     }
@@ -79,6 +114,9 @@ async function submitForm() {
             window.location.href = response.data.redirect ?? '/';
         }, isEmailVerified ? 900 : 1400);
     } catch (error) {
+        if (error.response?.status === 429) {
+            startCooldown(error.response);
+        }
         const message = error.response?.data?.message ?? 'Login failed. Check your details and try again.';
         showToast('error', 'Login failed', message);
     } finally {
@@ -106,6 +144,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+    window.clearInterval(cooldownTimer);
+
     if (toastTimer) {
         window.clearTimeout(toastTimer);
     }
@@ -208,10 +248,10 @@ onBeforeUnmount(() => {
 
             <button
                 type="submit"
-                :disabled="isSubmitting"
+                :disabled="isSubmitting || cooldownSeconds > 0"
                 :class="primaryButtonClass"
             >
-                {{ isSubmitting ? 'Signing in...' : 'Log in to portal' }}
+                {{ submitLabel }}
             </button>
         </form>
 

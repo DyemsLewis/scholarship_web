@@ -1,4 +1,5 @@
 <script setup>
+import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, ref } from 'vue';
 import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewModal.vue';
@@ -114,6 +115,7 @@ const backLabel = computed(() => originatingWorkspace ? 'Back to queue' : canBro
                                 </div>
                             </div>
                             <div class="program-page-actions">
+                                <WorkspaceGuide workspace="programs" />
                                 <span :class="['program-status inline-flex border px-3 py-1.5 font-bold uppercase tracking-wide', statusClass(program.status.tone)]">
                                     {{ program.status.label }}
                                 </span>
