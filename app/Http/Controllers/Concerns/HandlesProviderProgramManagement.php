@@ -25,6 +25,7 @@ use App\Support\ReviewRubric;
 use App\Support\ScholarshipEligibilityCondition;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
+use App\Support\StageEvaluationRubric;
 use App\Support\Terms;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
@@ -333,6 +334,8 @@ trait HandlesProviderProgramManagement
             $imagePath = $this->copyProviderLogoForScholarship($request->user());
         }
         $termsAccepted = $request->boolean('terms_accepted');
+        $examScoringMethod = $validated['exam_scoring_method'] ?? null;
+        $criterionLabels = $validated['stage_criterion_labels'] ?? null;
 
         unset(
             $validated['image_file'],
@@ -342,6 +345,8 @@ trait HandlesProviderProgramManagement
             $validated['cover_file'],
             $validated['terms_accepted'],
             $validated['program_events'],
+            $validated['exam_scoring_method'],
+            $validated['stage_criterion_labels'],
         );
         $validated['description'] = (string) ($validated['description'] ?? '');
         $validated['status'] = $validated['status'] === 'draft' ? 'draft' : 'pending_review';
@@ -354,12 +359,17 @@ trait HandlesProviderProgramManagement
         try {
             $this->ensureScholarshipReadyForSubmission($validated, $benefits, null, $imagePath);
 
-            $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $benefits, $request): Scholarship {
+            $scholarship = DB::transaction(function () use ($validated, $imagePath, $programEvents, $benefits, $request, $examScoringMethod, $criterionLabels): Scholarship {
                 $scholarship = Scholarship::create([
                     ...$validated,
                     'image_path' => $imagePath,
                     'provider_id' => $request->user()->providerOrganizationId(),
                 ]);
+                if ($examScoringMethod !== null || $criterionLabels !== null) {
+                    $scholarship->forceFill(['selection_scoring_policy' => \App\Support\SelectionScoringPolicy::preset(
+                        $scholarship->selection_stages, $scholarship->review_rubric ?? [], $examScoringMethod ?? 'criteria', $criterionLabels ?? [],
+                    )])->save();
+                }
 
                 foreach ($programEvents ?? [] as $programEvent) {
                     $this->persistScholarshipEvent($scholarship, $programEvent, $request->user());
@@ -446,6 +456,11 @@ trait HandlesProviderProgramManagement
         }
 
         $termsAccepted = $request->boolean('terms_accepted');
+        $examScoringMethod = $validated['exam_scoring_method'] ?? null;
+        $examScoringChanged = $examScoringMethod !== null
+            && $examScoringMethod !== \App\Support\SelectionScoringPolicy::examMethod($scholarship->selection_scoring_policy);
+        $criterionLabels = $validated['stage_criterion_labels'] ?? null;
+        $criterionLabelsChanged = $criterionLabels !== null && $criterionLabels !== StageEvaluationRubric::labels($scholarship->selection_scoring_policy);
 
         unset(
             $validated['image_file'],
@@ -455,6 +470,8 @@ trait HandlesProviderProgramManagement
             $validated['cover_file'],
             $validated['terms_accepted'],
             $validated['program_events'],
+            $validated['exam_scoring_method'],
+            $validated['stage_criterion_labels'],
         );
         $validated['description'] = $request->has('description')
             ? (string) ($validated['description'] ?? '')
@@ -469,10 +486,18 @@ trait HandlesProviderProgramManagement
             $validated['image_path'] = $imagePath;
         }
 
-        $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated, $benefitsChanged);
+        $validated['status'] = $this->providerScholarshipStatus($scholarship, $validated['status'], $validated, $benefitsChanged || $examScoringChanged || $criterionLabelsChanged);
         try {
-            DB::transaction(function () use ($scholarship, $validated, $programEvents, $benefits, $request): void {
+            DB::transaction(function () use ($scholarship, $validated, $programEvents, $benefits, $request, $examScoringMethod, $criterionLabels): void {
                 $locked = Scholarship::query()->whereKey($scholarship->id)->lockForUpdate()->firstOrFail();
+                $hasApplications = $locked->applications()->exists();
+                $savedExamMethod = \App\Support\SelectionScoringPolicy::examMethod($locked->selection_scoring_policy);
+                if ($hasApplications && $examScoringMethod !== null && $examScoringMethod !== $savedExamMethod) {
+                    throw ValidationException::withMessages(['exam_scoring_method' => 'The exam scoring method is fixed after the first application. Use a new intake to change it.']);
+                }
+                if ($hasApplications && $criterionLabels !== null && $criterionLabels !== StageEvaluationRubric::labels($locked->selection_scoring_policy)) {
+                    throw ValidationException::withMessages(['stage_criterion_labels' => 'Criterion labels are fixed after the first application. Use a new intake to change them.']);
+                }
                 $scholarship->refresh();
                 ProgramConfigurationRules::assertConsistent($validated, $locked);
                 $requestedSlots = array_key_exists('slots_available', $validated)
@@ -485,6 +510,12 @@ trait HandlesProviderProgramManagement
                 $this->ensureScholarshipAwardCapacity($scholarship, $requestedSlots);
                 $this->ensureScholarshipApplicationCapacity($scholarship, $requestedApplicationLimit);
                 $scholarship->update($validated);
+                if (! $hasApplications && ($examScoringMethod !== null || $criterionLabels !== null || $locked->selection_scoring_policy !== null)) {
+                    $scholarship->forceFill(['selection_scoring_policy' => \App\Support\SelectionScoringPolicy::preset(
+                        $scholarship->selection_stages, $scholarship->review_rubric ?? [], $examScoringMethod ?? $savedExamMethod,
+                        $criterionLabels ?? StageEvaluationRubric::labels($locked->selection_scoring_policy),
+                    )])->save();
+                }
 
                 if ($programEvents !== null) {
                     $submittedEventTypes = collect($programEvents)->pluck('type')->all();
@@ -829,6 +860,35 @@ trait HandlesProviderProgramManagement
 
     private function validateScholarship(Request $request, ?Scholarship $scholarship = null): array
     {
+        foreach ([
+            ['location_address_details', 'location_address', 'location_name', 'latitude', 'longitude'],
+            ['handoff_address_details', 'handoff_location_address', 'handoff_location_name', 'handoff_latitude', 'handoff_longitude'],
+        ] as [$detailsField, $addressField, $venueField, $latitudeField, $longitudeField]) {
+            if (! $request->has($detailsField)) {
+                continue;
+            }
+            $details = $request->input($detailsField);
+            if (is_string($details) && $details !== '') {
+                try {
+                    $details = json_decode($details, true, flags: JSON_THROW_ON_ERROR);
+                } catch (\JsonException) {
+                    throw ValidationException::withMessages([$detailsField => 'Check the venue address fields.']);
+                }
+            }
+            if ($detailsField === 'handoff_address_details' && $request->input('handoff_mode', $scholarship?->handoff_mode) !== 'onsite') {
+                $request->merge([$detailsField => null]);
+                continue;
+            }
+            $request->merge([$detailsField => $details === '' ? null : $details]);
+            if (is_array($details) && $details !== []) {
+                $request->merge([
+                    $addressField => \App\Support\VenueAddress::format($details, false),
+                    $venueField => $details['venue'] ?? null,
+                    $latitudeField => $details['latitude'] ?? null,
+                    $longitudeField => $details['longitude'] ?? null,
+                ]);
+            }
+        }
         if (is_string($request->input('education_eligibility_policy'))) {
             try {
                 $policy = json_decode($request->input('education_eligibility_policy'), true, flags: JSON_THROW_ON_ERROR);
@@ -845,9 +905,25 @@ trait HandlesProviderProgramManagement
             }
             $request->merge(['eligibility_rule_modes' => $modes]);
         }
+        if (is_string($request->input('stage_criterion_labels'))) {
+            try {
+                $request->merge(['stage_criterion_labels' => json_decode($request->input('stage_criterion_labels'), true, flags: JSON_THROW_ON_ERROR)]);
+            } catch (\JsonException) {
+                throw ValidationException::withMessages(['stage_criterion_labels' => 'Check the exam and interview criterion labels.']);
+            }
+        }
         $requiresCompleteSubmission = ! in_array($request->input('status'), ['draft', 'closed'], true);
 
+        if (is_string($request->input('eligibility_review_rules'))) {
+            try { $request->merge(['eligibility_review_rules' => json_decode($request->input('eligibility_review_rules'), true, flags: JSON_THROW_ON_ERROR)]); }
+            catch (\JsonException) { throw ValidationException::withMessages(['eligibility_review_rules' => 'Choose which eligibility rules allow reconsideration.']); }
+        }
+
         $validated = $request->validate([
+            'eligibility_review_rules' => ['sometimes', 'nullable', 'array', 'list', 'max:10'],
+            'eligibility_review_rules.*' => ['string', 'distinct', Rule::in(EligibilityRulePolicy::KEYS)],
+            ...\App\Support\VenueAddress::rules('location_address_details', partial: ! $requiresCompleteSubmission),
+            ...\App\Support\VenueAddress::rules('handoff_address_details', partial: ! $requiresCompleteSubmission),
             'education_eligibility_policy' => ['sometimes', 'nullable', 'array:requires_completed_qualification,accepted_qualifications,unlisted_qualification,enrollment_statuses'],
             'education_eligibility_policy.requires_completed_qualification' => ['required_with:education_eligibility_policy', 'boolean'],
             'education_eligibility_policy.accepted_qualifications' => ['required_if:education_eligibility_policy.requires_completed_qualification,1,true', 'array', 'list', 'max:9'],
@@ -900,6 +976,8 @@ trait HandlesProviderProgramManagement
             'application_limit' => ['nullable', 'integer', 'min:1', 'max:1000000'],
             'application_mode' => ['nullable', Rule::in(['online', 'onsite', 'hybrid', 'provider_review'])],
             'selection_stages' => ['nullable', 'string', 'max:500', 'json'],
+            'exam_scoring_method' => ['sometimes', 'required', Rule::in(['criteria', 'total'])],
+            ...StageEvaluationRubric::labelRules(),
             'program_events' => ['nullable', 'string', 'max:20000', 'json'],
             'renewal_policy' => ['nullable', 'string', 'max:2000'],
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
@@ -952,6 +1030,9 @@ trait HandlesProviderProgramManagement
 
         if (array_key_exists('eligibility_rule_modes', $validated)) {
             $validated['eligibility_rule_modes'] = EligibilityRulePolicy::normalize($validated['eligibility_rule_modes']);
+        }
+        if (array_key_exists('stage_criterion_labels', $validated)) {
+            $validated['stage_criterion_labels'] = StageEvaluationRubric::normalizeLabels($validated['stage_criterion_labels'], $scholarship?->selection_scoring_policy);
         }
 
         return $validated;
@@ -1071,6 +1152,7 @@ trait HandlesProviderProgramManagement
         if (! in_array($validated['handoff_mode'] ?? $scholarship?->handoff_mode, ['onsite', 'hybrid'], true)) {
             $validated['handoff_latitude'] = null;
             $validated['handoff_longitude'] = null;
+            $validated['handoff_address_details'] = null;
         } elseif ($scholarship && array_key_exists('handoff_location_address', $validated)
             && $validated['handoff_location_address'] !== $scholarship->handoff_location_address
             && ! array_key_exists('handoff_latitude', $validated)) {
@@ -1471,6 +1553,7 @@ trait HandlesProviderProgramManagement
             'provider_objective_notes',
             'eligibility',
             'eligibility_rule_modes',
+            'eligibility_review_rules',
             'education_eligibility_policy',
             'eligible_education_levels',
             'eligible_courses',
@@ -1848,6 +1931,7 @@ trait HandlesProviderProgramManagement
             'provider_objectives' => $scholarship->provider_objectives ?? [],
             'provider_objective_notes' => $scholarship->provider_objective_notes,
             'eligibility' => $scholarship->eligibility,
+            'eligibility_review_rules' => $scholarship->eligibility_review_rules ?? [],
             'eligibility_conditions' => $scholarship->eligibility_conditions ?? [],
             'eligibility_rule_modes' => $scholarship->eligibilityRuleModes(),
             'education_eligibility_policy' => EducationEligibilityPolicy::normalize($scholarship->education_eligibility_policy),
@@ -1860,6 +1944,7 @@ trait HandlesProviderProgramManagement
             'exclude_current_scholarship_recipients' => (bool) $scholarship->exclude_current_scholarship_recipients,
             'location_name' => $scholarship->location_name,
             'location_address' => $scholarship->location_address,
+            'location_address_details' => $scholarship->location_address_details,
             'latitude' => $scholarship->latitude,
             'longitude' => $scholarship->longitude,
             'map_url' => $this->mapUrl($scholarship),
@@ -1872,12 +1957,15 @@ trait HandlesProviderProgramManagement
             'handoff_deadline' => $scholarship->handoff_deadline?->format('Y-m-d'),
             'handoff_location_name' => $scholarship->handoff_location_name,
             'handoff_location_address' => $scholarship->handoff_location_address,
+            'handoff_address_details' => $scholarship->handoff_address_details,
             'handoff_latitude' => $scholarship->handoff_latitude,
             'handoff_longitude' => $scholarship->handoff_longitude,
             'handoff_url' => $scholarship->handoff_url,
             'handoff_map_url' => $this->handoffMapUrl($scholarship),
             'review_rubric' => $scholarship->review_rubric ?? [],
             'selection_scoring_policy' => $scholarship->selection_scoring_policy,
+            'exam_scoring_method' => \App\Support\SelectionScoringPolicy::examMethod($scholarship->selection_scoring_policy),
+            'stage_criterion_labels' => StageEvaluationRubric::labels($scholarship->selection_scoring_policy),
             'application_questions' => $scholarship->application_questions ?? [],
             'benefits' => $scholarship->benefitPayload(),
             'benefit_summary' => $scholarship->benefitSummary(),

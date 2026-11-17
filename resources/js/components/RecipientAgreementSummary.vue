@@ -124,8 +124,8 @@ function formatAmount(value) {
                 </span>
                 <div>
                     <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-700">After selection</p>
-                    <h3 class="mt-1 text-lg font-bold text-slate-950">Recipient agreement</h3>
-                    <p class="mt-1 text-xs leading-5 text-slate-600">A fixed record of the support and responsibilities shown at selection.</p>
+                    <h3 class="mt-1 text-lg font-bold text-slate-950">Scholarship offer summary</h3>
+                    <p class="mt-1 text-xs leading-5 text-slate-600">A fixed record of the information shown at selection, not a signed final contract.</p>
                 </div>
             </div>
             <span :class="['inline-flex w-fit rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide', statusClass]">
@@ -172,13 +172,13 @@ function formatAmount(value) {
                 <div class="flex items-start gap-3">
                     <span v-if="embedded" class="grid h-9 w-9 shrink-0 place-items-center rounded bg-slate-950 text-sm text-amber-300"><i class="fa-solid fa-list-check" aria-hidden="true"></i></span>
                     <div class="min-w-0 flex-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">What you agree to</p>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">What the provider expects</p>
                         <p class="mt-1 font-bold text-slate-950">{{ expectationLabel }}</p>
                         <p class="mt-1 text-xs text-slate-500">Support period: {{ supportPeriod }}</p>
                     </div>
                 </div>
                 <div class="mt-3 rounded border border-slate-200 bg-slate-50 px-3 py-3">
-                    <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Your exact responsibilities</p>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500">Disclosed responsibilities</p>
                     <p class="mt-1 whitespace-pre-line text-sm font-semibold leading-6 text-slate-800">{{ responsibilities }}</p>
                 </div>
                 <dl class="mt-3 overflow-hidden rounded border border-slate-200">
@@ -220,7 +220,7 @@ function formatAmount(value) {
                     <span v-if="embedded" class="grid h-9 w-9 shrink-0 place-items-center rounded bg-slate-950 text-sm text-amber-300"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></span>
                     <div class="min-w-0">
                         <p class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Questions or requested adjustments</p>
-                        <p class="mt-1 text-sm font-bold text-slate-950">Contact the provider before accepting if any term is unclear.</p>
+                        <p class="mt-1 text-sm font-bold text-slate-950">Ask the provider about unclear terms before confirming your intention or signing a final agreement.</p>
                         <p v-if="providerContact.length" class="mt-2 break-words text-sm leading-6 text-slate-600">{{ providerContact.join(' · ') }}</p>
                         <p v-else class="mt-2 text-sm font-semibold text-amber-800">No provider contact was captured in this recorded agreement.</p>
                     </div>

@@ -65,6 +65,24 @@ test('missing server configuration cannot invent a score or a zero-point screeni
     assert.doesNotMatch(examOnly.formula, /NaN|screening/i);
 });
 
+test('total exam preview changes only the exam basis and cannot rewrite a frozen intake', () => {
+    const criteriaPolicy = { ...presets['exam+interview'], stage_criteria: {
+        exam: [{ key: 'knowledge', label: 'Subject knowledge', weight: 100 }],
+        interview: [{ key: 'motivation', label: 'Motivation', weight: 100 }],
+    } };
+    const available = { 'exam+interview': criteriaPolicy };
+    const before = JSON.stringify(available);
+    const total = programScoringPreview(available, criteriaPolicy.stages, criteriaPolicy, 0, 'total');
+    assert.equal(total.fixed, false);
+    assert.match(total.rows.find(row => row.key === 'exam').basis, /Total exam score/);
+    assert.match(total.rows.find(row => row.key === 'interview').basis, /Motivation/);
+    assert.deepEqual(total.rows.map(row => row.weight), [30, 40, 30]);
+    const frozen = programScoringPreview(available, criteriaPolicy.stages, criteriaPolicy, 2, 'total');
+    assert.equal(frozen.fixed, true);
+    assert.match(frozen.rows.find(row => row.key === 'exam').basis, /Subject knowledge/);
+    assert.equal(JSON.stringify(available), before);
+});
+
 test('scoring component compiles and the form only consumes read-only scoring data', () => {
     const read = file => readFileSync(new URL('../../' + file, import.meta.url), 'utf8');
     const filename = 'resources/js/pages/provider/programs/components/SelectionScoringPreview.vue';

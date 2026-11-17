@@ -100,8 +100,9 @@ final class SingleProviderDemoSeeder extends FreshWorkflowDemoSeeder
             $application = $this->applications['decision.'.$name];
             foreach (['exam', 'interview'] as $stage) {
                 $progress = $application->stageProgresses()->where('stage_key', $stage)->sole();
+                $criteria = \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, $stage, $score);
                 app(SelectionEvaluationService::class)->record($application->fresh(), $this->staff[Catalog::PROVIDER.'.selection'], $stage,
-                    $score, 100, $progress->evaluation_revision, 1, 'Evaluation checked against the completed activity record.');
+                    $criteria ? null : $score, $criteria ? null : 100, $progress->evaluation_revision, 1, 'Evaluation checked against the completed activity record.', $criteria);
             }
         }
         $this->applications['decision.dune']->stageEvaluations()->where('stage_key', 'interview')->delete();

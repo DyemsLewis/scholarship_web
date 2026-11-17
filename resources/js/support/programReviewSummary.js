@@ -90,12 +90,15 @@ export function programReviewSummary(form, { eligibilitySummary = '', rules = []
         selection: {
             facts: [fact('Stage order', (form.selectionStages ?? []).map(key => optionLabel(key, catalogs.stages)).join(' > ') || 'Not set', true),
                 fact('DSS scoring basis', weights, true),
+                ...((form.selectionStages ?? []).includes('exam') ? [fact('Examination scoring',
+                    (scoring.examMethod ?? form.examScoringMethod) === 'total' ? 'Total exam score and maximum' : 'Score by criteria')] : []),
                 fact('Recipient commitment', optionLabel(agreement.commitment_type, [
                     ['provider_briefing', 'Not selected'], ['none', 'No ongoing recipient commitment'], ['renewal', 'Enrollment or renewal requirements'],
                     ['service', 'Service or community commitment'], ['activities', 'Required program activities'], ['reporting', 'Progress or utilization reports'], ['custom', 'Custom commitment'],
                 ]), true)],
             detailsLabel: 'Recipient agreement and release conditions',
             details: [fact('Conditions for receiving benefits', text(agreement.release_conditions)),
+                ...(scoring.rows ?? []).filter(row => row.criteria?.length).map(row => fact(`${row.label} criteria`, row.basis)),
                 ...(ongoing ? [fact('Recipient responsibilities', text(agreement.responsibilities)), fact('Required evidence', text(agreement.required_evidence)),
                     fact('Commitment duration', text(agreement.duration)), fact('If requirements are not met', text(agreement.noncompliance_consequence)),
                     fact('Exception or withdrawal process', text(agreement.exit_or_exception_process))] : [])],

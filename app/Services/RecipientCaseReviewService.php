@@ -10,6 +10,7 @@ use App\Models\RecipientCaseReview;
 use App\Models\RecipientSupportDecision;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Support\RecipientAgreement;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -162,6 +163,9 @@ final class RecipientCaseReviewService
 
     public function acceptedConsequences(RecipientAgreementCase $case): ?string
     {
+        if (! RecipientAgreement::hasDisclosedResponsibilities($case->agreement_snapshot ?? [])) {
+            return null;
+        }
         $value = data_get($case->agreement_snapshot, 'recipient_expectation.noncompliance_consequence');
 
         return is_string($value) && trim($value) !== '' ? trim($value) : null;

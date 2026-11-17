@@ -6,6 +6,7 @@ import ProviderSidebar from '../ProviderSidebar.vue';
 import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { providerProgramQueueLink } from '../../../support/staffQueueState.js';
+import { nextProviderMinute, providerDate, providerDateOffset, providerTimestamp } from '../../../support/providerDates';
 
 const programs = ref([]);
 const candidates = ref([]);
@@ -37,11 +38,7 @@ const blockedCandidates = computed(() => candidates.value.filter((candidate) => 
 const allEligibleSelected = computed(() => eligibleCandidates.value.length > 0 && eligibleCandidates.value.every((candidate) => selectedRecipients.value.includes(candidate.application_id)));
 
 function tomorrowMorning() {
-    const date = new Date();
-    date.setDate(date.getDate() + 1);
-    date.setHours(9, 0, 0, 0);
-    const offset = date.getTimezoneOffset() * 60 * 1000;
-    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    return providerDateOffset(providerDate(), 1) + 'T09:00';
 }
 
 function firstError(error, fallback) {
@@ -96,6 +93,10 @@ watch(() => form.value.release_at, () => {
 async function saveRelease() {
     confirmation.value = false;
     if (isSaving.value || isLoading.value || eligibilityError.value || !selectedProgram.value || !selectedRecipients.value.length) return;
+    if (!Number.isFinite(providerTimestamp(form.value.release_at)) || providerTimestamp(form.value.release_at) <= Date.now()) {
+        errorMessage.value = 'Choose a future date and time for the benefit release.';
+        return;
+    }
     isSaving.value = true;
     errorMessage.value = '';
     try {
@@ -146,7 +147,7 @@ onBeforeUnmount(() => {
                         <div class="grid grid-cols-3 gap-5 px-6 py-6">
                             <label class="text-sm font-semibold text-slate-700">Program<select v-model="selectedProgram" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="" disabled>Select a program</option><option v-for="program in programs" :key="program.id" :value="String(program.id)">{{ program.title }}</option></select></label>
                             <label class="text-sm font-semibold text-slate-700">Release title<input v-model="form.title" required maxlength="120" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="Example: First semester allowance"></label>
-                            <label class="text-sm font-semibold text-slate-700">Release date and time<input v-model="form.release_at" type="datetime-local" required class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
+                            <label class="text-sm font-semibold text-slate-700">Release date and time (Philippine time)<input v-model="form.release_at" type="datetime-local" :min="nextProviderMinute()" required class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
                             <label class="col-span-2 text-sm font-semibold text-slate-700">Benefit description<input v-model="form.benefit_description" required maxlength="255" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="What recipients will receive"></label>
                             <label class="text-sm font-semibold text-slate-700">Amount <span class="font-normal text-slate-600">(optional)</span><input v-model="form.amount" type="number" min="0" step="0.01" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="PHP"></label>
                             <label class="text-sm font-semibold text-slate-700">Release method<select v-model="form.release_method" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="in_person">In person</option><option value="bank_transfer">Bank transfer</option><option value="e_wallet">E-wallet</option><option value="other">Other arrangement</option></select></label>

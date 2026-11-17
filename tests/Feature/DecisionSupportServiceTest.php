@@ -117,7 +117,7 @@ class DecisionSupportServiceTest extends TestCase
         $this->assertFalse($eligibility['condition_results'][0]['is_blocking']);
     }
 
-    public function test_provider_can_exclude_applicants_receiving_another_scholarship(): void
+    public function test_retired_external_scholarship_declarations_do_not_block_platform_eligibility(): void
     {
         [, $applicant, $scholarship] = $this->application([
             'exclude_current_scholarship_recipients' => true,
@@ -130,9 +130,11 @@ class DecisionSupportServiceTest extends TestCase
         $eligibility = app(ScholarshipEligibilityService::class)->evaluate($scholarship, $applicant->fresh());
         $criterion = collect($eligibility['criteria'])->firstWhere('key', 'current_scholarship_support');
 
-        $this->assertFalse($eligibility['is_eligible']);
-        $this->assertSame('fail', $criterion['status']);
-        $this->assertContains('current_scholarship_support', collect($eligibility['blocking_criteria'])->pluck('key'));
+        $this->assertTrue($eligibility['is_eligible']);
+        $this->assertSame('pass', $criterion['status']);
+        $this->assertNotContains('current_scholarship_support', collect($eligibility['blocking_criteria'])->pluck('key'));
+        $this->assertStringNotContainsString('Existing education allowance', $criterion['student_value']);
+        $this->assertStringContainsString('application documents', $criterion['note']);
 
         $applicant->studentProfile()->update([
             'current_scholarship_status' => 'pending',

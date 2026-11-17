@@ -58,7 +58,7 @@ class ApplicationWorkflowReworkTest extends TestCase
             ->patchJson("/provider/applications/{$application->id}/stages/exam/result", [
                 'result' => 'passed',
                 'notes' => 'Provider confirmed the exam result outside the portal.',
-                'evaluation' => ['score' => 43, 'maximum_score' => 50, 'expected_stage_revision' => 0, 'expected_revision' => 0],
+                'evaluation' => ['criteria_scores' => \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, 'exam', 86), 'expected_stage_revision' => 0, 'expected_revision' => 0],
             ])
             ->assertOk()
             ->assertJsonPath('application.workflow.current_stage', 'interview');

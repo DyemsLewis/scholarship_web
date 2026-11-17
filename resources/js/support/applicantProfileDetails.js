@@ -41,8 +41,6 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
     const guardianProvided = ['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'].some((key) => hasValue(saved[key]))
         || saved.guardian_is_account_owner === true;
     const generalAddress = [saved.city, saved.province, saved.region].filter(hasValue).join(', ');
-    const outsideDetailsRelevant = saved.current_scholarship_status !== 'none'
-        && (['receiving', 'pending'].includes(saved.current_scholarship_status) || hasValue(saved.current_scholarship_details));
 
     const sections = [
         {
@@ -96,8 +94,6 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
                 { id: 'household', items: [
                     item('income_bracket', 'Household income bracket', saved.income_bracket),
                     item('household_size', 'Household size', hasValue(saved.household_size) ? `${saved.household_size} ${Number(saved.household_size) === 1 ? 'member' : 'members'}` : ''),
-                    item('current_scholarship_status', 'Outside scholarship', label('currentScholarship', saved.current_scholarship_status)),
-                    ...(outsideDetailsRelevant ? [item('current_scholarship_details', 'Outside scholarship details', saved.current_scholarship_details, { span: 'full' })] : []),
                 ] },
                 ...(guardianRequired || guardianProvided ? [{
                     id: 'guardian', title: 'Parent or guardian',

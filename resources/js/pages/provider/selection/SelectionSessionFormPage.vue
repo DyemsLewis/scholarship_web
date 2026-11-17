@@ -4,6 +4,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { sessionScheduleError } from '../../../support/selectionSessionValidation';
+import { nextProviderMinute, providerDate, providerDateOffset, providerDateTime, providerDateTimeIso, providerTimestamp } from '../../../support/providerDates';
 
 const appElement = document.getElementById('app');
 const sessionId = appElement?.dataset.sessionId || null;
@@ -41,18 +42,11 @@ const usesVenue = computed(() => ['onsite', 'hybrid'].includes(form.value.mode))
 const usesMeetingLink = computed(() => ['online', 'hybrid'].includes(form.value.mode));
 
 function defaultDateTime(daysAhead, hour) {
-    const date = new Date();
-    date.setDate(date.getDate() + daysAhead);
-    date.setHours(hour, 0, 0, 0);
-    const offset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    return `${providerDateOffset(providerDate(), daysAhead)}T${String(hour).padStart(2, '0')}:00`;
 }
 
 function toLocalInput(value) {
-    if (!value) return '';
-    const date = new Date(value);
-    const offset = date.getTimezoneOffset() * 60000;
-    return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+    return providerDateTime(value);
 }
 
 function labelize(value) {
@@ -83,8 +77,8 @@ function sessionPayload() {
     return {
         stage_key: form.value.stage_key,
         title: form.value.title.trim(),
-        starts_at: new Date(form.value.starts_at).toISOString(),
-        ends_at: form.value.ends_at ? new Date(form.value.ends_at).toISOString() : null,
+        starts_at: providerDateTimeIso(form.value.starts_at),
+        ends_at: form.value.ends_at ? providerDateTimeIso(form.value.ends_at) : null,
         timezone: form.value.timezone,
         mode: form.value.mode,
         venue: usesVenue.value ? form.value.venue.trim() : null,
@@ -222,8 +216,8 @@ onMounted(loadForm);
                                 <label class="text-sm font-semibold text-slate-700">Program<select v-model="form.program_id" required :disabled="Boolean(sessionId)" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950 disabled:bg-slate-100"><option value="" disabled>Select a program</option><option v-for="program in programs" :key="program.id" :value="String(program.id)">{{ program.title }}</option></select></label>
                                 <label class="text-sm font-semibold text-slate-700">Stage<select v-model="form.stage_key" required :disabled="Boolean(sessionId) || !form.program_id" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950 disabled:bg-slate-100"><option value="" disabled>Select a stage</option><option v-for="stage in availableStages" :key="stage.key" :value="stage.key">{{ stage.label }}</option></select></label>
                                 <label class="col-span-2 text-sm font-semibold text-slate-700">Session title<input v-model="form.title" type="text" required maxlength="255" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="Example: Morning examination group"></label>
-                                <label class="text-sm font-semibold text-slate-700">Starts<input v-model="form.starts_at" type="datetime-local" required class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
-                                <label class="text-sm font-semibold text-slate-700">Ends <span class="font-normal text-slate-600">(optional)</span><input v-model="form.ends_at" type="datetime-local" :min="form.starts_at || undefined" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
+                                <label class="text-sm font-semibold text-slate-700">Starts (Philippine time)<input v-model="form.starts_at" type="datetime-local" :min="nextProviderMinute()" required class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
+                                <label class="text-sm font-semibold text-slate-700">Ends <span class="font-normal text-slate-600">(optional)</span><input v-model="form.ends_at" type="datetime-local" :min="form.starts_at ? nextProviderMinute(providerTimestamp(form.starts_at)) : nextProviderMinute()" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></label>
                                 <label class="text-sm font-semibold text-slate-700">Capacity <span class="font-normal text-slate-600">(optional)</span><input v-model="form.capacity" type="number" :min="Math.max(1, existingSession?.capacity?.assigned || 0)" max="10000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="No limit"></label>
                                 <div class="border border-slate-200 bg-slate-50 px-4 py-3"><p class="text-xs font-bold uppercase tracking-[0.12em] text-slate-600">Current stage</p><p class="mt-1 text-sm font-semibold text-slate-900">{{ selectedStage?.label || labelize(form.stage_key) }}</p></div>
                             </div>

@@ -24,7 +24,7 @@ class ScholarshipEligibilityService
 
     private array $activePlatformScholarshipsByUser = [];
 
-    public function evaluate(Scholarship $scholarship, ?User $user, bool $includeReadiness = true): array
+    public function evaluate(Scholarship $scholarship, ?User $user, bool $includeReadiness = true, bool $applyReviews = true): array
     {
         $profile = $user?->studentProfile;
         $criteria = [];
@@ -190,47 +190,30 @@ class ScholarshipEligibilityService
         }
 
         if ($scholarship->exclude_current_scholarship_recipients) {
-            $scholarshipStatus = $profile?->current_scholarship_status;
             $activePlatformScholarships = collect($this->activePlatformScholarships($user, $scholarship->id));
-            $isReceivingExternalSupport = $scholarshipStatus === 'receiving';
             $hasActivePlatformSupport = $activePlatformScholarships->isNotEmpty();
-            $hasAcceptedDeclaration = in_array($scholarshipStatus, ['none', 'pending', 'completed'], true);
-            $statusLabels = [
-                'none' => 'No scholarship outside this portal',
-                'receiving' => 'Receiving scholarship support outside this portal',
-                'pending' => 'Outside scholarship application pending',
-                'completed' => 'Outside scholarship already completed',
-            ];
-            $studentValues = collect([
-                $hasActivePlatformSupport
-                    ? 'Portal record: '.$activePlatformScholarships->pluck('title')->implode(', ')
-                    : null,
-                $statusLabels[$scholarshipStatus] ?? $scholarshipStatus,
-            ])->filter()->implode('; ');
             $addCriterion(
                 'current_scholarship_support',
-                'Current scholarship support',
-                blank($scholarshipStatus)
-                    ? 'missing'
-                    : (($hasActivePlatformSupport || $isReceivingExternalSupport || ! $hasAcceptedDeclaration) ? 'fail' : 'pass'),
-                $studentValues ?: null,
-                'Must not receive another active scholarship in this portal or elsewhere',
+                'Scholarship support in this platform',
+                $user ? ($hasActivePlatformSupport ? 'fail' : 'pass') : 'missing',
+                $user ? ($hasActivePlatformSupport
+                    ? 'Platform record: '.$activePlatformScholarships->pluck('title')->implode(', ')
+                    : 'No other active scholarship recorded in this platform') : null,
+                'Must not receive another active scholarship in this platform',
                 $hasActivePlatformSupport
-                    ? 'The portal found another active scholarship award on this account.'
-                    : ($isReceivingExternalSupport
-                        ? 'This provider does not accept applicants receiving scholarship support outside the portal.'
-                        : ($hasAcceptedDeclaration
-                            ? 'No conflicting active scholarship was found in the portal or external declaration.'
-                            : 'Choose an outside scholarship status before applying.')),
+                    ? 'The platform found another active scholarship award on this account.'
+                    : ($user
+                        ? 'No other active platform award was found. Providers may request application documents to verify support outside the platform.'
+                        : 'Sign in to check awards recorded in this platform. External support is verified by the provider through application documents.'),
             );
         } else {
             $addCriterion(
                 'current_scholarship_support',
-                'Current scholarship support',
+                'Scholarship support in this platform',
                 'info',
-                $profile?->current_scholarship_status,
                 null,
-                'This program does not restrict applicants who receive other scholarship support.',
+                null,
+                'This program does not restrict other platform awards. Providers may request application documents to verify support outside the platform.',
                 false,
             );
         }
@@ -297,7 +280,7 @@ class ScholarshipEligibilityService
             default => ['state' => 'ready', 'label' => 'No required mismatches', 'title' => 'No required rule mismatches found'],
         };
 
-        return [
+        $result = [
             'policy_version' => EligibilityRulePolicy::VERSION,
             'rule_modes' => $ruleModes,
             'score' => $score,
@@ -325,6 +308,7 @@ class ScholarshipEligibilityService
             'condition_results' => $conditionResults,
             'criteria' => $criteria,
         ];
+        return $applyReviews && $user ? app(EligibilityReviewService::class)->apply($scholarship, $user, $result) : $result;
     }
 
     public function activePlatformScholarships(?User $user, ?int $exceptScholarshipId = null): array

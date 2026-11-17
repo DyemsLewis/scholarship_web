@@ -3,6 +3,8 @@ import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { ref, watch } from 'vue';
 import { useModalAccessibility } from '../../composables/useModalAccessibility';
 import { showPortalToast } from '../../support/portalToast';
+import ReceiptProofUpload from './ReceiptProofUpload.vue';
+import { evidenceError } from '../../support/agreementConcerns';
 
 const props = defineProps({
     open: { type: Boolean, default: false },
@@ -20,6 +22,7 @@ function defaultForm() {
         received_on: today,
         recipient_note: '',
         acknowledged: false,
+        evidence: null,
     };
 }
 
@@ -34,11 +37,12 @@ function close() {
 
 async function submit() {
     if (!props.release || isSaving.value) return;
-    if (!form.value.acknowledged) {
+    const proofError = !form.value.evidence ? 'Upload proof that you received the benefit.' : evidenceError([form.value.evidence], 1);
+    if (!form.value.acknowledged || proofError) {
         showPortalToast({
             type: 'error',
             title: 'Confirmation required',
-            message: 'Confirm that your response is accurate.',
+            message: proofError || 'Confirm that your response is accurate.',
         });
         return;
     }
@@ -46,14 +50,15 @@ async function submit() {
     if (!await confirmOutcome({
         record: props.release.title || 'Benefit release',
         outcome: 'Received as listed',
-        consequence: 'Confirm only if you actually received this benefit. Your response and receipt date will be recorded.',
+        consequence: 'Confirm only if you actually received this benefit. Your receipt date and uploaded proof will be recorded and shared with authorized staff.',
         confirmLabel: 'Confirm receipt',
-    }, () => props.open && !!props.release && !isSaving.value && form.value.acknowledged)) return;
+    }, () => props.open && !!props.release && !isSaving.value && form.value.acknowledged && !!form.value.evidence)) return;
     isSaving.value = true;
     const data = new FormData();
     data.append('response_type', 'confirmed');
     data.append('acknowledged', '1');
     data.append('received_on', form.value.received_on);
+    data.append('evidence', form.value.evidence);
     if (form.value.recipient_note) data.append('recipient_note', form.value.recipient_note);
 
     try {
@@ -103,6 +108,7 @@ async function submit() {
                         <span class="mb-1.5 block text-xs font-bold text-slate-700">Date received</span>
                         <input v-model="form.received_on" type="date" :min="release?.transfer_sent_on || undefined" :max="today" required class="w-full rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-sm">
                     </label>
+                    <ReceiptProofUpload v-model="form.evidence" :disabled="isSaving" />
                     <label class="block">
                         <span class="mb-1.5 block text-xs font-bold text-slate-700">Note <span class="font-normal text-slate-500">(optional)</span></span>
                         <textarea v-model="form.recipient_note" maxlength="1000" rows="3" class="w-full resize-y rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-sm leading-6"></textarea>
@@ -116,7 +122,7 @@ async function submit() {
 
                 <footer class="flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
                     <button type="button" :disabled="isSaving" class="rounded-sm border border-slate-300 px-4 py-2.5 text-sm font-bold text-slate-700" @click="close">Cancel</button>
-                    <button type="submit" :disabled="isSaving || !form.acknowledged" class="rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isSaving ? 'Saving...' : 'Continue' }}</button>
+                    <button type="submit" :disabled="isSaving || !form.acknowledged || !form.evidence" class="rounded-sm bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">{{ isSaving ? 'Saving...' : 'Continue' }}</button>
                 </footer>
             </form>
         </div>

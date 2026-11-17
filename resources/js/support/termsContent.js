@@ -141,9 +141,10 @@ export const termsContent = {
     },
     acceptance: {
         title: 'Scholarship Response Terms',
-        summary: 'A scholarship response tells the provider whether the applicant intends to continue with the award process. Accepting allows the provider to proceed with verification, orientation, or distribution steps, while declining informs the provider that the applicant will not continue.',
+        summary: 'After the provider selects an applicant, the scholarship response confirms whether the applicant intends to proceed with the offer, subject to the final provider agreement. It does not replace a signed final contract or accept additional obligations that were not shown.',
         details: [
-            'Accepting a scholarship response does not by itself guarantee immediate release of money, supplies, or other support. Final distribution still depends on the provider requirements, schedule, available funding, and any stated award conditions.',
+            'Confirming an intention to proceed is separate from selection and from signing the final provider agreement. Read that final agreement and ask about any different or additional conditions before agreeing to them.',
+            'Confirming an intention does not by itself guarantee immediate release of money, supplies, or other support. Final distribution still depends on disclosed provider requirements, schedule, available funding, and any stated award conditions.',
             'For a younger applicant, a parent or guardian should help review the award details and confirm the response. They should also help the learner understand any orientation, document, or distribution requirement.',
             'Keep contact details and supporting documents current so the provider can send accurate next-step information. Contact the provider when instructions are unclear or when the applicant can no longer attend a required activity.',
         ],

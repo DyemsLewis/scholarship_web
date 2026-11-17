@@ -34,7 +34,7 @@ export function configuredEligibilityRules(form, catalogs = {}) {
     const scale = form.minimumGradeScale;
     const academicValue = scale === 'pass_fail' ? 'Pass/fail or competency evidence'
         : scale === 'other' ? 'Academic evidence reviewed by the provider'
-            : hasGrade ? `${scale === 'grade_point' || (!scale && Number(grade) <= 5) ? 'Maximum GWA / GPA' : 'Minimum average'}: ${Number(grade).toFixed(2)}${scale === 'percentage' || (!scale && Number(grade) > 5) ? '%' : ''}`
+            : hasGrade ? `${scale === 'grade_point' || (!scale && Number(grade) <= 5) ? 'Minimum GWA / GPA' : 'Minimum average'}: ${Number(grade).toFixed(2)}${scale === 'percentage' || (!scale && Number(grade) > 5) ? '%' : ''}`
                 : 'Academic threshold not entered yet';
     const enrollment = (form.eligibilityConditions ?? []).find((condition) => condition.key === 'currently_enrolled' && condition.verification_type === 'automatic');
     const education = normalizeEducationPolicy(form.educationEligibilityPolicy);
@@ -47,7 +47,7 @@ export function configuredEligibilityRules(form, catalogs = {}) {
         { key: 'income', label: 'Household income', value: form.incomeRequirement, active: !isOpenEligibilityRule(form.incomeRequirement) },
         { key: 'school_type', label: 'School types', value: labels(form.eligibleSchoolTypes, catalogs.schoolTypes), active: restricts(form.eligibleSchoolTypes) },
         { key: 'academic', label: 'Academic performance', value: academicValue, active: Boolean(scale || hasGrade) },
-        { key: 'current_scholarship_support', label: 'Other scholarship support', value: 'No other active scholarship support', active: Boolean(form.excludeCurrentRecipients) },
+        { key: 'current_scholarship_support', label: 'Other platform scholarships', value: 'No other active scholarship in this platform', active: Boolean(form.excludeCurrentRecipients) },
         { key: 'enrollment_status', label: 'Enrollment status', value: education.enrollment_statuses.join(', ') || enrollment?.statement || 'Currently enrolled', active: Boolean(enrollment) || education.enrollment_statuses.length > 0 },
-    ].filter((rule) => rule.active).map(({ active, ...rule }) => ({ ...rule, mode: modes[rule.key] }));
+    ].filter((rule) => rule.active).map(({ active, ...rule }) => ({ ...rule, mode: modes[rule.key], allowsReview: modes[rule.key] === 'required' && (form.eligibilityReviewRules ?? []).includes(rule.key) }));
 }

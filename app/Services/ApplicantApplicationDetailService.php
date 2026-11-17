@@ -183,14 +183,14 @@ class ApplicantApplicationDetailService
                 'state' => 'action_required',
                 'tone' => 'attention',
                 'eyebrow' => 'Your next action',
-                'title' => 'Review the recipient agreement',
-                'description' => 'Check the recorded support and responsibilities before accepting or declining.',
+                'title' => 'Review your scholarship offer',
+                'description' => 'You are already selected. Confirm whether you intend to proceed, subject to the final provider agreement.',
                 'actor' => 'applicant',
                 'actor_label' => 'You',
                 'due_label' => null,
                 'action' => [
                     'kind' => 'link',
-                    'label' => 'Review agreement',
+                    'label' => 'Review offer',
                     'href' => $this->viewUrl($application, 'outcome').'?action=agreement',
                     'target' => 'agreement',
                 ],
@@ -332,7 +332,7 @@ class ApplicantApplicationDetailService
     {
         $deadline = $application->scholarship?->deadline;
 
-        return $deadline ? 'Program deadline '.$deadline->format('M d, Y') : null;
+        return $deadline ? 'Application deadline '.$deadline->format('M d, Y') : null;
     }
 
     private function snapshot(
@@ -351,7 +351,7 @@ class ApplicantApplicationDetailService
             ],
             [
                 'key' => 'deadline',
-                'label' => 'Program deadline',
+                'label' => 'Application deadline',
                 'value' => $application->scholarship?->deadline?->format('M d, Y') ?? 'Not listed',
             ],
             [
@@ -393,7 +393,7 @@ class ApplicantApplicationDetailService
             'latest_update' => $this->latestUpdate($application, $workflow),
             'record' => [
                 ['label' => 'Submitted', 'value' => $application->submitted_at?->format('M d, Y h:i A') ?? 'Not recorded'],
-                ['label' => 'Program deadline', 'value' => $scholarship?->deadline?->format('M d, Y') ?? 'Not listed'],
+                ['label' => 'Application deadline', 'value' => $scholarship?->deadline?->format('M d, Y') ?? 'Not listed'],
                 ['label' => 'Review method', 'value' => $this->applicationModeLabel($scholarship?->application_mode)],
                 ['label' => 'Submission version', 'value' => 'Version '.max(1, (int) data_get($application->submission_snapshot, 'version', 1))],
             ],
@@ -712,8 +712,8 @@ class ApplicantApplicationDetailService
             $addEvent(
                 'agreement-response',
                 'agreement',
-                $accepted ? 'Recipient agreement accepted' : 'Recipient agreement declined',
-                'Your response to the recorded scholarship terms was saved.',
+                $accepted ? 'Offer intention confirmed' : 'Scholarship offer declined',
+                'Your response to the scholarship offer was saved. It does not record a signed final contract.',
                 'You',
                 $application->student_responded_at,
                 $accepted ? 'positive' : 'negative',

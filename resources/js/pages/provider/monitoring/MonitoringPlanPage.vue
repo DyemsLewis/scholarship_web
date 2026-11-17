@@ -7,6 +7,8 @@ import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { showPortalToast } from '../../../support/portalToast';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
+import { earliestDate, latestDate, nextProviderMinute, providerDate } from '../../../support/providerDates';
+import { monitoringPlanDateError } from '../../../support/monitoringPlanDates';
 
 const scholarshipId = document.getElementById('app')?.dataset.scholarshipId;
 const scholarship = ref(null);
@@ -67,11 +69,8 @@ function defaultPlan() {
     };
 }
 
-function localDate() {
-    const now = new Date();
-    const local = new Date(now.getTime() - (now.getTimezoneOffset() * 60_000));
-    return local.toISOString().slice(0, 10);
-}
+const planDateError = computed(() => monitoringPlanDateError(form.value, scholarship.value || {}, savedPlan.value));
+const minimumPlanEnd = computed(() => latestDate(form.value.starts_on, savedPlan.value?.status === 'active' && savedPlan.value.ends_on < providerDate() ? savedPlan.value.ends_on : providerDate()));
 
 function defaultCheckIn() {
     return {
@@ -206,8 +205,8 @@ function closeCheckInEditor() {
 
 function goTo(section) {
     errorMessage.value = '';
-    if (section === 'requirements' && form.value.starts_on && form.value.ends_on && form.value.ends_on < form.value.starts_on) {
-        errorMessage.value = 'The monitoring end date must be on or after the start date.';
+    if (section !== 'schedule' && planDateError.value) {
+        errorMessage.value = planDateError.value;
         return;
     }
     if (section === 'review' && !form.value.requirements.length) {
@@ -220,6 +219,7 @@ function goTo(section) {
 
 async function savePlan(status) {
     if (!canEdit.value || isSaving.value) return;
+    if (planDateError.value) { activeSection.value = 'schedule'; errorMessage.value = planDateError.value; return; }
     if (status === 'active' && !form.value.requirements.length) {
         goTo('requirements');
         return;
@@ -339,8 +339,8 @@ onMounted(loadPlan);
                             <div class="mt-6 grid grid-cols-4 gap-5">
                                 <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Frequency</span><select v-model="form.frequency" :disabled="!canEdit" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-100"><option v-for="frequency in frequencies" :key="frequency.value" :value="frequency.value">{{ frequency.label }}</option></select></label>
                                 <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Grace period</span><div class="flex"><input v-model.number="form.grace_period_days" :disabled="!canEdit" type="number" min="0" max="60" class="h-11 min-w-0 flex-1 border border-slate-300 px-3 text-sm disabled:bg-slate-100"><span class="grid h-11 place-items-center border border-l-0 border-slate-300 bg-slate-50 px-3 text-xs text-slate-500">days</span></div></label>
-                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Starts</span><input v-model="form.starts_on" :disabled="!canEdit" type="date" :max="form.ends_on || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm disabled:bg-slate-100"></label>
-                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Ends</span><input v-model="form.ends_on" :disabled="!canEdit" type="date" :min="form.starts_on || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm disabled:bg-slate-100"></label>
+                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Starts</span><input v-model="form.starts_on" :disabled="!canEdit" type="date" :min="scholarship.support_starts_on || undefined" :max="earliestDate(form.ends_on, scholarship.support_ends_on) || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm disabled:bg-slate-100"></label>
+                                <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Ends</span><input v-model="form.ends_on" :disabled="!canEdit" type="date" :min="minimumPlanEnd" :max="scholarship.support_ends_on || undefined" class="h-11 w-full border border-slate-300 px-3 text-sm disabled:bg-slate-100"></label>
                             </div>
                             <label class="mt-6 flex items-start gap-3 border border-slate-200 bg-slate-50 p-4"><input v-model="form.allow_exception_requests" :disabled="!canEdit" type="checkbox" class="mt-0.5 h-4 w-4"><span><strong class="block text-sm text-slate-900">Allow extension or exception requests</strong><span class="mt-1 block text-xs leading-5 text-slate-500">Recipients can explain a documented issue before a requirement is marked incomplete.</span></span></label>
                             <label class="mt-5 block"><span class="mb-2 block text-xs font-bold text-slate-700">Instructions <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="form.instructions" :disabled="!canEdit" rows="4" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm leading-6 disabled:bg-slate-100" placeholder="Add instructions that apply to every check-in."></textarea></label>
@@ -404,7 +404,7 @@ onMounted(loadPlan);
                     <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Check-in title</span><input v-model="checkInForm.title" required maxlength="120" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester progress check"></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Academic period <span class="font-normal text-slate-600">(optional)</span></span><input v-model="checkInForm.period_label" maxlength="80" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="First semester"></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">School year <span class="font-normal text-slate-600">(optional)</span></span><input v-model="checkInForm.school_year" maxlength="30" class="h-11 w-full border border-slate-300 px-3 text-sm" placeholder="2026-2027"></label>
-                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Date and time (Philippine time)</span><input v-model="checkInForm.handoff_at" required type="datetime-local" :min="(savedPlan?.starts_on && savedPlan.starts_on > localDate() ? savedPlan.starts_on : localDate()) + 'T00:00'" :max="savedPlan?.ends_on ? savedPlan.ends_on + 'T23:59' : undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
+                    <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Date and time (Philippine time)</span><input v-model="checkInForm.handoff_at" required type="datetime-local" :min="latestDate(nextProviderMinute(), savedPlan?.starts_on ? savedPlan.starts_on + 'T00:00' : '')" :max="savedPlan?.ends_on ? savedPlan.ends_on + 'T23:59' : undefined" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
                     <ProviderVenueAddress v-model="checkInForm.address_details" v-model:address="checkInForm.handoff_location" class="col-span-2" />
                     <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">Arrival instructions <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="checkInForm.instructions" rows="3" maxlength="2000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm" placeholder="For example: check in at the reception desk."></textarea></label>
                     <fieldset class="col-span-2 min-w-0 border border-slate-200 px-4 pb-3">

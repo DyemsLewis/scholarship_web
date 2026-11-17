@@ -44,7 +44,6 @@ function householdProps(overrides = {}) {
     return {
         modelValue: { income_bracket: 'PHP 10,000 - 20,000', household_size: 5, guardian_name: '', guardian_relationship: '', guardian_contact: '', guardian_email: '', guardian_is_account_owner: false, current_scholarship_status: 'none', current_scholarship_details: '' },
         incomeOptions: ['PHP 10,000 - 20,000'], relationshipOptions: ['Mother'],
-        scholarshipOptions: ['none', 'receiving', 'pending', 'completed'].map((value) => option(value)),
         ...overrides,
     };
 }
@@ -197,16 +196,20 @@ test('required guardians stay visible; optional guardians can be added without c
     assert.match(legacy, /<option value="Parent">Parent<\/option>/);
 });
 
-test('outside scholarships only ask for details when needed and retain portal award context', async () => {
+test('household editing omits outside scholarship declarations and retains automatic platform award context', async () => {
     const props = householdProps();
     for (const status of ['none', 'completed', 'pending', 'receiving']) {
         const html = await render(household, { ...props, modelValue: { ...props.modelValue, current_scholarship_status: status } });
-        assert.equal(html.includes('id="profile-current-scholarship-details"'), ['pending', 'receiving'].includes(status));
+        assert.doesNotMatch(html, /id="profile-current-scholarship|Outside scholarship status|Outside provider and program/);
+        assert.match(html, /checked automatically/);
+        assert.match(html, /application documents to verify scholarship support outside/);
     }
     const html = await render(household, { ...props, portalScholarships: [{ application_id: 7, title: 'Demo learning grant' }] });
     assert.match(html, /1 award recorded in this portal/);
     assert.match(html, /Demo learning grant/);
     assert.doesNotMatch(html, /No active award/);
+    const page = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
+    assert.doesNotMatch(page, /current_scholarship_status|current_scholarship_details|currentScholarshipOptions/);
 });
 
 test('address keeps residency required and saved precision editable without requiring an exact home', async () => {

@@ -101,10 +101,11 @@ test('guardian contacts show saved relationship, phone and email without adding 
     assert.equal(findSection(applicantProfileDetails({ ...adult, guardian_name: 'Trusted contact' }, { requiresGuardian: false }), 'household').groups.length, 2);
 });
 
-test('outside scholarship information is clearly separate and stale details are not shown for a none declaration', () => {
+test('retired outside scholarship declarations never appear in applicant or reviewer profile details', () => {
     const current = { ...savedProfile(), current_scholarship_status: 'receiving', current_scholarship_details: 'Local tuition assistance' };
-    assert.equal(findField(applicantProfileDetails(current), 'current_scholarship_details').value, 'Local tuition assistance');
-    assert.equal(findField(applicantProfileDetails(current), 'current_scholarship_status').label, 'Outside scholarship');
+    assert.equal(findField(applicantProfileDetails(current), 'current_scholarship_details'), undefined);
+    assert.equal(findField(applicantProfileDetails(current), 'current_scholarship_status'), undefined);
+    assert.equal(findField(applicantProfileDetails(current, { omitUnavailable: true }), 'current_scholarship_status'), undefined);
     assert.equal(findField(applicantProfileDetails({ ...current, current_scholarship_status: 'none' }), 'current_scholarship_details'), undefined);
     assert.equal(findField(applicantProfileDetails({ ...current, household_size: 1 }), 'household_size').value, '1 member');
 });
@@ -131,7 +132,7 @@ test('missing values and older enum keys remain readable instead of becoming fal
     const sections = applicantProfileDetails({ gender: 'prefer_not_to_say', enrollment_status: 'not_currently_enrolled' });
     assert.equal(findField(sections, 'gender').value, 'Prefer not to say');
     assert.equal(findField(sections, 'enrollment_status').value, 'Not Currently Enrolled');
-    assert.equal(findField(sections, 'current_scholarship_status').value, '');
+    assert.equal(findField(sections, 'current_scholarship_status'), undefined);
     assert.equal(findField(sections, 'household_size').value, '');
     assert.equal(applicantProfileDetails(null).length, 4);
 });
@@ -144,7 +145,7 @@ test('date-only birthdates are not shifted or silently repaired', () => {
 test('reviewer records use the same labels, guardian contacts and numeric scales as the applicant', () => {
     const profile = savedProfile();
     const sections = applicantProfileDetails(profile, { omitUnavailable: true });
-    assert.equal(findField(sections, 'current_scholarship_status').value, 'No scholarship outside this portal');
+    assert.equal(findField(sections, 'current_scholarship_status'), undefined);
     assert.equal(findField(sections, 'account_managed_by').value, 'Learner / student');
     assert.equal(findField(sections, 'gwa').detail, 'General average / percentage');
     assert.equal(findField(sections, 'guardian_email').value, profile.guardian_email);

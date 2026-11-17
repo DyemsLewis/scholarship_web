@@ -256,6 +256,9 @@ class SelectionComparisonTest extends TestCase
             'status' => 'published', 'slots_available' => $slots, 'deadline' => now()->subDay()->toDateString(),
             'selection_stages' => ['screening', 'formal_application', 'exam', 'interview', 'decision'], 'review_rubric' => ReviewRubric::DEFAULT,
         ]);
+        $legacy = \App\Support\SelectionScoringPolicy::preset($program->selection_stages, $program->review_rubric);
+        unset($legacy['stage_criteria']);
+        $program->forceFill(['selection_scoring_policy' => [...$legacy, 'version' => '1.0']])->save();
 
         return [$provider, $program];
     }

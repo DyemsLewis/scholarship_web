@@ -49,7 +49,7 @@ test('long provider instructions remain collapsed without hiding agreement acces
 test('one-time empty schedules do not imply that recurring check-ins are required', async () => {
     const html = await render(content({ schedule: [], plan: { ...plan, mode: 'one_time', mode_label: 'One-time benefit only', frequency_label: null } }));
     assert.match(html, /No additional dates published/);
-    assert.match(html, /Delivery instructions and release updates remain available in Benefit releases/);
+    assert.match(html, /Delivery instructions and release updates remain available in Benefits &amp; Events/);
     assert.doesNotMatch(html, /additional check-in|Review frequency|Recurring check-ins/);
 });
 

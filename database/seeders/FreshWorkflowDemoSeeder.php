@@ -391,7 +391,8 @@ class FreshWorkflowDemoSeeder extends Seeder
                 ));
                 if ($this->seedStageScores) {
                     $revision = (int) $application->stageProgresses()->where('stage_key', $stage)->value('evaluation_revision');
-                    Carbon::withTestNow($session->completed_at->copy()->addMinutes(31), fn () => app(SelectionEvaluationService::class)->record($application->fresh(), $actor, $stage, 93, 100, $revision, 0, 'Assessment recorded from the completed session.'));
+                    $criteria = \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, $stage, 93);
+                    Carbon::withTestNow($session->completed_at->copy()->addMinutes(31), fn () => app(SelectionEvaluationService::class)->record($application->fresh(), $actor, $stage, $criteria ? null : 93, $criteria ? null : 100, $revision, 0, 'Assessment recorded from the completed session.', $criteria));
                 }
             }
         }

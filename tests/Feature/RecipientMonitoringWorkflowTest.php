@@ -394,6 +394,7 @@ class RecipientMonitoringWorkflowTest extends TestCase
                 'response_type' => 'confirmed',
                 'received_on' => now()->toDateString(),
                 'recipient_note' => 'I received the complete allowance.',
+                'evidence' => UploadedFile::fake()->image('applicant-receipt.png'),
                 'acknowledged' => true,
             ])
             ->assertCreated()
@@ -506,6 +507,7 @@ class RecipientMonitoringWorkflowTest extends TestCase
         $this->actingAs($applicant)->postJson('/dashboard/delivery-reports/'.$report->id.'/response', [
             'expected_revision' => $report->fresh()->revision, 'request_key' => (string) Str::uuid(),
             'response_kind' => 'receipt_confirmed', 'received_on' => now()->toDateString(), 'confirmed' => true,
+            'evidence' => [UploadedFile::fake()->image('received-books.png')],
         ])->assertOk()->assertJsonPath('report.status', 'closed');
 
         $receiptResponse->refresh();
@@ -848,8 +850,38 @@ class RecipientMonitoringWorkflowTest extends TestCase
             ->assertJsonPath('release.latitude', null)->assertJsonPath('release.longitude', null);
 
         unset($payload['longitude']);
+        // Remote methods discard venue coordinates; an incomplete physical pin is invalid.
+        $payload['release_method'] = 'in_person';
         $this->postJson("/provider/scholarships/{$scholarship->id}/benefit-releases", $payload)
             ->assertUnprocessable()->assertJsonValidationErrors('longitude');
+    }
+
+    public function test_receipt_confirmation_requires_private_applicant_proof_and_cannot_be_replaced(): void
+    {
+        [$provider, $applicant, $program, $application] = $this->selectedApplication();
+        $release = RecipientBenefitRelease::create(['scholarship_id' => $program->id, 'created_by' => $provider->id, 'title' => 'Learning materials', 'benefit_description' => 'School materials', 'release_at' => now()->subDay(), 'release_method' => 'in_person', 'status' => 'completed']);
+        $record = $release->records()->create(['scholarship_application_id' => $application->id, 'applicant_id' => $applicant->id, 'status' => 'released', 'recorded_by' => $provider->id, 'released_at' => now()]);
+        $url = "/dashboard/benefit-release-records/{$record->id}/response";
+        $body = ['response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true];
+        $this->actingAs($applicant)->postJson($url, $body)->assertUnprocessable()->assertJsonValidationErrors('evidence');
+        $this->assertNull($record->receiptResponse()->first());
+        foreach ([UploadedFile::fake()->create('script.svg', 10, 'image/svg+xml'), UploadedFile::fake()->create('large.pdf', 5121, 'application/pdf')] as $file) {
+            $this->post($url, [...$body, 'evidence' => $file], ['Accept' => 'application/json'])->assertUnprocessable()->assertJsonValidationErrors('evidence');
+        }
+        $result = $this->post($url, [...$body, 'evidence' => UploadedFile::fake()->image('receipt.png')], ['Accept' => 'application/json'])->assertCreated();
+        $receipt = $record->receiptResponse()->sole();
+        Storage::disk('local')->assertExists($receipt->evidence_path);
+        $this->assertSame('image/png', $receipt->evidence_mime_type);
+        $this->assertNull($record->fresh()->receipt_path, 'Applicant proof must not overwrite provider proof.');
+        $fileUrl = route('dashboard.benefit-receipt-responses.file', [$receipt, 'kind' => 'evidence'], false);
+        $this->get($fileUrl)->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->post($url, [...$body, 'evidence' => UploadedFile::fake()->image('replacement.png')], ['Accept' => 'application/json'])->assertUnprocessable();
+        $this->assertDatabaseCount('recipient_benefit_receipt_responses', 1);
+        $this->actingAs(User::factory()->create(['role' => 'applicant']))->get($fileUrl)->assertForbidden();
+        $this->actingAs($provider)->get(route('provider.benefit-receipt-responses.file', [$receipt, 'kind' => 'evidence'], false))->assertOk();
+        $foreign = User::factory()->create(['role' => 'provider']);
+        $foreign->providerProfile()->update(['verification_status' => 'approved']);
+        $this->actingAs($foreign)->get(route('provider.benefit-receipt-responses.file', [$receipt, 'kind' => 'evidence'], false))->assertForbidden();
     }
 
     private function selectedApplication(): array

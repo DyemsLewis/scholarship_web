@@ -1,3 +1,16 @@
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+</IfModule>
+
+<IfModule mod_headers.c>
+    <Files "service-worker.js">
+        Header set Cache-Control "no-store, max-age=0"
+    </Files>
+    <FilesMatch "^(manifest\.webmanifest|offline\.html)$">
+        Header set Cache-Control "no-cache, max-age=0, must-revalidate"
+    </FilesMatch>
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes

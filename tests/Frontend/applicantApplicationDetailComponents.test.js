@@ -144,10 +144,29 @@ test('the outcome page separates the final result, agreement, and recipient supp
     assert.match(outcome, /ApplicationOutcomeRecord/);
     assert.match(outcome, /RecipientAgreementDialog/);
     assert.match(outcome, /response_endpoint/);
-    assert.match(outcome, /Read the complete terms/);
+    assert.match(outcome, /You are already selected/);
+    assert.match(outcome, /subject to the final provider agreement/);
+    assert.match(outcome, /agreement_version: agreement\.value\.version/);
     assert.match(record, /<details v-if="award\.benefits/);
+    assert.doesNotMatch(record, /Recorded award|award\.amount_label/);
     assert.doesNotMatch(outcome, /Open recipient support/);
     assert.doesNotMatch(outcome, /dss_breakdown|rubric_scores|review_notes/);
+});
+
+test('offer confirmation does not present an intention as a signed final contract', () => {
+    const dialog = readFileSync(new URL('../../resources/js/components/application-detail/RecipientAgreementDialog.vue', import.meta.url), 'utf8');
+    const summary = readFileSync(new URL('../../resources/js/components/RecipientAgreementSummary.vue', import.meta.url), 'utf8');
+    const provider = readFileSync(new URL('../../resources/js/pages/provider/recipients/RecipientRecordPage.vue', import.meta.url), 'utf8');
+
+    assert.match(dialog, /You are already selected/);
+    assert.match(dialog, /Confirm intention/);
+    assert.match(dialog, /subject to the final provider agreement/);
+    assert.match(dialog, /does not replace a signed final contract/);
+    assert.match(dialog, /does not sign a final contract or accept additional obligations/);
+    assert.doesNotMatch(dialog, /I reviewed the complete agreement|Accept agreement|You agree to the responsibilities/);
+    assert.match(summary, /What the provider expects/);
+    assert.match(provider, /data-provider-offer-notice/);
+    assert.match(provider, /not proof of a signed final contract or acceptance of undisclosed obligations/);
 });
 
 test('the history page shows applicant-safe milestones and opens supporting details in a dialog', () => {

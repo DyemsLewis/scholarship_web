@@ -6,6 +6,8 @@ import ProviderSidebar from '../ProviderSidebar.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
+import StageEvaluationEntryDialog from '../../../components/StageEvaluationEntryDialog.vue';
+import { screeningEvaluationStatus } from '../../../support/stageEvaluation';
 import { applicantProfileDetails } from '../../../support/applicantProfileDetails';
 import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
@@ -52,6 +54,7 @@ const { handleKeydown: handlePhotoKeydown } = useModalAccessibility(() => showPh
 const academicForm = ref({ academic_grading_scale: '', academic_result: '' });
 const decisionForm = ref({ decision: '', decision_reason: '', review_notes: '' });
 const rubricScores = ref({});
+const showEvaluationEntry = ref(false);
 
 const applicant = computed(() => application.value?.applicant ?? {});
 const scholarship = computed(() => application.value?.scholarship ?? {});
@@ -59,6 +62,7 @@ const workflow = computed(() => application.value?.workflow ?? {});
 const decisionReopen = computed(() => application.value?.decision_reopen ?? {});
 const readiness = computed(() => application.value?.document_readiness ?? {});
 const rubricCriteria = computed(() => application.value?.rubric_review?.criteria ?? []);
+const screeningEvaluation = computed(() => screeningEvaluationStatus(rubricScores.value, rubricCriteria.value));
 const currentUserId = computed(() => Number(window.portalUser?.id));
 const assignedReviewerId = computed(() => Number(application.value?.assigned_reviewer?.id || 0));
 const isAssignedToMe = computed(() => assignedReviewerId.value === currentUserId.value);
@@ -71,6 +75,7 @@ const screeningBlocker = computed(() => {
     return '';
 });
 const canSubmitScreening = computed(() => canEditReview.value && !workflow.value.is_closed && !actionBusy.value
+    && !showEvaluationEntry.value && screeningEvaluation.value.valid
     && !screeningBlocker.value && Boolean(decisionForm.value.decision)
     && !(decisionForm.value.decision === 'reject' && !decisionForm.value.decision_reason));
 const assignmentLabel = computed(() => {
@@ -129,6 +134,7 @@ function firstError(error, fallback) {
 }
 
 function syncApplication(nextApplication) {
+    showEvaluationEntry.value = false;
     application.value = nextApplication;
     const academicScale = nextApplication?.applicant?.grading_scale ?? '';
     academicForm.value = {
@@ -257,6 +263,13 @@ async function resolveCorrection() {
     }
 }
 
+function applyEvaluation(value) {
+    if (!showEvaluationEntry.value || !canEditReview.value || workflow.value.is_closed || actionBusy.value
+        || !screeningEvaluationStatus(value, rubricCriteria.value).valid) return;
+    rubricScores.value = value;
+    showEvaluationEntry.value = false;
+}
+
 async function recordResult() {
     if (!canSubmitScreening.value) return;
     const { decision, decision_reason, review_notes } = decisionForm.value;
@@ -265,7 +278,7 @@ async function recordResult() {
     const reason = rejectionReasons.find((option) => option.value === decision_reason)?.label;
     if (!await confirmOutcome({ title: 'Confirm screening result', record: applicant.value.name,
         outcome: passed ? 'Pass screening' : 'Do not pass screening', danger: !passed,
-        details: [`Program: ${scholarship.value.title}`, !passed && reason ? `Reason: ${reason}` : ''],
+        details: [`Program: ${scholarship.value.title}`, ...rubricCriteria.value.map(criterion => `${criterion.label}: ${scores[criterion.key]} / 100`), !passed && reason ? `Reason: ${reason}` : ''],
         consequence: stageDecisionConsequence(workflow.value, 'screening', passed),
         confirmLabel: 'Record screening result',
     }, () => canSubmitScreening.value)) return;
@@ -450,9 +463,15 @@ onMounted(loadApplication);
                         <div v-if="application.correction_status" class="flex items-center justify-between border-b border-amber-200 bg-amber-50 px-6 py-4"><div><p class="text-sm font-bold text-amber-900">Correction {{ labelize(application.correction_status) }}</p><p class="mt-1 text-xs text-amber-800">{{ application.correction_message }}</p></div><button v-if="application.correction_status === 'submitted' && canEditReview" type="button" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white" :disabled="actionBusy" @click="resolveCorrection"><i class="fa-solid fa-check text-[9px]" aria-hidden="true"></i>Accept update</button></div>
                         <p v-if="application.selection_evaluation?.policy_frozen && application.selection_evaluation?.stages?.find(stage => stage.key === 'screening')?.weight" class="border-b border-slate-200 bg-slate-50 px-6 py-3 text-xs leading-5 text-slate-600">The reviewed {{ application.selection_evaluation.stages.find(stage => stage.key === 'screening').criteria.map(row => row.label.toLowerCase()).join(' and ') }} scores are reused for final selection. Eligibility and document checks do not earn ranking points. No second screening score is needed.</p>
                         <form v-if="canEditReview" class="divide-y divide-slate-200" @submit.prevent="recordResult">
-                            <div class="px-6 py-5"><h3 class="font-bold text-slate-950">Review rubric</h3><div class="mt-4 divide-y divide-slate-200 border border-slate-200"><label v-for="criterion in rubricCriteria" :key="criterion.key" class="grid grid-cols-[1fr_8rem] items-center gap-6 px-4 py-3"><span><span class="block text-sm font-bold text-slate-900">{{ criterion.label }} <span class="font-normal text-slate-500">({{ criterion.weight }}%)</span></span><span class="mt-1 block text-xs text-slate-500">{{ criterion.guidance }}</span></span><input v-model.number="rubricScores[criterion.key]" type="number" min="0" max="100" required class="h-10 border border-slate-300 px-3 text-sm" placeholder="0-100"></label><p v-if="!rubricCriteria.length" class="px-4 py-6 text-sm text-slate-500">This program does not use a scored rubric.</p></div></div>
+                            <div class="px-6 py-5" data-screening-evaluation-summary>
+                                <div v-if="rubricCriteria.length" class="flex items-center justify-between gap-5 rounded-[5px] border border-slate-200 bg-slate-50 px-4 py-4">
+                                    <div><h3 class="text-sm font-bold text-slate-950">Pre-screening evaluation</h3><p class="mt-1 text-sm text-slate-700" data-evaluation-draft-summary>{{ screeningEvaluation.completed }} of {{ screeningEvaluation.total }} criteria complete</p><p class="mt-1 text-xs text-slate-500">Review the published rubric in the modal. Scores are saved with the confirmed screening result.</p></div>
+                                    <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-[5px] border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950 disabled:opacity-50" :disabled="actionBusy || workflow.is_closed" @click="showEvaluationEntry = true"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>{{ screeningEvaluation.valid ? 'Edit evaluation' : 'Evaluate' }}</button>
+                                </div>
+                                <p v-else class="text-sm text-slate-500">This program does not use a scored rubric.</p>
+                            </div>
                             <div class="px-6 py-5"><h3 class="font-bold text-slate-950">Decision</h3><div class="mt-4 flex gap-3"><label :class="['flex flex-1 cursor-pointer items-center gap-3 border p-4', decisionForm.decision === 'approve' ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300']"><input v-model="decisionForm.decision" type="radio" value="approve"><span><span class="block text-sm font-bold text-slate-950">Pass screening</span><span class="mt-1 block text-xs text-slate-500">Move the application to the next configured stage.</span></span></label><label :class="['flex flex-1 cursor-pointer items-center gap-3 border p-4', decisionForm.decision === 'reject' ? 'border-rose-500 bg-rose-50' : 'border-slate-300']"><input v-model="decisionForm.decision" type="radio" value="reject"><span><span class="block text-sm font-bold text-slate-950">Do not pass</span><span class="mt-1 block text-xs text-slate-500">End the application at screening.</span></span></label></div><label v-if="decisionForm.decision === 'reject'" class="mt-4 block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Reason</span><select v-model="decisionForm.decision_reason" required class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option value="" disabled>Select a reason</option><option v-for="reason in rejectionReasons" :key="reason.value" :value="reason.value">{{ reason.label }}</option></select></label><label class="mt-4 block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Review note <span class="font-normal text-slate-600">(optional)</span></span><textarea v-model="decisionForm.review_notes" rows="3" class="w-full border border-slate-300 px-3 py-2 text-sm" placeholder="Add only information needed for this decision."></textarea></label></div>
-                            <footer class="flex items-center justify-between gap-4 bg-slate-50 px-6 py-4"><p class="text-sm text-slate-600">{{ screeningBlocker || (!decisionForm.decision ? 'Choose a screening result to continue.' : '') }}</p><button type="submit" class="inline-flex h-11 shrink-0 items-center gap-2 rounded-[5px] bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="!canSubmitScreening"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-clipboard-check']" aria-hidden="true"></i>{{ actionBusy ? 'Saving...' : 'Review result' }}</button></footer>
+                            <footer class="flex items-center justify-between gap-4 bg-slate-50 px-6 py-4"><p class="text-sm text-slate-600">{{ screeningBlocker || (!screeningEvaluation.valid ? 'Complete the evaluation before recording a result.' : (!decisionForm.decision ? 'Choose a screening result to continue.' : '')) }}</p><button type="submit" class="inline-flex h-11 shrink-0 items-center gap-2 rounded-[5px] bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="!canSubmitScreening"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-clipboard-check']" aria-hidden="true"></i>{{ actionBusy ? 'Saving...' : 'Review result' }}</button></footer>
                         </form>
                         <div v-else class="px-6 py-10 text-center"><p class="font-bold text-slate-900">{{ isScreening ? 'Review action unavailable' : 'Screening review completed' }}</p><p class="mt-1 text-sm text-slate-500">{{ isScreening ? assignmentLabel : `This application is now at ${workflow.current_stage_label || labelize(application.workflow_stage)}.` }}</p><button v-if="decisionReopen.can_reopen" type="button" class="mt-5 h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="showReopenDialog = true"><i class="fa-solid fa-rotate-left mr-2" aria-hidden="true"></i>Reopen {{ decisionReopen.stage_label }}</button></div>
                     </section>
@@ -481,5 +500,6 @@ onMounted(loadApplication);
         <div v-if="showPhotoReplacementForm" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" @click.self="showPhotoReplacementForm = false"><form ref="photoDialog" class="provider-application-workspace application-dialog w-full max-w-lg border border-slate-200 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="review-photo-title" tabindex="-1" @keydown="handlePhotoKeydown" @submit.prevent="reviewPhoto('request_replacement')"><header class="border-b border-slate-200 px-6 py-5"><h2 id="review-photo-title" class="text-xl font-bold text-slate-950">Request a new applicant photo</h2><p class="mt-1 text-sm text-slate-500">Explain what makes the current photo unsuitable.</p></header><div class="application-dialog-body px-6 py-5"><textarea v-model="photoReason" rows="4" required minlength="5" class="w-full border border-slate-300 px-3 py-2 text-sm" placeholder="Example: The photo is too dark to identify the applicant."></textarea></div><footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 px-4 text-xs font-bold text-slate-700" @click="showPhotoReplacementForm = false">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white" :disabled="actionBusy"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-camera-rotate']" aria-hidden="true"></i>Request replacement</button></footer></form></div>
 
         <DecisionReopenDialog :open="showReopenDialog" :decision="decisionReopen" :record-name="applicant.name" :busy="actionBusy" :error="reopenError" @confirm="reopenDecision" @cancel="showReopenDialog = false; reopenError = ''" />
+        <StageEvaluationEntryDialog :open="showEvaluationEntry && canEditReview && !workflow.is_closed" :model-value="rubricScores" stage="screening" :criteria="rubricCriteria" :applicant-name="applicant.name" :disabled="actionBusy" @close="showEvaluationEntry = false" @apply="applyEvaluation" />
     </main>
 </template>

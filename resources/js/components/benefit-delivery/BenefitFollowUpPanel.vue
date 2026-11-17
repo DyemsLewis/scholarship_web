@@ -2,6 +2,7 @@
 import { computed, ref, useId } from 'vue';
 import { useModalAccessibility } from '../../composables/useModalAccessibility';
 import { confirmOutcome } from '../../support/outcomeConfirmation.js';
+import { providerDate, providerDateOffset } from '../../support/providerDates';
 
 const props = defineProps({ followUp: { type: Object, required: true }, context: { type: String, default: 'Benefit release' }, provider: Boolean });
 const emit = defineEmits(['saved']);
@@ -18,9 +19,7 @@ const requiresDate = computed(() => ['notice', 'remind'].includes(action.value))
 const titles = { notice: 'Arrange the missed benefit', remind: 'Send a follow-up reminder', close_unclaimed: 'Record an unclaimed benefit', continue: 'Ask for a new arrangement', decline: 'Decline this benefit', link_replacement: 'Link a replacement release' };
 const eventLabels = { notice: 'Portal notice sent', remind: 'Reminder sent', close_unclaimed: 'Recorded as unclaimed', continue: 'Recipient requested help', decline: 'Recipient declined the benefit', rescheduled: 'Replacement scheduled', link_replacement: 'Replacement linked' };
 const minDate = computed(() => {
-    const date = new Date();
-    date.setDate(date.getDate() + (action.value === 'notice' ? 7 : 2));
-    return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Manila' }).format(date);
+    return providerDateOffset(providerDate(), action.value === 'notice' ? 7 : 2);
 });
 
 function show(chosen) {

@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { programConfigurationErrors } from '../../resources/js/support/programConfiguration.js';
+import { programConfigurationErrors as errors } from '../../resources/js/support/programConfiguration.js';
+const programConfigurationErrors = values => errors(values, { today: '2026-11-16' });
 
 test('application capacity cannot be smaller than recipient capacity', () => {
     assert.match(programConfigurationErrors({ slots_available: '30', application_limit: '20' }).application_limit, /recipient slots/);
@@ -46,7 +47,19 @@ test('program editor applies conflict checks before saving and uses the existing
     assert.match(source, /programConfigurationErrors\(/);
     assert.match(source, /async function save\([^]*?configurationErrors\.value[^]*?showAlert\('Check the program details'/);
     assert.match(source, /:min="Number\(form\.slotsAvailable\) \|\| 1"/);
-    assert.match(source, /:min="form\.supportStartsAt \|\| undefined"/);
-    assert.match(source, /:min="form\.deadline \|\| undefined"/);
+    assert.match(source, /:min="programDateMinimum\('support_starts_at'\)"/);
+    assert.match(source, /:min="supportEndMinimum"/);
+    assert.match(source, /latestDate\(programDateMinimum\('handoff_deadline'\), form.deadline\)/);
     assert.match(source, /<form novalidate[^>]*@submit\.prevent="nextStep"/);
+});
+
+test('new start and end dates must be today or later while unchanged published history is retained', () => {
+    for (const field of ['application_opens_at', 'deadline', 'expected_results_at', 'handoff_deadline', 'support_starts_at', 'support_ends_at']) {
+        assert.match(programConfigurationErrors({ [field]: '2026-11-15' })[field], /today or a future date/);
+        assert.deepEqual(programConfigurationErrors({ [field]: '2026-11-16' }), {});
+        const options = { today: '2026-11-16', savedDates: { [field]: '2026-09-01' }, preserveHistoricalDates: true };
+        assert.deepEqual(errors({ [field]: '2026-09-01' }, options), {});
+        assert.ok(errors({ [field]: '2026-09-02' }, options)[field]);
+        assert.ok(errors({ [field]: '2026-09-01' }, { ...options, preserveHistoricalDates: false })[field]);
+    }
 });

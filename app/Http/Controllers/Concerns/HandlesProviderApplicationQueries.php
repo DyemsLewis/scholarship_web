@@ -972,8 +972,6 @@ trait HandlesProviderApplicationQueries
             'preferred_locations' => $profile?->preferred_locations,
             'willing_to_relocate' => $profile?->willing_to_relocate,
             'support_needs' => $profile?->support_needs,
-            'current_scholarship_status' => $profile?->current_scholarship_status,
-            'current_scholarship_details' => $profile?->current_scholarship_details,
             'platform_active_scholarships' => $this->eligibilityService->activePlatformScholarships(
                 $applicant,
                 $application->scholarship_id,

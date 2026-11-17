@@ -98,6 +98,16 @@ test('unsaved changes and blank values are represented rather than replaced with
     assert.doesNotMatch(JSON.stringify(programReviewSummary({}, {})), /NaN|Invalid Date/);
 });
 
+test('review identifies total examination scoring and respects the frozen scoring basis', () => {
+    const input = { ...form(), examScoringMethod: 'total' };
+    const config = options();
+    assert.equal(value(programReviewSummary(input, config).selection, 'Examination scoring'), 'Total exam score and maximum');
+    config.scoring.examMethod = 'criteria';
+    assert.equal(value(programReviewSummary(input, config).selection, 'Examination scoring'), 'Score by criteria');
+    input.selectionStages = ['screening', 'formal_application', 'decision'];
+    assert.equal(value(programReviewSummary(input, config).selection, 'Examination scoring'), undefined);
+});
+
 test('date-only values are formatted without UTC date shifts and optional blanks stay explicit', () => {
     assert.equal(programReviewDate('2027-01-01'), 'Jan 1, 2027');
     assert.equal(programReviewDate('2027-01-01T00:00:00.000Z'), 'Jan 1, 2027');

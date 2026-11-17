@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
+import ApplicantEligibilityReview from '../components/ApplicantEligibilityReview.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import EligibilityConditionList from '../components/EligibilityConditionList.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -676,6 +677,7 @@ function eligibilityCriterionIconClass(status) {
         fail: 'bg-rose-100 text-rose-700',
         missing: 'bg-amber-100 text-amber-800',
         preferred: 'bg-amber-100 text-amber-800',
+        exception: 'bg-amber-100 text-amber-800',
         review: 'bg-amber-100 text-amber-800',
         info: 'bg-sky-100 text-sky-700',
     }[status] ?? 'bg-slate-100 text-slate-700';
@@ -687,6 +689,7 @@ function eligibilityCriterionBadgeClass(status) {
         fail: 'bg-rose-100 text-rose-700',
         missing: 'bg-amber-100 text-amber-800',
         preferred: 'bg-amber-100 text-amber-800',
+        exception: 'bg-amber-100 text-amber-800',
         review: 'bg-amber-100 text-amber-800',
         info: 'bg-sky-100 text-sky-800',
     }[status] ?? 'bg-slate-100 text-slate-600';
@@ -1166,6 +1169,7 @@ watch(selectedScholarship, (scholarship) => {
                         </nav>
 
                         <div class="bg-white p-5 sm:p-6">
+                            <ApplicantEligibilityReview v-if="selectedScholarship && (currentStep === 1 || !selectedIsEligible)" :key="selectedScholarship.id" :scholarship-id="selectedScholarship.id" @changed="loadApplications" />
                             <div v-if="currentStep === 0 && !selectedScholarship">
                                 <div class="grid min-h-64 place-items-center rounded-md border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center">
                                     <div class="max-w-md">

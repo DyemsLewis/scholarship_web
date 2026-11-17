@@ -1,9 +1,9 @@
 <script setup>
-import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import FeedbackAlertModal from './FeedbackAlertModal.vue';
 import LocationPinField from './LocationPinField.vue';
 import { citiesForLocation, findLocationOption, findPhilippineRegion, philippineRegionOptions, provincesForRegion } from '../support/philippineLocations';
-import { emptyVenueAddress, venueAddressText } from '../support/venueAddress';
+import { emptyVenueAddress, lookupVenuePinAddress, venueAddressFromMap, venueAddressText } from '../support/venueAddress';
 
 const props = defineProps({
     modelValue: { type: Object, default: null },
@@ -20,10 +20,19 @@ const required = computed(() => Boolean(props.modelValue) || !props.address);
 const provinces = ref([]), cities = ref([]), loading = ref(false), error = ref('');
 const useManualLocation = ref(false);
 const pinValues = ref({});
+const pinMessage = ref('');
 const fieldClass = 'mt-1.5 h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 disabled:bg-slate-50';
 let version = 0;
+let pinRevision = 0, pinController = null;
+
+function cancelPinLookup() {
+    pinRevision++;
+    pinController?.abort();
+    pinMessage.value = '';
+}
 
 function change(key, value) {
+    cancelPinLookup();
     pinValues.value = {};
     const next = { ...fields.value, [key]: value, latitude: null, longitude: null };
     if (key === 'region') Object.assign(next, { province: '', city: '', barangay: '' });
@@ -36,9 +45,36 @@ function change(key, value) {
 }
 
 function pin(key, value) {
+    if (value === null) cancelPinLookup();
     pinValues.value = { ...pinValues.value, [key]: value };
     if (props.modelValue || value !== null) emit('update:modelValue', { ...fields.value, ...pinValues.value });
     emit('update:' + key, value);
+}
+
+async function fillFromPin(location) {
+    cancelPinLookup();
+    const revision = pinRevision;
+    const controller = pinController = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    pinMessage.value = 'Pin selected. Looking up its address...';
+    try {
+        const address = await lookupVenuePinAddress(location, controller.signal);
+        await nextTick();
+        if (revision !== pinRevision || controller.signal.aborted
+            || Number(props.latitude) !== Number(location.latitude) || Number(props.longitude) !== Number(location.longitude)) return;
+        const resolved = venueAddressFromMap(address);
+        if (!resolved) throw new Error('Address not recognized.');
+        const next = { ...fields.value, ...resolved, latitude: Number(location.latitude).toFixed(7), longitude: Number(location.longitude).toFixed(7) };
+        pinValues.value = { latitude: next.latitude, longitude: next.longitude };
+        emit('update:modelValue', next);
+        emit('update:address', venueAddressText(next, props.includeVenueInAddress));
+        pinMessage.value = 'Available address fields filled from the confirmed pin. Review them and complete any missing details before saving.';
+    } catch {
+        if (revision === pinRevision) pinMessage.value = 'Pin selected. The address could not be filled automatically; select the region, province, and city yourself before saving.';
+    } finally {
+        clearTimeout(timeout);
+        if (pinController === controller) pinController = null;
+    }
 }
 
 async function loadOptions() {
@@ -62,7 +98,7 @@ watch(() => [fields.value.region, fields.value.province], (current, previous) =>
     if (useManualLocation.value && previous && current[0] === previous[0]) return;
     loadOptions();
 }, { immediate: true });
-onBeforeUnmount(() => { version++; });
+onBeforeUnmount(() => { version++; cancelPinLookup(); });
 </script>
 
 <template>
@@ -78,6 +114,7 @@ onBeforeUnmount(() => { version++; });
         <FeedbackAlertModal v-model="error" title="Venue location lists unavailable" retry-label="Try again" :busy="loading" @retry="loadOptions" />
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-barangay`">Barangay <span class="font-normal text-slate-500">(optional)</span><input :id="`${id}-barangay`" :value="fields.barangay" maxlength="100" :class="fieldClass" @input="change('barangay', $event.target.value)"></label>
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-street`">Street / address details <span class="font-normal text-slate-500">(optional)</span><input :id="`${id}-street`" :value="fields.street" maxlength="160" :class="fieldClass" placeholder="Street and building number" @input="change('street', $event.target.value)"></label>
-        <LocationPinField :address="venueAddressText(modelValue) || address || venue" :latitude="modelValue ? fields.latitude : latitude" :longitude="modelValue ? fields.longitude : longitude" title="Venue location" @update:latitude="pin('latitude', $event)" @update:longitude="pin('longitude', $event)" />
+        <LocationPinField :address="venueAddressText(modelValue) || address || venue" :latitude="modelValue ? fields.latitude : latitude" :longitude="modelValue ? fields.longitude : longitude" :reset-on-address-change="false" :reverse-geocode-on-pick="false" title="Venue location" @update:latitude="pin('latitude', $event)" @update:longitude="pin('longitude', $event)" @selected="fillFromPin" />
+        <p v-if="pinMessage" class="text-xs leading-5 text-slate-600" role="status" aria-live="polite" data-pin-address-status>{{ pinMessage }}</p>
     </fieldset>
 </template>

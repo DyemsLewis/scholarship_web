@@ -8,11 +8,19 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ApplicantMonitoringDetailContractTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Storage::fake('local');
+    }
 
     public function test_support_landing_uses_the_same_direct_action_as_the_detail_and_only_shows_owned_support(): void
     {
@@ -198,7 +206,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
             ], false))
             ->assertJsonPath('detail.summary.check_ins.total', 2)
             ->assertJsonCount(4, 'detail.navigation')
-            ->assertJsonPath('detail.navigation.1.label', 'Check-ins')
+            ->assertJsonPath('detail.navigation.1.label', 'Requirements')
             ->assertJsonPath('detail.content.type', 'overview')
             ->assertJsonPath('detail.content.plan.mode', 'recurring')
             ->assertJsonPath('detail.content.plan.mode_label', 'Recurring check-ins')
@@ -207,6 +215,24 @@ class ApplicantMonitoringDetailContractTest extends TestCase
                 'record' => 'check-in-'.$structured->id,
             ], false))
             ->assertJsonMissingPath('application');
+    }
+
+    public function test_support_section_names_preserve_existing_navigation_and_view_keys(): void
+    {
+        [, $applicant, , $application] = $this->selectedRecipient();
+
+        foreach (['check-ins' => 'Requirements', 'benefits' => 'Benefits & Events'] as $view => $title) {
+            $response = $this->actingAs($applicant)
+                ->getJson(route('dashboard.monitoring.show.data', $application).'?view='.$view)
+                ->assertOk()
+                ->assertJsonPath('detail.view', $view)
+                ->assertJsonPath('detail.page.title', $title);
+
+            $navigation = collect($response->json('detail.navigation'))->firstWhere('key', $view);
+            $this->assertSame($title, $navigation['label']);
+            $this->assertTrue($navigation['active']);
+            $this->assertStringEndsWith('/'.$view, $navigation['href']);
+        }
     }
 
     public function test_monitoring_sections_have_direct_page_routes_and_scoped_contract_content(): void
@@ -469,6 +495,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
 
         $this->postJson(route('dashboard.benefit-release-records.response', $record), [
             'response_type' => 'confirmed',
+            'evidence' => UploadedFile::fake()->image('recipient-proof.png'),
             'received_on' => now()->toDateString(),
             'acknowledged' => true,
         ])->assertCreated();
@@ -621,6 +648,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
 
         $this->actingAs($applicant)->postJson(route('dashboard.benefit-release-records.response', $release), [
             'response_type' => 'confirmed', 'received_on' => '2026-11-09', 'acknowledged' => true,
+            'evidence' => UploadedFile::fake()->image('recipient-proof.png'),
         ])->assertCreated();
 
         $url = route('dashboard.monitoring.show.data', $application).'?view=history';

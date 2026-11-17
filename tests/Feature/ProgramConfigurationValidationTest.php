@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Scholarship;
 use App\Models\User;
+use App\Support\ProgramConfigurationRules;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -17,6 +19,7 @@ class ProgramConfigurationValidationTest extends TestCase
     {
         parent::setUp();
         Mail::fake();
+        $this->travelTo(CarbonImmutable::parse('2026-11-16 09:00:00', 'Asia/Manila'));
     }
 
     public static function conflictingConfigurations(): array
@@ -117,6 +120,55 @@ class ProgramConfigurationValidationTest extends TestCase
         $this->actingAs($admin)->patchJson('/admin/scholarships/'.$program->id.'/review', ['expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($program->id), 'status' => 'published'])
             ->assertUnprocessable()->assertJsonValidationErrors(['application_limit', 'expected_results_at']);
         $this->assertSame('pending_review', $program->fresh()->status);
+    }
+
+    public function test_new_support_dates_cannot_be_in_the_past_even_in_drafts(): void
+    {
+        $this->actingAs($this->provider());
+        foreach (['draft', 'pending_review'] as $status) {
+            foreach (['application_opens_at', 'deadline', 'expected_results_at', 'handoff_deadline', 'support_starts_at', 'support_ends_at'] as $field) {
+                $this->postJson('/provider/scholarships', [
+                    'title' => 'New support period', 'description' => 'Program date validation.', 'status' => $status, 'terms_accepted' => true,
+                    $field => now()->subDay()->toDateString(),
+                ])->assertUnprocessable()->assertJsonValidationErrors($field);
+            }
+        }
+        $this->assertDatabaseCount('scholarships', 0);
+        $this->postJson('/provider/scholarships', [
+            'title' => 'Same day support', 'status' => 'draft',
+            'support_starts_at' => now()->toDateString(), 'support_ends_at' => now()->toDateString(),
+        ])->assertCreated();
+    }
+
+    public function test_edits_cannot_replace_support_dates_with_past_dates(): void
+    {
+        $provider = $this->provider();
+        $program = $this->program($provider);
+        $before = $program->fresh()->getAttributes();
+        foreach (['support_starts_at', 'support_ends_at'] as $field) {
+            $this->actingAs($provider)->putJson('/provider/scholarships/'.$program->id, [
+                'title' => $program->title, 'status' => 'draft', $field => now()->subDay()->toDateString(),
+            ])->assertUnprocessable()->assertJsonValidationErrors($field);
+        }
+        $this->assertSame($before, $program->fresh()->getAttributes());
+    }
+
+    public function test_historical_published_dates_are_preserved_but_new_past_dates_and_stale_drafts_are_rejected(): void
+    {
+        $program = $this->program($this->provider());
+        $program->update(['status' => 'published', 'support_starts_at' => '2026-09-01', 'support_ends_at' => '2026-10-31']);
+        $this->assertSame([], ProgramConfigurationRules::errors([], $program));
+        $this->assertSame([], ProgramConfigurationRules::errors(['support_starts_at' => '2026-09-01', 'support_ends_at' => '2026-10-31'], $program));
+        $this->assertArrayHasKey('support_starts_at', ProgramConfigurationRules::errors(['support_starts_at' => '2026-09-02'], $program));
+        $this->assertArrayHasKey('support_ends_at', ProgramConfigurationRules::errors(['support_ends_at' => '2026-11-01'], $program));
+        $program->update(['status' => 'draft']);
+        $this->assertArrayHasKey('support_starts_at', ProgramConfigurationRules::errors([], $program));
+        $this->assertArrayHasKey('support_ends_at', ProgramConfigurationRules::errors([], $program));
+        $program->update(['status' => 'pending_review']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($admin)->patchJson('/admin/scholarships/'.$program->id.'/review', [
+            'expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($program->id), 'status' => 'published',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['support_starts_at', 'support_ends_at']);
     }
 
     private function provider(): User

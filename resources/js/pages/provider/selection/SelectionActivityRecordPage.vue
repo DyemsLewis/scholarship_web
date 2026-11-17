@@ -5,13 +5,13 @@ import { computed, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
-import StageEvaluationFields from '../../../components/StageEvaluationFields.vue';
+import StageEvaluationEntryDialog from '../../../components/StageEvaluationEntryDialog.vue';
 import StageEvaluationDialog from '../../../components/StageEvaluationDialog.vue';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
 import { profileEducationSummary } from '../../../support/applicantProfileLabels';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import { stageDecisionConsequence } from '../../../support/providerDecisionConfirmation.js';
-import { stageScoreLabel, stageScorePercentage } from '../../../support/stageEvaluation';
+import { stageScoreLabel, stageEvaluationForm, stageEvaluationResult, stageEvaluationPayload } from '../../../support/stageEvaluation';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
 const returnTo = new URLSearchParams(window.location.search).get('return_to');
@@ -25,11 +25,12 @@ const successMessage = ref('');
 const showReopenDialog = ref(false);
 const reopenError = ref('');
 const editingEvaluation = ref(null);
+const showEvaluationEntry = ref(false);
 const evaluationError = ref('');
 const confirming = ref(false);
 const resultForm = ref(emptyResultForm());
 function emptyResultForm() {
-    return { result: '', decision_reason: '', notes: '', evaluation: { score: '', maximum_score: 100 } };
+    return { result: '', decision_reason: '', notes: '', evaluation: stageEvaluationForm() };
 }
 
 const applicant = computed(() => application.value?.applicant ?? {});
@@ -44,11 +45,12 @@ const evaluations = computed(() => application.value?.selection_evaluation ?? {}
 const currentEvaluation = computed(() => evaluations.value.stages?.find(stage => stage.key === currentStage.value));
 const scoredStage = computed(() => evaluations.value.policy_frozen && ['exam', 'interview'].includes(currentStage.value) && currentEvaluation.value?.weight > 0);
 const needsEvaluation = computed(() => scoredStage.value && resultForm.value.result === 'passed');
+const calculatedEvaluation = computed(() => stageEvaluationResult(resultForm.value.evaluation, currentEvaluation.value?.criteria, currentStage.value));
 const previousEvaluations = computed(() => (evaluations.value.stages ?? []).filter(stage => stage.key !== currentStage.value && (stage.score !== null || stage.can_edit || stage.state === 'needs_review')));
 const nextStep = computed(() => readiness.value ? readiness.value.next_step : application.value?.provider_next_step);
-const canSubmitResult = computed(() => canRecordResult.value && !actionBusy.value && !confirming.value && Boolean(resultForm.value.result)
+const canSubmitResult = computed(() => canRecordResult.value && !actionBusy.value && !confirming.value && !showEvaluationEntry.value && Boolean(resultForm.value.result)
     && !(resultForm.value.result === 'not_passed' && !resultForm.value.decision_reason)
-    && (!needsEvaluation.value || stageScorePercentage(resultForm.value.evaluation.score, resultForm.value.evaluation.maximum_score) !== null));
+    && (!needsEvaluation.value || calculatedEvaluation.value !== null));
 const activity = computed(() => readiness.value?.session ?? readiness.value?.legacy_schedule);
 const rejectionReasons = computed(() => {
     const allowed = {
@@ -79,12 +81,14 @@ function firstError(error, fallback) {
 }
 
 async function loadRecord() {
+    showEvaluationEntry.value = false;
     isLoading.value = true;
     readiness.value = null;
     errorMessage.value = '';
     try {
         const response = await window.axios.get(`/provider/applications/${applicationId}/data`, { params: { workspace: 'selection' } });
         application.value = response.data.application;
+        resultForm.value.evaluation = stageEvaluationForm(currentEvaluation.value);
         if (['formal_application', 'exam', 'interview'].includes(application.value.workflow_stage)) {
             const readinessResponse = await window.axios.get(`/provider/applications/${applicationId}/stage-readiness`);
             readiness.value = readinessResponse.data.readiness;
@@ -96,6 +100,13 @@ async function loadRecord() {
     }
 }
 
+function applyEvaluation(value) {
+    if (!showEvaluationEntry.value || !canRecordResult.value || !needsEvaluation.value || actionBusy.value || confirming.value
+        || stageEvaluationResult(value, currentEvaluation.value?.criteria, currentStage.value) === null) return;
+    resultForm.value.evaluation = value;
+    showEvaluationEntry.value = false;
+}
+
 async function recordResult() {
     if (!canSubmitResult.value) return;
     const stage = currentStage.value;
@@ -103,8 +114,7 @@ async function recordResult() {
     const { result, decision_reason, notes } = resultForm.value;
     const snapshot = JSON.stringify(resultForm.value);
     const evaluation = needsEvaluation.value ? {
-        score: Number(resultForm.value.evaluation.score),
-        maximum_score: Number(resultForm.value.evaluation.maximum_score),
+        ...stageEvaluationPayload(resultForm.value.evaluation, currentEvaluation.value.criteria),
         expected_stage_revision: currentEvaluation.value.stage_revision,
         expected_revision: currentEvaluation.value.revision,
     } : null;
@@ -115,7 +125,7 @@ async function recordResult() {
     try {
         accepted = await confirmOutcome({ title: `Confirm ${completedStage.toLowerCase()} result`, record: applicant.value.name,
             outcome: result, danger: !passed,
-            details: [`Program: ${scholarship.value.title}`, evaluation ? `Evaluation: ${stageScoreLabel(evaluation.score, evaluation.maximum_score)}` : '', !passed && reason ? `Reason: ${reason}` : ''],
+            details: [`Program: ${scholarship.value.title}`, evaluation ? `Evaluation: ${stageScoreLabel(calculatedEvaluation.value.score, calculatedEvaluation.value.maximum_score)}` : '', ...(evaluation?.criteria_scores ? currentEvaluation.value.criteria.map(row => `${row.label}: ${evaluation.criteria_scores[row.key].score} / ${evaluation.criteria_scores[row.key].maximum_score} (${row.weight}%)`) : []), !passed && reason ? `Reason: ${reason}` : ''],
             consequence: stageDecisionConsequence(workflow.value, stage, passed),
             confirmLabel: 'Record result',
         }, () => canRecordResult.value && !actionBusy.value && currentStage.value === stage && JSON.stringify(resultForm.value) === snapshot);
@@ -217,7 +227,10 @@ onMounted(loadRecord);
                         <form v-if="canRecordResult" class="px-6 py-6" @submit.prevent="recordResult">
                             <div class="flex w-full items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span><div><h2 class="text-lg font-bold text-slate-950">Record outcome</h2><p class="mt-1 text-sm text-slate-500">This advances or closes the applicant record.</p></div></div>
                             <div class="mt-5 grid grid-cols-2 gap-3"><label :class="['cursor-pointer border px-4 py-4', resultForm.result === 'passed' ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="resultForm.result" type="radio" value="passed" class="mr-3 text-slate-950 focus:ring-slate-950"><span class="text-sm font-bold text-slate-950">Passed</span><span class="ml-2 text-xs text-slate-500">Continue to the next stage</span></label><label :class="['cursor-pointer border px-4 py-4', resultForm.result === 'not_passed' ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="resultForm.result" type="radio" value="not_passed" class="mr-3 text-slate-950 focus:ring-slate-950"><span class="text-sm font-bold text-slate-950">Not passed</span><span class="ml-2 text-xs text-slate-500">Close this application</span></label></div>
-                            <div v-if="needsEvaluation" class="mt-5 border-y border-slate-200 py-5" data-outcome-evaluation><StageEvaluationFields v-model="resultForm.evaluation" :stage="currentStage" id-prefix="stage-outcome" :disabled="actionBusy || confirming" /><p class="mt-3 text-xs text-slate-500">{{ currentEvaluation.weight }}% of the final evaluation. The score and this outcome are saved together.</p></div>
+                            <div v-if="needsEvaluation" class="mt-5 flex items-center justify-between gap-5 rounded-[5px] border border-slate-200 bg-slate-50 px-4 py-4" data-outcome-evaluation>
+                                <div><h3 class="text-sm font-bold text-slate-950">{{ stageLabel }} evaluation</h3><p class="mt-1 text-sm text-slate-700" data-evaluation-draft-summary>{{ calculatedEvaluation ? stageScoreLabel(calculatedEvaluation.score, calculatedEvaluation.maximum_score) : 'Evaluation is required before passing this stage.' }}</p><p class="mt-1 text-xs text-slate-500">{{ currentEvaluation.weight }}% of the final evaluation. Saved with the confirmed outcome.</p></div>
+                                <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-[5px] border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950 disabled:opacity-50" :disabled="actionBusy || confirming" @click="showEvaluationEntry = true"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>{{ calculatedEvaluation ? 'Edit evaluation' : 'Evaluate' }}</button>
+                            </div>
                             <p v-else-if="currentStage === 'formal_application'" class="mt-4 text-xs text-slate-500">Formal verification is a qualifying check, not a ranking score.</p>
                             <p v-if="evaluations.state === 'legacy'" class="mt-4 text-xs text-slate-500">This existing intake has no fixed scoring plan. Its stage outcomes continue without adding a ranking score.</p>
                             <label v-if="resultForm.result === 'not_passed'" class="mt-4 block text-sm font-semibold text-slate-700">Reason<select v-model="resultForm.decision_reason" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="" disabled>Select a reason</option><option v-for="option in rejectionReasons" :key="option.value" :value="option.value">{{ option.label }}</option></select></label>
@@ -243,5 +256,6 @@ onMounted(loadRecord);
 
         <DecisionReopenDialog :open="showReopenDialog" :decision="decisionReopen" :record-name="applicant.name" :busy="actionBusy" :error="reopenError" @cancel="showReopenDialog = false; reopenError = ''" @confirm="reopenDecision" />
         <StageEvaluationDialog :evaluation="editingEvaluation" :applicant-name="applicant.name" :busy="actionBusy" :error="evaluationError" @close="editingEvaluation = null" @save="saveEvaluation" />
+        <StageEvaluationEntryDialog :open="showEvaluationEntry && needsEvaluation && canRecordResult" :model-value="resultForm.evaluation" :stage="currentStage" :criteria="currentEvaluation?.criteria || []" :applicant-name="applicant.name" :disabled="actionBusy || confirming" @close="showEvaluationEntry = false" @apply="applyEvaluation" />
     </main>
 </template>

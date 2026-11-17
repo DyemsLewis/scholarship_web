@@ -20,6 +20,7 @@ function display(value, fallback) {
 
 function reviewNote(criterion) {
     const status = presentation(criterion).status;
+    if (status === 'exception') return `A provider-approved exception allowed submission. The original mismatch is unchanged. ${criterion.exception_note || ''}`;
     if (status === 'review') return criterion.comparison_mode === 'scale_mismatch'
         ? 'Different grading scales. Confirm the academic record manually; this is not missing profile data or an automatic failure.'
         : 'Review the academic evidence manually. This check is not an automatic match or failure.';

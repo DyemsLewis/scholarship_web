@@ -7,6 +7,33 @@ use App\Models\ScholarshipApplication;
 
 class RecipientAgreement
 {
+    public const RESPONSE_SCOPE = 'offer_confirmation';
+
+    public const RESPONSE_NOTICE = 'This confirms your intention to proceed with the scholarship offer, subject to the final provider agreement. It is not a signed final contract and does not accept additional obligations that are not shown here. Ask the provider to explain any different or additional terms before signing or continuing.';
+
+    public static function hasDisclosedResponsibilities(array $snapshot): bool
+    {
+        $expectation = $snapshot['recipient_expectation'] ?? [];
+        if (! is_array($expectation)
+            || in_array($expectation['commitment_type'] ?? null, ['provider_briefing', 'none'], true)) {
+            return false;
+        }
+
+        foreach ([
+            $expectation['responsibilities'] ?? null,
+            $snapshot['return_service_contract'] ?? null,
+            $snapshot['other_contract_terms'] ?? null,
+            $snapshot['renewal_policy'] ?? null,
+        ] as $text) {
+            if (is_string($text) && trim($text) !== ''
+                && trim($text) !== 'The provider will explain any final recipient commitments after the applicant is accepted.') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function snapshot(Scholarship $scholarship, ?ScholarshipApplication $application = null): array
     {
         $scholarship->loadMissing(['provider.providerProfile', 'benefits']);
@@ -49,8 +76,8 @@ class RecipientAgreement
         return [
             'status' => $status,
             'status_label' => match ($status) {
-                'accepted' => 'Accepted',
-                'declined' => 'Declined',
+                'accepted' => 'Intention confirmed',
+                'declined' => 'Offer declined',
                 default => 'Awaiting response',
             },
             'snapshot' => $snapshot,
@@ -60,7 +87,9 @@ class RecipientAgreement
             'response_note' => $application->student_response_note,
             'requires_response' => $application->final_outcome === 'selected' && blank($application->student_response_status),
             'can_respond' => $application->final_outcome === 'selected' && blank($application->student_response_status),
-            'notice' => 'This fixed record contains the program terms disclosed when you were selected. If a later document is different, ask the provider to explain the difference before signing or continuing.',
+            'response_scope' => self::RESPONSE_SCOPE,
+            'final_contract_recorded' => false,
+            'notice' => self::RESPONSE_NOTICE,
         ];
     }
 }

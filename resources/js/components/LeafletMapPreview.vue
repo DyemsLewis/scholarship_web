@@ -216,6 +216,7 @@ async function geocodeAddress(address = props.address) {
             latitude: Number(firstResult.lat),
             longitude: Number(firstResult.lon),
             displayName: firstResult.display_name,
+            address: firstResult.address ?? {},
         };
 
         if (props.picker && !await isAllowed(coordinates)) {
@@ -473,17 +474,18 @@ async function setPickedCoordinates(coordinates) {
             reportError(PHILIPPINE_LAND_MESSAGE + (acceptedCoordinates ? ' Your previous pin has been kept.' : ''));
             return;
         }
-        // Land validation is independent of the optional address lookup.
-        const location = props.reverseGeocodeOnPick ? await reverseGeocodeCoordinates(coordinates) : null;
-        if (!isMounted || revision !== selectionRevision) return;
         acceptedCoordinates = coordinates;
         pendingPickedCoordinates = coordinates;
         await renderMap(coordinates, true);
         if (!isMounted || revision !== selectionRevision) return;
-        emit('picked', location || coordinates);
-        statusMessage.value = location?.displayName
-            ? 'Pin set. Address fields were filled from this map point.'
-            : 'Land location selected. Address lookup is unavailable; enter the address yourself before saving.';
+        emit('picked', coordinates);
+        selectionState();
+        statusMessage.value = 'Land location selected. You can use this pin now.';
+        // An optional address lookup must not delay using a validated land pin.
+        const location = props.reverseGeocodeOnPick ? await reverseGeocodeCoordinates(coordinates) : null;
+        if (!isMounted || revision !== selectionRevision) return;
+        if (location) emit('picked', location);
+        statusMessage.value = 'Land location selected. Choose Use this pin to confirm, then review the address fields.';
     } catch (error) {
         if (!isMounted || revision !== selectionRevision) return;
         await renderMap(acceptedCoordinates, true);

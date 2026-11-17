@@ -4,8 +4,7 @@ import AlertDialog from '../../../components/AlertDialog.vue';
 import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewModal.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import CoverImagePickerModal from '../../../components/CoverImagePickerModal.vue';
-import LocationMapModal from '../../../components/LocationMapModal.vue';
-import LocationPinField from '../../../components/LocationPinField.vue';
+import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { useConfirmationDialog } from '../../../composables/useConfirmationDialog';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
@@ -18,17 +17,19 @@ import EligibilityCheckboxPicker from './components/EligibilityCheckboxPicker.vu
 import EligibilityLocationPicker from './components/EligibilityLocationPicker.vue';
 import DocumentRequirementsPicker from './components/DocumentRequirementsPicker.vue';
 import SelectionScoringPreview from './components/SelectionScoringPreview.vue';
+import StageCriterionLabelsEditor from './components/StageCriterionLabelsEditor.vue';
 import ProgramReviewSummary from './components/ProgramReviewSummary.vue';
 import { normalizeEducationPolicy, educationPolicyError } from '../../../support/educationEligibilityPolicy';
 import { configuredEligibilityRules, normalizeEligibilityRuleModes } from '../../../support/providerEligibilityRules';
-import { programConfigurationErrors } from '../../../support/programConfiguration';
+import { programConfigurationErrors, programDateToday } from '../../../support/programConfiguration';
+import { latestDate } from '../../../support/providerDates';
 import { programDraftSnapshot, programSaveLabel, shouldGuardProgramLink } from '../../../support/programSaveState';
 import { eligibilitySummaryFromRules, eligibilitySummaryReviewKey } from '../../../support/programEligibilitySummary';
 import { programEligibilityOptions, educationSelectionImpact, eligibilityListValues } from '../../../support/programEligibilityOptions';
 import { organizationProgramLocation, organizationLocationWouldReplace } from '../../../support/programOrganizationLocation';
 import { hasLocationPin } from '../../../support/locationPins';
 import { programReviewSummary } from '../../../support/programReviewSummary';
-import { programScoringPreview } from '../../../support/programScoringPreview';
+import { programCriterionLabels, programCriterionLabelErrors, programScoringPreview } from '../../../support/programScoringPreview';
 import { normalizeProgramRecipientAgreement } from '../../../support/programRecipientAgreement.js';
 
 const pathMatch = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
@@ -52,6 +53,7 @@ const isSaving = ref(false);
 const saveFailed = ref(false);
 const savedMessage = ref('');
 const originalStatus = ref('draft');
+const savedDates = ref({});
 const applicationsCount = ref(0);
 const fixedScoringPolicy = ref(null);
 let scoringPresets = {};
@@ -71,7 +73,6 @@ const coverFile = ref(null);
 const coverPreviewUrl = ref('');
 const recommendedCoverKey = ref('learning-together');
 const providerCoverUrl = ref(portalUser.provider_cover_url ?? '');
-const showLocationMap = ref(false);
 const mapMessage = ref('');
 const benefitType = ref('');
 const benefitDialogOpen = ref(false);
@@ -147,6 +148,7 @@ function emptyForm() {
         applicationOpensAt: '', deadline: '', expectedResultsAt: '',
         locationName: portalUser.provider_name ?? '',
         locationAddress: portalUser.provider_address ?? '',
+        locationAddressDetails: null,
         latitude: '', longitude: '',
         contactEmail: portalUser.provider_contact_email ?? '',
         contactNumber: portalUser.provider_contact_number ?? '',
@@ -155,7 +157,7 @@ function emptyForm() {
         eligibility: '', eligibleEducationLevels: [], eligibleCourses: '', eligibleSchoolTypes: [],
         eligibleYearLevels: '', eligibleLocations: '', incomeRequirement: 'Any',
         minimumGradeScale: '', minimumGwa: '', excludeCurrentRecipients: false,
-        eligibilityRuleModes: normalizeEligibilityRuleModes(), eligibilityConditions: [],
+        eligibilityRuleModes: normalizeEligibilityRuleModes(), eligibilityReviewRules: [], eligibilityConditions: [],
         educationEligibilityPolicy: normalizeEducationPolicy(),
         applicationMode: 'online',
         requirements: 'Certificate of enrollment\nLatest report card or grades\nRecent school ID',
@@ -163,9 +165,11 @@ function emptyForm() {
         postQualificationRequirements: 'Original copies of submitted records',
         handoffMode: 'onsite',
         handoffInstructions: 'Bring the listed original records for final verification.',
-        handoffDeadline: '', handoffLocationName: '', handoffLocationAddress: '', handoffUrl: '',
+        handoffDeadline: '', handoffLocationName: '', handoffLocationAddress: '', handoffAddressDetails: null, handoffUrl: '',
         handoffLatitude: null, handoffLongitude: null,
         selectionStages: ['screening', 'formal_application', 'decision'],
+        examScoringMethod: 'criteria',
+        stageCriterionLabels: programCriterionLabels(scoringPresets),
         reviewRubric: structuredClone(defaultRubric),
         recipientAgreement: normalizeProgramRecipientAgreement(),
         termsAccepted: false,
@@ -176,6 +180,8 @@ function emptyForm() {
 }
 
 const form = ref(emptyForm());
+const criterionLabelErrors = computed(() => programCriterionLabelErrors(form.value.stageCriterionLabels));
+const scoringPreview = computed(() => programScoringPreview(scoringPresets, form.value.selectionStages, fixedScoringPolicy.value, applicationsCount.value, form.value.examScoringMethod, form.value.stageCriterionLabels));
 const programHasLocationPin = computed(() => hasLocationPin(form.value.latitude, form.value.longitude));
 const coursesNeedChoice = ref(false);
 const yearsNeedChoice = ref(false);
@@ -230,7 +236,6 @@ const coverSourceLabel = computed(() => ({
     provider: 'Organization background',
     upload: 'Uploaded image',
 }[coverSource.value] ?? 'Program background'));
-const mapAddress = computed(() => form.value.locationAddress.trim());
 const requiresAgreementDetails = computed(() => !['provider_briefing', 'none'].includes(form.value.recipientAgreement.commitment_type));
 const selectedStages = computed(() => stageOptions.filter((stage) => form.value.selectionStages.includes(stage.id)));
 const eligibilityCounts = computed(() => ({
@@ -242,6 +247,13 @@ function hasEligibilityRule(key) {
     return eligibilityRules.value.some((rule) => rule.key === key);
 }
 
+const preserveHistoricalDates = computed(() => ['published', 'closed'].includes(originalStatus.value));
+function programDateMinimum(field) {
+    const today = programDateToday();
+    const savedDate = savedDates.value[field];
+    return preserveHistoricalDates.value && savedDate && savedDate < today ? savedDate : today;
+}
+const supportEndMinimum = computed(() => latestDate(programDateMinimum('support_ends_at'), form.value.supportStartsAt));
 const configurationErrors = computed(() => programConfigurationErrors({
     slots_available: form.value.slotsAvailable,
     application_limit: form.value.applicationLimit,
@@ -251,7 +263,7 @@ const configurationErrors = computed(() => programConfigurationErrors({
     handoff_deadline: form.value.handoffDeadline,
     support_starts_at: form.value.supportStartsAt,
     support_ends_at: form.value.supportEndsAt,
-}));
+}, { savedDates: savedDates.value, preserveHistoricalDates: preserveHistoricalDates.value }));
 
 function configurationErrorForStep(stepId) {
     return Object.entries(configurationErrors.value).find(([field]) => stepForBackendField(field) === stepId)?.[1];
@@ -315,6 +327,7 @@ const stepChecks = computed(() => ({
     ),
     selection: Boolean(
         ['screening', 'formal_application', 'decision'].every((stage) => form.value.selectionStages.includes(stage))
+        && !Object.keys(criterionLabelErrors.value).length
         && form.value.reviewRubric.length
         && form.value.recipientAgreement.commitment_type !== 'provider_briefing'
         && form.value.recipientAgreement.release_conditions.trim()
@@ -329,7 +342,7 @@ const allConfigurationComplete = computed(() => Object.values(stepChecks.value).
 const reviewSummaries = computed(() => programReviewSummary(form.value, {
     eligibilitySummary: eligibilitySummary.value,
     rules: eligibilityRules.value,
-    scoring: programScoringPreview(scoringPresets, form.value.selectionStages, fixedScoringPolicy.value, applicationsCount.value),
+    scoring: scoringPreview.value,
     catalogs: { benefitTypes, frequencyOptions, stages: stageOptions.map(stage => [stage.id, stage.label]) },
     coverLabel: coverSourceLabel.value,
     hasLogo: hasScholarshipLogo.value,
@@ -368,6 +381,7 @@ function closeAlert() {
 }
 
 function stepMessage(stepId) {
+    if (stepId === 'selection' && Object.keys(criterionLabelErrors.value).length) return Object.values(criterionLabelErrors.value)[0];
     if (stepId === 'eligibility' && educationChoicesNeedReview.value) return 'Resolve the education-level changes: choose replacement courses or year levels, explicitly remove the restriction, and review any retained custom values.';
     if (stepId === 'eligibility' && eligibilitySummary.value.length > 5000) return 'The eligibility summary exceeds 5,000 characters. Shorten the rule lists or use a shorter custom summary.';
     if (stepId === 'eligibility' && customSummaryNeedsReview.value) return 'Check the custom eligibility summary against the current rules, then confirm it is consistent or use the rule-based summary.';
@@ -630,12 +644,6 @@ function resetCover() {
     coverPickerOpen.value = false;
 }
 
-function handleMapResolved(location) {
-    form.value.latitude = Number(location.latitude).toFixed(7);
-    form.value.longitude = Number(location.longitude).toFixed(7);
-    mapMessage.value = 'Map pin set from the address.';
-}
-
 async function useOrganizationLocation() {
     if (!organizationLocation.locationAddress || isReadOnly.value || isSaving.value) return;
     if (organizationLocationWouldReplace(form.value, organizationLocation)) {
@@ -646,22 +654,11 @@ async function useOrganizationLocation() {
         });
         if (!confirmed || isReadOnly.value || isSaving.value) return;
     }
+    form.value.locationAddressDetails = null;
     Object.assign(form.value, organizationLocation);
     mapMessage.value = programHasLocationPin.value
         ? 'Organization address and map pin copied. Save the program to keep these changes.'
         : 'Organization address copied. No saved organization pin is available; select a program map pin.';
-}
-
-function clearProgramAddressPin() {
-    form.value.latitude = '';
-    form.value.longitude = '';
-    mapMessage.value = 'Address changed. Select a new map pin for this program venue.';
-}
-
-function handleMapPicked(location) {
-    handleMapResolved(location);
-    if (location.displayName) form.value.locationAddress = location.displayName;
-    mapMessage.value = 'Map pin updated.';
 }
 
 function normalizedBenefit(benefit) {
@@ -693,6 +690,7 @@ function fillForm(program) {
         expectedResultsAt: program.expected_results_at ?? '',
         locationName: program.location_name ?? portalUser.provider_name ?? '',
         locationAddress: program.location_address ?? portalUser.provider_address ?? '',
+        locationAddressDetails: program.location_address_details ?? null,
         latitude: program.latitude ?? '',
         longitude: program.longitude ?? '',
         contactEmail: program.contact_email ?? portalUser.provider_contact_email ?? '',
@@ -702,6 +700,7 @@ function fillForm(program) {
         officialProgramUrl: program.official_program_url ?? '',
         eligibility: program.eligibility ?? '',
         eligibilityRuleModes: normalizeEligibilityRuleModes(program.eligibility_rule_modes),
+        eligibilityReviewRules: program.eligibility_review_rules ?? [],
         educationEligibilityPolicy: normalizeEducationPolicy(program.education_eligibility_policy),
         eligibilityConditions: program.eligibility_conditions ?? [],
         eligibleEducationLevels: splitList(program.eligible_education_levels),
@@ -724,10 +723,13 @@ function fillForm(program) {
         handoffDeadline: program.handoff_deadline ?? '',
         handoffLocationName: program.handoff_location_name ?? '',
         handoffLocationAddress: program.handoff_location_address ?? '',
+        handoffAddressDetails: program.handoff_address_details ?? null,
         handoffLatitude: program.handoff_latitude ?? null,
         handoffLongitude: program.handoff_longitude ?? null,
         handoffUrl: program.handoff_url ?? '',
         selectionStages: program.selection_stages?.length ? program.selection_stages : ['screening', 'formal_application', 'decision'],
+        examScoringMethod: program.exam_scoring_method ?? (program.selection_scoring_policy && !program.selection_scoring_policy.stage_criteria?.exam?.length ? 'total' : 'criteria'),
+        stageCriterionLabels: program.stage_criterion_labels ?? programCriterionLabels(scoringPresets, program.selection_scoring_policy),
         reviewRubric: program.review_rubric?.length ? program.review_rubric : structuredClone(defaultRubric),
         recipientAgreement: normalizeProgramRecipientAgreement(program.recipient_agreement),
         termsAccepted: false,
@@ -736,6 +738,7 @@ function fillForm(program) {
         coverUrl: program.cover_image_url ?? '',
     };
     originalStatus.value = program.status ?? 'draft';
+    savedDates.value = Object.fromEntries(['application_opens_at', 'deadline', 'expected_results_at', 'handoff_deadline', 'support_starts_at', 'support_ends_at'].map(field => [field, program[field] ?? '']));
     applicationsCount.value = Number(program.applications_count ?? 0);
     fixedScoringPolicy.value = program.selection_scoring_policy ?? null;
     coverSource.value = program.cover_image_source ?? 'default';
@@ -768,6 +771,7 @@ function createPayload(status, termsAccepted = false) {
         application_opens_at: form.value.applicationOpensAt, deadline: form.value.deadline,
         expected_results_at: form.value.expectedResultsAt, location_name: form.value.locationName.trim(),
         location_address: form.value.locationAddress.trim(), latitude: form.value.latitude, longitude: form.value.longitude,
+        location_address_details: JSON.stringify(form.value.locationAddressDetails),
         contact_email: form.value.contactEmail.trim(), contact_number: form.value.contactNumber.trim(),
         contact_person: form.value.contactPerson.trim(), contact_department: form.value.contactDepartment.trim(),
         official_program_url: form.value.officialProgramUrl.trim(), eligibility: eligibilitySummary.value.trim(),
@@ -776,6 +780,7 @@ function createPayload(status, termsAccepted = false) {
         eligible_education_levels: form.value.eligibleEducationLevels.join('\n'),
         eligible_courses: form.value.eligibleCourses.trim(), eligible_school_types: form.value.eligibleSchoolTypes.join('\n'),
         eligible_year_levels: form.value.eligibleYearLevels.trim(), eligible_locations: form.value.eligibleLocations.trim(),
+        eligibility_review_rules: JSON.stringify(form.value.eligibilityReviewRules),
         income_requirement: form.value.incomeRequirement, minimum_grade_scale: form.value.minimumGradeScale,
         minimum_gwa: form.value.minimumGwa, exclude_current_scholarship_recipients: form.value.excludeCurrentRecipients ? 1 : 0,
         application_mode: form.value.applicationMode, requirements: form.value.requirements.trim(),
@@ -784,9 +789,12 @@ function createPayload(status, termsAccepted = false) {
         handoff_mode: form.value.handoffMode, handoff_instructions: form.value.handoffInstructions.trim(),
         handoff_deadline: form.value.handoffDeadline, handoff_location_name: form.value.handoffLocationName.trim(),
         handoff_location_address: form.value.handoffLocationAddress.trim(), handoff_url: form.value.handoffUrl.trim(),
+        handoff_address_details: JSON.stringify(form.value.handoffMode === 'onsite' ? form.value.handoffAddressDetails : null),
         handoff_latitude: form.value.handoffMode === 'onsite' ? form.value.handoffLatitude : null,
         handoff_longitude: form.value.handoffMode === 'onsite' ? form.value.handoffLongitude : null,
         selection_stages: JSON.stringify(form.value.selectionStages), review_rubric: JSON.stringify(form.value.reviewRubric),
+        exam_scoring_method: form.value.examScoringMethod,
+        stage_criterion_labels: JSON.stringify(form.value.stageCriterionLabels),
         recipient_agreement: JSON.stringify(form.value.recipientAgreement), status,
         terms_accepted: termsAccepted ? 1 : 0,
     };
@@ -812,7 +820,7 @@ function stepForBackendField(field) {
     if (/^(application_opens_at|deadline|expected_results_at|location_|latitude|longitude|contact_|official_program_url)/.test(field)) return 'dates-location';
     if (/^(eligibility|education_eligibility_policy|eligible_|income_|minimum_|exclude_)/.test(field)) return 'eligibility';
     if (/^(application_mode|requirements|optional_requirements|post_qualification|handoff_)/.test(field)) return 'application';
-    if (/^(selection_stages|review_rubric|recipient_agreement)/.test(field)) return 'selection';
+    if (/^(selection_stages|exam_scoring_method|stage_criterion_labels|review_rubric|recipient_agreement)/.test(field)) return 'selection';
     return activeStep.value;
 }
 
@@ -830,7 +838,7 @@ async function save(status = 'draft', termsAccepted = false) {
         showAlert('Resolve education selections', stepMessage('eligibility'));
         return null;
     }
-    const conflict = Object.entries(configurationErrors.value)[0];
+    const conflict = Object.entries({ ...configurationErrors.value, ...criterionLabelErrors.value })[0];
     if (conflict) {
         openStep(stepForBackendField(conflict[0]));
         showAlert('Check the program details', conflict[1]);
@@ -1155,8 +1163,8 @@ onBeforeUnmount(() => {
                                 <div class="mt-6 grid w-full grid-cols-2 gap-5 border-t border-slate-200 pt-6">
                                     <label><span :class="labelClass">Recipient slots <span class="text-amber-700">Required</span></span><input v-model="form.slotsAvailable" type="number" min="1" max="1000000" :class="inputClass"></label>
                                     <label><span :class="labelClass">Application limit <span class="text-amber-700">Required</span></span><input v-model="form.applicationLimit" type="number" :min="Number(form.slotsAvailable) || 1" max="1000000" :class="inputClass"><span class="mt-1.5 block text-xs text-slate-500">Must be at least the number of recipient slots.</span></label>
-                                    <label><span :class="labelClass">Support starts <span class="text-amber-700">Required</span></span><input v-model="form.supportStartsAt" type="date" :max="form.supportEndsAt || undefined" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Support ends <span class="text-amber-700">Required</span></span><input v-model="form.supportEndsAt" type="date" :min="form.supportStartsAt || undefined" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Support starts <span class="text-amber-700">Required</span></span><input v-model="form.supportStartsAt" type="date" :min="programDateMinimum('support_starts_at')" :max="form.supportEndsAt || undefined" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Support ends <span class="text-amber-700">Required</span></span><input v-model="form.supportEndsAt" type="date" :min="supportEndMinimum" :class="inputClass"></label>
                                 </div>
                             </section>
 
@@ -1166,9 +1174,9 @@ onBeforeUnmount(() => {
                                     <p class="mt-1 text-sm text-slate-500">Applicants use these details before they submit.</p>
                                 </div>
                                 <div class="mt-6 grid w-full grid-cols-3 gap-5">
-                                    <label><span :class="labelClass">Applications open <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.applicationOpensAt" type="date" :max="form.deadline || undefined" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Application deadline <span class="text-amber-700">Required</span></span><input v-model="form.deadline" type="date" :min="form.applicationOpensAt || undefined" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Expected results <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.expectedResultsAt" type="date" :min="form.deadline || undefined" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Applications open <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.applicationOpensAt" type="date" :min="programDateMinimum('application_opens_at')" :max="form.deadline || undefined" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Application deadline <span class="text-amber-700">Required</span></span><input v-model="form.deadline" type="date" :min="latestDate(programDateMinimum('deadline'), form.applicationOpensAt)" :class="inputClass"></label>
+                                    <label><span :class="labelClass">Expected results <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.expectedResultsAt" type="date" :min="latestDate(programDateMinimum('expected_results_at'), form.deadline)" :class="inputClass"></label>
                                 </div>
 
                                 <div data-program-location class="mt-7 w-full border-t border-slate-200 pt-6">
@@ -1179,14 +1187,10 @@ onBeforeUnmount(() => {
                                         </div>
                                         <div class="flex shrink-0 items-center gap-2">
                                             <button type="button" data-use-organization-location :disabled="!organizationLocation.locationAddress" class="inline-flex items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40" @click="useOrganizationLocation"><i class="fa-solid fa-building-columns text-[10px]" aria-hidden="true"></i>Use organization location</button>
-                                            <button type="button" class="border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="showLocationMap = true"><i class="fa-solid fa-map-location-dot mr-2 text-amber-700" aria-hidden="true"></i>{{ programHasLocationPin ? 'Review map pin' : 'Set map pin' }}</button>
                                         </div>
                                     </div>
                                     <p class="mt-2 text-xs leading-5 text-slate-500">{{ organizationLocation.locationAddress ? 'Reuse the saved organization address and pin, or enter a different program venue below. This does not change the organization profile.' : 'No organization address is saved. Enter a program venue below, or ask the organization profile manager to add the office location.' }}</p>
-                                    <div class="mt-4 grid grid-cols-2 gap-5">
-                                        <label><span :class="labelClass">Location name <span class="text-amber-700">Required</span></span><input id="program-location-name" v-model="form.locationName" type="text" maxlength="255" :class="inputClass" placeholder="Office or community desk"></label>
-                                        <label><span :class="labelClass">Complete address <span class="text-amber-700">Required</span></span><input id="program-location-address" v-model="form.locationAddress" type="text" maxlength="500" :class="inputClass" @input="clearProgramAddressPin"></label>
-                                    </div>
+                                    <ProviderVenueAddress v-model="form.locationAddressDetails" v-model:venue="form.locationName" v-model:address="form.locationAddress" v-model:latitude="form.latitude" v-model:longitude="form.longitude" :include-venue-in-address="false" class="mt-4" @update:model-value="mapMessage = ''" />
                                     <p data-program-location-status class="mt-3 text-xs font-semibold" :class="programHasLocationPin ? 'text-emerald-700' : 'text-amber-700'" role="status" aria-live="polite">
                                         <i :class="programHasLocationPin ? 'fa-solid fa-circle-check' : 'fa-solid fa-location-dot'" class="mr-1.5" aria-hidden="true"></i>
                                         {{ mapMessage || (programHasLocationPin ? 'Map pin selected' : 'Map pin still needed') }}
@@ -1266,7 +1270,7 @@ onBeforeUnmount(() => {
                                             <select id="program-academic-rule" v-model="form.minimumGradeScale" :class="inputClass" @change="form.minimumGwa = ''"><option value="">No academic minimum</option><option value="percentage">General average / percentage</option><option value="grade_point">GWA / GPA grade point</option><option value="pass_fail">Pass/fail or competency</option><option value="other">Other / manual review</option></select>
                                         </div>
                                         <label v-if="['percentage', 'grade_point'].includes(form.minimumGradeScale)" for="program-academic-minimum">
-                                            <span class="mb-2 flex min-h-8 items-center text-xs font-bold text-slate-700">{{ form.minimumGradeScale === 'grade_point' ? 'Maximum GWA / GPA' : 'Minimum average' }}</span>
+                                            <span class="mb-2 flex min-h-8 items-center text-xs font-bold text-slate-700">{{ form.minimumGradeScale === 'grade_point' ? 'Minimum GWA / GPA' : 'Minimum average' }}</span>
                                             <input id="program-academic-minimum" v-model="form.minimumGwa" type="number" min="0" :max="form.minimumGradeScale === 'grade_point' ? 5 : 100" step="0.01" :class="inputClass">
                                         </label>
                                     </div>
@@ -1300,15 +1304,22 @@ onBeforeUnmount(() => {
                                         </div>
                                         <div>
                                             <div class="mb-2 flex min-h-8 items-center justify-between gap-3">
-                                                <p class="text-xs font-bold text-slate-700">Other scholarship support</p>
-                                                <EligibilityRuleModeSelect v-if="hasEligibilityRule('current_scholarship_support')" v-model="form.eligibilityRuleModes.current_scholarship_support" rule-key="current_scholarship_support" label="Other active scholarship support" />
+                                                <p class="text-xs font-bold text-slate-700">Other platform scholarships</p>
+                                                <EligibilityRuleModeSelect v-if="hasEligibilityRule('current_scholarship_support')" v-model="form.eligibilityRuleModes.current_scholarship_support" rule-key="current_scholarship_support" label="Other platform scholarships" />
                                             </div>
                                             <label class="flex min-h-11 cursor-pointer items-start gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-xs leading-5 text-slate-700">
                                                 <input v-model="form.excludeCurrentRecipients" type="checkbox" class="mt-0.5 border-slate-300 text-slate-950 focus:ring-slate-700">
-                                                Applicant is not receiving another active scholarship
+                                                Applicant is not receiving another active scholarship in this platform
                                             </label>
+                                            <p class="mt-2 text-xs leading-5 text-slate-500">Checked automatically against platform awards. To verify outside scholarships, request a supporting document in Application.</p>
                                         </div>
                                     </div>
+                                </section>
+
+                                <section class="mt-6 border-t border-slate-200 pt-5" data-eligibility-review-policy>
+                                    <div class="flex items-start gap-3"><span class="grid size-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i></span><div><h4 class="text-sm font-bold text-slate-950">Eligibility reconsideration</h4><p class="mt-1 text-xs leading-5 text-slate-500">Optional. Choose which required rules may be reviewed individually before an applicant can apply.</p></div></div>
+                                    <div class="mt-3 grid grid-cols-2 gap-2"><label v-for="rule in eligibilityRules.filter(rule => rule.mode === 'required')" :key="rule.key" class="flex cursor-pointer items-center gap-3 rounded-sm border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-700"><input v-model="form.eligibilityReviewRules" type="checkbox" :value="rule.key" :disabled="eligibilityControlsDisabled" class="h-4 w-4">{{ rule.label }}</label></div>
+                                    <p class="mt-3 text-xs leading-5 text-slate-500">Unchecked rules stay mandatory without exceptions. Reviewers must approve each request with a reason. Profile verification, application dates, required files, and intake limits cannot be waived here.</p>
                                 </section>
 
                                 <details :open="!useGeneratedEligibilitySummary || customSummaryNeedsReview || eligibilitySummary.length > 5000" class="group mt-6 overflow-hidden rounded-sm border border-slate-200" data-eligibility-summary-panel>
@@ -1369,12 +1380,10 @@ onBeforeUnmount(() => {
                                         </div>
                                         <div class="mt-5 grid grid-cols-2 gap-5">
                                             <label class="col-span-2"><span :class="labelClass">Instructions <span class="text-amber-700">Required</span></span><textarea v-model="form.handoffInstructions" rows="3" maxlength="3000" :class="textareaClass"></textarea></label>
-                                            <label><span :class="labelClass">Formal application deadline <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.handoffDeadline" type="date" :min="form.deadline || undefined" :class="inputClass"></label>
+                                            <label><span :class="labelClass">Formal application deadline <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.handoffDeadline" type="date" :min="latestDate(programDateMinimum('handoff_deadline'), form.deadline)" :class="inputClass"></label>
                                             <label v-if="form.handoffMode === 'online'"><span :class="labelClass">Official link <span class="text-amber-700">Required</span></span><input v-model="form.handoffUrl" type="url" :class="inputClass" placeholder="https://"></label>
                                             <template v-if="form.handoffMode === 'onsite'">
-                                                <label><span :class="labelClass">Location name <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.handoffLocationName" type="text" :class="inputClass"></label>
-                                                <label class="col-span-2"><span :class="labelClass">Address <span class="text-amber-700">Required</span></span><input v-model="form.handoffLocationAddress" type="text" maxlength="500" :class="inputClass"></label>
-                                                <LocationPinField v-model:latitude="form.handoffLatitude" v-model:longitude="form.handoffLongitude" class="col-span-2" :address="form.handoffLocationAddress || form.handoffLocationName" title="Formal application venue" />
+                                                <ProviderVenueAddress v-model="form.handoffAddressDetails" v-model:venue="form.handoffLocationName" v-model:address="form.handoffLocationAddress" v-model:latitude="form.handoffLatitude" v-model:longitude="form.handoffLongitude" :include-venue-in-address="false" class="col-span-2" />
                                             </template>
                                         </div>
                                     </div>
@@ -1395,7 +1404,13 @@ onBeforeUnmount(() => {
                                     </button>
                                 </div>
 
-                                <SelectionScoringPreview :presets="scoringPresets" :stages="form.selectionStages" :fixed-policy="fixedScoringPolicy" :applications-count="applicationsCount" />
+                                <div v-if="form.selectionStages.includes('exam')" class="mt-6 border-t border-slate-200 pt-5" data-exam-scoring-method>
+                                    <label for="exam-scoring-method" :class="labelClass">Examination scoring method</label>
+                                    <select id="exam-scoring-method" v-model="form.examScoringMethod" :class="inputClass" :disabled="isReadOnly || isSaving || applicationsCount > 0"><option value="total">Total exam score</option><option value="criteria">Score by criteria</option></select>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">{{ applicationsCount > 0 ? 'Fixed for this intake so all applicants are evaluated on the same basis. Use a new intake to change the method.' : (form.examScoringMethod === 'total' ? 'Selection staff enter the applicant\'s actual exam score and maximum, for example 43 out of 50. The DSS converts it to a percentage.' : 'Selection staff score each configured criterion. The DSS calculates the weighted exam score.') }}</p>
+                                </div>
+                                <StageCriterionLabelsEditor v-model="form.stageCriterionLabels" :rows="scoringPreview.rows" :fixed="applicationsCount > 0" :disabled="isReadOnly || isSaving" :input-class="inputClass" />
+                                <SelectionScoringPreview :presets="scoringPresets" :stages="form.selectionStages" :fixed-policy="fixedScoringPolicy" :applications-count="applicationsCount" :exam-method="form.examScoringMethod" :criterion-labels="form.stageCriterionLabels" />
 
                                 <div class="mt-7 w-full border-t border-slate-200 pt-6">
                                     <label><span :class="labelClass">Recipient commitment <span class="text-amber-700">Required</span></span><select v-model="form.recipientAgreement.commitment_type" :class="inputClass"><option value="provider_briefing" disabled>Choose the agreement type</option><option value="none">No ongoing recipient commitment</option><option value="renewal">Enrollment or renewal requirements</option><option value="service">Service or community commitment</option><option value="activities">Required program activities</option><option value="reporting">Progress or utilization reports</option><option value="custom">Custom commitment</option></select></label>
@@ -1540,23 +1555,6 @@ onBeforeUnmount(() => {
             @reset="resetCover"
         />
 
-        <LocationMapModal
-            :open="showLocationMap"
-            eyebrow="Program location"
-            title="Set the public map pin"
-            :address="mapAddress"
-            :latitude="form.latitude"
-            :longitude="form.longitude"
-            :marker-text="form.locationName"
-            :picker="true"
-            :auto-geocode="true"
-            :location-message="mapMessage"
-            confirm-label="Keep this pin"
-            @close="showLocationMap = false"
-            @resolved="handleMapResolved"
-            @picked="handleMapPicked"
-            @error="mapMessage = $event"
-        />
         <ApplicantPagePreviewModal
             :open="previewOpen"
             :title="form.title || 'Scholarship program'"

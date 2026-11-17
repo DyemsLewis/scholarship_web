@@ -45,6 +45,9 @@ class EligibilityRuleModesTest extends TestCase
     {
         [, $applicant, $program] = $this->context($programFields);
         $applicant->studentProfile()->update($profileFields);
+        if ($key === 'current_scholarship_support') {
+            $this->addPlatformAward($program, $applicant);
+        }
         $service = app(ScholarshipEligibilityService::class);
         $required = $service->evaluate($program, $applicant->fresh());
         $this->assertFalse($required['is_eligible']);
@@ -277,6 +280,9 @@ class EligibilityRuleModesTest extends TestCase
     {
         [, $applicant, $program] = $this->context($programFields);
         $applicant->studentProfile()->update($profileFields);
+        if ($key === 'current_scholarship_support') {
+            $this->addPlatformAward($program, $applicant);
+        }
         $application = ScholarshipApplication::create([
             'scholarship_id' => $program->id, 'applicant_id' => $applicant->id, 'status' => 'submitted', 'submitted_at' => now(),
         ]);
@@ -316,6 +322,12 @@ class EligibilityRuleModesTest extends TestCase
                 ->assertJsonPath('application.dss_breakdown', null)
                 ->assertJsonPath('application.dss_explanation', null);
         }
+    }
+
+    private function addPlatformAward(Scholarship $program, User $applicant): void
+    {
+        $other = Scholarship::create(['provider_id' => $program->provider_id, 'title' => 'Other active platform award', 'description' => 'Tests overlapping platform support.', 'status' => 'published']);
+        ScholarshipApplication::create(['scholarship_id' => $other->id, 'applicant_id' => $applicant->id, 'status' => 'awarded', 'final_outcome' => 'selected', 'submitted_at' => now()]);
     }
 
     private function context(array $programFields = []): array

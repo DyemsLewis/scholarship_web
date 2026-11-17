@@ -260,7 +260,7 @@ class RecipientBenefitPayoutDetailsTest extends TestCase
         $this->get($proofUrl)->assertOk();
         $this->actingAs(User::factory()->create(['role' => 'applicant']))->get($proofUrl)->assertForbidden();
         $responseUrl = route('dashboard.benefit-release-records.response', $record, false);
-        $response = ['response_type' => 'confirmed', 'acknowledged' => true];
+        $response = ['response_type' => 'confirmed', 'acknowledged' => true, 'evidence' => UploadedFile::fake()->image('received-transfer.png')];
         $this->actingAs($applicant)->postJson($responseUrl, $response + ['received_on' => now()->subDay()->toDateString()])
             ->assertUnprocessable()->assertJsonValidationErrors('received_on');
         $this->postJson($responseUrl, $response + ['received_on' => now()->toDateString()])->assertCreated();

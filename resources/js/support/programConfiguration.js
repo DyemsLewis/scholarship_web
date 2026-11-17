@@ -1,4 +1,7 @@
-export function programConfigurationErrors(values = {}) {
+import { providerDate } from './providerDates.js';
+export const programDateToday = providerDate;
+
+export function programConfigurationErrors(values = {}, { today = programDateToday(), savedDates = {}, preserveHistoricalDates = false } = {}) {
     const errors = {};
     const capacityFields = {
         slots_available: 'Recipient slots',
@@ -25,6 +28,16 @@ export function programConfigurationErrors(values = {}) {
     for (const [later, earlier, field, message] of pairs) {
         if (isSet(values[later]) && isSet(values[earlier]) && values[later] < values[earlier]) {
             errors[field] = message;
+        }
+    }
+    for (const [field, label] of [
+        ['application_opens_at', 'application opening date'], ['deadline', 'application deadline'],
+        ['expected_results_at', 'expected results date'], ['handoff_deadline', 'formal application deadline'],
+        ['support_starts_at', 'support start date'], ['support_ends_at', 'support end date'],
+    ]) {
+        const keepsHistoricalDate = preserveHistoricalDates && values[field] === savedDates[field];
+        if (isSet(values[field]) && values[field] < today && !keepsHistoricalDate) {
+            errors[field] = `The ${label} must be today or a future date.`;
         }
     }
     return errors;

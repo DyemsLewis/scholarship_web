@@ -1385,8 +1385,7 @@ class ApplicantDashboardController extends Controller
                 'academic_term', 'gwa', 'grading_scale',
             ],
             'household' => [
-                'income_bracket', 'household_size', 'current_scholarship_status',
-                'current_scholarship_details', 'guardian_name', 'guardian_relationship',
+                'income_bracket', 'household_size', 'guardian_name', 'guardian_relationship',
                 'guardian_contact', 'guardian_email', 'guardian_is_account_owner',
             ],
             'location' => ['address', 'barangay', 'city', 'province', 'region', 'latitude', 'longitude'],
@@ -1419,8 +1418,6 @@ class ApplicantDashboardController extends Controller
             'preferred_locations' => ['nullable', 'string', 'max:1000'],
             'willing_to_relocate' => ['nullable', Rule::in(['yes', 'no', 'depends'])],
             'support_needs' => ['nullable', 'string', 'max:1500'],
-            'current_scholarship_status' => ['required', Rule::in(['none', 'receiving', 'pending', 'completed'])],
-            'current_scholarship_details' => ['nullable', 'required_if:current_scholarship_status,receiving,pending', 'string', 'max:1000'],
             'scholarship_goal' => ['nullable', 'string', 'max:1500'],
             'achievements' => ['nullable', 'string', 'max:1500'],
             'activities_and_responsibilities' => ['nullable', 'string', 'max:1500'],
@@ -1455,11 +1452,6 @@ class ApplicantDashboardController extends Controller
         } elseif (array_key_exists('grading_scale', $validated)
             && ! AcademicRequirement::requiresNumeric($validated['grading_scale'])) {
             $validated['gwa'] = null;
-        }
-
-        if (array_key_exists('current_scholarship_status', $validated)
-            && ! in_array($validated['current_scholarship_status'], ['receiving', 'pending'], true)) {
-            $validated['current_scholarship_details'] = null;
         }
 
         $submittedAchievements = trim((string) ($validated['achievements'] ?? $user->studentProfile?->achievements ?? ''));
@@ -1737,6 +1729,8 @@ class ApplicantDashboardController extends Controller
                     ]);
                 }
 
+                $eligibilityMatch = app(\App\Services\EligibilityReviewService::class)->revalidateSubmission($lockedScholarship, $request->user(), $eligibilityMatch);
+
                 $application = ScholarshipApplication::create([
                     'scholarship_id' => $scholarship->id,
                     'applicant_id' => $request->user()->id,
@@ -1752,6 +1746,7 @@ class ApplicantDashboardController extends Controller
                     'terms_accepted_at' => $acceptedAt,
                     'terms_version' => Terms::VERSION,
                 ]);
+                app(\App\Services\EligibilityReviewService::class)->attachToApplication($application, $eligibilityMatch);
 
                 ApplicationStatusHistory::create([
                     'scholarship_application_id' => $application->id,
@@ -2095,7 +2090,10 @@ class ApplicantDashboardController extends Controller
         $validated = $request->validate([
             'response' => ['required', Rule::in(['accepted', 'declined'])],
             'terms_accepted' => ['exclude_unless:response,accepted', 'required', 'accepted'],
+            'agreement_version' => ['sometimes', 'required', 'string', Rule::in([$application->provider_contract_terms_version])],
             'note' => [Rule::requiredIf($request->input('response') === 'declined'), 'nullable', 'string', 'min:5', 'max:1000'],
+        ], [
+            'agreement_version.in' => 'The offer summary changed. Reload it and review the current information before responding.',
         ]);
         $response = $validated['response'];
         $now = now();
@@ -2126,34 +2124,39 @@ class ApplicantDashboardController extends Controller
             'from_status' => $application->status,
             'to_status' => "agreement_{$response}",
             'review_notes' => $response === 'accepted'
-                ? 'Applicant accepted the recipient agreement.'
-                : 'Applicant declined the recipient agreement.',
+                ? 'Applicant confirmed intention to proceed with the offer, subject to the final provider agreement. This is not a record of a signed final contract.'
+                : 'Applicant declined the scholarship offer.',
             'changed_at' => $now,
         ]);
 
         $programTitle = $application->scholarship?->title ?? 'the scholarship program';
         $providerMessage = $response === 'accepted'
-            ? "{$request->user()->name} accepted the recipient agreement for {$programTitle}."
-            : "{$request->user()->name} declined the recipient agreement for {$programTitle}. Review their note before proceeding.";
+            ? "{$request->user()->name} confirmed intention to proceed with {$programTitle}, subject to the final provider agreement. This does not confirm that a final contract was signed."
+            : "{$request->user()->name} declined the offer for {$programTitle}. Review their note before proceeding.";
         PortalNotification::create([
             'user_id' => $application->scholarship->provider_id,
             'type' => 'recipient_agreement_response',
-            'title' => $response === 'accepted' ? 'Recipient agreement accepted' : 'Recipient agreement declined',
+            'title' => $response === 'accepted' ? 'Scholarship offer intention confirmed' : 'Scholarship offer declined',
             'message' => $providerMessage,
             'action_url' => route('provider.applications.show', $application, false).'?section=decision',
         ]);
         $this->notifyAdditionalProviderReviewers(
             $application,
             'recipient_agreement_response',
-            $response === 'accepted' ? 'Recipient agreement accepted' : 'Recipient agreement declined',
+            $response === 'accepted' ? 'Scholarship offer intention confirmed' : 'Scholarship offer declined',
             $providerMessage,
         );
         ActivityLog::record(
             $request->user(),
             "recipient_agreement_{$response}",
-            "{$request->user()->name} {$response} the recipient agreement for application #{$application->id}.",
+            "{$request->user()->name} recorded an offer response ({$response}) for application #{$application->id}.",
             $request,
-            ['application_id' => $application->id, 'agreement_version' => $application->provider_contract_terms_version],
+            [
+                'application_id' => $application->id,
+                'agreement_version' => $application->provider_contract_terms_version,
+                'response_scope' => RecipientAgreement::RESPONSE_SCOPE,
+                'response_notice' => RecipientAgreement::RESPONSE_NOTICE,
+            ],
         );
 
         $freshApplication = $application->fresh()->load([
@@ -2166,7 +2169,7 @@ class ApplicantDashboardController extends Controller
 
         return response()->json([
             'message' => $response === 'accepted'
-                ? 'Recipient agreement accepted.'
+                ? 'Your intention to proceed is confirmed, subject to the final provider agreement.'
                 : 'Your decision was sent to the provider.',
             'application' => $this->applicationPayload($freshApplication),
         ]);
@@ -2646,12 +2649,15 @@ class ApplicantDashboardController extends Controller
                 'min:5',
                 'max:1500',
             ],
-            'evidence' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'max:5120'],
+            'evidence' => [Rule::requiredIf($request->input('response_type') === 'confirmed'), 'nullable', 'file', 'mimes:pdf,jpg,jpeg,png', 'mimetypes:application/pdf,image/jpeg,image/png', 'max:5120'],
             'acknowledged' => ['accepted'],
         ]);
 
         $evidence = $request->file('evidence');
         $evidencePath = $evidence?->store("benefit-receipt-responses/{$record->id}/recipient", 'local');
+        if ($evidence && ! $evidencePath) {
+            throw ValidationException::withMessages(['evidence' => 'Your receipt proof could not be saved. Upload it again before confirming receipt.']);
+        }
 
         try {
             $response = DB::transaction(function () use ($request, $record, $validated, $evidence, $evidencePath): RecipientBenefitReceiptResponse {
@@ -2674,7 +2680,7 @@ class ApplicantDashboardController extends Controller
                     'recipient_note' => trim((string) ($validated['recipient_note'] ?? '')) ?: null,
                     'issue_type' => $validated['response_type'] === 'issue' ? $validated['issue_type'] : null,
                     'issue_details' => $validated['response_type'] === 'issue' ? $validated['issue_details'] : null,
-                    'evidence_original_name' => $evidence?->getClientOriginalName(),
+                    'evidence_original_name' => $evidence ? Str::limit(str_replace(["\r", "\n", "\0"], '', basename(str_replace('\\', '/', $evidence->getClientOriginalName()))), 200, '') : null,
                     'evidence_path' => $evidencePath,
                     'evidence_mime_type' => $evidence?->getMimeType(),
                     'evidence_size' => $evidence?->getSize() ?: 0,

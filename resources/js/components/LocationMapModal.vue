@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import LeafletMapPreview from './LeafletMapPreview.vue';
 import { useModalAccessibility } from '../composables/useModalAccessibility';
+import { hasLocationPin } from '../support/locationPins.js';
 
 const props = defineProps({
     open: { type: Boolean, default: false },
@@ -17,11 +18,12 @@ const props = defineProps({
     secondaryMarkerText: { type: String, default: '' },
     distanceLabel: { type: String, default: '' },
     picker: { type: Boolean, default: false },
+    reverseGeocodeOnPick: { type: Boolean, default: true },
     autoGeocode: { type: Boolean, default: true },
     autoGeocodeDelay: { type: Number, default: 850 },
     geocodeZoom: { type: Number, default: 15 },
     locationMessage: { type: String, default: '' },
-    confirmLabel: { type: String, default: 'Use this location' },
+    confirmLabel: { type: String, default: 'Use this pin' },
     googleMapsQuery: { type: String, default: '' },
 });
 
@@ -30,13 +32,21 @@ const dialog = ref(null);
 const { handleKeydown } = useModalAccessibility(() => props.open, dialog, () => emit('close'));
 const retryCount = ref(0);
 const selection = ref({ pending: false, valid: false });
-watch(() => props.open, () => { selection.value = { pending: false, valid: false }; });
+const draftLocation = ref(null);
+let draftEvent = 'picked';
+watch(() => props.open, (open) => {
+    selection.value = { pending: false, valid: false };
+    draftLocation.value = open && hasLocationPin(props.latitude, props.longitude)
+        ? { latitude: props.latitude, longitude: props.longitude } : null;
+    draftEvent = 'picked';
+}, { immediate: true });
 const mapGeocodeTrigger = computed(() => retryCount.value);
 const googleMapsUrl = computed(() => {
-    const rawLatitude = String(props.latitude ?? '').trim();
-    const rawLongitude = String(props.longitude ?? '').trim();
-    const latitude = Number(props.latitude);
-    const longitude = Number(props.longitude);
+    const location = props.picker ? draftLocation.value : props;
+    const rawLatitude = String(location?.latitude ?? '').trim();
+    const rawLongitude = String(location?.longitude ?? '').trim();
+    const latitude = Number(location?.latitude);
+    const longitude = Number(location?.longitude);
     const hasPinnedCoordinates = rawLatitude !== ''
         && rawLongitude !== ''
         && Number.isFinite(latitude)
@@ -56,6 +66,21 @@ const googleMapsUrl = computed(() => {
 
 function close() {
     emit('close');
+}
+
+function stageLocation(location, event) {
+    if (!props.picker) { emit(event, location); return; }
+    if (!hasLocationPin(location?.latitude, location?.longitude)) return;
+    draftLocation.value = location;
+    draftEvent = event;
+}
+
+function confirmSelection() {
+    if (!props.picker) { close(); return; }
+    if (selection.value.pending || !selection.value.valid
+        || !hasLocationPin(draftLocation.value?.latitude, draftLocation.value?.longitude)) return;
+    emit(draftEvent, draftLocation.value);
+    close();
 }
 
 function retryAddressSearch() {
@@ -95,8 +120,8 @@ function retryAddressSearch() {
                 <div class="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-3 sm:p-4">
                     <LeafletMapPreview
                         :address="address"
-                        :latitude="latitude"
-                        :longitude="longitude"
+                        :latitude="picker ? draftLocation?.latitude : latitude"
+                        :longitude="picker ? draftLocation?.longitude : longitude"
                         :title="title"
                         :marker-text="markerText || title"
                         :secondary-latitude="secondaryLatitude"
@@ -104,13 +129,14 @@ function retryAddressSearch() {
                         :secondary-marker-text="secondaryMarkerText"
                         :distance-label="distanceLabel"
                         :picker="picker"
+                        :reverse-geocode-on-pick="reverseGeocodeOnPick"
                         :auto-geocode="autoGeocode"
                         :auto-geocode-delay="autoGeocodeDelay"
                         :geocode-zoom="geocodeZoom"
                         :geocode-trigger="mapGeocodeTrigger"
                         height="min(60vh, 34rem)"
-                        @resolved="emit('resolved', $event)"
-                        @picked="emit('picked', $event)"
+                        @resolved="stageLocation($event, 'resolved')"
+                        @picked="stageLocation($event, 'picked')"
                         @error="emit('error', $event)"
                         @selection-state="selection = $event"
                     />
@@ -132,7 +158,7 @@ function retryAddressSearch() {
                             Open in Google Maps
                         </a>
                         <button v-if="picker && address" type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100" @click="retryAddressSearch">Search address again</button>
-                        <button type="button" :disabled="picker && (selection.pending || !selection.valid)" class="rounded-md bg-slate-950 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" @click="close">{{ picker ? confirmLabel : 'Close map' }}</button>
+                        <button type="button" :disabled="picker && (selection.pending || !selection.valid || !draftLocation)" class="rounded-md bg-slate-950 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50" @click="confirmSelection">{{ picker ? confirmLabel : 'Close map' }}</button>
                     </div>
                 </footer>
             </section>

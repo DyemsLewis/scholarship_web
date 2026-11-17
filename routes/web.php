@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\SupportOfficerWorkspaceController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ApplicantBenefitPayoutController;
 use App\Http\Controllers\ApplicantDashboardController;
+use App\Http\Controllers\EligibilityReviewController;
 use App\Http\Controllers\ApplicationDocumentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BenefitDeliveryReportController;
@@ -67,6 +68,9 @@ Route::get('/dashboard/providers/{provider}', [ApplicantDashboardController::cla
 Route::get('/dashboard/providers/{provider}/data', [ApplicantDashboardController::class, 'providerDetailData'])->middleware('auth')->whereNumber('provider')->name('dashboard.providers.show.data');
 Route::get('/dashboard/scholarships/{scholarship}', [ApplicantDashboardController::class, 'scholarshipDetail'])->middleware('auth')->name('dashboard.scholarships.show');
 Route::get('/dashboard/scholarships/{scholarship}/data', [ApplicantDashboardController::class, 'scholarshipDetailData'])->middleware('auth')->name('dashboard.scholarships.show.data');
+Route::get('/dashboard/scholarships/{scholarship}/eligibility-review', [EligibilityReviewController::class, 'applicantContext'])->middleware('auth')->whereNumber('scholarship');
+Route::post('/dashboard/scholarships/{scholarship}/eligibility-review', [EligibilityReviewController::class, 'store'])->middleware(['auth', 'throttle:3,1'])->whereNumber('scholarship');
+Route::get('/dashboard/eligibility-reviews/{eligibilityReview}/evidence', [EligibilityReviewController::class, 'evidence'])->middleware('auth')->whereNumber('eligibilityReview');
 Route::post('/dashboard/scholarships/{scholarship}/application-start', [ApplicantDashboardController::class, 'trackApplicationStart'])->middleware(['auth', 'throttle:30,1'])->name('dashboard.scholarships.application-start');
 Route::get('/dashboard/scholarships/{scholarship}/{section}', [ApplicantDashboardController::class, 'scholarshipDetail'])->middleware('auth')->where('section', 'eligibility|award|application|provider')->name('dashboard.scholarships.show.section');
 Route::get('/dashboard/applications', [ApplicantDashboardController::class, 'applications'])->middleware('auth')->name('dashboard.applications');
@@ -437,6 +441,12 @@ Route::middleware(['auth', 'provider'])
         Route::get('/workspaces/reviews/data', [ProviderController::class, 'applicationReviewerWorkspaceData'])
             ->middleware(['permission:verify_applications', 'provider.approved'])
             ->name('workspaces.reviews.data');
+        Route::get('/workspaces/reviews/eligibility-requests', [EligibilityReviewController::class, 'index'])->middleware(['permission:verify_applications', 'provider.approved']);
+        Route::get('/workspaces/reviews/eligibility-requests/data', [EligibilityReviewController::class, 'queue'])->middleware(['permission:verify_applications', 'provider.approved']);
+        Route::get('/eligibility-reviews/{eligibilityReview}/data', [EligibilityReviewController::class, 'show'])->middleware(['permission:verify_applications', 'provider.approved'])->whereNumber('eligibilityReview');
+        Route::patch('/eligibility-reviews/{eligibilityReview}/decision', [EligibilityReviewController::class, 'decide'])->middleware(['permission:verify_applications', 'provider.approved', 'throttle:20,1'])->whereNumber('eligibilityReview');
+        Route::get('/eligibility-reviews/{eligibilityReview}/evidence', [EligibilityReviewController::class, 'evidence'])->middleware(['permission:verify_applications', 'provider.approved'])->whereNumber('eligibilityReview');
+        Route::get('/eligibility-reviews/{eligibilityReview}/applicant-photo', [EligibilityReviewController::class, 'photo'])->middleware(['permission:verify_applications', 'provider.approved'])->whereNumber('eligibilityReview');
         Route::get('/workspaces/selection', [ProviderWorkspacePageController::class, 'selectionDashboard'])
             ->middleware(['permission:manage_selection_activities', 'provider.approved'])
             ->name('workspaces.selection');

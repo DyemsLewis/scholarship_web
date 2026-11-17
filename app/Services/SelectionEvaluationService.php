@@ -8,6 +8,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Support\ScholarshipSelectionPlan;
 use App\Support\SelectionScoringPolicy;
+use App\Support\StageEvaluationRubric;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
@@ -24,8 +25,8 @@ final class SelectionEvaluationService
             }
 
             $policy = $program->selection_scoring_policy;
-            if ($policy === null) {
-                $policy = SelectionScoringPolicy::preset($program->selection_stages, $program->review_rubric ?? []);
+            if ($policy === null || empty($policy['frozen_at'])) {
+                $policy ??= SelectionScoringPolicy::preset($program->selection_stages, $program->review_rubric ?? []);
                 $policy['frozen_at'] = now()->toISOString();
                 $program->forceFill(['selection_scoring_policy' => $policy])->save();
             }
@@ -87,12 +88,13 @@ final class SelectionEvaluationService
         int $expectedStageRevision,
         int $expectedRevision = 0,
         ?string $note = null,
+        ?array $criteriaScores = null,
     ): ApplicationStageEvaluation {
         if (! in_array($stage, ['exam', 'interview'], true)) {
             throw ValidationException::withMessages(['stage' => 'Record an exam or interview evaluation. Screening reuses the reviewed rubric.']);
         }
 
-        return $this->append($application, $actor, $stage, $score, $maximumScore, $expectedRevision, $expectedStageRevision, $note);
+        return $this->append($application, $actor, $stage, $score, $maximumScore, $expectedRevision, $expectedStageRevision, $note, criteriaScores: $criteriaScores);
     }
 
     private function append(
@@ -105,8 +107,9 @@ final class SelectionEvaluationService
         int $expectedStageRevision,
         ?string $note,
         array $breakdown = [],
+        ?array $criteriaScores = null,
     ): ApplicationStageEvaluation {
-        return DB::transaction(function () use ($application, $actor, $stage, $score, $maximumScore, $expectedRevision, $expectedStageRevision, $note, $breakdown): ApplicationStageEvaluation {
+        return DB::transaction(function () use ($application, $actor, $stage, $score, $maximumScore, $expectedRevision, $expectedStageRevision, $note, $breakdown, $criteriaScores): ApplicationStageEvaluation {
             Scholarship::query()->whereKey($application->scholarship_id)->lockForUpdate()->firstOrFail();
             $locked = ScholarshipApplication::query()->with(['scholarship', 'stageProgresses'])->lockForUpdate()->findOrFail($application->id);
             $owner = $actor->providerOrganizationOwner();
@@ -114,6 +117,19 @@ final class SelectionEvaluationService
                 && $owner->providerProfile?->verification_status === 'approved'
                 && $actor->canAccessProviderProgram($locked->scholarship)
                 && $actor->hasPortalPermission($stage === 'screening' ? 'verify_applications' : 'manage_selection_activities'), 403);
+
+            $criteria = StageEvaluationRubric::criteria($locked->selection_scoring_snapshot, $stage);
+            if ($criteria !== []) {
+                if ($score !== null || $maximumScore !== null) {
+                    throw ValidationException::withMessages(['score' => 'The stage total is calculated from the individual criteria, not entered separately.']);
+                }
+                $calculated = StageEvaluationRubric::calculate($criteria, $criteriaScores, $stage);
+                $score = $calculated['score'];
+                $maximumScore = $calculated['maximum_score'];
+                $breakdown = $calculated['breakdown'];
+            } elseif ($criteriaScores !== null) {
+                throw ValidationException::withMessages(['criteria_scores' => 'This existing intake uses its original total-score plan.']);
+            }
 
             if (! is_numeric($score) || ! is_numeric($maximumScore)
                 || ! is_finite((float) $score) || ! is_finite((float) $maximumScore)) {
@@ -155,7 +171,7 @@ final class SelectionEvaluationService
                 'score' => $values['score'],
                 'maximum_score' => $values['maximum_score'],
                 'percentage' => round(((float) $score / (float) $maximumScore) * 100, 4),
-                'source' => $stage === 'screening' ? 'reviewed_screening_rubric' : 'stage_evaluation',
+                'source' => $stage === 'screening' ? 'reviewed_screening_rubric' : ($criteria !== [] ? 'stage_criteria' : 'stage_evaluation'),
                 'breakdown' => $breakdown,
                 'note' => filled($note) ? trim($note) : null,
                 'recorded_by' => $actor->id,
@@ -203,6 +219,18 @@ final class SelectionEvaluationService
                     return is_numeric($score) && (float) $score === (float) $criterion['score'];
                 });
             }
+            $criteria = StageEvaluationRubric::criteria($policy, $stage);
+            if ($current && $criteria !== []) {
+                try {
+                    $saved = collect($evaluation->breakdown ?? [])->keyBy('key');
+                    $scores = $saved->map(fn ($row) => ['score' => $row['score'] ?? null, 'maximum_score' => $row['maximum_score'] ?? null])->all();
+                    $calculated = StageEvaluationRubric::calculate($criteria, $scores, $stage);
+                    $current = $evaluation->source === 'stage_criteria' && abs($calculated['score'] - (float) $evaluation->percentage) < 0.0001
+                        && collect($criteria)->every(fn ($row) => ($saved->get($row['key'])['weight'] ?? null) === $row['weight']);
+                } catch (ValidationException) {
+                    $current = false;
+                }
+            }
             $percentage = $weight !== null && $current ? (float) $evaluation->percentage : null;
             if ($percentage !== null) {
                 $complete++;
@@ -233,6 +261,7 @@ final class SelectionEvaluationService
                 'raw_score' => $current ? (float) $evaluation->score : null,
                 'maximum_score' => $current ? (float) $evaluation->maximum_score : null,
                 'note' => $current ? $evaluation->note : null,
+                'breakdown' => $current ? ($evaluation->breakdown ?? []) : [],
                 'history' => $application->stageEvaluations->where('stage_key', $stage)->sortByDesc('revision')->take(10)
                     ->map(fn (ApplicationStageEvaluation $entry): array => [
                         'revision' => $entry->revision,
@@ -240,6 +269,7 @@ final class SelectionEvaluationService
                         'maximum_score' => (float) $entry->maximum_score,
                         'percentage' => round((float) $entry->percentage, 2),
                         'note' => $entry->note,
+                        'breakdown' => $entry->breakdown ?? [],
                         'recorded_by' => $entry->recorder?->name ?? 'Former team member',
                         'recorded_at' => $entry->recorded_at->format('M d, Y h:i A'),
                     ])->values()->all(),
@@ -247,7 +277,7 @@ final class SelectionEvaluationService
                     && ! filled($application->final_outcome)
                     && ! in_array($application->application_state, ['closed', 'withdrawn'], true)
                     && ! in_array($application->correction_status, ['requested', 'submitted'], true),
-                'criteria' => $weight !== null && $stage === 'screening' ? $policy['screening_criteria'] : [],
+                'criteria' => $weight !== null ? ($stage === 'screening' ? $policy['screening_criteria'] : $criteria) : [],
             ];
         }
         $count = count($policy['weights']);

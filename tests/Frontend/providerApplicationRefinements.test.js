@@ -104,7 +104,8 @@ test('decision readiness, reopening, capacity, recipient acceptance and outcome 
     const selection = read('pages/provider/selection/SelectionActivityRecordPage.vue');
     for (const token of ['v-if="canRecordResult"', 'readiness.attendance_status', 'readiness.proof_count', 'recordResult', 'DecisionReopenDialog']) assert.ok(selection.includes(token));
     const decision = read('pages/provider/decisions/FinalDecisionRecordPage.vue');
-    for (const token of ['capacity.remaining', 'recordOutcome', 'DecisionReopenDialog', 'actionBusy', 'rejectionReasons', 'decisionForm.awarded_amount']) assert.ok(decision.includes(token), token);
+    for (const token of ['capacity.remaining', 'recordOutcome', 'DecisionReopenDialog', 'actionBusy', 'rejectionReasons']) assert.ok(decision.includes(token), token);
+    assert.doesNotMatch(decision, /awarded_amount|Awarded amount|decisionAwardLabel/);
     assert.doesNotMatch(decision, /block max-w-(?:xl|sm)/);
     const recipient = read('pages/provider/recipients/RecipientRecordPage.vue');
     for (const token of ['v-if="!agreementAccepted"', 'support.renewal_eligible', 'supportForm.confirmed', 'askToSaveSupport', 'askToResolveRequest', 'openResponse']) assert.ok(recipient.includes(token));

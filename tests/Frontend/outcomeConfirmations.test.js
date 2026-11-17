@@ -5,11 +5,13 @@ import { readFileSync } from 'node:fs';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, reactive, ref } from 'vue';
 import { confirmOutcome, registerOutcomeConfirmationPresenter } from '../../resources/js/support/outcomeConfirmation.js';
-import { decisionAwardLabel, finalDecisionConsequence, stageDecisionConsequence } from '../../resources/js/support/providerDecisionConfirmation.js';
+import { finalDecisionConsequence, stageDecisionConsequence } from '../../resources/js/support/providerDecisionConfirmation.js';
+import { selectionRationaleRequired } from '../../resources/js/support/selectionComparison.js';
 import { useConfirmationDialog } from '../../resources/js/composables/useConfirmationDialog.js';
 import { useApplicantEvidenceDecision } from '../../resources/js/composables/useApplicantEvidenceDecision.js';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
 import { reviewErrorMessage, reviewStatusLabel } from '../../resources/js/support/adminReviewPresentation.js';
+import * as stageEvaluation from '../../resources/js/support/stageEvaluation.js';
 
 const read = (path) => readFileSync(new URL(`../../resources/js/${path}`, import.meta.url), 'utf8');
 const flush = () => new Promise((resolve) => setImmediate(resolve));
@@ -123,11 +125,11 @@ test('Cancel retains evidence outcome, comparison, notes and does not send a mut
 
 function harness(path, deps, exposed) {
     const script = parse(read(path)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
-    const bindings = { staffQueueReturn, ref, computed, confirmOutcome, onMounted() {}, useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/programs', load() {} }), ...deps };
+    const bindings = { staffQueueReturn, ref, computed, confirmOutcome, ...stageEvaluation, onMounted() {}, useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/programs', load() {} }), ...deps };
     return new Function(...Object.keys(bindings), `${script}\nreturn {${exposed}};`)(...Object.values(bindings));
 }
 
-test('final outcome starts blank; the amount reviewed on promotion is the amount sent after confirmation', async () => {
+test('final outcome starts blank and promotion confirms without entering or sending an amount', async () => {
     const dialog = useConfirmationDialog(), writes = [];
     const unregister = registerOutcomeConfirmationPresenter(dialog.requestConfirmation);
     const application = {
@@ -140,25 +142,26 @@ test('final outcome starts blank; the amount reviewed on promotion is the amount
     } };
     const state = harness('pages/provider/decisions/FinalDecisionRecordPage.vue', {
         window, document: { getElementById: () => ({ dataset: { applicationId: 2 } }) },
-        decisionReasonOptions: [], decisionAwardLabel, finalDecisionConsequence,
+        decisionReasonOptions: [], finalDecisionConsequence, selectionRationaleRequired,
     }, 'loadApplication, askToRecordOutcome, decisionForm');
     try {
         await state.loadApplication();
         assert.equal(state.decisionForm.value.outcome, '');
         await state.askToRecordOutcome();
         assert.equal(dialog.confirmation.open, false);
-        Object.assign(state.decisionForm.value, { outcome: 'selected', awarded_amount: 4500, notes: 'Confirmed from the program record.' });
+        assert.equal('awarded_amount' in state.decisionForm.value, false);
+        Object.assign(state.decisionForm.value, { outcome: 'selected', notes: 'Confirmed from the program record.' });
         const cancel = state.askToRecordOutcome();
-        assert.match(dialog.confirmation.message, /Mira Cruz.*\n.*Promote To Selected.*\n.*Learning Grant.*\n.*PHP 4,500\.00/);
+        assert.match(dialog.confirmation.message, /Mira Cruz.*\n.*Promote To Selected.*\n.*Learning Grant/);
+        assert.doesNotMatch(dialog.confirmation.message, /PHP|Award:/);
         dialog.cancelConfirmation(); await cancel;
         assert.equal(writes.length, 0);
-        assert.equal(state.decisionForm.value.awarded_amount, 4500);
+        assert.equal(state.decisionForm.value.notes, 'Confirmed from the program record.');
         const save = state.askToRecordOutcome();
-        state.decisionForm.value.awarded_amount = 1200;
         dialog.confirmConfirmation(); await save;
         assert.equal(writes.length, 1);
         assert.match(writes[0][0], /\/final-outcome$/);
-        assert.equal(writes[0][1].awarded_amount, 4500);
+        assert.equal('awarded_amount' in writes[0][1], false);
         assert.equal(writes[0][1].expected_outcome, 'waitlisted');
     } finally { unregister(); }
 });

@@ -36,7 +36,7 @@ const instructions = computed(() => delivery.value.key !== 'inactive' && (props.
 
     <div data-benefit-release-record class="mt-4 space-y-4">
         <a :href="release.return_href" class="inline-flex min-h-9 items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
-            <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i> All benefit releases
+            <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i> All Benefits &amp; Events
         </a>
 
         <BenefitFollowUpPanel v-if="release.follow_up" :key="release.record_id" :follow-up="release.follow_up" :context="release.title" @saved="emit('refresh')" />
@@ -153,8 +153,8 @@ const instructions = computed(() => delivery.value.key !== 'inactive' && (props.
                     <template v-if="response.response_type === 'issue'">
                         <p class="mt-1 text-sm font-semibold text-slate-700">{{ response.issue_type_label }}</p>
                         <p class="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{{ response.issue_details }}</p>
-                        <button v-if="response.evidence" type="button" class="mt-2 min-h-10 rounded-sm border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="previewFile = response.evidence">View your evidence</button>
                     </template>
+                    <button v-if="response.evidence" type="button" class="mt-2 min-h-10 rounded-sm border border-slate-300 px-3 text-sm font-bold text-slate-700 hover:bg-slate-50" @click="previewFile = response.evidence">{{ response.response_type === 'confirmed' ? 'View your receipt proof' : 'View your evidence' }}</button>
                 </section>
                 <section v-if="response?.status === 'resolved'">
                     <h4 class="text-sm font-bold text-slate-950">Provider resolution</h4>

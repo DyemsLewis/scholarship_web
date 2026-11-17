@@ -6,7 +6,6 @@ import ProviderApplicantPreviewToolbar from '../components/ProviderApplicantPrev
 import ScholarshipEligibilityPanel from '../components/ScholarshipEligibilityPanel.vue';
 import ScholarshipApplicationGuide from '../components/ScholarshipApplicationGuide.vue';
 import ScholarshipApplicationRequirements from '../components/ScholarshipApplicationRequirements.vue';
-import ScholarshipFormalApplicationSchedule from '../components/ScholarshipFormalApplicationSchedule.vue';
 import ScholarshipAwardDetails from '../components/ScholarshipAwardDetails.vue';
 import ScholarshipDetailAction from '../components/ScholarshipDetailAction.vue';
 import ScholarshipOverview from '../components/ScholarshipOverview.vue';
@@ -433,6 +432,7 @@ onMounted(async () => {
                         v-else-if="activeView === 'eligibility'"
                         :content="content"
                         :verdict="eligibilityVerdict"
+                        @review-changed="loadScholarship"
                         :preview="isPreview"
                         :preview-scenario="content.preview_scenario || previewScenario"
                         :application-href="navigation.find((item) => item.key === 'application')?.href || ''"
@@ -498,7 +498,7 @@ onMounted(async () => {
                             </header>
                             <p v-if="process.schedule_note" class="border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-xs leading-5 text-slate-600 sm:px-6" data-program-schedule-note>{{ process.schedule_note }}</p>
                             <ol class="divide-y divide-slate-200">
-                                <li v-for="stage in process.stages" :key="stage.key" :class="['grid gap-3 px-4 py-4 sm:gap-4 sm:px-5', stage.key === 'formal_application' && process.formal_application ? 'sm:grid-cols-[2.5rem_minmax(0,1fr)] sm:items-start' : 'sm:grid-cols-[2.5rem_minmax(0,1fr)_minmax(11rem,auto)] sm:items-center']">
+                                <li v-for="stage in process.stages" :key="stage.key" class="grid gap-3 px-4 py-4 sm:grid-cols-[2.5rem_minmax(0,1fr)_minmax(11rem,auto)] sm:items-center sm:gap-4 sm:px-5">
                                     <span class="grid h-9 w-9 place-items-center rounded-md bg-slate-950 text-sm font-bold text-amber-300">{{ stage.step }}</span>
                                     <div>
                                         <div class="flex items-center gap-2">
@@ -506,9 +506,12 @@ onMounted(async () => {
                                             <h4 class="text-base font-bold text-slate-950">{{ stage.label }}</h4>
                                         </div>
                                         <p class="mt-1 text-sm leading-6 text-slate-600">{{ stage.description }}</p>
-                                        <ScholarshipFormalApplicationSchedule v-if="stage.key === 'formal_application' && process.formal_application" :schedule="process.formal_application" :preview="isPreview" />
                                     </div>
-                                    <div v-if="stage.key !== 'formal_application' || !process.formal_application" class="sm:text-right">
+                                    <div v-if="stage.key === 'formal_application'" class="sm:text-right">
+                                        <p class="text-sm font-bold text-slate-900">After pre-screening</p>
+                                        <p class="mt-1 text-xs font-semibold text-slate-500">See your application record for instructions</p>
+                                    </div>
+                                    <div v-else class="sm:text-right">
                                         <p class="text-sm font-bold text-slate-900">{{ stage.timing?.label }}</p>
                                         <p v-if="stage.timing?.note" class="mt-1 text-xs font-semibold text-slate-500">{{ stage.timing.note }}</p>
                                     </div>

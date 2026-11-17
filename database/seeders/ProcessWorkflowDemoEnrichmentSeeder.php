@@ -98,9 +98,10 @@ class ProcessWorkflowDemoEnrichmentSeeder extends FreshWorkflowDemoSeeder
                         if ($key === 'dss.score' && $stage === 'interview') continue;
                         $score = match ($key) { 'dss.first' => 96, 'dss.second' => 90, 'dss.third' => 82, default => 93 };
                         $progress = $application->stageProgresses()->where('stage_key', $stage)->sole();
+                        $criteria = \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, $stage, $score);
                         Carbon::withTestNow($progress->completed_at->copy()->addMinute(), fn () => app(SelectionEvaluationService::class)->record(
-                            $application->fresh(), $this->staff['nuvareya.selection'], $stage, $score, 100,
-                            (int) $progress->evaluation_revision, 0, 'Assessment recorded from the completed session.',
+                            $application->fresh(), $this->staff['nuvareya.selection'], $stage, $criteria ? null : $score, $criteria ? null : 100,
+                            (int) $progress->evaluation_revision, 0, 'Assessment recorded from the completed session.', $criteria,
                         ));
                     }
                     if (! str_starts_with($key, 'dss.')) $application = $this->acceptAward($application, $round);

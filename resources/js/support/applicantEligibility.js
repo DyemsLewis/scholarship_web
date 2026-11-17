@@ -9,6 +9,7 @@ export function eligibilityCriterionPresentation(criterion) {
         || ['scale_mismatch', 'manual_review'].includes(criterion?.comparison_mode)
         || (criterion?.key === 'academic' && criterion?.status === 'info' && Boolean(criterion?.requirement));
     const modeLabel = preferred ? 'Preferred' : 'Required';
+    if (criterion?.exception_approved && criterion?.status === 'fail') return { status: 'exception', label: 'Exception approved', state: 'attention', modeLabel };
     if (criterion?.status === 'fail') {
         return preferred
             ? { status: 'preferred', label: 'Preference not matched', state: 'attention', modeLabel }

@@ -32,6 +32,17 @@ test('one shared editor covers creation editing check-ins rescheduling and benef
     assert.match(source, /pinValues.value = \{ \.\.\.pinValues.value, \[key\]: value \}/);
     assert.match(source, /latitude: null, longitude: null/);
     assert.match(source, /Enter the province and city/);
+    assert.match(source, /:reset-on-address-change="false"/);
+});
+
+test('program venues and formal application handoffs use the same structured editor', () => {
+    const source = read('pages/provider/programs/ProgramFormPage.vue');
+    assert.equal((source.match(/<ProviderVenueAddress/g) || []).length, 2);
+    assert.match(source, /location_address_details: JSON.stringify\(form.value.locationAddressDetails\)/);
+    assert.match(source, /handoff_address_details: JSON.stringify/);
+    assert.match(source, /program.location_address_details \?\? null/);
+    assert.match(source, /program.handoff_address_details \?\? null/);
+    assert.doesNotMatch(source, /v-model="form.locationAddress"[^>]*type="text"|v-model="form.handoffLocationAddress"[^>]*type="text"/);
 });
 
 test('check-in records expose the saved map and in-person releases can include instructions', () => {

@@ -12,6 +12,7 @@ use App\Models\RecipientBenefitEntitlement;
 use App\Models\RecipientBenefitReleaseRecord;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Support\RecipientAgreement;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -379,6 +380,9 @@ final class RecipientAgreementCaseService
 
     private function obligationSource(ScholarshipApplication $application, string $key): array
     {
+        if (! RecipientAgreement::hasDisclosedResponsibilities($application->provider_contract_terms_snapshot ?? [])) {
+            throw ValidationException::withMessages(['term_key' => 'An offer confirmation does not establish undisclosed obligations. The provider must first clarify the specific recipient responsibilities.']);
+        }
         if (! in_array($application->status, ['awarded', 'distribution_scheduled', 'disbursed', 'renewed'], true)
             || in_array($application->supportDecisions()->first()?->decision, ['completed', 'terminated'], true)) {
             throw ValidationException::withMessages(['agreement' => 'An agreement concern requires active scholarship support.']);

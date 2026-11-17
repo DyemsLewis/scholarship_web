@@ -31,7 +31,7 @@ class ProviderExamReviewWorkflowTest extends TestCase
             ->patchJson("/provider/applications/{$application->id}/stages/exam/result", [
                 'result' => 'passed',
                 'notes' => 'The provider confirmed the applicant passed the external exam.',
-                'evaluation' => ['score' => 43, 'maximum_score' => 50, 'expected_stage_revision' => 0, 'expected_revision' => 0],
+                'evaluation' => ['criteria_scores' => \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, 'exam', 86), 'expected_stage_revision' => 0, 'expected_revision' => 0],
             ])
             ->assertOk()
             ->assertJsonPath('application.status', 'approved')
@@ -58,7 +58,7 @@ class ProviderExamReviewWorkflowTest extends TestCase
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/stages/exam/result", [
                 'result' => 'passed',
-                'evaluation' => ['score' => 43, 'maximum_score' => 50, 'expected_stage_revision' => 0, 'expected_revision' => 0],
+                'evaluation' => ['criteria_scores' => \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, 'exam', 86), 'expected_stage_revision' => 0, 'expected_revision' => 0],
             ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('result');

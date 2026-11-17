@@ -36,7 +36,8 @@ test('program form uses the existing organization payload and invalidates a pin 
     assert.match(source, /organizationProgramLocation\(portalUser\)/);
     assert.match(source, /Object.assign\(form.value, organizationLocation\)/);
     assert.match(source, /cancelLabel: 'Keep current venue'/);
-    assert.match(source, /@input="clearProgramAddressPin"/);
+    assert.match(source, /v-model="form.locationAddressDetails"/);
+    assert.match(source, /form.value.locationAddressDetails = null/);
     assert.match(source, /&& programHasLocationPin.value/);
     assert.match(source, /:disabled="!organizationLocation.locationAddress"/);
 });

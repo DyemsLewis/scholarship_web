@@ -12,7 +12,7 @@ import { applicantProfileDetails } from '../../../support/applicantProfileDetail
 import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
 import { decisionReasonOptions } from '../../../support/applicationDecisionReasons';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
-import { decisionAwardLabel, finalDecisionConsequence } from '../../../support/providerDecisionConfirmation.js';
+import { finalDecisionConsequence } from '../../../support/providerDecisionConfirmation.js';
 import EligibilityReviewPanel from '../reviews/components/EligibilityReviewPanel.vue';
 import { selectionRationaleRequired } from '../../../support/selectionComparison';
 
@@ -38,7 +38,7 @@ const errorMessage = ref('');
 const successMessage = ref('');
 const showReopenDialog = ref(false);
 const reopenError = ref('');
-const decisionForm = ref({ outcome: '', decision_reason: '', notes: '', awarded_amount: '', selection_rationale: '' });
+const decisionForm = ref({ outcome: '', decision_reason: '', notes: '', selection_rationale: '' });
 
 const applicant = computed(() => application.value?.applicant ?? {});
 const scholarship = computed(() => application.value?.scholarship ?? {});
@@ -124,7 +124,6 @@ function resetForm() {
         outcome: '',
         decision_reason: '',
         notes: '',
-        awarded_amount: application.value?.awarded_amount ?? scholarship.value.award_amount ?? '',
         selection_rationale: '',
     };
 }
@@ -151,11 +150,10 @@ async function loadApplication() {
 async function askToRecordOutcome() {
     if (!canSubmitOutcome.value) return;
     const previousOutcome = currentOutcome.value;
-    const { outcome, decision_reason, notes, awarded_amount } = decisionForm.value;
+    const { outcome, decision_reason, notes } = decisionForm.value;
     const formSnapshot = JSON.stringify(decisionForm.value);
     const reference = comparison.value.reference;
     const rationale = needsRationale.value ? decisionForm.value.selection_rationale.trim() : '';
-    const amount = awarded_amount === '' ? null : awarded_amount;
     const rejectionReason = rejectionReasons.find((option) => option.value === decision_reason)?.label;
     const promoting = previousOutcome === 'waitlisted' && outcome === 'selected';
     confirming.value = true;
@@ -167,7 +165,6 @@ async function askToRecordOutcome() {
         outcome: promoting ? 'Promote to selected' : outcome,
         details: [
             `Program: ${scholarship.value.title}`,
-            outcome === 'selected' ? `Award: ${decisionAwardLabel(amount ?? scholarship.value.award_amount)}` : '',
             outcome === 'not_selected' ? `Reason: ${rejectionReason}` : '',
             comparison.value.recommended_outcome ? `Suggested outcome: ${labelize(comparison.value.recommended_outcome)}` : '',
             rationale ? `Internal reason: ${rationale}` : '',
@@ -189,7 +186,6 @@ async function askToRecordOutcome() {
         notes: notes || null,
         ...(reference ? { comparison_reference: reference } : {}),
         selection_rationale: rationale || null,
-        ...(outcome === 'selected' ? { awarded_amount: amount } : {}),
     });
 }
 
@@ -282,11 +278,10 @@ onMounted(loadApplication);
                         <header class="flex items-start gap-3 border-b border-slate-200 px-7 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">{{ isRecorded ? 'Recorded outcome' : isWaitlisted ? 'Review waitlisted applicant' : 'Record final outcome' }}</h2><p class="mt-1 text-sm text-slate-500">{{ isRecorded ? 'This decision is retained as part of the application history.' : 'The applicant is notified after the outcome is saved.' }}</p></div></header>
 
                         <div v-if="isRecorded" class="px-7 py-8">
-                            <dl class="grid grid-cols-4 border-y border-slate-200">
+                            <dl class="grid grid-cols-3 border-y border-slate-200">
                                 <div class="border-r border-slate-200 px-4 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Outcome</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ outcomeLabel }}</dd></div>
                                 <div class="border-r border-slate-200 px-4 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Recorded</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ application.outcome_at || application.reviewed_at || 'Recorded' }}</dd></div>
-                                <div class="border-r border-slate-200 px-4 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Reason</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ application.decision_reason ? labelize(application.decision_reason) : 'Not required' }}</dd></div>
-                                <div class="px-4 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Award</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ application.awarded_amount ? `PHP ${Number(application.awarded_amount).toLocaleString()}` : 'Not recorded' }}</dd></div>
+                                <div class="px-4 py-4"><dt class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Reason</dt><dd class="mt-1 text-sm font-bold text-slate-950">{{ application.decision_reason ? labelize(application.decision_reason) : 'Not required' }}</dd></div>
                             </dl>
                             <div v-if="application.outcome_notes" class="mt-5"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Decision note</p><p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ application.outcome_notes }}</p></div>
                             <div v-if="application.selection_decision_rationale" class="mt-5 border-l-2 border-slate-300 bg-slate-50 px-4 py-3"><p class="text-xs font-bold text-slate-700">Internal decision reason</p><p class="mt-1 text-sm text-slate-600">{{ application.selection_decision_rationale }}</p><p class="mt-1 text-xs text-slate-500">Saved with the evaluation basis. Not shown to the applicant.</p></div>
@@ -312,7 +307,6 @@ onMounted(loadApplication);
 
                             <p v-if="slotsFull" class="mt-4 border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">All configured slots are currently occupied. Selection becomes available when capacity opens.</p>
                             <label v-if="decisionForm.outcome === 'not_selected'" class="mt-5 block w-full text-sm font-semibold text-slate-700">Decision reason<select v-model="decisionForm.decision_reason" required class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal outline-none focus:border-slate-950"><option value="" disabled>Select a reason</option><option v-for="reason in rejectionReasons" :key="reason.value" :value="reason.value">{{ reason.label }}</option></select></label>
-                            <label v-if="decisionForm.outcome === 'selected'" class="mt-5 block w-full text-sm font-semibold text-slate-700">Awarded amount <span class="font-normal text-slate-600">(optional)</span><div class="mt-2 flex"><span class="grid h-11 place-items-center border border-r-0 border-slate-300 bg-slate-50 px-3 text-sm font-bold text-slate-500">PHP</span><input v-model="decisionForm.awarded_amount" type="number" min="0" max="999999999.99" step="0.01" class="h-11 min-w-0 flex-1 border border-slate-300 px-3 font-normal outline-none focus:border-slate-950"></div><span class="mt-2 block text-xs font-normal text-slate-600">Leave blank to use the program's award terms.</span></label>
                             <label v-if="decisionForm.outcome" class="mt-5 block text-sm font-semibold text-slate-700">Decision note <span class="font-normal text-slate-600">(optional, visible to the applicant)</span><textarea v-model="decisionForm.notes" maxlength="2000" rows="3" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950" placeholder="Add information that helps the applicant understand the outcome."></textarea></label>
                             <div class="mt-5 flex items-center gap-3"><button type="submit" class="inline-flex h-11 items-center gap-2 rounded-[5px] bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-60" :disabled="!canSubmitOutcome"><i :class="['fa-solid text-[10px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-clipboard-check']" aria-hidden="true"></i>{{ actionBusy ? 'Saving...' : 'Review outcome' }}</button></div>
                         </form>

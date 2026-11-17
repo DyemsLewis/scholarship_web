@@ -48,6 +48,14 @@ test('all configured rules are summarized without treating preferences as requir
     assert.equal(rules.find((rule) => rule.key === 'academic').value, 'Minimum average: 85.00%');
 });
 
+test('the program builder and review summary label grade thresholds as minimum requirements', () => {
+    const source = readFileSync(new URL('../../resources/js/pages/provider/programs/ProgramFormPage.vue', import.meta.url), 'utf8');
+    assert.match(source, /'Minimum GWA \/ GPA' : 'Minimum average'/);
+    assert.doesNotMatch(source, /Maximum GWA/);
+    const rules = configuredEligibilityRules({ ...blankForm(), minimumGradeScale: 'grade_point', minimumGwa: 2 });
+    assert.equal(rules.find(rule => rule.key === 'academic').value, 'Minimum GWA / GPA: 2.00');
+});
+
 test('clearing a rule hides it without discarding its saved preference', () => {
     const form = { ...blankForm(), eligibleCourses: 'STEM', eligibilityRuleModes: normalizeEligibilityRuleModes({ course: 'preferred' }) };
     assert.equal(configuredEligibilityRules(form)[0].mode, 'preferred');

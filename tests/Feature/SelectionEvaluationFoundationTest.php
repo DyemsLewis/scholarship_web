@@ -287,6 +287,9 @@ class SelectionEvaluationFoundationTest extends TestCase
             'review_rubric' => $rubric ?? ReviewRubric::DEFAULT,
             'selection_stages' => ['screening', 'formal_application', ...$stages, 'decision'],
         ]);
+        $legacy = SelectionScoringPolicy::preset($program->selection_stages, $program->review_rubric);
+        unset($legacy['stage_criteria']);
+        $program->forceFill(['selection_scoring_policy' => [...$legacy, 'version' => '1.0']])->save();
         $application = ScholarshipApplication::create([
             'scholarship_id' => $program->id, 'applicant_id' => User::factory()->create()->id,
             'status' => 'submitted', 'submitted_at' => now(), 'review_rubric_snapshot' => $program->review_rubric,

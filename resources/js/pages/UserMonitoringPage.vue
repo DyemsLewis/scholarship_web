@@ -125,7 +125,7 @@ onMounted(loadSupport);
                         <header class="flex items-center justify-between gap-4 border-b border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-6">
                             <div>
                                 <h2 id="active-support-title" class="font-display text-xl font-bold text-slate-950">Your scholarships</h2>
-                                <p class="mt-1 text-sm text-slate-600">Open a support record for its check-ins, releases, and updates.</p>
+                                <p class="mt-1 text-sm text-slate-600">Open a support record for its requirements, benefits, and updates.</p>
                             </div>
                             <span class="shrink-0 text-xs font-bold text-slate-600">{{ support.active.length }} current</span>
                         </header>

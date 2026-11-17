@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import StageEvaluationFields from './StageEvaluationFields.vue';
 import { useModalAccessibility } from '../composables/useModalAccessibility';
 import { confirmOutcome } from '../support/outcomeConfirmation';
-import { stageScoreLabel, stageScorePercentage } from '../support/stageEvaluation';
+import { stageScoreLabel, stageEvaluationForm, stageEvaluationResult, stageEvaluationPayload } from '../support/stageEvaluation';
 
 const props = defineProps({
     evaluation: { type: Object, default: null },
@@ -14,14 +14,15 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save']);
 const dialog = ref(null);
 const confirming = ref(false);
-const form = ref({ score: '', maximum_score: 100, note: '' });
+const form = ref(stageEvaluationForm());
+const total = computed(() => stageEvaluationResult(form.value, props.evaluation?.criteria, props.evaluation?.key));
 const correcting = computed(() => props.evaluation?.score !== null && props.evaluation?.score !== undefined);
-const valid = computed(() => stageScorePercentage(form.value.score, form.value.maximum_score) !== null
+const valid = computed(() => total.value !== null
     && (!correcting.value || form.value.note.trim().length >= 10));
 const { handleKeydown } = useModalAccessibility(() => Boolean(props.evaluation), dialog, close);
 watch(() => props.evaluation, (stage) => {
     if (!stage) return;
-    form.value = { score: stage.raw_score ?? '', maximum_score: stage.maximum_score ?? 100, note: '' };
+    form.value = stageEvaluationForm(stage);
 });
 function close() {
     if (!props.busy && !confirming.value) emit('close');
@@ -36,12 +37,12 @@ async function save() {
             title: correcting.value ? 'Confirm score correction' : 'Confirm stage evaluation',
             record: props.applicantName,
             outcome: `${evaluation.label} evaluation`,
-            details: [`Score: ${stageScoreLabel(form.value.score, form.value.maximum_score)}`, correcting.value ? `Reason: ${form.value.note.trim()}` : ''],
+            details: [`Score: ${stageScoreLabel(total.value.score, total.value.maximum_score)}`, ...(evaluation.criteria ?? []).map(row => `${row.label}: ${form.value.criteria_scores[row.key].score} / ${form.value.criteria_scores[row.key].maximum_score} (${row.weight}%)`), correcting.value ? `Reason: ${form.value.note.trim()}` : ''],
             consequence: 'This updates the selection evaluation only. It does not change a stage result, select the applicant, or alter the waitlist. Earlier scores remain in history.',
             confirmLabel: correcting.value ? 'Save correction' : 'Save evaluation',
         }, () => Boolean(props.evaluation?.can_edit) && props.evaluation === evaluation && !props.busy && JSON.stringify(form.value) === snapshot);
         if (accepted) emit('save', { stage: evaluation, payload: {
-            score: Number(form.value.score), maximum_score: Number(form.value.maximum_score),
+            ...stageEvaluationPayload(form.value, evaluation.criteria),
             expected_stage_revision: evaluation.stage_revision, expected_revision: evaluation.revision,
             note: form.value.note.trim() || null,
         } });
@@ -59,7 +60,7 @@ async function save() {
                 <div class="min-h-0 overflow-y-auto px-6 py-5">
                     <p v-if="error" role="alert" class="mb-4 border-l-4 border-rose-400 bg-rose-50 px-3 py-3 text-sm text-rose-800">{{ error }}</p>
                     <p v-if="correcting" class="mb-4 text-xs text-slate-500">Current score: <strong class="text-slate-800">{{ evaluation.raw_score }} / {{ evaluation.maximum_score }}</strong>. The original is kept in history.</p>
-                    <StageEvaluationFields v-model="form" :stage="evaluation.key" id-prefix="stage-correction" :disabled="busy || confirming" />
+                    <StageEvaluationFields v-model="form" :stage="evaluation.key" :criteria="evaluation.criteria" id-prefix="stage-correction" :disabled="busy || confirming" />
                     <label class="mt-5 block text-sm font-semibold text-slate-700">{{ correcting ? 'Reason for correction' : 'Internal note (optional)' }}<textarea v-model="form.note" :required="correcting" :minlength="correcting ? 10 : undefined" maxlength="2000" rows="3" :disabled="busy || confirming" class="mt-2 w-full rounded-[5px] border border-slate-300 px-3 py-3 font-normal text-slate-950 outline-none focus:border-slate-950" :placeholder="correcting ? 'Explain why the recorded score needs correcting.' : 'Add a short reference to the score sheet if needed.'"></textarea></label>
                     <details v-if="evaluation.history?.length" class="mt-4 border-t border-slate-200 pt-3"><summary class="cursor-pointer text-xs font-bold text-slate-600">Recent score history</summary><ol class="mt-2 divide-y divide-slate-200"><li v-for="entry in evaluation.history" :key="entry.revision" class="py-3"><div class="flex items-start justify-between gap-5"><p class="text-xs text-slate-500">{{ entry.recorded_by }} | {{ entry.recorded_at }}</p><p class="shrink-0 text-xs font-bold text-slate-900">{{ stageScoreLabel(entry.score, entry.maximum_score) }}</p></div><p v-if="entry.note" class="mt-2 whitespace-pre-line text-xs leading-5 text-slate-600">{{ entry.note }}</p></li></ol></details>
                 </div>

@@ -290,6 +290,10 @@ final class BenefitDeliveryReportService
         }
         $this->files->validate($files);
 
+        if ($data['response_kind'] === 'receipt_confirmed' && $files === []) {
+            throw ValidationException::withMessages(['evidence' => 'Upload a photo or document showing that you received the benefit before confirming receipt.']);
+        }
+
         return $this->command($actor, $case, $revision, $data, $files, function ($case, $response) use ($data): void {
             $old = $case->status;
             $proposal = $case->proposal;

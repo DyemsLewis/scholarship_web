@@ -21,7 +21,7 @@ export function deliveryBodyValid({ creating, provider, kind, source, period, de
         if (kind === 'correction_planned') return !!followUp;
         return kind === 'information_provided';
     }
-    if (kind === 'receipt_confirmed') return !!date;
+    if (kind === 'receipt_confirmed') return !!date && files.length > 0;
     if (kind === 'clarification_accepted') return true;
     return ['still_unresolved', 'additional_information'].includes(kind) && details.trim().length >= 10;
 }

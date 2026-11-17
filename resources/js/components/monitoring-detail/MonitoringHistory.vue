@@ -11,8 +11,8 @@ const props = defineProps({
 const emit = defineEmits(['refresh']);
 const filter = ref('all');
 const categories = [
-    { key: 'check_in', label: 'Check-ins' },
-    { key: 'benefit_release', label: 'Benefits' },
+    { key: 'check_in', label: 'Requirements' },
+    { key: 'benefit_release', label: 'Benefits & Events' },
     { key: 'support_outcome', label: 'Decisions' },
 ];
 const filters = computed(() => [
@@ -64,7 +64,7 @@ function contextLabel(item) {
         <section class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm" aria-labelledby="support-timeline-title">
             <header class="border-b border-slate-200 px-4 py-4 sm:px-6">
                 <h2 id="support-timeline-title" class="font-display text-xl font-bold text-slate-950 sm:text-2xl">Support timeline</h2>
-                <p class="mt-1 text-sm leading-6 text-slate-600">Past check-ins, benefit releases, and provider decisions. Newest first.</p>
+                <p class="mt-1 text-sm leading-6 text-slate-600">Past requirements, benefits, and provider decisions. Newest first.</p>
                 <div v-if="filters.length > 2" class="mt-3 flex flex-wrap gap-1.5" role="group" aria-label="Filter support history">
                     <button v-for="option in filters" :key="option.key" type="button" :aria-pressed="activeFilter === option.key"
                         :class="['min-h-9 rounded-sm border px-3 text-xs font-bold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600', activeFilter === option.key ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50']"

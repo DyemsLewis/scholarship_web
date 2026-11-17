@@ -42,7 +42,7 @@ const total = computed(() => allGroups.value.reduce((sum, group) => sum + group.
             <header class="relative isolate overflow-hidden bg-portal-navy px-5 py-5 text-white sm:px-6">
                 <div class="relative z-10 max-w-2xl">
                     <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Your scholarship benefits</p>
-                    <h2 class="mt-1 font-display text-xl font-bold sm:text-2xl">Benefit releases</h2>
+                    <h2 class="mt-1 font-display text-xl font-bold sm:text-2xl">Benefits &amp; Events</h2>
                     <p class="mt-2 max-w-xl text-sm leading-6 text-slate-200">{{ content.one_time ? 'Track your one-time award, review the delivery details, and confirm it only after it arrives.' : 'See what is coming, check the provider\'s instructions, and confirm what you actually receive.' }}</p>
                 </div>
                 <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-0 hidden w-2/5 md:block"><img :src="'/images/filipino-students-group-study.jpg'" alt="" class="h-full w-full object-cover opacity-40"><div class="absolute inset-0 bg-linear-to-r from-portal-navy via-portal-navy/50 to-portal-navy/20"></div></div>

@@ -25,7 +25,7 @@ const facts = computed(() => checkInCardFacts(props.record, props.past));
         </div>
         <footer class="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5">
             <p class="min-w-0 text-xs leading-5 text-slate-600">{{ checkInCardGuidance(record, past) }}</p>
-            <a :href="record.href" class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 sm:min-w-44">{{ past ? 'Open record' : 'Open check-in' }}<i class="fa-solid fa-arrow-right block w-3 text-center text-xs leading-none" aria-hidden="true"></i></a>
+            <a :href="record.href" class="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 sm:min-w-44">{{ past ? 'Open record' : 'View requirements' }}<i class="fa-solid fa-arrow-right block w-3 text-center text-xs leading-none" aria-hidden="true"></i></a>
         </footer>
     </article>
 </template>

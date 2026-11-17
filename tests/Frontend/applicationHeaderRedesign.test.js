@@ -18,7 +18,7 @@ const identity = {
 };
 const snapshot = [
     { key: 'stage', label: 'Current stage', value: 'Pre-screening review' },
-    { key: 'deadline', label: 'Program deadline', value: 'Nov 30, 2026' },
+    { key: 'deadline', label: 'Application deadline', value: 'Nov 30, 2026' },
     { key: 'files', label: 'Required files', value: '3 of 4 accepted' },
     { key: 'review', label: 'Review method', value: 'Online application' },
 ];

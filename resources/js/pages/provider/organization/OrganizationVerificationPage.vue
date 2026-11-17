@@ -1,4 +1,5 @@
 <script setup>
+import { providerDate } from '../../../support/providerDates';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -185,7 +186,7 @@ onMounted(loadVerification);
                             <label class="col-span-2"><span :class="labelClass">Legal organization name</span><input v-model="form.legal_name" type="text" :class="fieldClass"><span v-if="firstError('legal_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('legal_name') }}</span></label>
                             <label><span :class="labelClass">Registration authority</span><input v-model="form.registration_authority" type="text" :class="fieldClass" placeholder="SEC, DTI, DepEd"><span v-if="firstError('registration_authority')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('registration_authority') }}</span></label>
                             <label class="col-span-2"><span :class="labelClass">Registration number</span><input v-model="form.registration_number" type="text" :class="fieldClass"><span v-if="firstError('registration_number')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('registration_number') }}</span></label>
-                            <label><span :class="labelClass">Registration date <span class="font-normal text-slate-600">(optional)</span></span><input v-model="form.registration_date" type="date" :class="fieldClass"><span v-if="firstError('registration_date')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('registration_date') }}</span></label>
+                            <label><span :class="labelClass">Registration date <span class="font-normal text-slate-600">(optional)</span></span><input v-model="form.registration_date" type="date" :max="providerDate()" :class="fieldClass"><span v-if="firstError('registration_date')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('registration_date') }}</span></label>
                         </div>
                     </form>
 

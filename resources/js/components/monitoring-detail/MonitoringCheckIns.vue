@@ -13,17 +13,17 @@ const props = defineProps({
 const emit = defineEmits(['refresh']);
 const appointment = computed(() => props.content.directory.next_appointment);
 const summary = computed(() => [
-    { key: 'active', title: 'Open check-ins', count: props.content.directory.active.length },
-    { key: 'upcoming', title: 'Upcoming check-ins', count: props.content.directory.upcoming.length },
-    { key: 'completed', title: 'Past check-ins', count: props.content.directory.completed.length },
+    { key: 'active', title: 'Open requirements', count: props.content.directory.active.length },
+    { key: 'upcoming', title: 'Upcoming requirements', count: props.content.directory.upcoming.length },
+    { key: 'completed', title: 'Past requirements', count: props.content.directory.completed.length },
 ]);
 const groups = computed(() => [
     {
-        title: 'Open check-ins',
+        title: 'Open requirements',
         records: props.content.directory.active.filter(record => record.record_key !== appointment.value?.record_key),
     },
     {
-        title: 'Upcoming check-ins',
+        title: 'Upcoming requirements',
         records: props.content.directory.upcoming.filter(record => record.record_key !== appointment.value?.record_key),
     },
 ].filter(group => group.records.length));
@@ -41,7 +41,7 @@ const groups = computed(() => [
     <div v-else data-monitoring-check-ins class="mt-4 space-y-4">
         <section data-check-in-directory-header class="overflow-hidden rounded-md border border-slate-300 bg-white shadow-sm">
             <header class="relative isolate overflow-hidden bg-portal-navy px-5 py-5 text-white sm:px-6">
-                <div class="relative z-10 max-w-2xl"><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Your scholarship commitments</p><h2 class="mt-1 font-display text-xl font-bold sm:text-2xl">Check-ins</h2><p class="mt-2 max-w-xl text-sm leading-6 text-slate-200">Keep your appointments, required records, and provider updates in view.</p></div>
+                <div class="relative z-10 max-w-2xl"><p class="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300">Your scholarship commitments</p><h2 class="mt-1 font-display text-xl font-bold sm:text-2xl">Requirements</h2><p class="mt-2 max-w-xl text-sm leading-6 text-slate-200">Keep your appointments, required records, and provider updates in view.</p></div>
                 <div aria-hidden="true" class="pointer-events-none absolute inset-y-0 right-0 hidden w-2/5 md:block"><img :src="'/images/filipino-students-group-study.jpg'" alt="" class="h-full w-full object-cover opacity-40"><div class="absolute inset-0 bg-linear-to-r from-portal-navy via-portal-navy/50 to-portal-navy/20"></div></div>
             </header>
             <dl v-if="!content.empty" data-check-in-summary class="grid grid-cols-3 divide-x divide-slate-200"><div v-for="item in summary" :key="item.key" class="px-3 py-3 sm:px-5 sm:py-4"><dt class="text-[10px] font-bold leading-4 text-slate-500 sm:text-xs">{{ item.title }}</dt><dd class="mt-1 text-xl font-bold tabular-nums text-slate-950">{{ item.count }}</dd></div></dl>
@@ -86,7 +86,7 @@ const groups = computed(() => [
                 <div class="flex min-w-0 items-center gap-3">
                     <span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></span>
                     <div>
-                        <h3 class="text-base font-bold text-slate-950">Past check-ins</h3>
+                        <h3 class="text-base font-bold text-slate-950">Past requirements</h3>
                         <p class="mt-0.5 text-xs text-slate-600">Review recorded outcomes.</p>
                     </div>
                 </div>

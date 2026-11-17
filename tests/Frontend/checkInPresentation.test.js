@@ -53,7 +53,7 @@ const { default: Card } = await import(`data:text/javascript;base64,${Buffer.fro
 test('cards retain their server state, period, date, venue and existing record link', async () => {
     const row = record({ handoff });
     const html = await renderToString(createSSRApp(Card, { record: row }));
-    for (const text of [row.title, row.period_label, row.state_label, handoff.scheduled_label, handoff.location, row.href, 'Open check-in']) assert.ok(html.includes(text), text);
+    for (const text of [row.title, row.period_label, row.state_label, handoff.scheduled_label, handoff.location, row.href, 'View requirements']) assert.ok(html.includes(text), text);
     assert.doesNotMatch(html, /type="file"|Upload record/);
     const past = await renderToString(createSSRApp(Card, { record: record({ state_label: 'Cancelled' }), past: true }));
     assert.match(past, /Cancelled/);

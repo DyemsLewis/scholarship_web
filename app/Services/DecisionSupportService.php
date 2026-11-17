@@ -386,7 +386,6 @@ class DecisionSupportService
             'gwa' => $profile->gwa,
             'grading_scale' => AcademicRequirement::normalizeScale($profile->grading_scale, $profile->gwa),
             'enrollment_status' => $profile->enrollment_status,
-            'current_scholarship_status' => $profile->current_scholarship_status,
             'income_bracket' => $profile->income_bracket,
             'barangay' => $profile->barangay,
             'city' => $profile->city,

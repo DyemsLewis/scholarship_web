@@ -1,5 +1,6 @@
 <script setup>
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
+import FilePreviewModal from '../../../components/FilePreviewModal.vue';
 import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, ref, watch } from 'vue';
@@ -29,6 +30,7 @@ const confirmation = ref(null);
 const resultForm = ref({ status: 'prepared', originals_verified: false, notes: '', receipt_proof: null });
 const transferSentOn = ref('');
 const deliveryReport = ref(null);
+const receiptPreview = ref(null);
 
 const records = computed(() => release.value?.records ?? []);
 const selectedRecord = computed(() => records.value.find((record) => record.id === selectedRecordId.value) ?? null);
@@ -306,6 +308,11 @@ onMounted(loadRecord);
                                 </template>
 
                                 <div v-else class="mt-5 border-y border-slate-200 py-5"><dl class="grid grid-cols-4"><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Result</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.status_label }}</dd></div><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Recorded by</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.recorded_by || 'Not recorded' }}</dd></div><div class="border-r border-slate-200 px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">{{ selectedRecord.transfer_sent_label ? 'Sent on' : 'Recorded' }}</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.transfer_sent_label || selectedRecord.recorded_at || 'Not available' }}</dd></div><div class="px-4"><dt class="text-xs font-bold uppercase tracking-wide text-slate-600">Receipt response</dt><dd class="mt-1 text-sm font-bold text-slate-900">{{ selectedRecord.receipt_response?.status_label || (selectedRecord.status === 'released' ? 'Awaiting recipient' : 'Not applicable') }}</dd></div></dl><WorkspaceTextSummary class="mt-5 text-sm leading-6 text-slate-600" :text="selectedRecord.notes" label="details" /><a v-if="selectedRecord.receipt" :href="selectedRecord.receipt.view_url" target="_blank" rel="noopener" class="mt-4 inline-flex items-center gap-2 border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700"><i class="fa-solid fa-eye text-[10px]" aria-hidden="true"></i>{{ selectedRecord.transfer_sent_label ? 'View transfer proof' : 'Open receipt proof' }}</a></div>
+                                <section v-if="selectedRecord.receipt_response?.response_type === 'confirmed' && selectedRecord.receipt_response.evidence" class="mt-5 border-l-2 border-emerald-300 bg-emerald-50 px-4 py-4">
+                                    <h4 class="text-sm font-bold text-slate-950">Applicant receipt confirmation</h4>
+                                    <p class="mt-1 text-xs text-slate-600">Received {{ selectedRecord.receipt_response.received_label || 'as recorded' }}. This is the applicant's proof, separate from your release evidence.</p>
+                                    <button type="button" class="mt-3 inline-flex min-h-10 items-center gap-2 rounded-[5px] border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700" @click="receiptPreview = selectedRecord.receipt_response.evidence"><i class="fa-regular fa-file-image" aria-hidden="true"></i>View applicant receipt proof</button>
+                                </section>
                                 <BenefitDeliveryReportPanel v-if="selectedRecord.has_open_delivery_report && !selectedRecord.receipt_response" :history-url="selectedRecord.delivery_reports_url" provider />
                             </div>
                         </template>
@@ -328,5 +335,6 @@ onMounted(loadRecord);
 
         <ConfirmationDialog :open="Boolean(confirmation)" :title="confirmation?.title" :message="confirmation?.message" :confirm-label="confirmation?.confirmLabel" :tone="confirmation?.tone" @confirm="confirmAction" @cancel="confirmation = null" />
         <BenefitDeliveryReportDialog :open="!!deliveryReport" :record="deliveryReport" provider @close="deliveryReport = null; loadRecord()" @changed="successMessage = $event.message || ''" />
+        <FilePreviewModal :file="receiptPreview" title="Applicant receipt proof" @close="receiptPreview = null" />
     </main>
 </template>

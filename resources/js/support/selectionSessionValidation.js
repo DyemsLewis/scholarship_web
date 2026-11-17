@@ -1,8 +1,10 @@
+import { providerTimestamp } from './providerDates.js';
+
 export function sessionScheduleError(form, assignedCount = 0, now = Date.now()) {
-    const startsAt = Date.parse(form.starts_at);
+    const startsAt = providerTimestamp(form.starts_at);
     if (!Number.isFinite(startsAt) || startsAt < now) return 'Choose a future date and time for the session.';
     if (form.ends_at) {
-        const endsAt = Date.parse(form.ends_at);
+        const endsAt = providerTimestamp(form.ends_at);
         if (!Number.isFinite(endsAt) || endsAt <= startsAt) return 'The end time must be later than the start time.';
     }
     if (form.capacity !== '' && form.capacity !== null && form.capacity !== undefined) {

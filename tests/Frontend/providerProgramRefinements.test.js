@@ -46,7 +46,7 @@ test('program records retain capacity, dates, complete summaries, stages, benefi
 
 test('all seven builder sections retain existing gates, bounds and visible current-step semantics', () => {
     assert.equal((form.match(/id: '(basics|support|dates-location|eligibility|application|selection|review)'/g) ?? []).length, 7);
-    for (const value of [":aria-current=\"activeStep === step.id ? 'step' : undefined\"", '{{ step.hint }}', 'programConfigurationErrors', ':min="Number(form.slotsAvailable) || 1"', ':min="form.applicationOpensAt || undefined"', ':min="form.deadline || undefined"', ':disabled="isReadOnly || isSaving"', 'hasSavedProgram.value', 'applicationsCount.value === 0', 'configuredEligibilityRules', 'form.termsAccepted', 'submitProgram', 'saveDraft']) assert.ok(form.includes(value), value);
+    for (const value of [":aria-current=\"activeStep === step.id ? 'step' : undefined\"", '{{ step.hint }}', 'programConfigurationErrors', ':min="Number(form.slotsAvailable) || 1"', 'latestDate(programDateMinimum(\'deadline\'), form.applicationOpensAt)', 'latestDate(programDateMinimum(\'expected_results_at\'), form.deadline)', ':disabled="isReadOnly || isSaving"', 'hasSavedProgram.value', 'applicationsCount.value === 0', 'configuredEligibilityRules', 'form.termsAccepted', 'submitProgram', 'saveDraft']) assert.ok(form.includes(value), value);
     assert.match(form, /:status="programStatusLabel"/);
     assert.match(form, /:preview-status="programStatusLabel"/);
     assert.match(form, /pending_review: 'Under review'/);

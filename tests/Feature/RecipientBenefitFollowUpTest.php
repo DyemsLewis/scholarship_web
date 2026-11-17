@@ -9,12 +9,20 @@ use App\Models\User;
 use App\Services\BenefitDeliveryReportService;
 use App\Services\RecipientBenefitEntitlementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class RecipientBenefitFollowUpTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Storage::fake('local');
+    }
 
     public function test_unclaimed_requires_notice_reminder_expired_deadline_and_explicit_close_without_inferring_withdrawal(): void
     {
@@ -135,6 +143,7 @@ class RecipientBenefitFollowUpTest extends TestCase
         $this->complete($provider, $application)->assertUnprocessable();
         $this->actingAs($applicant)->postJson("/dashboard/benefit-release-records/{$record->id}/response", [
             'response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true,
+            'evidence' => UploadedFile::fake()->image('receipt.png'),
         ])->assertCreated();
         $this->complete($provider, $application)->assertOk();
     }
@@ -174,6 +183,7 @@ class RecipientBenefitFollowUpTest extends TestCase
             ->assertJsonPath('detail.decision.state', 'benefit_confirmation_required');
         $this->postJson("/dashboard/benefit-release-records/{$record->id}/response", [
             'response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true,
+            'evidence' => UploadedFile::fake()->image('receipt.png'),
         ])->assertCreated();
         $this->getJson($overview)->assertOk()
             ->assertJsonPath('detail.content.closeout.counts', $decision->closeout_snapshot)

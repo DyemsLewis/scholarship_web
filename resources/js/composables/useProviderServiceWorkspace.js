@@ -1,5 +1,6 @@
 import { computed, onMounted, ref } from 'vue';
 import { providerServiceWorkspace } from '../support/providerServiceWorkspaces.js';
+import { providerDateTime } from '../support/providerDates.js';
 
 export function providerServicePurchaseId() {
     return document.getElementById('app')?.dataset.purchaseId
@@ -22,13 +23,12 @@ export function formatServiceDateTime(value) {
         year: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
+        timeZone: 'Asia/Manila',
     }).format(new Date(value));
 }
 
 export function localServiceDateTime(value) {
-    if (!value) return '';
-    const date = new Date(value);
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    return providerDateTime(value);
 }
 
 export function formatServiceFileSize(bytes) {

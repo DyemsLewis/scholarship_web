@@ -46,14 +46,19 @@ class RecipientAgreementWorkflowTest extends TestCase
             ->patchJson("/dashboard/applications/{$application->id}/response", [
                 'response' => 'accepted',
                 'terms_accepted' => true,
+                'agreement_version' => $version,
                 'note' => 'I reviewed the support and responsibilities.',
             ])
             ->assertOk()
             ->assertJsonPath('application.recipient_agreement.status', 'accepted')
+            ->assertJsonPath('application.recipient_agreement.status_label', 'Intention confirmed')
+            ->assertJsonPath('application.recipient_agreement.response_scope', 'offer_confirmation')
+            ->assertJsonPath('application.recipient_agreement.final_contract_recorded', false)
             ->assertJsonPath('application.recipient_agreement.can_respond', false);
 
         $application->refresh();
         $this->assertSame('accepted', $application->student_response_status);
+        $this->assertSame('selected', $application->final_outcome);
         $this->assertNotNull($application->provider_contract_terms_accepted_at);
         $this->assertSame($version, $application->student_response_terms_version);
         $this->assertTrue(PortalNotification::query()
@@ -86,6 +91,28 @@ class RecipientAgreementWorkflowTest extends TestCase
         $this->assertSame('selected', $application->final_outcome);
         $this->assertSame('awarded', $application->status);
         $this->assertNull($application->provider_contract_terms_accepted_at);
+    }
+
+    public function test_offer_confirmation_cannot_select_an_applicant_or_accept_a_different_snapshot(): void
+    {
+        [$provider, $applicant, , $application] = $this->applicationReadyForDecision();
+        $this->actingAs($applicant)->patchJson("/dashboard/applications/{$application->id}/response", [
+            'response' => 'accepted', 'terms_accepted' => true,
+        ])->assertUnprocessable();
+        $this->assertNull($application->fresh()->student_response_status);
+
+        app(ApplicationWorkflowService::class)->recordFinalOutcome($application, 'selected', $provider);
+        $this->actingAs($applicant)->patchJson("/dashboard/applications/{$application->id}/response", [
+            'response' => 'accepted', 'terms_accepted' => true, 'agreement_version' => 'outdated-offer',
+        ])->assertUnprocessable()->assertJsonValidationErrors('agreement_version');
+        $this->assertNull($application->fresh()->student_response_status);
+        $this->assertSame('selected', $application->fresh()->final_outcome);
+
+        $this->actingAs($applicant)->patchJson("/dashboard/applications/{$application->id}/response", [
+            'response' => 'accepted', 'terms_accepted' => false,
+            'agreement_version' => $application->fresh()->provider_contract_terms_version,
+        ])->assertUnprocessable()->assertJsonValidationErrors('terms_accepted');
+        $this->assertNull($application->fresh()->student_response_status);
     }
 
     private function applicationReadyForDecision(): array

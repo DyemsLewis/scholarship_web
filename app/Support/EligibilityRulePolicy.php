@@ -26,6 +26,7 @@ class EligibilityRulePolicy
     public static function isBlocking(array $criterion): bool
     {
         return ($criterion['key'] ?? null) !== 'documents'
+            && empty($criterion['exception_approved'])
             && ($criterion['category'] ?? 'eligibility') === 'eligibility'
             && ($criterion['status'] ?? null) === 'fail'
             && ($criterion['rule_mode'] ?? 'required') !== 'preferred';

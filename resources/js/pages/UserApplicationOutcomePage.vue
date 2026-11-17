@@ -41,7 +41,7 @@ const shellDetail = computed(() => {
             decision.action.label = 'Review concern';
         } else {
             decision.action.href = agreement.value ? '#recipient-agreement' : '#application-result';
-            decision.action.label = agreement.value?.can_respond ? 'Review agreement' : 'Review result';
+            decision.action.label = agreement.value?.can_respond ? 'Review offer' : 'Review result';
         }
     }
 
@@ -76,7 +76,7 @@ async function respondToAgreement(response) {
         showPortalToast({
             type: 'error',
             title: 'Confirmation required',
-            message: 'Confirm that you reviewed the complete recipient agreement before accepting.',
+            message: 'Confirm your intention to proceed after reviewing the offer summary. Your response remains subject to the final provider agreement.',
         });
         return;
     }
@@ -85,7 +85,7 @@ async function respondToAgreement(response) {
         showPortalToast({
             type: 'error',
             title: 'Reason required',
-            message: 'Briefly explain why you cannot accept the recipient agreement.',
+            message: 'Briefly explain why you cannot proceed with the scholarship offer.',
         });
         return;
     }
@@ -96,12 +96,13 @@ async function respondToAgreement(response) {
         const result = await window.axios.patch(outcome.value.response_endpoint, {
             response,
             terms_accepted: response === 'accepted' ? agreementTermsAccepted.value : false,
+            agreement_version: agreement.value.version,
             note: agreementNote.value.trim() || null,
         }, {
             portalToast: false,
         });
         showPortalToast({
-            title: response === 'accepted' ? 'Agreement accepted' : 'Response sent',
+            title: response === 'accepted' ? 'Intention confirmed' : 'Response sent',
             message: result.data.message,
         });
         agreementTermsAccepted.value = false;
@@ -213,18 +214,18 @@ onMounted(() => loadOutcome(true));
                         </span>
                         <div>
                             <div class="flex flex-wrap items-center gap-2">
-                                <h2 class="text-base font-bold text-slate-950">Recipient agreement</h2>
+                                <h2 class="text-base font-bold text-slate-950">Scholarship offer</h2>
                                 <span :class="['rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide', agreement.status === 'accepted' ? 'bg-emerald-100 text-emerald-800' : agreement.status === 'declined' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800']">
                                     {{ agreement.status_label }}
                                 </span>
                             </div>
                             <p class="mt-1 text-sm leading-5 text-slate-600">
-                                {{ agreement.can_respond ? 'Read the complete terms, then accept or decline the support.' : 'Your response is recorded. You can reopen the terms at any time.' }}
+                                {{ agreement.can_respond ? 'You are already selected. Review the summary and confirm whether you intend to proceed, subject to the final provider agreement.' : 'Your offer response is recorded. It does not confirm that a final provider contract was signed.' }}
                             </p>
                         </div>
                     </div>
                     <button type="button" class="shrink-0 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="showAgreement = true">
-                        {{ agreement.can_respond ? 'Review and respond' : 'View agreement' }}
+                        {{ agreement.can_respond ? 'Review and respond' : 'View offer summary' }}
                     </button>
                 </div>
             </section>

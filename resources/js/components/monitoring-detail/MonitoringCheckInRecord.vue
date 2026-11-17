@@ -227,7 +227,7 @@ async function saveManualGrade(requirement, index) {
     <div data-monitoring-check-in-record class="mt-4 space-y-4">
         <a :href="record.return_href" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950">
             <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-            All check-ins
+            All requirements
         </a>
 
         <article class="overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm" aria-labelledby="check-in-record-title">

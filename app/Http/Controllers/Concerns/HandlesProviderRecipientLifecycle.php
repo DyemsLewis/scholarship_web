@@ -283,13 +283,7 @@ trait HandlesProviderRecipientLifecycle
             ])],
         ]);
 
-        if (filled($validated['starts_on'] ?? null)
-            && filled($validated['ends_on'] ?? null)
-            && CarbonImmutable::parse($validated['ends_on'])->isBefore(CarbonImmutable::parse($validated['starts_on']))) {
-            throw ValidationException::withMessages([
-                'ends_on' => 'The monitoring end date must be on or after the start date.',
-            ]);
-        }
+        \App\Support\MonitoringPlanDateRules::assertConsistent($validated, $scholarship, $scholarship->monitoringPlan()->first());
 
         $requirements = collect($validated['requirements']);
 
@@ -343,7 +337,8 @@ trait HandlesProviderRecipientLifecycle
         }
 
         $plan = DB::transaction(function () use ($request, $scholarship, $validated, $requirements): RecipientMonitoringPlan {
-            $plan = $scholarship->monitoringPlan()->firstOrNew();
+            $plan = $scholarship->monitoringPlan()->lockForUpdate()->firstOrNew();
+            \App\Support\MonitoringPlanDateRules::assertConsistent($validated, $scholarship, $plan->exists ? $plan : null);
             $isNew = ! $plan->exists;
             $wasActive = $plan->status === 'active';
 
@@ -993,6 +988,7 @@ trait HandlesProviderRecipientLifecycle
                 'nullable',
                 'date',
                 'after:'.$cycle->due_at->format('Y-m-d'),
+                'after_or_equal:today',
                 'before_or_equal:'.$cycle->due_at->copy()->addDays(60)->format('Y-m-d'),
             ],
         ]);
@@ -1453,7 +1449,7 @@ trait HandlesProviderRecipientLifecycle
         $validated = $request->validate([
             ...\App\Support\VenueAddress::rules(),
             'title' => ['required', 'string', 'max:120'],
-            'release_at' => ['required', 'date', 'after_or_equal:today'],
+            'release_at' => ['required', 'date', 'after:now'],
             'benefit_description' => ['required', 'string', 'max:255'],
             'amount' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
             'release_method' => ['required', Rule::in(['in_person', 'bank_transfer', 'e_wallet', 'other'])],
@@ -1910,8 +1906,8 @@ trait HandlesProviderRecipientLifecycle
                 'other',
             ])],
             'effective_on' => ['required', 'date', 'before_or_equal:today'],
-            'support_ends_on' => [Rule::requiredIf($request->input('decision') === 'renewed'), 'nullable', 'date'],
-            'next_review_on' => ['nullable', 'date'],
+            'support_ends_on' => [Rule::requiredIf($request->input('decision') === 'renewed'), 'nullable', 'date', 'after_or_equal:today'],
+            'next_review_on' => ['nullable', 'date', 'after_or_equal:today'],
             'notice_given_on' => [Rule::requiredIf($request->input('decision') === 'terminated'), 'nullable', 'date', 'before_or_equal:today'],
             'reason' => [
                 Rule::requiredIf(in_array($request->input('decision'), ['completed', 'terminated'], true)),
@@ -2528,7 +2524,7 @@ trait HandlesProviderRecipientLifecycle
                     'type' => 'agreement',
                     'type_label' => 'Agreement',
                     'title' => $recipient['name'],
-                    'detail' => 'Recipient agreement is awaiting acceptance.',
+                    'detail' => 'The selected recipient has not confirmed intention to proceed with the offer.',
                     'status_label' => $recipient['agreement_status_label'],
                     'application_url' => $recipient['application_url'],
                     'priority' => 2,
@@ -2834,7 +2830,7 @@ trait HandlesProviderRecipientLifecycle
                 ?? $application->submitted_at;
             $timeline->push([
                 'type' => 'agreement',
-                'title' => $agreement['status'] === 'accepted' ? 'Recipient agreement accepted' : 'Recipient agreement issued',
+                'title' => $agreement['status'] === 'accepted' ? 'Offer intention confirmed' : 'Scholarship offer issued',
                 'description' => $agreement['response_note']
                     ?: ($agreement['status'] === 'accepted'
                         ? 'The recipient accepted the recorded support terms.'

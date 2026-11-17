@@ -1,0 +1,12 @@
+[
+    {
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target": {
+            "namespace": "android_app",
+            "package_name": "online.findscholarship.twa",
+            "sha256_cert_fingerprints": [
+                "CE:99:E4:4C:30:CC:98:C4:9A:BB:23:FC:1A:62:06:E6:B9:FC:6F:A2:95:9A:C6:87:0B:F9:8D:89:17:7B:10:5A"
+            ]
+        }
+    }
+]

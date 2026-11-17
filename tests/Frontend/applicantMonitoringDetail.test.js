@@ -97,9 +97,9 @@ test('check-ins use a directory and focused record instead of the legacy all-at-
     const adjustment = readFileSync(new URL('../../resources/js/components/monitoring-detail/MonitoringAdjustmentModal.vue', import.meta.url), 'utf8');
 
     assert.match(directory, /data-monitoring-check-ins/);
-    assert.match(directory, /Open check-ins/);
-    assert.match(directory, /Upcoming check-ins/);
-    assert.match(directory, /Past check-ins/);
+    assert.match(directory, /Open requirements/);
+    assert.match(directory, /Upcoming requirements/);
+    assert.match(directory, /Past requirements/);
     assert.match(directory, /data-next-check-in-appointment/);
     assert.match(directory, /record\.record_key !== appointment\.value\?\.record_key/);
     assert.match(directory, /<MonitoringCheckInRecord/);
@@ -114,6 +114,17 @@ test('check-ins use a directory and focused record instead of the legacy all-at-
     assert.match(record, /Recorded outcome/);
     assert.match(record, /record\.guidance\.actor_label/);
     assert.match(adjustment, /adjustment-request/);
+});
+
+test('scholarship support section labels match across headings, history, and return links', () => {
+    const source = (name) => readFileSync(new URL(`../../resources/js/components/monitoring-detail/${name}.vue`, import.meta.url), 'utf8');
+    assert.match(source('MonitoringCheckIns'), />Requirements<\/h2>/);
+    assert.match(source('MonitoringBenefits'), />Benefits &amp; Events<\/h2>/);
+    assert.match(source('MonitoringCheckInRecord'), /All requirements/);
+    assert.match(source('BenefitReleaseRecord'), /All Benefits &amp; Events/);
+    assert.match(source('MonitoringHistory'), /key: 'check_in', label: 'Requirements'/);
+    assert.match(source('MonitoringHistory'), /key: 'benefit_release', label: 'Benefits & Events'/);
+    assert.match(source('MonitoringOverviewRecord'), /available in Benefits & Events/);
 });
 
 test('benefit releases use a focused directory and preserve confirmation and issue reporting', () => {

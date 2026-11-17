@@ -57,7 +57,7 @@ const supportPeriod = computed(() => {
                         </a>
                     </li>
                 </ul>
-                <div v-else data-overview-schedule-empty class="flex items-start gap-3 px-5 py-5 sm:px-6"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-500"><i class="fa-regular fa-calendar leading-none" aria-hidden="true"></i></span><div class="min-w-0"><h3 class="text-sm font-bold text-slate-800">No additional dates published</h3><p class="mt-1 text-sm leading-6 text-slate-600">{{ plan.mode === 'one_time' ? 'Delivery instructions and release updates remain available in Benefit releases.' : 'The provider will post additional check-in and benefit dates here when they are ready.' }}</p></div></div>
+                <div v-else data-overview-schedule-empty class="flex items-start gap-3 px-5 py-5 sm:px-6"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-500"><i class="fa-regular fa-calendar leading-none" aria-hidden="true"></i></span><div class="min-w-0"><h3 class="text-sm font-bold text-slate-800">No additional dates published</h3><p class="mt-1 text-sm leading-6 text-slate-600">{{ plan.mode === 'one_time' ? 'Delivery instructions and release updates remain available in Benefits & Events.' : 'The provider will post additional requirement and benefit dates here when they are ready.' }}</p></div></div>
             </section>
 
         <section v-if="latestUpdate && !content.closeout" class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-5 py-4 shadow-sm sm:px-6" aria-labelledby="overview-update-title">

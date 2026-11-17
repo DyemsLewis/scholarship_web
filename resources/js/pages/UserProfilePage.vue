@@ -136,12 +136,6 @@ const academicTermOptions = [
     { value: 'latest_completed_term', label: 'Latest completed term' },
     { value: 'not_applicable', label: 'Not applicable' },
 ];
-const currentScholarshipOptions = [
-    { value: 'none', label: 'No scholarship outside this portal' },
-    { value: 'receiving', label: 'Receiving scholarship support outside this portal' },
-    { value: 'pending', label: 'Outside scholarship application is pending' },
-    { value: 'completed', label: 'Outside scholarship already completed' },
-];
 const schoolYearStart = new Date().getMonth() >= 5 ? new Date().getFullYear() : new Date().getFullYear() - 1;
 const academicYearOptions = [
     schoolYearStart,
@@ -217,8 +211,6 @@ const fieldLabels = {
     grading_scale: 'Grading scale',
     income_bracket: 'Household income bracket',
     household_size: 'Household size',
-    current_scholarship_status: 'Outside scholarship status',
-    current_scholarship_details: 'Outside scholarship details',
     address: 'Address',
     barangay: 'Barangay',
     city: 'City / municipality',
@@ -257,8 +249,6 @@ const profileFieldControlIds = {
     grading_scale: 'profile-grading-scale',
     income_bracket: 'profile-income',
     household_size: 'profile-household-size',
-    current_scholarship_status: 'profile-current-scholarship',
-    current_scholarship_details: 'profile-current-scholarship-details',
     guardian_name: 'profile-guardian',
     guardian_relationship: 'profile-guardian-relationship',
     guardian_contact: 'profile-guardian-contact',
@@ -297,10 +287,10 @@ const profileSections = [
         label: 'Household',
         detail: 'Eligibility and guardian',
         icon: 'fa-solid fa-house-chimney-user',
-        impact: 'Household, guardian, and scholarship status.',
+        impact: 'Household and guardian details.',
         required: true,
-        fields: ['income_bracket', 'household_size', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
-        requiredFields: ['income_bracket', 'household_size', 'current_scholarship_status', 'current_scholarship_details', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'],
+        fields: ['income_bracket', 'household_size', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'],
+        requiredFields: ['income_bracket', 'household_size', 'guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'],
     },
     {
         id: 'location',
@@ -667,8 +657,6 @@ function emptyForm() {
         income_bracket: '',
         household_size: '',
         support_needs: '',
-        current_scholarship_status: '',
-        current_scholarship_details: '',
         scholarship_goal: '',
         achievements: '',
         activities_and_responsibilities: '',
@@ -765,11 +753,6 @@ function isFieldRelevant(field) {
         return requiresGrades.value || hasValue(form.value[field]);
     }
 
-    if (field === 'current_scholarship_details') {
-        return ['receiving', 'pending'].includes(form.value.current_scholarship_status)
-            || hasValue(form.value.current_scholarship_details);
-    }
-
     if (['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email', 'guardian_is_account_owner'].includes(field)) {
         return needsGuardianContext.value
             || hasValue(form.value.guardian_name)
@@ -804,10 +787,6 @@ function isFieldRequired(field) {
 
     if (['academic_year', 'academic_term'].includes(field)) {
         return requiresGrades.value;
-    }
-
-    if (field === 'current_scholarship_details') {
-        return ['receiving', 'pending'].includes(form.value.current_scholarship_status);
     }
 
     if (['guardian_name', 'guardian_relationship', 'guardian_contact', 'guardian_email'].includes(field)) {
@@ -991,10 +970,6 @@ function academicTermLabel(value) {
     return academicTermOptions.find((option) => option.value === value)?.label ?? value;
 }
 
-function currentScholarshipLabel(value) {
-    return currentScholarshipOptions.find((option) => option.value === value)?.label ?? value;
-}
-
 function educationLevelLabel(value) {
     return educationLevelOptions.find((option) => option.value === value)?.label ?? value;
 }
@@ -1148,7 +1123,7 @@ const applicantProfileSections = computed(() => applicantProfileDetails(user.val
     labels: {
         gender: genderLabel, citizenship: citizenshipLabel, accountManager: accountManagerLabel,
         educationLevel: educationLevelLabel, schoolType: schoolTypeLabel, gradingScale: gradingScaleLabel,
-        academicTerm: academicTermLabel, currentScholarship: currentScholarshipLabel, relationship: relationshipLabel,
+        academicTerm: academicTermLabel, relationship: relationshipLabel,
         region: (value) => findPhilippineRegion(value)?.label || value,
     },
 }));
@@ -1222,10 +1197,6 @@ function fieldDisplayValue(field) {
         return academicTermLabel(field.value);
     }
 
-    if (field.key === 'current_scholarship_status') {
-        return currentScholarshipLabel(field.value);
-    }
-
     if (field.key === 'guardian_relationship') {
         return relationshipLabel(field.value);
     }
@@ -1285,8 +1256,6 @@ function fillForm(payload) {
         income_bracket: payload?.income_bracket ?? '',
         household_size: payload?.household_size ?? '',
         support_needs: payload?.support_needs ?? '',
-        current_scholarship_status: payload?.current_scholarship_status ?? '',
-        current_scholarship_details: payload?.current_scholarship_details ?? '',
         scholarship_goal: payload?.scholarship_goal ?? '',
         achievements: payload?.achievements ?? '',
         activities_and_responsibilities: payload?.activities_and_responsibilities ?? '',
@@ -2231,7 +2200,6 @@ watch(() => form.value.grading_scale, (scale) => {
                             v-model="form"
                             :income-options="incomeOptions"
                             :relationship-options="guardianRelationshipOptions"
-                            :scholarship-options="currentScholarshipOptions"
                             :portal-scholarships="platformActiveScholarships"
                             :guardian-required="needsGuardianContext"
                             :has-guardian-details="hasGuardianDetails"

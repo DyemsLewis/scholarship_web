@@ -109,7 +109,7 @@ class FreshWorkflowDemoSeederTest extends TestCase
         foreach (['formal' => 'formal_application', 'exam.result' => 'exam', 'interview.result' => 'interview'] as $scenario => $stage) {
             $application = $this->application($scenario);
             $evaluation = $stage === 'formal_application' ? [] : ['evaluation' => [
-                'score' => 86, 'maximum_score' => 100,
+                'criteria_scores' => \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, $stage, 86),
                 'expected_stage_revision' => $application->stageProgresses()->where('stage_key', $stage)->value('evaluation_revision'),
                 'expected_revision' => (int) $application->stageEvaluations()->where('stage_key', $stage)->max('revision'),
             ]];
@@ -151,6 +151,7 @@ class FreshWorkflowDemoSeederTest extends TestCase
         $record = $application->benefitReleaseRecords()->sole();
         $this->actingAs($application->applicant)->postJson("/dashboard/benefit-release-records/{$record->id}/response", [
             'response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true,
+            'evidence' => UploadedFile::fake()->image('received-support.png'),
         ])->assertCreated();
 
         $application = $this->application('payout.details');

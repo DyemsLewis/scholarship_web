@@ -81,7 +81,7 @@ class RecipientAccountabilityEndToEndTest extends TestCase
         $this->assertNotSame('fulfilled', $entitlement->fresh()->status);
         $this->actingAs($provider)->post('/provider/delivery-reports/'.$id.'/proposal', $this->command($case->fresh()) + ['response_kind' => 'delivery_proposed', 'delivery_record_id' => $record->id, 'delivered_on' => now()->toDateString(), 'evidence' => [$this->pdf('transfer-proof.pdf')]], ['Accept' => 'application/json'])->assertOk();
         $this->assertNull($record->receiptResponse()->sole()->recipient_resolution_confirmed_at);
-        $this->actingAs($applicant)->postJson('/dashboard/delivery-reports/'.$id.'/response', $this->command($case->fresh()) + ['response_kind' => 'receipt_confirmed', 'received_on' => now()->toDateString()])->assertOk()->assertJsonPath('report.status', 'closed');
+        $this->actingAs($applicant)->postJson('/dashboard/delivery-reports/'.$id.'/response', $this->command($case->fresh()) + ['response_kind' => 'receipt_confirmed', 'received_on' => now()->toDateString(), 'evidence' => [UploadedFile::fake()->image('received-benefit.png')]])->assertOk()->assertJsonPath('report.status', 'closed');
         $this->assertNotNull($record->receiptResponse()->sole()->recipient_resolution_confirmed_at);
         $this->assertSame('fulfilled', $entitlement->fresh()->status);
         $this->assertDatabaseCount('recipient_support_decisions', 0);

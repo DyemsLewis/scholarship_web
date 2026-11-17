@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, ref } from 'vue';
+import { nextProviderMinute, providerDate, providerDateOffset, providerTimestamp } from '../../resources/js/support/providerDates.js';
 
 const read = (path) => readFileSync(new URL(`../../resources/js/${path}`, import.meta.url), 'utf8');
 const pages = [
@@ -88,8 +89,8 @@ function scheduleHarness() {
         get: () => new Promise((resolve, reject) => requests.push({ resolve, reject })),
         post: (...args) => { posts.push(args); return Promise.reject(new Error('Unexpected write')); },
     }, clearTimeout() {}, setTimeout() { return 1; } };
-    const run = new Function('ref', 'computed', 'watch', 'onMounted', 'onBeforeUnmount', 'window', 'URLSearchParams', `${source}\nreturn { loadScheduleData, saveRelease, isLoading, errorMessage, eligibilityError, selectedProgram, selectedRecipients, candidates, confirmation };`);
-    const state = run(ref, computed, (source, callback) => watchers.push(callback), () => {}, () => {}, window, URLSearchParams);
+    const run = new Function('ref', 'computed', 'watch', 'onMounted', 'onBeforeUnmount', 'window', 'URLSearchParams', 'nextProviderMinute', 'providerDate', 'providerDateOffset', 'providerTimestamp', `${source}\nreturn { loadScheduleData, saveRelease, isLoading, errorMessage, eligibilityError, selectedProgram, selectedRecipients, candidates, confirmation };`);
+    const state = run(ref, computed, (source, callback) => watchers.push(callback), () => {}, () => {}, window, URLSearchParams, nextProviderMinute, providerDate, providerDateOffset, providerTimestamp);
     return { ...state, requests, watchers, posts };
 }
 const payload = (id) => ({ data: { programs: [], candidates: [{ application_id: id, name: `Recipient ${id}`, eligible: true }] } });

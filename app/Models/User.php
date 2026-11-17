@@ -567,8 +567,6 @@ class User extends Authenticatable implements MustVerifyEmail
             'preferred_locations' => $this->studentProfile?->preferred_locations,
             'willing_to_relocate' => $this->studentProfile?->willing_to_relocate,
             'support_needs' => $this->studentProfile?->support_needs,
-            'current_scholarship_status' => $this->studentProfile?->current_scholarship_status,
-            'current_scholarship_details' => $this->studentProfile?->current_scholarship_details,
             'scholarship_goal' => $this->studentProfile?->scholarship_goal,
             'achievements' => $this->studentProfile?->achievements,
             'activities_and_responsibilities' => $this->studentProfile?->activities_and_responsibilities,
@@ -652,15 +650,10 @@ class User extends Authenticatable implements MustVerifyEmail
         $fields += [
             'income_bracket' => 'Household income bracket',
             'household_size' => 'Household size',
-            'current_scholarship_status' => 'Outside scholarship status',
             'city' => 'City / municipality',
             'province' => 'Province',
             'region' => 'Region',
         ];
-
-        if (in_array($payload['current_scholarship_status'] ?? null, ['receiving', 'pending'], true)) {
-            $fields['current_scholarship_details'] = 'Outside scholarship details';
-        }
 
         if ($requiresGuardian) {
             $fields += [

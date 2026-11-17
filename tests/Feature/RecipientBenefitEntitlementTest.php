@@ -9,11 +9,19 @@ use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBenefit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class RecipientBenefitEntitlementTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        Storage::fake('local');
+    }
 
     public function test_accepting_the_recipient_agreement_creates_immutable_benefit_entitlements(): void
     {
@@ -185,6 +193,7 @@ class RecipientBenefitEntitlementTest extends TestCase
                 $this->releasePayload($application, $benefit, 'Learning tablet release', 0),
             )
             ->assertCreated();
+        $this->travel(2)->minutes();
         $recordId = $release->json('release.records.0.id');
 
         $this->actingAs($provider)
@@ -209,6 +218,7 @@ class RecipientBenefitEntitlementTest extends TestCase
         $this->actingAs($applicant)
             ->postJson("/dashboard/benefit-release-records/{$recordId}/response", [
                 'response_type' => 'confirmed',
+                'evidence' => UploadedFile::fake()->image('receipt.png'),
                 'received_on' => now()->toDateString(),
                 'acknowledged' => true,
             ])
@@ -243,6 +253,7 @@ class RecipientBenefitEntitlementTest extends TestCase
                 $this->releasePayload($application, $benefit, 'Initial supply pickup', 0),
             )
             ->assertCreated();
+        $this->travel(2)->minutes();
         $recordId = $firstRelease->json('release.records.0.id');
 
         $this->actingAs($provider)
@@ -296,6 +307,7 @@ class RecipientBenefitEntitlementTest extends TestCase
                 $this->releasePayload($application, $benefit, 'Device package release', 0),
             )
             ->assertCreated();
+        $this->travel(2)->minutes();
         $recordId = $release->json('release.records.0.id');
         $this->actingAs($provider)
             ->postJson("/provider/benefit-release-records/{$recordId}/result", [
@@ -384,7 +396,7 @@ class RecipientBenefitEntitlementTest extends TestCase
         int $daysFromNow = 1,
     ): array {
         $releaseAt = $daysFromNow === 0
-            ? now()->startOfDay()
+            ? now()->addMinute()
             : now()->addDays($daysFromNow);
 
         return [

@@ -28,6 +28,7 @@ test('unscheduled recurring reports require an affected period', () => {
 test('receipt confirmation needs a date while unresolved replies require useful details', () => {
     assert.equal(deliveryBodyValid({ ...base, provider: false, kind: 'receipt_confirmed', details: '' }), true);
     assert.equal(deliveryBodyValid({ ...base, provider: false, kind: 'receipt_confirmed', date: '' }), false);
+    assert.equal(deliveryBodyValid({ ...base, provider: false, kind: 'receipt_confirmed', files: [] }), false);
     assert.equal(deliveryBodyValid({ ...base, provider: false, kind: 'still_unresolved', details: 'No' }), false);
 });
 test('delivery forms use scoped private modals, retained stale text, and no unilateral resolve request', () => {

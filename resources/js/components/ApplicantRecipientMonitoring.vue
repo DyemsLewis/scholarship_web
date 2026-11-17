@@ -1,4 +1,5 @@
 <script setup>
+import ReceiptProofUpload from './monitoring-detail/ReceiptProofUpload.vue';
 import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, ref } from 'vue';
 import FilePreviewModal from './FilePreviewModal.vue';
@@ -50,7 +51,7 @@ const latestDecision = computed(() => decisions.value[0] ?? null);
 const previousDecisions = computed(() => decisions.value.slice(1));
 const monitoringTabs = [
     { key: 'requirements', label: 'Requirements', icon: 'fa-solid fa-graduation-cap' },
-    { key: 'benefits', label: 'Benefit releases', icon: 'fa-solid fa-hand-holding-heart' },
+    { key: 'benefits', label: 'Benefits & Events', icon: 'fa-solid fa-hand-holding-heart' },
     { key: 'status', label: 'Support history', icon: 'fa-solid fa-clock-rotate-left' },
 ];
 
@@ -227,6 +228,10 @@ function closeReceiptResponse() {
 
 async function submitReceiptResponse() {
     if (!receiptResponseTarget.value || isSavingReceiptResponse.value) return;
+    if (receiptResponseForm.value.response_type === 'confirmed' && !receiptResponseForm.value.evidence) {
+        showPortalToast({ type: 'error', title: 'Receipt proof required', message: 'Upload proof that you received the benefit before confirming.' });
+        return;
+    }
     if (!await confirmOutcome({ record: receiptResponseTarget.value.title || 'Benefit release', outcome: receiptResponseForm.value.response_type === 'confirmed' ? 'Received as listed' : 'Benefit issue reported', consequence: 'Confirm receipt only if you actually received this benefit. Otherwise report the issue to the provider.' }, () => !!receiptResponseTarget.value && !isSavingReceiptResponse.value && receiptResponseForm.value.acknowledged)) return;
 
     isSavingReceiptResponse.value = true;
@@ -240,8 +245,8 @@ async function submitReceiptResponse() {
     } else {
         data.append('issue_type', form.issue_type);
         data.append('issue_details', form.issue_details);
-        if (form.evidence) data.append('evidence', form.evidence);
     }
+    if (form.evidence) data.append('evidence', form.evidence);
 
     try {
         const response = await window.axios.post(
@@ -524,8 +529,8 @@ async function saveManualGrade(cycle) {
                         <template v-else>
                             <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Problem</span><select v-model="receiptResponseForm.issue_type" required class="w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"><option value="not_received">Benefit not received</option><option value="incorrect_amount">Incorrect amount</option><option value="incomplete_benefit">Benefit was incomplete</option><option value="damaged_item">Item was damaged</option><option value="other">Other problem</option></select></label>
                             <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">What happened</span><textarea v-model="receiptResponseForm.issue_details" required minlength="5" maxlength="1500" rows="4" placeholder="Describe what was missing or different." class="w-full resize-y rounded-md border border-slate-300 px-3 py-2.5 text-sm leading-6"></textarea></label>
-                            <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Evidence <span class="font-normal text-slate-400">(optional)</span></span><input type="file" accept=".pdf,.jpg,.jpeg,.png" class="block w-full rounded-md border border-slate-300 bg-white p-2 text-sm file:mr-3 file:rounded file:border-0 file:bg-slate-950 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white" @change="receiptResponseForm.evidence = $event.target.files?.[0] || null"></label>
                         </template>
+                        <ReceiptProofUpload v-model="receiptResponseForm.evidence" :required="receiptResponseForm.response_type === 'confirmed'" :disabled="isSavingReceiptResponse" />
 
                         <label class="flex items-start gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-700"><input v-model="receiptResponseForm.acknowledged" type="checkbox" required class="mt-1 h-4 w-4 rounded border-slate-300 text-slate-950"><span>I confirm this response is accurate.</span></label>
                     </div>

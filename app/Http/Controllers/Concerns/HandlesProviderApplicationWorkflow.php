@@ -353,12 +353,13 @@ trait HandlesProviderApplicationWorkflow
             'review_notes' => ['nullable', 'string', 'max:1500'],
             'rubric_scores' => ['sometimes', 'array'],
             'rubric_scores.*' => ['nullable', 'numeric', 'between:0,100'],
-            'evaluation' => [Rule::requiredIf($requiresEvaluation), Rule::prohibitedIf(! $requiresEvaluation), 'array:score,maximum_score,expected_stage_revision,expected_revision'],
-            'evaluation.score' => ['required_with:evaluation', 'numeric', 'min:0', 'max:1000000', 'decimal:0,4'],
-            'evaluation.maximum_score' => ['required_with:evaluation', 'numeric', 'min:0.0001', 'max:1000000', 'decimal:0,4'],
+            'evaluation' => [Rule::requiredIf($requiresEvaluation), Rule::prohibitedIf(! $requiresEvaluation), 'array:score,maximum_score,criteria_scores,expected_stage_revision,expected_revision'],
+            'evaluation.score' => ['sometimes', 'numeric', 'min:0', 'max:1000000', 'decimal:0,4'],
+            'evaluation.maximum_score' => ['sometimes', 'numeric', 'min:0.0001', 'max:1000000', 'decimal:0,4'],
+            'evaluation.criteria_scores' => ['sometimes', 'array'],
             'evaluation.expected_stage_revision' => ['required_with:evaluation', 'integer', 'min:0'],
             'evaluation.expected_revision' => ['required_with:evaluation', 'integer', 'min:0'],
-        ], ['evaluation.required' => 'Enter the recorded score and maximum before passing this stage.']);
+        ], ['evaluation.required' => 'Complete the required evaluation before passing this stage.']);
         $notes = $validated['notes'] ?? $validated['review_notes'] ?? null;
 
         $actor = $request->user();
@@ -402,8 +403,9 @@ trait HandlesProviderApplicationWorkflow
             );
             if ($evaluation) {
                 app(SelectionEvaluationService::class)->record(
-                    $updated, $actor, $stage, $evaluation['score'], $evaluation['maximum_score'],
+                    $updated, $actor, $stage, $evaluation['score'] ?? null, $evaluation['maximum_score'] ?? null,
                     (int) $evaluation['expected_stage_revision'] + 1, (int) $evaluation['expected_revision'], $notes,
+                    $evaluation['criteria_scores'] ?? null,
                 );
             }
 
@@ -471,16 +473,18 @@ trait HandlesProviderApplicationWorkflow
         abort_unless(in_array($stage, ['exam', 'interview'], true), 404);
         $this->authorizeProviderStageAction($request->user(), $stage);
         $validated = $request->validate([
-            'score' => ['required', 'numeric', 'min:0', 'max:1000000', 'decimal:0,4'],
-            'maximum_score' => ['required', 'numeric', 'min:0.0001', 'max:1000000', 'decimal:0,4'],
+            'score' => ['sometimes', 'numeric', 'min:0', 'max:1000000', 'decimal:0,4'],
+            'maximum_score' => ['sometimes', 'numeric', 'min:0.0001', 'max:1000000', 'decimal:0,4'],
+            'criteria_scores' => ['sometimes', 'array'],
             'expected_stage_revision' => ['required', 'integer', 'min:0'],
             'expected_revision' => ['required', 'integer', 'min:0'],
             'note' => ['nullable', 'string', 'max:2000'],
         ]);
         DB::transaction(function () use ($application, $request, $stage, $validated): void {
             $evaluation = app(SelectionEvaluationService::class)->record(
-                $application, $request->user(), $stage, $validated['score'], $validated['maximum_score'],
+                $application, $request->user(), $stage, $validated['score'] ?? null, $validated['maximum_score'] ?? null,
                 (int) $validated['expected_stage_revision'], (int) $validated['expected_revision'], $validated['note'] ?? null,
+                $validated['criteria_scores'] ?? null,
             );
             ActivityLog::record($request->user(), 'application_stage_evaluation_recorded',
                 "{$request->user()->name} recorded a {$stage} evaluation.", $request,
@@ -542,7 +546,8 @@ trait HandlesProviderApplicationWorkflow
             'user_id' => $updated->applicant_id,
             'type' => 'application_outcome',
             'title' => "Application outcome: {$outcomeLabel}",
-            'message' => "The provider recorded {$outcomeLabel} as the final outcome for {$updated->scholarship?->title}. Open the application to review the details.",
+            'message' => "The provider recorded {$outcomeLabel} as the final outcome for {$updated->scholarship?->title}. Open the application to review the details."
+                .($validated['outcome'] === 'selected' ? \App\Support\StageResultInquiry::message($updated) : ''),
             'action_url' => route('dashboard.applications.show', $updated, false),
         ]);
         ActivityLog::record(
@@ -718,7 +723,8 @@ trait HandlesProviderApplicationWorkflow
                         'Selected through the provider bulk decision list.',
                     );
                     $title = 'Application outcome: Selected';
-                    $message = "The provider selected you for {$scholarship->title}. Open the application to review the result.";
+                    $message = "The provider selected you for {$scholarship->title}. Open the application to review the result."
+                        .\App\Support\StageResultInquiry::message($updated);
                 } else {
                     $updated = $this->workflowService->recordStageResult(
                         $application,
@@ -1581,7 +1587,7 @@ trait HandlesProviderApplicationWorkflow
                 'min:10',
                 'max:2000',
             ],
-            'outcome_at' => ['nullable', 'date'],
+            'outcome_at' => ['nullable', 'date', 'before_or_equal:now'],
             'distribution_scheduled_for' => $request->input('status') === 'distribution_scheduled'
                 ? ['required', 'date', 'after_or_equal:today']
                 : ['nullable', 'date'],
@@ -2195,9 +2201,11 @@ trait HandlesProviderApplicationWorkflow
             return "Your application for {$programTitle} did not pass the scholarship {$eventType}. Open the application to review the provider note.";
         }
 
-        return $application->status === 'interview'
+        $message = $application->status === 'interview'
             ? "You passed the scholarship exam for {$programTitle}. Your application will proceed to the interview stage."
             : "You passed the scholarship {$eventType} for {$programTitle}. Your application has advanced to the next stage.";
+
+        return $message.\App\Support\StageResultInquiry::message($application);
     }
 
     private function workflowStageNotification(
@@ -2231,7 +2239,8 @@ trait HandlesProviderApplicationWorkflow
 
         return [
             'title' => $stage === 'screening' ? 'Pre-screening passed' : ucfirst($stageLabel).' passed',
-            'message' => "You passed the {$stageLabel} for {$programTitle}. Your next step is {$nextStageLabel}.",
+            'message' => "You passed the {$stageLabel} for {$programTitle}. Your next step is {$nextStageLabel}."
+                .\App\Support\StageResultInquiry::message($application),
         ];
     }
 
@@ -2414,6 +2423,10 @@ trait HandlesProviderApplicationWorkflow
 
         if (in_array($status, ['rejected', 'not_awarded', 'exam_failed', 'interview_failed', 'benefits_terminated'], true) && filled($decisionReason)) {
             $payload['message'] .= " Reason: {$this->statusLabel($decisionReason)}.";
+        }
+
+        if (in_array($status, ['approved', 'exam_qualified', 'exam_passed', 'awarded'], true)) {
+            $payload['message'] .= \App\Support\StageResultInquiry::message($application);
         }
 
         return array_merge($payload, ['action_url' => $actionUrl]);

@@ -6,7 +6,6 @@ const form = defineModel({ type: Object, required: true });
 defineProps({
     incomeOptions: { type: Array, required: true },
     relationshipOptions: { type: Array, required: true },
-    scholarshipOptions: { type: Array, required: true },
     portalScholarships: { type: Array, default: () => [] },
     guardianRequired: { type: Boolean, default: false },
     hasGuardianDetails: { type: Boolean, default: false },
@@ -41,16 +40,8 @@ defineEmits(['guardian-phone-input']);
         </component>
 
         <section class="py-4" aria-labelledby="household-scholarship-title">
-            <h3 id="household-scholarship-title" :class="sectionTitle">Other scholarship support</h3>
-            <p class="mt-1 text-xs leading-5 text-slate-500">Only declare scholarships outside this portal. Portal awards are checked automatically.</p>
-            <div class="mt-4">
-                <label :class="labelClass" for="profile-current-scholarship">Outside scholarship status</label>
-                <select id="profile-current-scholarship" v-model="form.current_scholarship_status" required :class="inputClass"><option value="">Select an option</option><option v-for="option in scholarshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select>
-            </div>
-            <div v-if="['receiving', 'pending'].includes(form.current_scholarship_status)" class="mt-4">
-                <label :class="labelClass" for="profile-current-scholarship-details">Outside provider and program</label>
-                <textarea id="profile-current-scholarship-details" v-model="form.current_scholarship_details" required rows="2" maxlength="1000" placeholder="Provider and program name" :class="inputClass"></textarea>
-            </div>
+            <h3 id="household-scholarship-title" :class="sectionTitle">Scholarships in this platform</h3>
+            <p class="mt-1 text-xs leading-5 text-slate-500">Active awards in this platform are checked automatically. Providers may request application documents to verify scholarship support outside the platform.</p>
             <details v-if="portalScholarships.length" data-portal-scholarships class="mt-3">
                 <summary class="cursor-pointer text-xs font-semibold leading-5 text-slate-600">{{ portalScholarships.length }} {{ portalScholarships.length === 1 ? 'award' : 'awards' }} recorded in this portal</summary>
                 <ul class="mt-2 space-y-1 border-l-2 border-slate-200 pl-3 text-xs leading-5 text-slate-600"><li v-for="record in portalScholarships" :key="record.application_id">{{ record.title }}</li></ul>

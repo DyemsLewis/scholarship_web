@@ -217,7 +217,7 @@ class RecipientCaseReviewWorkflowTest extends TestCase
         $entitlements->allocate($record, $application->scholarship->benefits()->whereKey($benefit->id)->get());
         $entitlements->syncReleaseResult($record->fresh());
         $report = $delivery->propose($provider, $report->fresh(), $report->fresh()->revision, ['request_key' => (string) Str::uuid(), 'response_kind' => 'delivery_proposed', 'details' => 'Actual delivery is supported by this proof.', 'delivery_record_id' => $record->id, 'delivered_on' => now()->toDateString(), 'confirmed' => true], [$this->pdf()]);
-        $report = $delivery->respond($applicant, $report, $report->revision, ['request_key' => (string) Str::uuid(), 'response_kind' => 'receipt_confirmed', 'received_on' => now()->toDateString(), 'confirmed' => true]);
+        $report = $delivery->respond($applicant, $report, $report->revision, ['request_key' => (string) Str::uuid(), 'response_kind' => 'receipt_confirmed', 'received_on' => now()->toDateString(), 'confirmed' => true], [$this->pdf()]);
         $before = $entitlement->fresh()->getRawOriginal();
         $receipt = $record->receiptResponse()->sole()->getRawOriginal();
         $this->act($admin, $report, 'outcome', [...$this->outcome($report), 'recommendation' => 'delivery_follow_up'])->assertOk();

@@ -4,6 +4,11 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        <meta name="theme-color" content="#081426">
+        <meta name="application-name" content="FindScholarship">
+        <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
+        <link rel="icon" type="image/png" sizes="192x192" href="{{ asset('pwa/icon-192.png') }}">
+        <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('pwa/apple-touch-icon.png') }}">
         @if ($recordUrl = request()->attributes->get('opaque_record_url'))
             <meta name="portal-route-prefix" content="{{ $recordUrl['prefix'] }}">
             <meta name="portal-route-opaque-prefix" content="{{ $recordUrl['opaque_prefix'] }}">

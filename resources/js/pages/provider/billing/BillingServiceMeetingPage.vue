@@ -3,6 +3,7 @@ import { computed, reactive, watch } from 'vue';
 import { formatServiceDateTime, localServiceDateTime, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
 import BillingServiceWorkspaceShell from './components/BillingServiceWorkspaceShell.vue';
 import { labelFromKey } from '../../../support/display';
+import { nextProviderMinute } from '../../../support/providerDates';
 
 const {
     purchaseId,
@@ -18,7 +19,7 @@ const {
 
 const meetingForm = reactive({ meeting_scheduled_for: '', meeting_mode: 'online', meeting_purpose: '' });
 const canRequestMeeting = computed(() => purchase.value?.status === 'paid' && purchase.value?.cancellation_status !== 'requested' && !['completed', 'cancelled'].includes(purchase.value?.fulfillment_status));
-const minimumMeeting = computed(() => localServiceDateTime(new Date(Date.now() + 60 * 60 * 1000).toISOString()));
+const minimumMeeting = computed(() => nextProviderMinute());
 
 watch(purchase, (value) => {
     if (!value) return;

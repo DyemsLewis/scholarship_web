@@ -1,4 +1,5 @@
 <script setup>
+import { nextProviderMinute } from '../support/providerDates';
 import { computed, ref } from 'vue';
 import { useModalAccessibility } from '../composables/useModalAccessibility';
 import { confirmOutcome } from '../support/outcomeConfirmation.js';
@@ -106,7 +107,7 @@ async function save() {
                 <div class="monitoring-dialog-body space-y-4 p-6">
                     <p v-if="error" role="alert" class="border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{{ error }}</p>
                     <template v-if="mode === 'reschedule'">
-                        <label class="block"><span class="mb-1.5 block text-xs font-bold text-slate-700">New date and time (Philippine time)</span><input v-model="form.appointment_at" type="datetime-local" required class="h-11 w-full rounded border border-slate-300 px-3 text-sm"></label>
+                        <label class="block"><span class="mb-1.5 block text-xs font-bold text-slate-700">New date and time (Philippine time)</span><input v-model="form.appointment_at" type="datetime-local" :min="nextProviderMinute()" required class="h-11 w-full rounded border border-slate-300 px-3 text-sm"></label>
                         <ProviderVenueAddress v-model="form.address_details" v-model:address="form.appointment_location" />
                     </template>
                     <label v-else class="block"><span class="mb-1.5 block text-xs font-bold text-slate-700">Attendance</span><select v-model="form.attendance_status" required class="h-11 w-full rounded border border-slate-300 bg-white px-3 text-sm"><option disabled value="">Select attendance</option><option value="attended">Attended</option><option value="no_show">Missed appointment</option></select></label>

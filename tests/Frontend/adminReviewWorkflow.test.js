@@ -16,6 +16,12 @@ for (const name of ['AdminReviewGuide', 'AdminReviewNavigation']) {
     });
 }
 
+test('program review names the publication decision without changing other review actions', () => {
+    const source = readFileSync(new URL('../../resources/js/components/admin/AdminReviewGuide.vue', import.meta.url), 'utf8');
+    assert.match(source, /kind === 'program' \? 'Go to publication decision' : workflow\.review_count \? 'Review next document' : 'Open final decision'/);
+    assert.match(source, /type="button"[^>]+@click="\$emit\('continue'\)"/);
+});
+
 function navigation(get, search = '?return_to=' + encodeURIComponent('/admin/workspaces/reviews/applicants?status=all&search=learner&page=2')) {
     const source = readFileSync(new URL('../../resources/js/composables/useAdminReviewNavigation.js', import.meta.url), 'utf8')
         .replace(/^import .*;\r?\n/gm, '').replace('export function', 'function');

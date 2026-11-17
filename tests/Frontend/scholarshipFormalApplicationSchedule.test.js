@@ -14,12 +14,20 @@ test('the published formal schedule compiles', () => {
     assert.deepEqual(template.errors, []);
 });
 
-test('how to apply and its formal schedule use one content column at every breakpoint', () => {
+test('how to apply keeps one content column without the formal application schedule', () => {
     assert.match(page, /class="grid grid-cols-1 items-start gap-4" data-scholarship-how-to-apply/);
-    assert.doesNotMatch(source, /grid-cols-/);
-    assert.match(source, /data-formal-deadline-strip/);
-    assert.doesNotMatch(source, /bg-slate-950/);
-    assert.match(page, /stage\.key === 'formal_application' && process\.formal_application/);
+    assert.doesNotMatch(page, /ScholarshipFormalApplicationSchedule|process\.formal_application|data-scholarship-formal-schedule/);
+    assert.match(page, /v-for="stage in process\.stages"/);
+    assert.match(page, /v-if="stage\.key === 'formal_application'"[\s\S]*?After pre-screening[\s\S]*?See your application record for instructions/);
+    assert.match(page, /<div v-else class="sm:text-right">[\s\S]*?stage\.timing\?\.label/);
+});
+
+test('the assigned formal application instructions remain in application details', () => {
+    const application = readFileSync(new URL('../../resources/js/pages/UserApplicationActivitiesPage.vue', import.meta.url), 'utf8');
+    const handoff = readFileSync(new URL('../../resources/js/components/application-detail/FormalApplicationHandoff.vue', import.meta.url), 'utf8');
+    assert.match(application, /<FormalApplicationHandoff/);
+    assert.match(application, /@map="openHandoffMap"/);
+    assert.match(handoff, /data-application-formal-schedule/);
 });
 
 test('the schedule keeps its venue map preparation and honest deadline wording', () => {

@@ -173,7 +173,7 @@ onMounted(loadPage);
 </script>
 
 <template>
-    <main :class="props.embedded ? 'min-h-full bg-slate-100' : isPreview ? 'min-h-screen bg-slate-200' : 'student-shell'" :data-embedded-preview="props.embedded || undefined">
+    <main class="provider-public-page" :class="props.embedded ? 'min-h-full bg-slate-100' : isPreview ? 'min-h-screen bg-slate-200' : 'student-shell'" :data-embedded-preview="props.embedded || undefined">
         <ApplicantSidebar v-if="!isPreview" />
 
         <ProviderApplicantPreviewToolbar
@@ -261,7 +261,7 @@ onMounted(loadPage);
                 <template v-else-if="provider">
                     <section class="student-card overflow-hidden rounded-md border-slate-300 border-t-4 border-t-amber-400 shadow-[0_8px_24px_rgba(15,23,42,0.06)]" data-provider-detail-hero>
                         <div class="grid lg:min-h-[390px] lg:grid-cols-[minmax(0,1.08fr)_minmax(25rem,0.92fr)]">
-                            <div class="flex flex-col p-5 sm:p-7 lg:p-9">
+                            <div class="provider-detail-intro flex flex-col p-5 sm:p-7 lg:p-9">
                                 <div class="flex min-w-0 items-start gap-4">
                                     <img v-if="hasLogo(provider)" :src="provider.logo_url" :alt="`${provider.name} logo`" class="h-16 w-16 shrink-0 rounded-md bg-white object-contain p-2 ring-1 ring-slate-200 sm:h-20 sm:w-20" @error="markLogoFailed(provider)">
                                     <div v-else class="grid h-16 w-16 shrink-0 place-items-center rounded-md bg-slate-950 text-base font-black tracking-[0.08em] text-white sm:h-20 sm:w-20">{{ providerInitials(provider) }}</div>
@@ -276,7 +276,7 @@ onMounted(loadPage);
 
                                 <p class="mt-6 max-w-3xl text-base font-semibold leading-7 text-slate-700">{{ provider.mission || provider.description || 'Supporting learners through current scholarship opportunities.' }}</p>
 
-                                <dl class="mt-6 grid border-y border-slate-200 sm:grid-cols-3">
+                                <dl class="provider-detail-facts mt-6 grid border-y border-slate-200 sm:grid-cols-3">
                                     <div class="border-b border-slate-200 py-3 sm:border-b-0 sm:border-r sm:pr-4">
                                         <dt class="student-detail-label">Current programs</dt>
                                         <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.programs_count }} available</dd>
@@ -312,32 +312,36 @@ onMounted(loadPage);
                     </section>
 
                     <section class="student-card mt-4 overflow-hidden rounded-md border-slate-300" data-provider-detail-record>
-                        <header class="border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
-                            <p class="student-kicker">Organization record</p>
-                            <h2 class="mt-1 text-xl font-bold text-slate-950">About and public contact</h2>
+                        <header class="provider-detail-record-heading flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+                            <div>
+                                <p class="student-kicker">Organization record</p>
+                                <h2 class="mt-1 text-xl font-bold text-slate-950">About and public contact</h2>
+                            </div>
+                            <div v-if="provider.address || (provider.latitude != null && provider.longitude != null)" class="provider-detail-map-action shrink-0">
+                                <LocationMapLink :address="provider.address || ''" :latitude="provider.latitude" :longitude="provider.longitude" :title="provider.name" />
+                            </div>
                         </header>
 
-                        <div v-if="provider.description" class="px-5 py-5 sm:px-6">
+                        <div v-if="provider.description" class="provider-detail-description px-5 py-5 sm:px-6">
                             <p class="max-w-5xl whitespace-pre-line text-sm leading-7 text-slate-700">{{ provider.description }}</p>
                         </div>
 
-                        <dl class="grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-4">
-                            <div class="border-b border-slate-200 px-5 py-4 sm:border-r lg:border-b-0">
+                        <dl class="provider-detail-contact grid border-t border-slate-200 sm:grid-cols-2 lg:grid-cols-4">
+                            <div class="border-b border-slate-200 px-5 py-3 sm:border-r lg:border-b-0">
                                 <dt class="student-detail-label">Public contact</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.contact_department || 'Scholarship office' }}</dd>
                             </div>
-                            <div class="border-b border-slate-200 px-5 py-4 lg:border-b-0 lg:border-r">
+                            <div class="border-b border-slate-200 px-5 py-3 lg:border-b-0 lg:border-r">
                                 <dt class="student-detail-label">Phone</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.contact_number || 'Not listed' }}</dd>
                             </div>
-                            <div class="border-b border-slate-200 px-5 py-4 sm:border-r lg:border-b-0">
+                            <div class="border-b border-slate-200 px-5 py-3 sm:border-r lg:border-b-0">
                                 <dt class="student-detail-label">Office hours</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.office_hours || 'Not listed' }}</dd>
                             </div>
-                            <div class="px-5 py-4">
+                            <div class="px-5 py-3">
                                 <dt class="student-detail-label">Office address</dt>
                                 <dd class="mt-1 text-sm font-bold text-slate-950">{{ provider.address || 'Not listed' }}</dd>
-                                <LocationMapLink :address="provider.address || ''" :latitude="provider.latitude" :longitude="provider.longitude" :title="provider.name" />
                             </div>
                         </dl>
                     </section>
@@ -362,7 +366,7 @@ onMounted(loadPage);
                                         <img :src="program.logo_url || '/uploads/scholarship-default.jpg'" :alt="`${program.title} logo`" class="absolute bottom-4 left-4 h-16 w-16 rounded-md bg-white object-contain p-2 shadow-lg ring-1 ring-white/70" data-program-logo @error="useDefaultProgramLogo">
                                     </figure>
 
-                                    <div class="flex flex-col p-5 sm:p-6">
+                                    <div class="provider-program-body flex flex-col p-5 sm:p-6">
                                         <div class="flex flex-wrap items-center gap-2">
                                             <span class="student-detail-label">{{ program.category || 'Scholarship program' }}</span>
                                             <span :class="['student-badge', programTimingClass(program)]">{{ programTiming(program) }}</span>
@@ -370,7 +374,7 @@ onMounted(loadPage);
                                         <h3 class="mt-2 font-display text-2xl font-bold text-slate-950">{{ program.title }}</h3>
                                         <p v-if="program.description" class="mt-2 line-clamp-2 max-w-3xl text-sm leading-6 text-slate-600">{{ program.description }}</p>
 
-                                        <div class="mt-4 border-t border-slate-200 pt-4">
+                                        <div class="provider-program-benefits mt-4 border-t border-slate-200 pt-4">
                                             <p class="student-detail-label">Benefits</p>
                                             <ApplicantTextSummary :text="program.benefit_summary || 'Support listed in scholarship details.'" :label="`benefit summary for ${program.title}`" class="mt-1" />
                                             <p class="mt-3 text-xs text-slate-600"><template v-if="isPreview"><strong class="text-slate-950">Varies</strong> by applicant</template><template v-else><strong class="text-slate-950">{{ program.eligibility_match?.score ?? 0 }}%</strong> profile match</template></p>
@@ -390,3 +394,79 @@ onMounted(loadPage);
         </section>
     </main>
 </template>
+
+<style scoped>
+.provider-public-page {
+    --provider-soft-blue: #edf3fa;
+    --provider-outline: #ccd7e5;
+    --provider-warm: #fff5d6;
+}
+
+.provider-detail-intro,
+.provider-detail-description,
+.provider-program-body {
+    background: linear-gradient(145deg, #f8fafd, var(--provider-soft-blue));
+}
+
+.provider-detail-facts {
+    border-color: #ebd99d;
+    background-color: var(--provider-warm);
+}
+
+.provider-detail-facts > div {
+    padding-inline: 0.875rem;
+    border-color: #ebd99d;
+}
+
+.provider-detail-record-heading {
+    border-bottom: 3px solid var(--color-portal-gold);
+    background: linear-gradient(120deg, var(--color-portal-navy), #10243d);
+}
+
+.provider-detail-record-heading .student-kicker {
+    color: var(--color-portal-gold);
+}
+
+.provider-detail-record-heading h2 {
+    color: #fff;
+}
+
+.provider-detail-map-action :deep(button) {
+    margin-top: 0;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgb(255 255 255 / 0.3);
+    border-radius: 0.375rem;
+    background-color: rgb(255 255 255 / 0.08);
+    color: #fff;
+}
+
+.provider-detail-map-action :deep(button:hover) {
+    background-color: rgb(255 255 255 / 0.15);
+}
+
+.provider-detail-map-action :deep(button i) {
+    color: var(--color-portal-gold);
+}
+
+.provider-detail-contact {
+    border-color: var(--provider-outline);
+    background-color: #e7eef7;
+}
+
+.provider-detail-contact > div {
+    border-color: var(--provider-outline);
+}
+
+.provider-detail-contact .student-detail-label,
+.provider-detail-facts .student-detail-label {
+    color: #52657e;
+}
+
+.provider-program-benefits {
+    padding: 1rem;
+    border: 1px solid #ebd99d;
+    border-inline-start: 3px solid var(--color-portal-gold);
+    border-radius: 0.375rem;
+    background-color: var(--provider-warm);
+}
+</style>

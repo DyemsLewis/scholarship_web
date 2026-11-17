@@ -4,7 +4,14 @@ namespace App\Support;
 
 final class SelectionScoringPolicy
 {
-    public const VERSION = '1.0';
+    public const VERSION = '2.2';
+
+    public static function examMethod(?array $policy): string
+    {
+        if ($policy === null) return 'criteria';
+
+        return $policy['exam_scoring_method'] ?? (filled($policy['stage_criteria']['exam'] ?? []) ? 'criteria' : 'total');
+    }
 
     public static function builderPresets(array $rubric): array
     {
@@ -18,7 +25,7 @@ final class SelectionScoringPolicy
         return $presets;
     }
 
-    public static function preset(?array $stages, array $rubric): array
+    public static function preset(?array $stages, array $rubric, string $examMethod = 'criteria', array $criterionLabels = []): array
     {
         $stages = ScholarshipSelectionPlan::normalize($stages);
         // Eligibility and file completeness are qualifying checks, not competitive points.
@@ -32,12 +39,25 @@ final class SelectionScoringPolicy
             default => $keys === [] ? [] : [100],
         };
 
+        $criterionLabels = StageEvaluationRubric::normalizeLabels($criterionLabels);
+        $stageCriteria = StageEvaluationRubric::presets();
+        foreach ($stageCriteria as $stage => &$criteria) {
+            foreach ($criteria as &$criterion) {
+                $criterion['label'] = $criterionLabels[$stage][$criterion['key']];
+            }
+            unset($criterion);
+        }
+        unset($criteria);
+
         return [
             'version' => self::VERSION,
             'stages' => $stages,
             'weights' => $keys === [] ? [] : array_combine($keys, $weights),
             'review_rubric' => $rubric,
             'screening_criteria' => $screening,
+            'stage_criteria' => array_intersect_key($stageCriteria, array_flip(array_diff($keys, $examMethod === 'total' ? ['exam'] : []))),
+            'stage_criterion_labels' => $criterionLabels,
+            'exam_scoring_method' => $examMethod,
             'notice' => 'Stage evaluations support the final decision. They do not automatically select or reject an applicant.',
         ];
     }

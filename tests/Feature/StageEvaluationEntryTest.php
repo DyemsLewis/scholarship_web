@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\ApplicationWorkflowService;
 use App\Services\SelectionEvaluationService;
 use App\Support\ReviewRubric;
+use App\Support\SelectionScoringPolicy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -224,6 +225,124 @@ class StageEvaluationEntryTest extends TestCase
         $this->assertDatabaseCount('application_stage_evaluations', 1);
     }
 
+    public function test_exam_criteria_are_calculated_on_the_server_and_saved_with_the_outcome(): void
+    {
+        [$provider, $application] = $this->application('exam', true);
+        $this->actingAs($provider)->patchJson($this->resultUrl($application, 'exam'), $this->criteriaOutcome())
+            ->assertOk()->assertJsonPath('application.workflow_stage', 'interview')
+            ->assertJsonPath('application.selection_evaluation.stages.2.score', 86)
+            ->assertJsonPath('application.selection_evaluation.stages.2.breakdown.1.score', 16)
+            ->assertJsonPath('application.selection_evaluation.stages.2.breakdown.1.maximum_score', 20)
+            ->assertJsonPath('application.selection_evaluation.stages.2.breakdown.1.contribution', 32);
+        $this->assertDatabaseHas('application_stage_evaluations', ['stage_key' => 'exam', 'source' => 'stage_criteria', 'score' => 86, 'maximum_score' => 100]);
+        $this->assertNull($application->fresh()->final_outcome);
+    }
+
+    public function test_interview_criteria_use_fixed_ratings_and_flow_into_the_final_dss(): void
+    {
+        [$provider, $application] = $this->application('interview', true);
+        $payload = ['result' => 'passed', 'evaluation' => ['criteria_scores' => [
+            'motivation' => ['score' => 4.5, 'maximum_score' => 5],
+            'communication' => ['score' => 4, 'maximum_score' => 5],
+            'readiness' => ['score' => 5, 'maximum_score' => 5],
+        ], 'expected_stage_revision' => 0, 'expected_revision' => 0]];
+        $this->actingAs($provider)->patchJson($this->resultUrl($application, 'interview'), $payload)
+            ->assertOk()->assertJsonPath('application.workflow_stage', 'decision')
+            ->assertJsonPath('application.selection_evaluation.stages.3.score', 90)
+            ->assertJsonPath('application.selection_evaluation.score', 88.2);
+        $this->assertNull($application->fresh()->final_outcome);
+        $this->assertNull($application->fresh()->waitlist_position);
+    }
+
+    public function test_criteria_cannot_be_bypassed_by_a_total_or_partial_or_extra_scores(): void
+    {
+        [$provider, $application] = $this->application('exam', true);
+        $full = $this->criteriaOutcome();
+        $partial = $full;
+        unset($partial['evaluation']['criteria_scores']['reasoning']);
+        $extra = $full;
+        $extra['evaluation']['criteria_scores']['appearance'] = ['score' => 100, 'maximum_score' => 100];
+        $tampered = $full;
+        $tampered['evaluation']['score'] = 100;
+        $tampered['evaluation']['maximum_score'] = 100;
+        foreach ([$this->passed(), $partial, $extra, $tampered] as $payload) {
+            $this->actingAs($provider)->patchJson($this->resultUrl($application, 'exam'), $payload)->assertUnprocessable();
+            $this->assertUnchangedExam($application);
+        }
+        $this->assertDatabaseCount('portal_notifications', 0);
+    }
+
+    public function test_criterion_limits_decimal_precision_and_injected_weights_are_rejected(): void
+    {
+        [$provider, $application] = $this->application('exam', true);
+        foreach ([['score' => 41, 'maximum_score' => 40], ['score' => -1, 'maximum_score' => 40],
+            ['score' => '', 'maximum_score' => 40], ['score' => 0, 'maximum_score' => 0],
+            ['score' => 1.00001, 'maximum_score' => 40], ['score' => 30, 'maximum_score' => 40, 'weight' => 100]] as $row) {
+            $payload = $this->criteriaOutcome();
+            $payload['evaluation']['criteria_scores']['knowledge'] = $row;
+            $this->actingAs($provider)->patchJson($this->resultUrl($application, 'exam'), $payload)->assertUnprocessable();
+            $this->assertUnchangedExam($application);
+        }
+    }
+
+    public function test_all_zero_criteria_are_valid_but_missing_is_not_a_zero_score(): void
+    {
+        [$provider, $application] = $this->application('exam', true);
+        $payload = $this->criteriaOutcome();
+        foreach ($payload['evaluation']['criteria_scores'] as &$row) $row['score'] = 0;
+        unset($row);
+        $this->actingAs($provider)->patchJson($this->resultUrl($application, 'exam'), $payload)
+            ->assertOk()->assertJsonPath('application.selection_evaluation.stages.2.score', 0);
+    }
+
+    public function test_interview_maxima_cannot_be_changed_to_inflate_a_rating(): void
+    {
+        [$provider, $application] = $this->application('interview', true);
+        $scores = \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, 'interview', 90);
+        $scores['motivation']['maximum_score'] = 4.5;
+        $scores['motivation']['score'] = 4;
+        $this->actingAs($provider)->patchJson($this->resultUrl($application, 'interview'), ['result' => 'passed', 'evaluation' => [
+            'criteria_scores' => $scores, 'expected_stage_revision' => 0, 'expected_revision' => 0,
+        ]])->assertUnprocessable()->assertJsonValidationErrors('criteria_scores.motivation.maximum_score');
+        $this->assertSame('interview', $application->fresh()->workflow_stage);
+    }
+
+    public function test_criteria_corrections_keep_the_original_breakdown_and_require_a_reason(): void
+    {
+        [$provider, $application] = $this->application('exam', true);
+        $this->actingAs($provider)->patchJson($this->resultUrl($application, 'exam'), $this->criteriaOutcome())->assertOk();
+        $payload = $this->criteriaOutcome()['evaluation'];
+        $payload['expected_stage_revision'] = 1;
+        $payload['expected_revision'] = 1;
+        $payload['criteria_scores']['knowledge']['score'] = 38;
+        $this->postJson($this->evaluationUrl($application), $payload)->assertUnprocessable()->assertJsonValidationErrors('note');
+        $this->postJson($this->evaluationUrl($application), [...$payload, 'note' => 'Corrected the knowledge section against the answer sheet.'])
+            ->assertOk()->assertJsonPath('application.selection_evaluation.stages.2.score', 88)
+            ->assertJsonPath('application.selection_evaluation.stages.2.history.1.breakdown.0.score', 36);
+        $this->assertSame('interview', $application->fresh()->workflow_stage);
+        $this->assertDatabaseCount('portal_notifications', 1);
+        $this->postJson($this->evaluationUrl($application), [...$payload, 'note' => 'A stale score form must not overwrite the new revision.'])->assertUnprocessable();
+    }
+
+    public function test_criteria_still_require_a_completed_activity_and_assigned_selection_staff(): void
+    {
+        [$provider, $application] = $this->application('exam', true);
+        $application->schedules()->where('type', 'exam')->update(['status' => 'scheduled', 'completed_at' => null]);
+        $this->actingAs($provider)->patchJson($this->resultUrl($application, 'exam'), $this->criteriaOutcome())->assertUnprocessable();
+        $other = User::factory()->create(['role' => 'provider']);
+        $this->actingAs($other)->patchJson($this->resultUrl($application, 'exam'), $this->criteriaOutcome())->assertForbidden();
+        $this->assertUnchangedExam($application);
+    }
+
+    private function criteriaOutcome(): array
+    {
+        return ['result' => 'passed', 'evaluation' => ['criteria_scores' => [
+            'knowledge' => ['score' => 36, 'maximum_score' => 40],
+            'reasoning' => ['score' => 16, 'maximum_score' => 20],
+            'application' => ['score' => 9, 'maximum_score' => 10],
+        ], 'expected_stage_revision' => 0, 'expected_revision' => 0]];
+    }
+
     private function passed(): array
     {
         return ['result' => 'passed', 'evaluation' => ['score' => 43, 'maximum_score' => 50, 'expected_stage_revision' => 0, 'expected_revision' => 0]];
@@ -239,7 +358,7 @@ class StageEvaluationEntryTest extends TestCase
         return "/provider/applications/{$application->id}/stages/exam/evaluation";
     }
 
-    private function application(string $stage = 'exam'): array
+    private function application(string $stage = 'exam', bool $criteria = false): array
     {
         $provider = User::factory()->create(['role' => 'provider']);
         $program = Scholarship::create([
@@ -247,6 +366,11 @@ class StageEvaluationEntryTest extends TestCase
             'status' => 'published', 'selection_stages' => ['screening', 'formal_application', 'exam', 'interview', 'decision'],
             'review_rubric' => ReviewRubric::DEFAULT,
         ]);
+        if (! $criteria) {
+            $legacy = SelectionScoringPolicy::preset($program->selection_stages, $program->review_rubric);
+            unset($legacy['stage_criteria']);
+            $program->forceFill(['selection_scoring_policy' => [...$legacy, 'version' => '1.0']])->save();
+        }
         $application = ScholarshipApplication::create([
             'scholarship_id' => $program->id, 'applicant_id' => User::factory()->create()->id,
             'status' => 'submitted', 'submitted_at' => now(),
@@ -269,7 +393,8 @@ class StageEvaluationEntryTest extends TestCase
         }
         if ($stage === 'interview') {
             $application = $workflow->recordStageResult($application, 'exam', 'passed', $provider);
-            app(SelectionEvaluationService::class)->record($application, $provider, 'exam', 42, 50, 1);
+            $scores = $criteria ? \Database\Seeders\Support\DemoStageScores::atPercentage($application->selection_scoring_snapshot, 'exam', 84) : null;
+            app(SelectionEvaluationService::class)->record($application, $provider, 'exam', $criteria ? null : 42, $criteria ? null : 50, 1, criteriaScores: $scores);
         }
 
         return [$provider, $application];

@@ -45,6 +45,7 @@ if (permissions.has('verify_applications')) {
             { href: '/provider/workspaces/reviews/assigned', label: 'My reviews', exact: true },
             { href: '/provider/workspaces/reviews/unassigned', label: 'Unassigned', exact: true },
             { href: '/provider/workspaces/reviews/returned', label: 'Returned updates', exact: true },
+            { href: '/provider/workspaces/reviews/eligibility-requests', label: 'Eligibility requests', exact: true },
             { href: '/provider/workspaces/reviews/history', label: 'Review history', exact: true },
         ],
     });

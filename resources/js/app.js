@@ -4,6 +4,12 @@ import GlobalToastHost from './components/GlobalToastHost.vue';
 import StaffFilePreviewHost from './components/StaffFilePreviewHost.vue';
 import OutcomeConfirmationHost from './components/OutcomeConfirmationHost.vue';
 import { installModalScrollEnvironment } from './support/modalScrollEnvironment';
+import { registerPortalPwa } from './support/portalPwa';
+
+if (!import.meta.env.DEV) {
+    if (document.readyState === 'complete') void registerPortalPwa();
+    else window.addEventListener('load', () => void registerPortalPwa(), { once: true });
+}
 
 function loadIconCdn() {
     if (document.querySelector('link[data-icon-cdn="fontawesome"]')) {
@@ -104,6 +110,7 @@ const pages = {
     providerAccount: () => import('./pages/provider/ProviderAccountPage.vue'),
     providerApplicationReviewerDashboard: () => import('./pages/provider/reviews/ApplicationReviewerDashboardPage.vue'),
     providerApplicationReviewerWorkspace: () => import('./pages/provider/reviews/ApplicationReviewDirectoryPage.vue'),
+    providerEligibilityReviews: () => import('./pages/provider/reviews/EligibilityReviewRequestsPage.vue'),
     providerApplicationReviewRecord: () => import('./pages/provider/reviews/ApplicationReviewRecordPage.vue'),
     providerSelectionOfficerDashboard: () => import('./pages/provider/selection/SelectionOfficerDashboardPage.vue'),
     providerSelectionOfficerWorkspace: () => import('./pages/provider/selection/SelectionActivityDirectoryPage.vue'),

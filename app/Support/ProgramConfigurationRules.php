@@ -35,6 +35,23 @@ final class ProgramConfigurationRules
             }
         }
 
+        foreach ([
+            'application_opens_at' => 'application opening date', 'deadline' => 'application deadline',
+            'expected_results_at' => 'expected results date', 'handoff_deadline' => 'formal application deadline',
+            'support_starts_at' => 'support start date', 'support_ends_at' => 'support end date',
+        ] as $field => $label) {
+            if (blank($values[$field] ?? null)) {
+                continue;
+            }
+            $date = CarbonImmutable::parse($values[$field])->startOfDay();
+            $savedDate = $scholarship?->getAttribute($field);
+            $keepsHistoricalDate = in_array($scholarship?->status, ['published', 'closed'], true)
+                && $savedDate && $date->isSameDay($savedDate);
+            if ($date->isBefore(CarbonImmutable::today()) && ! $keepsHistoricalDate) {
+                $errors[$field] = "The {$label} must be today or a future date.";
+            }
+        }
+
         return $errors;
     }
 

@@ -167,18 +167,18 @@ class ApplicantMonitoringDetailService
         return match ($view) {
             'check-ins' => [
                 'eyebrow' => 'Scholarship Support',
-                'title' => 'Check-ins',
-                'description' => 'Review check-in instructions, due dates, and provider feedback.',
+                'title' => 'Requirements',
+                'description' => 'Review required records, appointments, and provider feedback.',
             ],
             'benefits' => [
                 'eyebrow' => 'Scholarship Support',
-                'title' => 'Benefit releases',
+                'title' => 'Benefits & Events',
                 'description' => 'See what your award covers, how it is delivered, and what you need to do.',
             ],
             'history' => [
                 'eyebrow' => 'Support record',
                 'title' => 'Support history',
-                'description' => 'Review past check-ins and provider outcomes.',
+                'description' => 'Review past requirements, benefits, and provider outcomes.',
             ],
             default => [
                 'eyebrow' => 'Support record',
@@ -320,14 +320,14 @@ class ApplicantMonitoringDetailService
             ],
             [
                 'key' => 'check-ins',
-                'label' => 'Check-ins',
+                'label' => 'Requirements',
                 'icon' => 'fa-solid fa-list-check',
                 'href' => $this->viewUrl($application, 'check-ins'),
                 'badge' => $checkIns->where('state', 'action_required')->count(),
             ],
             [
                 'key' => 'benefits',
-                'label' => 'Benefit releases',
+                'label' => 'Benefits & Events',
                 'icon' => 'fa-solid fa-hand-holding-heart',
                 'href' => $this->viewUrl($application, 'benefits'),
                 'badge' => $releases->where('can_respond', true)->count() + $releases->whereIn('payout.status', RecipientBenefitPayoutService::APPLICANT_ACTIONS)->count(),
@@ -524,10 +524,10 @@ class ApplicantMonitoringDetailService
             return $this->decisionRecord(
                 'agreement_required',
                 'attention',
-                'Review the recipient agreement',
-                'Accept the scholarship terms to continue with check-ins and benefits.',
+                'Review your scholarship offer',
+                'Confirm your intention to proceed with check-ins and benefits, subject to the final provider agreement.',
                 'applicant',
-                'Review agreement',
+                'Review offer',
                 route('dashboard.applications.show.section', [
                     'application' => $application,
                     'section' => 'outcome',
@@ -865,7 +865,7 @@ class ApplicantMonitoringDetailService
         }
 
         [$title, $description] = match ($action['key']) {
-            'accept_agreement' => ['Review your recipient agreement', 'Accept the terms before completing this check-in.'],
+            'accept_agreement' => ['Review your scholarship offer', 'Confirm your intention to proceed before completing this check-in. This does not sign a final provider contract.'],
             'submit_requirements' => ['Submit the remaining records', 'Open the required items to add the requested files.'],
             'replace_record' => ['Replace a check-in record', 'Read the provider feedback and upload the requested replacement.'],
             'attend_handoff' => ['Attend your check-in', 'Bring the listed documents to the appointment. No online upload is needed.'],

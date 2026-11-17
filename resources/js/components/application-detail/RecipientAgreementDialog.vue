@@ -36,9 +36,9 @@ async function respond(outcome) {
     const valid = () => props.open && props.agreement?.can_respond && !props.processing
         && (outcome === 'accepted' ? props.termsAccepted : props.note.trim().length >= 5);
     if (!await confirmOutcome({
-        record: 'Recipient agreement', outcome: outcome === 'accepted' ? 'Agreement accepted' : 'Agreement declined',
-        consequence: outcome === 'accepted' ? 'You agree to the responsibilities and conditions shown. The provider can continue with your recipient support.' : 'You will not proceed under this agreement. Your explanation will be sent to the provider.',
-        confirmLabel: outcome === 'accepted' ? 'Accept agreement' : 'Decline agreement', danger: outcome === 'declined',
+        record: 'Scholarship offer', outcome: outcome === 'accepted' ? 'Intention to proceed confirmed' : 'Offer declined',
+        consequence: outcome === 'accepted' ? 'You intend to proceed, subject to the final provider agreement. This does not sign a final contract or accept additional obligations that are not shown.' : 'You do not intend to proceed with this offer. Your explanation will be sent to the provider.',
+        confirmLabel: outcome === 'accepted' ? 'Confirm intention' : 'Decline offer', danger: outcome === 'declined',
     }, valid)) return;
     emit('respond', outcome);
 }
@@ -58,22 +58,23 @@ async function respond(outcome) {
                         <i class="fa-solid fa-file-signature" aria-hidden="true"></i>
                     </span>
                     <div class="min-w-0 flex-1">
-                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">Recipient agreement</p>
-                        <h2 id="recipient-agreement-title" class="mt-1 text-xl font-bold text-white">Review the complete terms</h2>
-                        <p class="mt-1 text-sm leading-5 text-slate-300">Read each section before recording your response.</p>
+                        <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">Scholarship offer</p>
+                        <h2 id="recipient-agreement-title" class="mt-1 text-xl font-bold text-white">Review your offer summary</h2>
+                        <p class="mt-1 text-sm leading-5 text-slate-300">You are already selected. Confirm whether you intend to proceed.</p>
                     </div>
-                    <button type="button" :disabled="processing" class="grid h-9 w-9 shrink-0 place-items-center rounded border border-white/20 text-slate-300 hover:bg-white/10 hover:text-white disabled:opacity-50" aria-label="Close recipient agreement" @click="emit('close')">
+                    <button type="button" :disabled="processing" class="grid h-9 w-9 shrink-0 place-items-center rounded border border-white/20 text-slate-300 hover:bg-white/10 hover:text-white disabled:opacity-50" aria-label="Close scholarship offer" @click="emit('close')">
                         <i class="fa-solid fa-xmark" aria-hidden="true"></i>
                     </button>
                 </header>
 
                 <div class="min-h-0 flex-1 overflow-y-auto bg-slate-100 p-3 sm:p-4">
+                    <p class="mb-3 border-l-2 border-amber-400 bg-amber-50 px-4 py-3 text-sm leading-6 text-slate-700" data-offer-confirmation-notice>Confirming your intention is subject to the final provider agreement. It does not replace a signed final contract or accept obligations that are not shown.</p>
                     <RecipientAgreementSummary :agreement="agreement" compact embedded />
 
                     <section v-if="agreement.can_respond" class="mt-4 overflow-hidden rounded-md border border-slate-300 bg-white">
                         <header class="border-b border-slate-200 px-4 py-3 sm:px-5">
                             <h3 class="text-sm font-bold text-slate-950">Your response</h3>
-                            <p class="mt-1 text-xs leading-5 text-slate-600">Accept to continue as a recipient, or decline and briefly explain why.</p>
+                            <p class="mt-1 text-xs leading-5 text-slate-600">Confirm your intention to proceed, or decline and briefly explain why.</p>
                         </header>
                         <div class="space-y-4 px-4 py-4 sm:px-5">
                             <label class="flex cursor-pointer items-start gap-3 border-l-2 border-amber-400 bg-amber-50 px-3 py-3 text-sm leading-5 text-slate-700">
@@ -83,13 +84,13 @@ async function respond(outcome) {
                                     :checked="termsAccepted"
                                     @change="emit('update:termsAccepted', $event.target.checked)"
                                 >
-                                <span><strong class="text-slate-950">I reviewed the complete agreement.</strong> I understand the support, responsibilities, proof, release conditions, timeframe, consequences, and exception process.</span>
+                                <span><strong class="text-slate-950">I intend to accept this offer, subject to the final provider agreement.</strong> I reviewed the summary and understand that additional terms must be explained before I agree to them.</span>
                             </label>
 
                             <div>
                                 <div class="flex items-end justify-between gap-3">
                                     <label for="recipient-agreement-note" class="text-sm font-bold text-slate-900">Note to provider</label>
-                                    <span class="text-xs text-slate-500">Optional to accept, required to decline</span>
+                                    <span class="text-xs text-slate-500">Optional to confirm, required to decline</span>
                                 </div>
                                 <textarea
                                     id="recipient-agreement-note"
@@ -97,7 +98,7 @@ async function respond(outcome) {
                                     rows="3"
                                     maxlength="1000"
                                     class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-slate-600 focus:ring-2 focus:ring-slate-200"
-                                    placeholder="Add a question or explain why you cannot accept."
+                                    placeholder="Add a question or explain why you cannot proceed."
                                     @input="emit('update:note', $event.target.value)"
                                 ></textarea>
                             </div>
@@ -116,10 +117,10 @@ async function respond(outcome) {
                     </button>
                     <template v-if="agreement.can_respond">
                         <button type="button" :disabled="processing || note.trim().length < 5" class="rounded-md border border-rose-200 px-4 py-2.5 text-sm font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50" @click="respond('declined')">
-                            Decline agreement
+                            Decline offer
                         </button>
                         <button type="button" :disabled="processing || !termsAccepted" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50" @click="respond('accepted')">
-                            {{ processing ? 'Saving...' : 'Accept agreement' }}
+                            {{ processing ? 'Saving...' : 'Confirm intention' }}
                         </button>
                     </template>
                 </footer>

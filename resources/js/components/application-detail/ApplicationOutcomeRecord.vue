@@ -59,12 +59,8 @@ const resultPresentation = computed(() => ({
         </dl>
 
         <template v-if="award && result.key === 'selected'">
-            <dl v-if="award.amount_label || award.support_period" class="flex flex-col border-t border-slate-200 bg-slate-50/80 sm:flex-row sm:divide-x sm:divide-slate-200">
-                <div v-if="award.amount_label" class="flex-1 px-4 py-4 sm:px-5">
-                    <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Recorded award</dt>
-                    <dd class="mt-1 text-lg font-bold text-slate-950">{{ award.amount_label }}</dd>
-                </div>
-                <div v-if="award.support_period" class="flex-1 border-t border-slate-200 px-4 py-4 sm:border-t-0 sm:px-5">
+            <dl v-if="award.support_period" class="border-t border-slate-200 bg-slate-50/80">
+                <div class="px-4 py-4 sm:px-5">
                     <dt class="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Support period</dt>
                     <dd class="mt-1 text-sm font-bold text-slate-950">{{ award.support_period }}</dd>
                 </div>

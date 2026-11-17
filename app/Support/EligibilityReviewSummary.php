@@ -21,11 +21,12 @@ class EligibilityReviewSummary
         $required = $criteria->filter(fn (array $item): bool => EligibilityRulePolicy::isBlocking($item));
         $preferred = $criteria->filter(fn (array $item): bool => ($item['status'] ?? null) === 'fail'
             && ($item['rule_mode'] ?? 'required') === 'preferred');
+        $exceptions = $criteria->where('exception_approved', true);
         $review = $criteria->filter(fn (array $item): bool => self::needsReview($item));
         $missing = $criteria->filter(fn (array $item): bool => ($item['status'] ?? null) === 'missing' && ! self::needsReview($item));
         $met = $criteria->filter(fn (array $item): bool => ($item['status'] ?? null) === 'pass' && ! self::needsReview($item))->count();
         $open = $criteria->filter(fn (array $item): bool => ($item['status'] ?? null) === 'info' && ! self::needsReview($item))->count();
-        $notMet = $required->count() + $preferred->count();
+        $notMet = $required->count() + $preferred->count() + $exceptions->count();
         $applicable = $met + $notMet + $missing->count() + $review->count();
         $names = fn ($items): string => $items->pluck('label')->filter()->implode(', ');
         [$state, $label, $interpretation] = match (true) {
@@ -33,6 +34,7 @@ class EligibilityReviewSummary
             $missing->isNotEmpty() => ['provisional', 'Missing information', 'Missing profile information: '.$names($missing).'. Treat the score as provisional and confirm these items before deciding.'],
             $review->isNotEmpty() => ['manual_review', 'Manual review needed', 'Evidence review needed: '.$names($review).'. These checks are not automatic matches or failures; do not use estimated grade conversions as proof.'],
             $preferred->isNotEmpty() => ['preferred_difference', 'Preferences differ', 'Preferences not matched: '.$names($preferred).'. These differences did not block submission. Use them as review context, not an automatic rejection.'],
+            $exceptions->isNotEmpty() => ['exception_approved', 'Provider-approved exception', 'An authorized provider reviewer allowed submission despite: '.$names($exceptions).'. The original discrepancies remain on record. This is not a selection decision.'],
             $criteria->isEmpty() => ['unavailable', 'Comparison unavailable', 'No saved eligibility checks are available. Review the application evidence rather than treating an empty comparison as a match.'],
             $applicable === 0 => ['open_criteria', 'Open criteria', 'The program has no restrictive structured criteria. A high score means no listed mismatch; it is not an applicant ranking or selection decision.'],
             default => ['complete', 'Comparison complete', 'All applicable structured criteria have enough profile data for comparison. Confirm the values against uploaded proof before deciding.'],
@@ -46,6 +48,7 @@ class EligibilityReviewSummary
             'met' => $met,
             'not_met' => $notMet,
             'required_not_met' => $required->count(),
+            'approved_exceptions' => $exceptions->count(),
             'preferred_not_met' => $preferred->count(),
             'missing' => $missing->count(),
             'manual_review' => $review->count(),

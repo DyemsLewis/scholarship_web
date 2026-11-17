@@ -652,6 +652,26 @@ class RecipientMonitoringChecklistTest extends TestCase
             ->assertUnprocessable();
     }
 
+    public function test_provider_cannot_approve_an_extension_that_is_already_expired(): void
+    {
+        [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();
+        $cycleId = $this->existingUploadCheckIn($provider, $scholarship, [
+            'title' => 'Late document follow-up', 'opens_at' => now()->subDays(10)->toDateString(), 'due_at' => now()->subDays(5)->toDateString(),
+        ])->json('cycle.id');
+        $requirement = RecipientMonitoringCycleRequirement::where('recipient_monitoring_cycle_id', $cycleId)->where('type', 'enrollment')->firstOrFail();
+        $adjustment = RecipientMonitoringAdjustmentRequest::create([
+            'recipient_monitoring_cycle_id' => $cycleId, 'recipient_monitoring_cycle_requirement_id' => $requirement->id,
+            'scholarship_application_id' => $application->id, 'applicant_id' => $applicant->id,
+            'request_type' => 'extension', 'reason_category' => 'school_schedule', 'explanation' => 'Waiting for a school record.',
+            'requested_due_at' => now()->addDays(2), 'status' => 'pending',
+        ]);
+        $url = "/provider/monitoring-adjustment-requests/{$adjustment->id}/decision";
+        $this->actingAs($provider)->patchJson($url, ['decision' => 'approved', 'approved_due_at' => now()->subDay()->toDateString()])
+            ->assertUnprocessable()->assertJsonValidationErrors('approved_due_at');
+        $this->assertSame('pending', $adjustment->fresh()->status);
+        $this->patchJson($url, ['decision' => 'approved', 'approved_due_at' => now()->toDateString()])->assertOk();
+    }
+
     public function test_recipient_requests_and_uses_an_approved_personal_extension(): void
     {
         [$provider, $applicant, $scholarship, $application] = $this->selectedRecipientWithPlan();

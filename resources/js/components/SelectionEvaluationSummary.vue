@@ -45,6 +45,12 @@ const number = (value) => Number(value).toLocaleString(undefined, { maximumFract
                         </tr>
                     </tbody>
                 </table>
+                <div v-for="stage in evaluation.stages.filter(row => ['exam', 'interview'].includes(row.key) && row.criteria?.length)" :key="stage.key" class="mt-3 rounded-[5px] border border-slate-200" data-evaluation-criteria-breakdown>
+                    <details class="group/criteria">
+                        <summary class="flex cursor-pointer items-center justify-between gap-4 px-4 py-3 text-xs font-bold text-slate-700"><span>{{ stage.label }} criteria</span><span class="font-normal text-slate-500">{{ stage.breakdown?.length ? 'View scored criteria' : 'Evaluation not yet recorded' }}<i class="fa-solid fa-chevron-down ml-2 text-[10px]" aria-hidden="true"></i></span></summary>
+                        <dl class="divide-y divide-slate-100 border-t border-slate-200 px-4"><div v-for="criterion in stage.criteria" :key="criterion.key" class="flex items-center justify-between gap-5 py-3 text-xs"><dt class="font-semibold text-slate-700">{{ criterion.label }}<span class="ml-2 font-normal text-slate-500">{{ criterion.weight }}% of this stage</span></dt><dd class="shrink-0 font-bold tabular-nums text-slate-950">{{ stage.breakdown?.find(row => row.key === criterion.key) ? `${number(stage.breakdown.find(row => row.key === criterion.key).score)} / ${number(stage.breakdown.find(row => row.key === criterion.key).maximum_score)}` : 'Not evaluated' }}</dd></div></dl>
+                    </details>
+                </div>
                 <p class="mt-3 border-l-2 border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-5 text-slate-700">Missing evaluations are not zero scores. Formal verification and document completeness do not earn ranking points.</p>
                 <p v-if="evaluation.stages.find(stage => stage.key === 'screening')?.criteria?.length" class="mt-3 text-xs text-slate-500">Screening reuses the reviewed {{ evaluation.stages.find(stage => stage.key === 'screening').criteria.map(row => row.label.toLowerCase()).join(' and ') }} scores, in proportion to their rubric weights.</p>
                 <p class="mt-2 text-xs leading-5 text-slate-500">{{ evaluation.notice }}</p>

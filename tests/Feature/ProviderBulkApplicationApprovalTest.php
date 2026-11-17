@@ -114,10 +114,20 @@ class ProviderBulkApplicationApprovalTest extends TestCase
             ->patchJson("/provider/scholarships/{$scholarship->id}/applications/bulk-advance", [
                 'application_ids' => [$application->id],
                 'target_stage' => 'pass_stage',
-            ])->assertOk()
-            ->assertJsonPath('updated_count', 1);
+            ])->assertUnprocessable()->assertJsonValidationErrors('application_ids');
+
+        $this->assertSame('exam', $application->fresh()->workflow_stage);
+        $this->patchJson("/provider/applications/{$application->id}/stages/exam/result", [
+            'result' => 'passed',
+            'evaluation' => [
+                'criteria_scores' => \Database\Seeders\Support\DemoStageScores::atPercentage($application->fresh()->selection_scoring_snapshot, 'exam', 86),
+                'expected_stage_revision' => 0, 'expected_revision' => 0,
+            ],
+        ])->assertOk();
 
         $this->assertSame('formal_application', $application->fresh()->workflow_stage);
+        $this->assertStringContainsString('For more information about this result',
+            \App\Models\PortalNotification::where('user_id', $application->applicant_id)->latest('id')->firstOrFail()->message);
     }
 
     public function test_bulk_exam_approval_keeps_document_and_program_ownership_safeguards(): void

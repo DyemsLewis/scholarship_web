@@ -915,7 +915,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <main class="student-shell">
+    <main class="student-shell scholarship-catalog">
         <ApplicantSidebar />
 
         <section class="student-page">
@@ -936,7 +936,7 @@ onBeforeUnmount(() => {
                 </div>
 
                 <section v-else class="mt-6 space-y-5">
-                    <section class="student-card overflow-hidden">
+                    <section class="scholarship-filters student-card overflow-hidden">
                         <div class="flex flex-col gap-3 bg-slate-950 p-4 text-white lg:flex-row lg:items-center lg:justify-between">
                             <div>
                                 <h3 class="font-display text-lg font-bold">Search and filter</h3>
@@ -956,7 +956,7 @@ onBeforeUnmount(() => {
                             </div>
                         </div>
 
-                        <div class="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(14rem,2fr)_auto_minmax(10rem,1fr)_minmax(10rem,1fr)_auto_auto] xl:items-center">
+                        <div class="scholarship-filter-fields grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-[minmax(14rem,2fr)_auto_minmax(10rem,1fr)_minmax(10rem,1fr)_auto_auto] xl:items-center">
                             <input
                                 v-model="search"
                                 type="search"
@@ -1068,7 +1068,7 @@ onBeforeUnmount(() => {
                             <article
                                 v-for="scholarship in filteredScholarships"
                                 :key="scholarship.id"
-                                class="group flex h-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-400 hover:shadow-md"
+                                class="scholarship-result-card group flex h-full flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-400 hover:shadow-md"
                             >
                                 <div class="scholarship-card-head relative overflow-hidden p-4 text-white">
                                     <div class="relative z-10 flex items-center justify-between gap-3">
@@ -1113,7 +1113,7 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div class="flex flex-1 flex-col p-4">
+                                <div class="scholarship-card-body flex flex-1 flex-col p-4">
                                     <div class="flex flex-wrap items-center gap-2">
                                         <p v-if="isUpcomingProgram(scholarship)" class="rounded-md bg-sky-100 px-2.5 py-1 text-xs font-bold text-sky-800">
                                             <i class="fa-regular fa-clock mr-1"></i>
@@ -1135,7 +1135,7 @@ onBeforeUnmount(() => {
                                         {{ scholarship.description }}
                                     </p>
 
-                                    <div class="mt-4 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+                                    <div class="scholarship-card-facts mt-4 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
                                         <div class="flex min-w-0 items-start gap-2.5 bg-slate-50 p-3">
                                             <i class="fa-solid fa-user-graduate mt-1 w-4 shrink-0 text-center text-amber-700" aria-hidden="true"></i>
                                             <div class="min-w-0">
@@ -1166,7 +1166,7 @@ onBeforeUnmount(() => {
                                         </div>
                                     </div>
 
-                                    <div class="mt-4 flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 p-3.5">
+                                    <div class="scholarship-card-benefit mt-4 flex items-center gap-3 rounded-md border border-amber-200 bg-amber-50 p-3.5">
                                         <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-amber-200 text-amber-900">
                                             <i :class="[primaryBenefitIcon(scholarship), 'text-sm']"></i>
                                         </span>
@@ -1192,7 +1192,7 @@ onBeforeUnmount(() => {
                                     </div>
                                 </div>
 
-                                <div class="mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 p-3">
+                                <div class="scholarship-card-actions mt-auto grid grid-cols-2 gap-2 border-t border-slate-100 p-3">
                                     <a
                                         :href="`/dashboard/scholarships/${scholarship.id}`"
                                         class="rounded-md border border-slate-300 bg-white px-3 py-2.5 text-center text-sm font-bold text-slate-700 transition hover:bg-slate-100"
@@ -1663,9 +1663,58 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.scholarship-catalog {
+    --catalog-soft-blue: #edf3fa;
+    --catalog-outline: #ccd7e5;
+    --catalog-warm: #fff5d6;
+}
+
+.scholarship-filters {
+    border-color: var(--catalog-outline);
+}
+
+.scholarship-filter-fields {
+    background: linear-gradient(115deg, var(--catalog-soft-blue), var(--color-portal-paper));
+}
+
+.scholarship-result-card {
+    border-color: var(--catalog-outline);
+}
+
 .scholarship-card-head {
     background:
         radial-gradient(circle at 92% -20%, rgba(252, 211, 77, 0.28), transparent 38%),
         linear-gradient(120deg, #081426 0%, #10243d 100%);
+}
+
+.scholarship-result-card > .scholarship-card-head {
+    border-bottom: 3px solid var(--color-portal-gold);
+}
+
+.scholarship-card-body {
+    background: linear-gradient(150deg, #f8fafd, var(--catalog-soft-blue));
+}
+
+.scholarship-card-facts {
+    border-color: var(--catalog-outline);
+    background-color: var(--catalog-outline);
+}
+
+.scholarship-card-facts > div {
+    background-color: #e7eef7;
+}
+
+.scholarship-card-facts p:first-child {
+    color: #52657e;
+}
+
+.scholarship-card-benefit {
+    border-inline-start: 3px solid var(--color-portal-gold);
+    background-color: var(--catalog-warm);
+}
+
+.scholarship-card-actions {
+    border-color: var(--catalog-outline);
+    background-color: var(--color-portal-soft);
 }
 </style>

@@ -10,18 +10,18 @@ final class VenueAddress
 {
     public const REGIONS = ['Region I', 'Region II', 'Region III', 'Region IV-A', 'MIMAROPA', 'Region V', 'Region VI', 'NIR', 'Region VII', 'Region VIII', 'Region IX', 'Region X', 'Region XI', 'Region XII', 'NCR', 'CAR', 'Region XIII', 'BARMM'];
 
-    public static function rules(): array
+    public static function rules(string $field = 'address_details', bool $partial = false): array
     {
         return [
-            'address_details' => ['nullable', 'array:venue,region,province,city,barangay,street,latitude,longitude'],
-            'address_details.venue' => ['required_with:address_details', 'string', 'max:120'],
-            'address_details.region' => ['required_with:address_details', Rule::in(self::REGIONS)],
-            'address_details.province' => ['required_with:address_details', 'string', 'max:100'],
-            'address_details.city' => ['required_with:address_details', 'string', 'max:100'],
-            'address_details.barangay' => ['nullable', 'string', 'max:100'],
-            'address_details.street' => ['nullable', 'string', 'max:160'],
-            'address_details.latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:address_details.longitude', new PhilippineLandPin],
-            'address_details.longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:address_details.latitude', new PhilippineLandPin],
+            $field => ['nullable', 'array:venue,region,province,city,barangay,street,latitude,longitude'],
+            $field.'.venue' => [$partial ? 'nullable' : 'required_with:'.$field, 'string', 'max:120'],
+            $field.'.region' => [$partial ? 'nullable' : 'required_with:'.$field, Rule::in(self::REGIONS)],
+            $field.'.province' => [$partial ? 'nullable' : 'required_with:'.$field, 'string', 'max:100'],
+            $field.'.city' => [$partial ? 'nullable' : 'required_with:'.$field, 'string', 'max:100'],
+            $field.'.barangay' => ['nullable', 'string', 'max:100'],
+            $field.'.street' => ['nullable', 'string', 'max:160'],
+            $field.'.latitude' => ['nullable', 'numeric', 'between:-90,90', 'required_with:'.$field.'.longitude', new PhilippineLandPin],
+            $field.'.longitude' => ['nullable', 'numeric', 'between:-180,180', 'required_with:'.$field.'.latitude', new PhilippineLandPin],
         ];
     }
 

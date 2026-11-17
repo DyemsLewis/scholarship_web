@@ -78,7 +78,7 @@ class BenefitDeliveryReportTest extends TestCase
         $this->assertSame('issue_open', $entitlement->fresh()->status);
         $this->actingAs($applicant)->postJson($this->url($report, 'dashboard').'/response', $this->reply($report->fresh(), 'still_unresolved'))
             ->assertOk()->assertJsonPath('report.status', 'awaiting_provider');
-        $this->actingAs($applicant)->postJson($this->url($report, 'dashboard').'/response', $this->reply($report->fresh(), 'receipt_confirmed') + ['received_on' => now()->toDateString()])->assertConflict();
+        $this->actingAs($applicant)->postJson($this->url($report, 'dashboard').'/response', $this->reply($report->fresh(), 'receipt_confirmed') + ['received_on' => now()->toDateString(), 'evidence' => [$this->pdf()]])->assertConflict();
         $this->proposal($provider, $report->fresh(), $record);
         $this->confirm($applicant, $report->fresh());
         $this->assertNotNull($receipt->fresh()->recipient_resolution_confirmed_at);
@@ -105,7 +105,7 @@ class BenefitDeliveryReportTest extends TestCase
         $this->proposal($provider, $report, $record);
         $proof = $report->evidence()->first();
         Storage::disk('local')->put($proof->path, 'changed bytes');
-        $this->actingAs($applicant)->postJson($this->url($report, 'dashboard').'/response', $this->reply($report->fresh(), 'receipt_confirmed') + ['received_on' => now()->toDateString()])->assertUnprocessable()->assertJsonValidationErrors('evidence');
+        $this->actingAs($applicant)->postJson($this->url($report, 'dashboard').'/response', $this->reply($report->fresh(), 'receipt_confirmed') + ['received_on' => now()->toDateString(), 'evidence' => [$this->pdf()]])->assertUnprocessable()->assertJsonValidationErrors('evidence');
         $this->assertSame('awaiting_recipient', $report->fresh()->status);
         $this->assertNull($entitlement->fresh()->fulfilled_at);
     }
@@ -151,7 +151,7 @@ class BenefitDeliveryReportTest extends TestCase
     {
         [$provider, $applicant, $application, $entitlement] = $this->award('monthly');
         $record = $this->release($provider, $application, $entitlement);
-        $this->actingAs($applicant)->postJson('/dashboard/benefit-release-records/'.$record->id.'/response', ['response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true])->assertCreated();
+        $this->actingAs($applicant)->postJson('/dashboard/benefit-release-records/'.$record->id.'/response', ['response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true, 'evidence' => $this->pdf()])->assertCreated();
         $original = $record->receiptResponse()->sole()->getRawOriginal();
         $this->actingAs($applicant)->getJson($this->history($application))->assertOk()->assertJsonPath('options.0.period_required', true);
         $report = $this->submit($applicant, $application, 'entitlement', $entitlement->id, ['benefit_period' => 'The following month']);
@@ -187,7 +187,7 @@ class BenefitDeliveryReportTest extends TestCase
         $this->assertDatabaseCount('recipient_benefit_receipt_responses', 0);
         $this->actingAs($provider)->postJson($this->url($report).'/proposal', $this->reply($report, 'information_provided'))->assertOk();
         $this->actingAs($applicant)->postJson($this->url($report, 'dashboard').'/response', $this->reply($report->fresh(), 'clarification_accepted'))->assertOk();
-        $this->actingAs($applicant)->postJson('/dashboard/benefit-release-records/'.$record->id.'/response', ['response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true])->assertCreated();
+        $this->actingAs($applicant)->postJson('/dashboard/benefit-release-records/'.$record->id.'/response', ['response_type' => 'confirmed', 'received_on' => now()->toDateString(), 'acknowledged' => true, 'evidence' => $this->pdf()])->assertCreated();
         $this->assertSame('fulfilled', $entitlement->fresh()->status);
     }
 
@@ -413,9 +413,30 @@ class BenefitDeliveryReportTest extends TestCase
         $this->actingAs($actor)->post($this->url($report).'/proposal', $this->reply($report, 'delivery_proposed') + ['delivery_record_id' => $record->id, 'delivered_on' => now()->toDateString(), 'evidence' => [$this->pdf()]], ['Accept' => 'application/json'])->assertOk()->assertJsonPath('report.status', 'awaiting_recipient');
     }
 
+    public function test_applicant_must_attach_their_own_receipt_proof_before_a_delivery_report_closes(): void
+    {
+        [$provider, $applicant, $application, $entitlement] = $this->award();
+        $record = $this->release($provider, $application, $entitlement);
+        $report = $this->submit($applicant, $application, 'release', $record->id);
+        $this->proposal($provider, $report, $record);
+        $revision = $report->fresh()->revision;
+        $body = $this->reply($report->fresh(), 'receipt_confirmed') + ['received_on' => now()->toDateString()];
+        $this->actingAs($applicant)->postJson($this->url($report, 'dashboard').'/response', $body)->assertUnprocessable()->assertJsonValidationErrors('evidence');
+        $this->assertSame($revision, $report->fresh()->revision);
+        $this->assertNull($record->receiptResponse()->sole()->recipient_resolution_confirmed_at);
+        $this->assertNull($entitlement->fresh()->fulfilled_at);
+        $this->post($this->url($report, 'dashboard').'/response', $body + ['evidence' => [UploadedFile::fake()->image('received-materials.png')]], ['Accept' => 'application/json'])->assertOk();
+        $statement = $report->responses()->where('response_kind', 'receipt_confirmed')->sole();
+        $proof = $statement->evidence()->sole();
+        $this->assertSame($applicant->id, $proof->uploaded_by);
+        Storage::disk('local')->assertExists($proof->path);
+        $this->assertSame('closed', $report->fresh()->status);
+        $this->assertNotNull($record->receiptResponse()->sole()->recipient_resolution_confirmed_at);
+    }
+
     private function confirm(User $actor, RecipientAgreementCase $report): void
     {
-        $this->actingAs($actor)->postJson($this->url($report, 'dashboard').'/response', $this->reply($report, 'receipt_confirmed') + ['received_on' => now()->toDateString()])->assertOk()->assertJsonPath('report.status', 'closed');
+        $this->actingAs($actor)->postJson($this->url($report, 'dashboard').'/response', $this->reply($report, 'receipt_confirmed') + ['received_on' => now()->toDateString(), 'evidence' => [$this->pdf()]])->assertOk()->assertJsonPath('report.status', 'closed');
     }
 
     private function body(string $type, int $id): array

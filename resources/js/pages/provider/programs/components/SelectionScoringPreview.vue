@@ -7,8 +7,10 @@ const props = defineProps({
     stages: { type: Array, required: true },
     fixedPolicy: { type: Object, default: null },
     applicationsCount: { type: Number, default: 0 },
+    examMethod: { type: String, default: null },
+    criterionLabels: { type: Object, default: null },
 });
-const preview = computed(() => programScoringPreview(props.presets, props.stages, props.fixedPolicy, props.applicationsCount));
+const preview = computed(() => programScoringPreview(props.presets, props.stages, props.fixedPolicy, props.applicationsCount, props.examMethod, props.criterionLabels));
 </script>
 
 <template>

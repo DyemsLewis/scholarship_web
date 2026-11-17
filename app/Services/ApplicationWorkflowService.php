@@ -159,8 +159,6 @@ class ApplicationWorkflowService
                 'income_bracket' => $profile?->income_bracket,
                 'household_size' => $profile?->household_size,
                 'support_needs' => $profile?->support_needs,
-                'current_scholarship_status' => $profile?->current_scholarship_status,
-                'current_scholarship_details' => $profile?->current_scholarship_details,
                 'location' => collect([
                     $profile?->barangay,
                     $profile?->city,

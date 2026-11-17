@@ -234,8 +234,6 @@ class MobileAuthController extends Controller
             'preferred_locations' => ['nullable', 'string', 'max:1000'],
             'willing_to_relocate' => ['nullable', Rule::in(['yes', 'no', 'depends'])],
             'support_needs' => ['nullable', 'string', 'max:1500'],
-            'current_scholarship_status' => ['required', Rule::in(['none', 'receiving', 'pending', 'completed'])],
-            'current_scholarship_details' => ['nullable', 'required_if:current_scholarship_status,receiving,pending', 'string', 'max:1000'],
             'scholarship_goal' => ['nullable', 'string', 'max:1500'],
             'achievements' => ['nullable', 'string', 'max:1500'],
             'activities_and_responsibilities' => ['nullable', 'string', 'max:1500'],
@@ -256,10 +254,6 @@ class MobileAuthController extends Controller
 
         if (array_key_exists('grading_scale', $validated) && ! AcademicRequirement::requiresNumeric($validated['grading_scale'])) {
             $validated['gwa'] = null;
-        }
-
-        if (! in_array($validated['current_scholarship_status'] ?? null, ['receiving', 'pending'], true)) {
-            $validated['current_scholarship_details'] = null;
         }
 
         $submittedAchievements = trim((string) ($validated['achievements'] ?? ''));
@@ -731,6 +725,8 @@ class MobileAuthController extends Controller
                     ]);
                 }
 
+                $eligibilityMatch = app(\App\Services\EligibilityReviewService::class)->revalidateSubmission($lockedScholarship, $user, $eligibilityMatch);
+
                 $application = ScholarshipApplication::create([
                     'scholarship_id' => $scholarship->id,
                     'applicant_id' => $user->id,
@@ -744,6 +740,7 @@ class MobileAuthController extends Controller
                     'notes' => $validated['notes'] ?? null,
                     'submitted_at' => now(),
                 ]);
+                app(\App\Services\EligibilityReviewService::class)->attachToApplication($application, $eligibilityMatch);
 
                 ApplicationStatusHistory::create([
                     'scholarship_application_id' => $application->id,
