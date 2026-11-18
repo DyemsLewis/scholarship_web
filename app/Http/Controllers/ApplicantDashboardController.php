@@ -38,6 +38,7 @@ use App\Services\BenefitDeliveryReportService;
 use App\Services\RecipientBenefitEntitlementService;
 use App\Services\RecipientBenefitPayoutService;
 use App\Services\RecipientMonitoringCaseService;
+use App\Services\RecipientOnboardingService;
 use App\Services\ScholarshipEligibilityService;
 use App\Services\ScholarshipEventService;
 use App\Support\AcademicRequirement;
@@ -2098,20 +2099,31 @@ class ApplicantDashboardController extends Controller
         $response = $validated['response'];
         $now = now();
 
-        $application->update([
-            'student_response_status' => $response,
-            'student_responded_at' => $now,
-            'student_response_note' => $validated['note'] ?? null,
-            'student_response_terms_accepted_at' => $response === 'accepted' ? $now : null,
-            'student_response_terms_version' => $response === 'accepted'
-                ? $application->provider_contract_terms_version
-                : null,
-            'provider_contract_terms_accepted_at' => $response === 'accepted' ? $now : null,
-            'provider_contract_acceptance_ip' => $response === 'accepted' ? $request->ip() : null,
-            'provider_contract_acceptance_user_agent' => $response === 'accepted'
-                ? Str::limit($request->userAgent() ?? '', 500, '')
-                : null,
-        ]);
+        $application = DB::transaction(function () use ($application, $request, $response, $validated, $now): ScholarshipApplication {
+            $locked = ScholarshipApplication::query()->lockForUpdate()->findOrFail($application->id);
+            if ($locked->final_outcome !== 'selected' || filled($locked->student_response_status)) {
+                throw ValidationException::withMessages(['response' => 'This offer is no longer awaiting your response. Reload the application.']);
+            }
+            if ($locked->provider_contract_terms_version !== $application->provider_contract_terms_version) {
+                throw ValidationException::withMessages(['agreement_version' => 'The offer summary changed. Reload it before responding.']);
+            }
+            $locked->update([
+                'student_response_status' => $response,
+                'student_responded_at' => $now,
+                'student_response_note' => $validated['note'] ?? null,
+                'student_response_terms_accepted_at' => $response === 'accepted' ? $now : null,
+                'student_response_terms_version' => $response === 'accepted' ? $locked->provider_contract_terms_version : null,
+                'provider_contract_terms_accepted_at' => $response === 'accepted' ? $now : null,
+                'provider_contract_acceptance_ip' => $response === 'accepted' ? $request->ip() : null,
+                'provider_contract_acceptance_user_agent' => $response === 'accepted'
+                    ? Str::limit($request->userAgent() ?? '', 500, '') : null,
+            ]);
+            if ($response === 'accepted') {
+                app(RecipientOnboardingService::class)->initializeForAcceptedApplication($locked);
+            }
+
+            return $locked;
+        });
 
         if ($response === 'accepted') {
             app(RecipientBenefitEntitlementService::class)->activateForAcceptedApplication($application);
@@ -3313,6 +3325,7 @@ class ApplicantDashboardController extends Controller
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,
             'recipient_agreement' => $scholarship->recipient_agreement,
+            'onboarding_policy' => $scholarship->onboarding_policy,
             'contact_email' => $scholarship->contact_email,
             'contact_number' => $scholarship->contact_number,
             'application_opens_at' => $scholarship->application_opens_at?->format('M d, Y'),

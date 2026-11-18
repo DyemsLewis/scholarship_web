@@ -118,8 +118,12 @@ export function findPhilippineRegion(value) {
     const alias = aliases.get(normalized);
 
     return philippineRegionOptions.find((option) => option.value === alias)
-        ?? philippineRegionOptions.find((option) => [option.value, option.label, option.code]
-            .some((candidate) => normalizedName(candidate) === normalized))
+        ?? philippineRegionOptions.find((option) => [
+            option.value, option.label, option.code,
+            // Map services often return the region name without its number or acronym.
+            option.label.replace(/\s*\([^)]*\)/g, ''),
+            ...Array.from(option.label.matchAll(/\(([^)]+)\)/g), match => match[1]),
+        ].some((candidate) => normalizedName(candidate) === normalized))
         ?? null;
 }
 

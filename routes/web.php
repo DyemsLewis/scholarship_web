@@ -30,6 +30,7 @@ use App\Http\Controllers\Provider\Programs\ProgramCoordinatorDashboardController
 use App\Http\Controllers\Provider\Programs\ProgramDirectoryController;
 use App\Http\Controllers\Provider\Programs\ProgramRecordController;
 use App\Http\Controllers\Provider\ProviderAccountController;
+use App\Http\Controllers\Provider\RecipientOnboardingController;
 use App\Http\Controllers\Provider\RoleDashboardController;
 use App\Http\Controllers\Provider\WorkspaceGuideController;
 use App\Http\Controllers\Provider\SelectionSessionWorkspaceController;
@@ -1009,6 +1010,9 @@ Route::middleware(['auth', 'provider'])
         Route::post('/benefit-receipt-responses/{response}/resolve', [ProviderController::class, 'resolveRecipientBenefitReceiptResponse'])->middleware(['permission:manage_benefit_releases', 'provider.approved', 'throttle:20,1'])->whereNumber('response')->name('benefit-receipt-responses.resolve');
         Route::get('/benefit-receipt-responses/{response}/files/{kind}', [ProviderController::class, 'viewRecipientBenefitReceiptResponseFile'])->middleware(['permission:manage_benefit_releases', 'provider.approved'])->whereNumber('response')->whereIn('kind', ['evidence', 'resolution-proof'])->name('benefit-receipt-responses.file');
         Route::get('/applications/{application}/recipient-record', [ProviderController::class, 'recipientSupportRecord'])->middleware(['permission:manage_recipients,manage_monitoring,manage_benefit_releases', 'provider.approved'])->whereNumber('application')->name('applications.recipient-record');
+        Route::get('/applications/{application}/onboarding', [RecipientOnboardingController::class, 'show'])->middleware(['permission:manage_recipients,manage_monitoring,manage_benefit_releases', 'provider.approved'])->whereNumber('application')->name('recipient-onboarding.show');
+        Route::post('/applications/{application}/onboarding/instructions', [RecipientOnboardingController::class, 'instructions'])->middleware(['permission:manage_recipients', 'provider.approved', 'throttle:20,1'])->whereNumber('application')->name('recipient-onboarding.instructions');
+        Route::post('/applications/{application}/onboarding/complete', [RecipientOnboardingController::class, 'complete'])->middleware(['permission:manage_recipients', 'provider.approved', 'throttle:20,1'])->whereNumber('application')->name('recipient-onboarding.complete');
         Route::middleware(['permission:manage_benefit_releases', 'provider.approved'])->group(function (): void {
             Route::get('/workspaces/releases/delivery-reports', [ProviderWorkspacePageController::class, 'deliveryReports'])->name('workspaces.releases.delivery-reports');
             Route::get('/workspaces/releases/delivery-reports/data', [BenefitDeliveryReportController::class, 'queue'])->name('delivery-reports.queue');

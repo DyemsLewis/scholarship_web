@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\CoverImageCatalog;
 use App\Support\EligibilityRulePolicy;
+use App\Support\RecipientOnboardingPolicy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +16,10 @@ class Scholarship extends Model
     protected static function booted(): void
     {
         static::saving(function (self $program): void {
+            if ($program->isDirty('onboarding_policy') && $program->onboarding_policy !== null) {
+                $program->onboarding_policy = RecipientOnboardingPolicy::normalize($program->onboarding_policy);
+            }
+            RecipientOnboardingPolicy::assertMutable($program);
             if ($program->status === 'pending_review' && ($program->isDirty('status') || ! $program->exists)) {
                 $program->review_requested_at = now();
             }
@@ -77,6 +82,7 @@ class Scholarship extends Model
         'return_service_contract',
         'other_contract_terms',
         'recipient_agreement',
+        'onboarding_policy',
         'contact_email',
         'contact_number',
         'application_opens_at',
@@ -118,6 +124,7 @@ class Scholarship extends Model
             'review_rubric' => 'array',
             'provider_objectives' => 'array',
             'recipient_agreement' => 'array',
+            'onboarding_policy' => 'array',
             'eligibility_conditions' => 'array',
             'eligibility_rule_modes' => 'array',
             'eligibility_review_rules' => 'array',

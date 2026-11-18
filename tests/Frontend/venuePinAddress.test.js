@@ -17,6 +17,30 @@ test('map address fills separate fields without putting the whole display addres
     assert.equal(venueAddressFromMap({ country_code: 'ph', region: 'CALABARZON' }).city, '');
 });
 
+test('map region names without numbers or acronyms fill the program address selects', () => {
+    for (const [region, province, city, expected] of [
+        ['Central Luzon', 'Pampanga', 'Angeles', 'Region III'],
+        ['National Capital Region', 'Metro Manila', 'Quezon City', 'NCR'],
+        ['Cordillera Administrative Region', 'Benguet', 'Baguio', 'CAR'],
+        ['Davao Region', 'Davao del Sur', 'Davao City', 'Region XI'],
+        ['Northern Mindanao', 'Misamis Oriental', 'Cagayan de Oro', 'Region X'],
+        ['Central Visayas', 'Cebu', 'Cebu City', 'Region VII'],
+        ['Negros Island Region', 'Negros Occidental', 'Bacolod', 'NIR'],
+        ['Bangsamoro Autonomous Region in Muslim Mindanao', 'Maguindanao del Norte', 'Cotabato City', 'BARMM'],
+    ]) {
+        const result = venueAddressFromMap({ country_code: 'ph', region, state: province, city });
+        assert.ok(result, region);
+        assert.equal(result.region, expected, region);
+        assert.equal(result.province, province);
+        assert.equal(result.city, city);
+    }
+    for (const option of locations.philippineRegionOptions) {
+        for (const value of [option.value, option.label, option.code]) assert.equal(locations.findPhilippineRegion(value), option);
+    }
+    assert.equal(locations.findPhilippineRegion('Cebu'), null);
+    assert.equal(locations.findPhilippineRegion('Unknown region'), null);
+});
+
 function editor(lookup) {
     const source = readFileSync(new URL('../../resources/js/components/ProviderVenueAddress.vue', import.meta.url), 'utf8');
     const script = parse(source).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
@@ -39,6 +63,24 @@ test('confirmed pin fills address fields and preserves the venue and selected co
     assert.equal(state.props.modelValue.venue, 'Scholarship office');
     assert.equal(state.props.modelValue.latitude, '14.5861000');
     assert.match(state.pinMessage.value, /Available address fields filled/);
+});
+
+test('confirming both coordinates then resolving a map region fills address text in a new program', async () => {
+    const state = editor(async () => ({ country_code: 'ph', region: 'Central Luzon', state: 'Pampanga', city: 'Angeles', quarter: 'Balibago', road: 'MacArthur Highway' }));
+    state.props.modelValue = null;
+    state.props.latitude = null;
+    state.props.longitude = null;
+    const location = { latitude: 15.1641, longitude: 120.5899 };
+    state.pin('latitude', location.latitude);
+    state.pin('longitude', location.longitude);
+    await state.fillFromPin(location);
+    assert.equal(state.props.modelValue.region, 'Region III');
+    assert.equal(state.props.modelValue.province, 'Pampanga');
+    assert.equal(state.props.modelValue.city, 'Angeles');
+    assert.equal(state.props.modelValue.venue, 'Scholarship office');
+    assert.equal(state.props.address, 'MacArthur Highway, Balibago, Angeles, Pampanga, Region III');
+    assert.equal(Number(state.props.latitude), location.latitude);
+    assert.equal(Number(state.props.longitude), location.longitude);
 });
 
 test('lookup failure preserves the pin and explicitly requests manual address selection', async () => {

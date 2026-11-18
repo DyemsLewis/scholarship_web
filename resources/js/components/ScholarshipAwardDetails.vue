@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import { scholarshipBenefitFacts } from '../support/scholarshipBenefits';
+import FinalAgreementDisclosure from './FinalAgreementDisclosure.vue';
 
 const props = defineProps({ content: { type: Object, required: true } });
 const benefits = computed(() => (props.content.benefits ?? []).map((benefit) => ({ ...benefit, facts: scholarshipBenefitFacts(benefit) })));
@@ -46,6 +47,7 @@ const additionalTerms = computed(() => terms.value.filter((term) => !keyTerms.in
             <h2 id="scholarship-terms-title" class="mt-1.5 font-display text-2xl font-bold text-slate-950">What recipients agree to</h2>
             <p v-if="terms.length" class="mt-2 text-sm leading-6 text-slate-600">Review these conditions before accepting an award.</p>
         </header>
+        <FinalAgreementDisclosure :policy="content.recipient_terms?.onboarding_policy" />
         <dl v-if="importantTerms.length" class="divide-y divide-slate-200" data-scholarship-key-terms>
             <div v-for="term in importantTerms" :key="term.key" class="grid gap-1 px-5 py-3.5 sm:grid-cols-[minmax(9rem,15rem)_minmax(0,1fr)] sm:gap-5 sm:px-6" :data-scholarship-term="term.key">
                 <dt class="text-sm font-bold leading-6 text-slate-950">{{ term.label }}</dt>

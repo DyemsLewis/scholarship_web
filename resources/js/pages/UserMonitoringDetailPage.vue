@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { nextTick, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import ApplicantMonitoringShell from '../components/monitoring-detail/ApplicantMonitoringShell.vue';
 import MonitoringCheckIns from '../components/monitoring-detail/MonitoringCheckIns.vue';
@@ -46,7 +46,15 @@ async function refreshMonitoringDetail() {
     }
 }
 
-onMounted(loadMonitoringRecord);
+onMounted(async () => {
+    await loadMonitoringRecord();
+    await nextTick();
+    if (window.location.hash === '#final-agreement') {
+        const requirement = document.getElementById('final-agreement');
+        requirement?.focus({ preventScroll: true });
+        requirement?.scrollIntoView({ block: 'start' });
+    }
+});
 </script>
 
 <template>

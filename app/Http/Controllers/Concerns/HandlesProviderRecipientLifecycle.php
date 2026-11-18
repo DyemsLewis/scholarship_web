@@ -1667,6 +1667,10 @@ trait HandlesProviderRecipientLifecycle
                     throw ValidationException::withMessages(['status' => 'Support has ended for this recipient. No further benefit can be prepared or released.']);
                 }
                 if ($status === 'released') {
+                    app(\App\Services\RecipientOnboardingService::class)->assertDistributionAllowed(
+                        $application,
+                        $validated['transfer_sent_on'] ?? null,
+                    );
                     $approval = $payouts->requireApproval(
                         $record,
                         $application,
@@ -3538,6 +3542,7 @@ trait HandlesProviderRecipientLifecycle
     ): Collection {
         return $applications->map(function (ScholarshipApplication $application) use ($cycles, $releaseAt): array {
             $eligibility = $this->recipientBenefitReleaseEligibility($application, $cycles, $releaseAt);
+            $onboarding = app(\App\Services\RecipientOnboardingService::class)->distributionReadiness($application);
 
             return [
                 'application_id' => $application->id,
@@ -3550,6 +3555,7 @@ trait HandlesProviderRecipientLifecycle
                 'eligible' => $eligibility['eligible'],
                 'eligibility_label' => $eligibility['label'],
                 'eligibility_reason' => $eligibility['reason'],
+                'onboarding' => $onboarding,
                 'requirements_met' => $eligibility['requirements_met'],
                 'requirements_total' => $eligibility['requirements_total'],
                 'application_url' => route('provider.applications.show', $application, false),
@@ -3771,9 +3777,21 @@ trait HandlesProviderRecipientLifecycle
                 ->mapWithKeys(function (RecipientBenefitReleaseRecord $record) use ($release, $checkAt, $canOpenMonitoring): array {
                     $status = $this->recipientBenefitReleaseEligibility($record->application, $release->scholarship->monitoringCycles, $checkAt);
                     $cycleId = $status['blocked_cycle_id'] ?? null;
+                    $onboarding = app(\App\Services\RecipientOnboardingService::class)->distributionReadiness($record->application);
+                    $onboardingHold = ! $onboarding['can_distribute'];
 
                     return [$record->id => [
                         ...$status,
+                        ...($onboardingHold ? [
+                            'eligible' => false,
+                            'label' => 'Final agreement pending',
+                            'reason' => $onboarding['block_reason'],
+                            'hold_summary' => $onboarding['block_reason'],
+                        ] : []),
+                        'onboarding' => $onboarding,
+                        'onboarding_url' => $onboarding['required'] && request()->user()?->hasPortalPermission('manage_recipients')
+                            ? route('provider.applications.show', ['application' => $record->application, 'workspace' => 'recipient', 'section' => 'onboarding'], false)
+                            : null,
                         'monitoring_url' => $canOpenMonitoring && $cycleId
                             ? route('provider.workspaces.monitoring.check-ins.show', $cycleId, false)
                             : null,

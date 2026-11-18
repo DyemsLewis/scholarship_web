@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" role="img" aria-label="Orivanta Welcome Scholars Award logo">
+  <path fill="#071426" d="M0 0h320v320H0z"/>
+  <path fill="none" stroke="#fbbf24" stroke-width="10" d="M36 36h248v248H36z"/>
+  <path fill="#fbbf24" d="m160 60 66 30-66 30-66-30 66-30Zm-42 49v24c26 16 58 16 84 0v-24l-42 19-42-19Z"/>
+  <text x="160" y="217" text-anchor="middle" fill="white" font-family="Georgia,serif" font-size="58" font-weight="bold">OWS</text>
+  <path stroke="#fbbf24" stroke-width="5" d="M101 240h118"/>
+</svg>

@@ -98,6 +98,8 @@ export function programReviewSummary(form, { eligibilitySummary = '', rules = []
                 ]), true)],
             detailsLabel: 'Recipient agreement and release conditions',
             details: [fact('Conditions for receiving benefits', text(agreement.release_conditions)),
+                ...(form.onboardingPolicy ? [fact('Final provider agreement', form.onboardingPolicy.final_agreement_required ? 'Required before benefit distribution' : 'No additional final-agreement requirement')] : []),
+                ...(form.onboardingPolicy?.final_agreement_required ? [fact('Onboarding process', text(form.onboardingPolicy.instructions))] : []),
                 ...(scoring.rows ?? []).filter(row => row.criteria?.length).map(row => fact(`${row.label} criteria`, row.basis)),
                 ...(ongoing ? [fact('Recipient responsibilities', text(agreement.responsibilities)), fact('Required evidence', text(agreement.required_evidence)),
                     fact('Commitment duration', text(agreement.duration)), fact('If requirements are not met', text(agreement.noncompliance_consequence)),

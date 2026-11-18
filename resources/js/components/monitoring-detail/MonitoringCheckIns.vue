@@ -4,6 +4,7 @@ import MonitoringCheckInRecord from './MonitoringCheckInRecord.vue';
 import CheckInSummaryCard from './CheckInSummaryCard.vue';
 import LocationMapLink from '../LocationMapLink.vue';
 import { checkInStatusClass } from '../../support/checkInStatus';
+import FinalAgreementRequirement from './FinalAgreementRequirement.vue';
 
 const props = defineProps({
     content: { type: Object, required: true },
@@ -13,9 +14,9 @@ const props = defineProps({
 const emit = defineEmits(['refresh']);
 const appointment = computed(() => props.content.directory.next_appointment);
 const summary = computed(() => [
-    { key: 'active', title: 'Open requirements', count: props.content.directory.active.length },
+    { key: 'active', title: 'Open requirements', count: props.content.directory.active.length + Number(Boolean(props.content.onboarding?.can_proceed)) },
     { key: 'upcoming', title: 'Upcoming requirements', count: props.content.directory.upcoming.length },
-    { key: 'completed', title: 'Past requirements', count: props.content.directory.completed.length },
+    { key: 'completed', title: 'Past requirements', count: props.content.directory.completed.length + Number(props.content.onboarding?.state === 'completed') },
 ]);
 const groups = computed(() => [
     {
@@ -46,6 +47,8 @@ const groups = computed(() => [
             </header>
             <dl v-if="!content.empty" data-check-in-summary class="grid grid-cols-3 divide-x divide-slate-200"><div v-for="item in summary" :key="item.key" class="px-3 py-3 sm:px-5 sm:py-4"><dt class="text-[10px] font-bold leading-4 text-slate-500 sm:text-xs">{{ item.title }}</dt><dd class="mt-1 text-xl font-bold tabular-nums text-slate-950">{{ item.count }}</dd></div></dl>
         </section>
+
+        <FinalAgreementRequirement v-if="content.onboarding" :record="content.onboarding" />
 
         <section v-if="appointment" data-next-check-in-appointment class="overflow-hidden rounded-md border border-amber-300 bg-white shadow-sm" aria-labelledby="next-check-in-title">
             <header class="border-b border-amber-200 bg-amber-50/60 px-4 py-4 sm:px-5">

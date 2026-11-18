@@ -156,7 +156,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
 
         $this->actingAs($applicant)->getJson(route('dashboard.monitoring.show.data', $application))
             ->assertOk()
-            ->assertJsonPath('detail.content.plan.agreement.label', 'Accepted')
+            ->assertJsonPath('detail.content.plan.agreement.label', 'Intention confirmed')
             ->assertJsonPath('detail.content.plan.agreement.href', $agreementUrl)
             ->assertJsonPath('detail.content.plan.instructions', null);
         $plan->update(['status' => 'active', 'instructions' => 'Bring your current school records.']);

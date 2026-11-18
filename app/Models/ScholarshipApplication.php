@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class ScholarshipApplication extends Model
 {
@@ -112,6 +113,11 @@ class ScholarshipApplication extends Model
     public function scholarship(): BelongsTo
     {
         return $this->belongsTo(Scholarship::class);
+    }
+
+    public function recipientOnboarding(): HasOne
+    {
+        return $this->hasOne(RecipientOnboardingRecord::class);
     }
 
     public function applicant(): BelongsTo

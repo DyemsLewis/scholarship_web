@@ -21,6 +21,7 @@ use App\Support\EligibilityRulePolicy;
 use App\Support\LearnerProgramPath;
 use App\Support\OpaqueRecordUrl;
 use App\Support\ProgramConfigurationRules;
+use App\Support\RecipientOnboardingPolicy;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEligibilityCondition;
 use App\Support\ScholarshipEventPayload;
@@ -983,6 +984,7 @@ trait HandlesProviderProgramManagement
             'return_service_contract' => ['nullable', 'string', 'max:3000'],
             'other_contract_terms' => ['nullable', 'string', 'max:3000'],
             'recipient_agreement' => ['nullable', 'string', 'max:12000', 'json'],
+            'onboarding_policy' => ['sometimes'],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'contact_number' => ['nullable', 'string', 'max:30', new PhoneNumber],
             'application_opens_at' => ['nullable', 'date'],
@@ -1015,6 +1017,11 @@ trait HandlesProviderProgramManagement
         ]);
 
         ProgramConfigurationRules::assertConsistent($validated, $scholarship);
+
+        if (array_key_exists('onboarding_policy', $validated)) {
+            $validated['onboarding_policy'] = $validated['onboarding_policy'] === null
+                ? null : RecipientOnboardingPolicy::normalize($validated['onboarding_policy']);
+        }
 
         if (array_key_exists('education_eligibility_policy', $validated)) {
             $validated['education_eligibility_policy'] = EducationEligibilityPolicy::normalize($validated['education_eligibility_policy']);
@@ -1590,6 +1597,7 @@ trait HandlesProviderProgramManagement
             'return_service_contract',
             'other_contract_terms',
             'recipient_agreement',
+            'onboarding_policy',
             'contact_email',
             'contact_number',
             'application_opens_at',
@@ -1991,6 +1999,7 @@ trait HandlesProviderProgramManagement
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,
             'recipient_agreement' => $scholarship->recipient_agreement,
+            'onboarding_policy' => $scholarship->onboarding_policy,
             'contact_email' => $scholarship->contact_email,
             'contact_number' => $scholarship->contact_number,
             'application_opens_at' => $scholarship->application_opens_at?->format('Y-m-d'),

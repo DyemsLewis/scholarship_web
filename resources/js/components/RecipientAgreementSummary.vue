@@ -1,5 +1,6 @@
 <script setup>
 import { computed, ref } from 'vue';
+import FinalAgreementDisclosure from './FinalAgreementDisclosure.vue';
 
 const props = defineProps({
     agreement: {
@@ -132,6 +133,8 @@ function formatAmount(value) {
                 {{ agreement.status_label }}
             </span>
         </header>
+
+        <FinalAgreementDisclosure :policy="snapshot.onboarding" />
 
         <nav v-if="embedded" class="grid grid-cols-2 gap-px border-b border-slate-200 bg-slate-200 sm:flex" aria-label="Agreement sections">
             <button

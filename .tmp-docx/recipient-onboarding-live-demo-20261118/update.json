@@ -1,0 +1,32 @@
+{
+  "source_sha256": "485c490b5e6ba55f39a90ef365415385307cda09a3af8298b274f1388964fb4b",
+  "updated_paragraphs": [
+    "Updated November 18 2026 Philippine time for final provider agreement",
+    "The onboarding setting screenshot was captured",
+    "7. Offer response: learner.aurora opens Continuing Learners Grant",
+    "Use learner.aurora in Orivanta Continuing Learners Grant: the provider selected",
+    "1. Open Applications, choose the selected Continuing Learners Grant record",
+    "2. Read the disclosed benefits, support period and provider expectations. A new intake",
+    "5. For an existing response, View offer summary",
+    "Existing hosted offers are legacy records. They correctly show",
+    "Open Programs > Create program or an unused draft > Selection.",
+    "Signed in accounts: the selected applicant, then orivanta.recipients",
+    "1. The applicant opens Applications > the selected record > Decision",
+    "2. The recipient officer opens Recipients > that same applicant and program > Onboarding.",
+    "Signed in accounts: the applicant, then orivanta.releases",
+    "3. The applicant opens Scholarship Support > the relevant program > Requirements",
+    "4. The release officer may schedule the first collection while onboarding is pending",
+    "5. After checking the provider-held agreement records, the recipient officer",
+    "6. The release officer reloads the distribution record. Pending onboarding",
+    "7. The applicant checks the actual benefit, uploads their receipt proof"
+  ],
+  "replaced_figures": [
+    "Hosting November 16 | learner.aurora | pending Continuing Learners offer",
+    "Hosting November 18 2026 | orivanta.manager | Selection step",
+    "Required-path local preview | account shown onboarding.preview.manager | same controls",
+    "Required-path local preview | account shown onboarding.preview.recipient | applicant Requirements"
+  ],
+  "hosted_program": "Orivanta Welcome Scholars Award",
+  "applicant": "learner.aurora",
+  "staged_file": "D:\\XAMPP\\htdocs\\scholarship_web\\.tmp-docx\\recipient-onboarding-live-demo-20261118\\guide-updated.docx"
+}

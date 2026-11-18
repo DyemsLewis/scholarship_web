@@ -18,6 +18,7 @@ import EligibilityLocationPicker from './components/EligibilityLocationPicker.vu
 import DocumentRequirementsPicker from './components/DocumentRequirementsPicker.vue';
 import SelectionScoringPreview from './components/SelectionScoringPreview.vue';
 import StageCriterionLabelsEditor from './components/StageCriterionLabelsEditor.vue';
+import ProgramOnboardingPolicyFields from './components/ProgramOnboardingPolicyFields.vue';
 import ProgramReviewSummary from './components/ProgramReviewSummary.vue';
 import { normalizeEducationPolicy, educationPolicyError } from '../../../support/educationEligibilityPolicy';
 import { configuredEligibilityRules, normalizeEligibilityRuleModes } from '../../../support/providerEligibilityRules';
@@ -31,6 +32,7 @@ import { hasLocationPin } from '../../../support/locationPins';
 import { programReviewSummary } from '../../../support/programReviewSummary';
 import { programCriterionLabels, programCriterionLabelErrors, programScoringPreview } from '../../../support/programScoringPreview';
 import { normalizeProgramRecipientAgreement } from '../../../support/programRecipientAgreement.js';
+import { programOnboardingPolicy, onboardingPolicyError } from '../../../support/recipientOnboarding';
 
 const pathMatch = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
 const portalUser = window.portalUser ?? {};
@@ -172,6 +174,7 @@ function emptyForm() {
         stageCriterionLabels: programCriterionLabels(scoringPresets),
         reviewRubric: structuredClone(defaultRubric),
         recipientAgreement: normalizeProgramRecipientAgreement(),
+        onboardingPolicy: null,
         termsAccepted: false,
         logoPath: '',
         logoUrl: '',
@@ -331,6 +334,7 @@ const stepChecks = computed(() => ({
         && form.value.reviewRubric.length
         && form.value.recipientAgreement.commitment_type !== 'provider_briefing'
         && form.value.recipientAgreement.release_conditions.trim()
+        && !onboardingPolicyError(form.value.onboardingPolicy)
         && (!requiresAgreementDetails.value || [
             'responsibilities', 'required_evidence', 'duration', 'noncompliance_consequence', 'exit_or_exception_process',
         ].every((field) => form.value.recipientAgreement[field].trim()))
@@ -732,6 +736,7 @@ function fillForm(program) {
         stageCriterionLabels: program.stage_criterion_labels ?? programCriterionLabels(scoringPresets, program.selection_scoring_policy),
         reviewRubric: program.review_rubric?.length ? program.review_rubric : structuredClone(defaultRubric),
         recipientAgreement: normalizeProgramRecipientAgreement(program.recipient_agreement),
+        onboardingPolicy: programOnboardingPolicy(program.onboarding_policy),
         termsAccepted: false,
         logoPath: program.image_path ?? '',
         logoUrl: program.logo_url ?? program.image_url ?? '',
@@ -798,6 +803,7 @@ function createPayload(status, termsAccepted = false) {
         recipient_agreement: JSON.stringify(form.value.recipientAgreement), status,
         terms_accepted: termsAccepted ? 1 : 0,
     };
+    if (form.value.onboardingPolicy !== null) fields.onboarding_policy = JSON.stringify(form.value.onboardingPolicy);
     if (coverSource.value !== 'legacy') {
         fields.cover_source = coverSource.value;
         fields.cover_key = coverKey.value;
@@ -820,7 +826,7 @@ function stepForBackendField(field) {
     if (/^(application_opens_at|deadline|expected_results_at|location_|latitude|longitude|contact_|official_program_url)/.test(field)) return 'dates-location';
     if (/^(eligibility|education_eligibility_policy|eligible_|income_|minimum_|exclude_)/.test(field)) return 'eligibility';
     if (/^(application_mode|requirements|optional_requirements|post_qualification|handoff_)/.test(field)) return 'application';
-    if (/^(selection_stages|exam_scoring_method|stage_criterion_labels|review_rubric|recipient_agreement)/.test(field)) return 'selection';
+    if (/^(selection_stages|exam_scoring_method|stage_criterion_labels|review_rubric|recipient_agreement|onboarding_policy)/.test(field)) return 'selection';
     return activeStep.value;
 }
 
@@ -1425,6 +1431,7 @@ onBeforeUnmount(() => {
                                         </template>
                                     </div>
                                 </div>
+                                <ProgramOnboardingPolicyFields v-model="form.onboardingPolicy" :fixed="applicationsCount > 0" :disabled="isReadOnly || isSaving" :textarea-class="textareaClass" />
                             </section>
 
                             <section v-else class="px-7 py-6">

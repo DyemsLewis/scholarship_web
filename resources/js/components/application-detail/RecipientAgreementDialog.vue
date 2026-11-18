@@ -37,7 +37,11 @@ async function respond(outcome) {
         && (outcome === 'accepted' ? props.termsAccepted : props.note.trim().length >= 5);
     if (!await confirmOutcome({
         record: 'Scholarship offer', outcome: outcome === 'accepted' ? 'Intention to proceed confirmed' : 'Offer declined',
-        consequence: outcome === 'accepted' ? 'You intend to proceed, subject to the final provider agreement. This does not sign a final contract or accept additional obligations that are not shown.' : 'You do not intend to proceed with this offer. Your explanation will be sent to the provider.',
+        consequence: outcome === 'accepted'
+            ? (props.agreement?.snapshot?.onboarding?.final_agreement_required
+                ? 'You intend to proceed. Complete the disclosed final agreement with the provider afterward; its instructions will be in Scholarship Support > Requirements. This confirmation does not sign a contract.'
+                : 'You intend to proceed, subject to the final provider agreement. This does not sign a final contract or accept additional obligations that are not shown.')
+            : 'You do not intend to proceed with this offer. Your explanation will be sent to the provider.',
         confirmLabel: outcome === 'accepted' ? 'Confirm intention' : 'Decline offer', danger: outcome === 'declined',
     }, valid)) return;
     emit('respond', outcome);

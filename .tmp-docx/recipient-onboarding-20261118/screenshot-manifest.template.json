@@ -1,0 +1,1951 @@
+{
+  "status": "AWAITING_FRESH_CAPTURES_NOT_READY_FOR_EDIT",
+  "source_sha256": "8616bf865e2f75929bdf1c62f0244a41bbf2cce76e23d0cd5c62b30917bed74b",
+  "captured_at": null,
+  "environment": null,
+  "figures": [
+    {
+      "figure": 1,
+      "block_index": 80,
+      "section": "1 Registration and sign in",
+      "subsection": "",
+      "signed_in_account": "Not signed in",
+      "page_shown": "Registration",
+      "relationship_id": "rId9",
+      "package_target": "word/media/image1.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1 Registration and sign in",
+        "Signed in account: Not signed in",
+        "Page shown: Registration",
+        "A new applicant or provider starts at registration, selects the appropriate account type and supplies the requested identity and contact information. Follow the email verification instructions before continuing. An existing demo account instead signs in using its username or email. The middle initial is optional."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 2,
+      "block_index": 86,
+      "section": "2 Applicant profile and supporting evidence",
+      "subsection": "",
+      "signed_in_account": "learner.aurora",
+      "page_shown": "Applicant profile",
+      "relationship_id": "rId40",
+      "package_target": "word/media/image30.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2 Applicant profile and supporting evidence",
+        "Signed in account: learner.aurora",
+        "Page shown: Applicant profile",
+        "The applicant record is the main profile content. Personal and contact, education, household and location information is grouped so reviewers and applicants can scan the same record. Use section edit modals rather than navigating away. Upload the requested supporting evidence; filling text fields or saving a photo does not verify the whole profile."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 3,
+      "block_index": 99,
+      "section": "2 Applicant profile and supporting evidence",
+      "subsection": "Inspect the profile edit modal without saving",
+      "signed_in_account": "learner.profile",
+      "page_shown": "Applicant profile",
+      "relationship_id": "rId50",
+      "package_target": "word/media/image40.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "Signed in account: learner.profile",
+        "Open only the information group that needs editing. This screen shows the same applicant record structure used for review; saving profile text is not evidence verification.",
+        "1. Choose Edit profile and inspect the personal and contact fields. Use the relevant group for education household or location rather than opening another full page.",
+        "2. Use Cancel to close without saving. Reopen only when you intend to make a real change. Photo controls may save immediately and should not be clicked just to test cancellation."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 4,
+      "block_index": 111,
+      "section": "3 Admin applicant verification",
+      "subsection": "Open the applicant verification record",
+      "signed_in_account": "lumenops.reviews",
+      "page_shown": "Admin applicant review",
+      "relationship_id": "rId41",
+      "package_target": "word/media/image31.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Select Applicant Verification from Applicant verification. Confirm the name and account before reviewing.",
+        "2. Read the review guide for the current step. Expand the complete profile only when more context is needed, and check any changes since the previous decision.",
+        "3. Go to Supporting evidence and compare each required document with the corresponding declared information.",
+        "4. Uploaded files do not verify the whole profile. Review current evidence first; use the queue navigation to keep the original search and filters while opening the next record."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 5,
+      "block_index": 129,
+      "section": "3 Admin applicant verification",
+      "subsection": "Inspect academic results inside the evidence review",
+      "signed_in_account": "lumenops.reviews",
+      "page_shown": "Admin applicant review",
+      "relationship_id": "rId51",
+      "package_target": "word/media/image41.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "Signed in account: lumenops.reviews",
+        "The evidence-review dialog is where the reviewer compares grades and supporting proof. Step 2 remains the separate whole-profile decision.",
+        "1. In learner.verification choose the academic document Review action. Inspect the submitted file and the related declared values.",
+        "2. Review Academic results and any grading-scale conversion notes. Record the accurate result with the document outcome and acknowledgement, then return to Step 2 for the profile result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 6,
+      "block_index": 134,
+      "section": "4 Provider organization profile",
+      "subsection": "",
+      "signed_in_account": "orivanta.profile",
+      "page_shown": "Provider profile",
+      "relationship_id": "rId14",
+      "package_target": "word/media/image4.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "4 Provider organization profile",
+        "Signed in account: orivanta.profile",
+        "Page shown: Provider profile",
+        "The organization profile manager maintains the provider information shown to applicants, including identity, public description, branding, contact information, and location. A provider preview shows the applicant-facing presentation."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 7,
+      "block_index": 147,
+      "section": "5 Admin provider verification",
+      "subsection": "Review organization documents individually",
+      "signed_in_account": "lumenops.reviews",
+      "page_shown": "Admin provider review",
+      "relationship_id": "rId15",
+      "package_target": "word/media/image5.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Sign in as lumenops.reviews, open Provider verification and select Orivanta Learning Foundation. Read its saved approval and individual proof history. To demonstrate a fresh review, first deliberately reopen the appropriate review or replace evidence through its actual workflow; do this only after the operational demonstration if it would block provider access.",
+        "2. Choose Review on one file. Compare the submitted proof with the legal organization name, registration authority and number, and representative details. Download it if the format cannot be previewed.",
+        "3. Choose Accept document only after inspecting it and checking the comparison acknowledgement. Otherwise choose Request replacement and explain what must be corrected. Saving records the reviewer, time, note and file revision; it does not verify the account.",
+        "4. In a fresh review, repeat for each current file. Unreviewed, unavailable and replacement-requested evidence blocks approval. Reload if another reviewer or upload changes the record. Do not resave an existing approval merely to make a demonstration look complete."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 8,
+      "block_index": 167,
+      "section": "5 Admin provider verification",
+      "subsection": "Use the workspace tutorial when entering a provider role",
+      "signed_in_account": "The provider specialist for that workspace",
+      "page_shown": "Admin provider review",
+      "relationship_id": "rId56",
+      "package_target": "word/media/image46.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "Signed in account: The provider specialist for that workspace",
+        "Workspace guide opens a short role-specific tutorial. It explains the queue next action and handoff without granting extra permissions or completing the business process.",
+        "1. Choose Workspace guide in the workspace header. Read one step at a time and use its navigation or close it to continue work.",
+        "2. Return to the actual record for attendance evidence outcome or delivery actions. Tutorial progress is not an application decision or a verified benefit."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 9,
+      "block_index": 172,
+      "section": "6 Program creation and publication",
+      "subsection": "",
+      "signed_in_account": "orivanta.programs",
+      "page_shown": "Provider program review",
+      "relationship_id": "rId16",
+      "package_target": "word/media/image6.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "6 Program creation and publication",
+        "Signed in account: orivanta.programs",
+        "Page shown: Provider program review",
+        "As orivanta.programs, edit the draft Orivanta Digital Learning Grant. Complete Basics, Support, Schedule, Eligibility, Application and Selection, then inspect the actual values in Review. Benefit editing, eligibility option pickers and applicant previews open in modals. Use Preview as applicant for saved public-facing content; the Review step shows the current form values. Orivanta College Pathways Award is the prepared pending publication review."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 10,
+      "block_index": 187,
+      "section": "6 Program creation and publication",
+      "subsection": "Allow eligibility reconsideration for chosen rules",
+      "signed_in_account": "orivanta.programs",
+      "page_shown": "Provider program review",
+      "relationship_id": "rId52",
+      "package_target": "word/media/image42.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Open Eligibility and scroll to Eligibility reconsideration. Select only required criteria the provider is willing to reconsider. Leave truly mandatory rules unchecked.",
+        "2. Review and save the draft. Relevant changes to a published program require publication review again; do not change the active cohort policy silently.",
+        "3. For a live applicant request the resulting program must be published and accepting applications with capacity. The applicant must have a complete verified profile and a real confirmed mismatch in an allowed rule.",
+        "4. Profile verification required files deadlines and intake limits cannot be waived through reconsideration. If the prerequisites are not ready show the configuration only rather than inventing a request."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 11,
+      "block_index": 199,
+      "section": "7 Admin program review",
+      "subsection": "Inspect the submitted scholarship before publication",
+      "signed_in_account": "lumenops.reviews",
+      "page_shown": "Admin program review",
+      "relationship_id": "rId42",
+      "package_target": "word/media/image32.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Open a program from Program review and confirm its provider and submission status.",
+        "2. Choose Open details, or select the specific information row, to inspect overview, benefits, eligibility, requirements, dates, selection and offer expectations in the modal. Closing the modal records no decision.",
+        "3. Back on the main record, read readiness checks and changes since the previous review. Choose the appropriate publication outcome and add a clear note for requested changes.",
+        "4. Choose Save decision, inspect the confirmation and confirm only the intended outcome. If the submission changed, reload and review it again. Publication makes the scholarship available; it does not select any applicant."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 12,
+      "block_index": 214,
+      "section": "7 Admin program review",
+      "subsection": "Open program information in the review modal",
+      "signed_in_account": "lumenops.reviews",
+      "page_shown": "Admin program review",
+      "relationship_id": "rId53",
+      "package_target": "word/media/image43.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "Signed in account: lumenops.reviews",
+        "Use Orivanta College Pathways Award in Program review. The saved information is inspected separately from the publication outcome.",
+        "1. Choose Open details or a specific information row. Navigate the modal sections to inspect what applicants would be offered.",
+        "2. Close the modal and return to the readiness checks and publication outcome. Saving the final decision still requires its own confirmation."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 13,
+      "block_index": 219,
+      "section": "8 Scholarship discovery and preparation",
+      "subsection": "",
+      "signed_in_account": "learner.aurora",
+      "page_shown": "Applicant scholarships",
+      "relationship_id": "rId18",
+      "package_target": "word/media/image8.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "8 Scholarship discovery and preparation",
+        "Signed in account: learner.aurora",
+        "Page shown: Applicant scholarships",
+        "Search published scholarships and open View details to read the offer, benefits, eligibility, file requirements, instructions and application deadline. Result cards use the separate scholarship logo, not the cover photo. A verified profile is required to apply. A required mismatch remains blocking unless an authorized provider approves an allowed reconsideration request; preferences and eligibility matching percentages are not selection outcomes."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 14,
+      "block_index": 242,
+      "section": "9 Reusable applicant documents",
+      "subsection": "",
+      "signed_in_account": "learner.aurora",
+      "page_shown": "Applicant documents",
+      "relationship_id": "rId19",
+      "package_target": "word/media/image9.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "9 Reusable applicant documents",
+        "Signed in account: learner.aurora",
+        "Page shown: Applicant documents",
+        "My Documents holds reusable files for future applications. A saved document is not automatically an accepted application requirement; the applicant must choose appropriate current files during an application."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 15,
+      "block_index": 248,
+      "section": "10 Submitted application and next action",
+      "subsection": "",
+      "signed_in_account": "learner.aurora",
+      "page_shown": "Applicant application",
+      "relationship_id": "rId43",
+      "package_target": "word/media/image33.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "10 Submitted application and next action",
+        "Signed in account: learner.aurora",
+        "Page shown: Applicant application",
+        "Use learner.aurora with Orivanta Campus Access Scholarship for the submitted application. Read the next action, Requirements, Schedule, Decision and History. The header now says Application deadline: this is the intake cutoff, not the support end date. The date is not a personal deadline for every later stage. A selected and accepted application remains accessible separately from Scholarship Support."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 16,
+      "block_index": 261,
+      "section": "11 Provider screening and document review",
+      "subsection": "Inspect application eligibility after selecting an applicant",
+      "signed_in_account": "orivanta.reviewer",
+      "page_shown": "Provider screening",
+      "relationship_id": "rId21",
+      "package_target": "word/media/image11.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Open Applicant Aurora from My review queue and confirm that the application is assigned to you.",
+        "2. Compare the declared profile against each program rule. Review unresolved items rather than relying only on an overall score.",
+        "3. Inspect the Profile tab and supporting evidence where a claim needs checking.",
+        "4. Hard requirements and reviewable qualifications must follow their configured policy; resolve the relevant review before recording a screening result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 17,
+      "block_index": 268,
+      "section": "11 Provider screening and document review",
+      "subsection": "Review the application evidence",
+      "signed_in_account": "orivanta.reviewer",
+      "page_shown": "Provider screening",
+      "relationship_id": "rId21",
+      "package_target": "word/media/image11.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Open Evidence in the selected application record.",
+        "2. Use View or the file preview to inspect the submitted file, then select Review beside that document.",
+        "3. Record an evidence status and specific review notes appropriate to the file. An upload alone is not accepted evidence.",
+        "4. Repeat for the required files before relying on document readiness for the screening result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 18,
+      "block_index": 289,
+      "section": "11 Provider screening and document review",
+      "subsection": "Review an eligibility request separately from screening",
+      "signed_in_account": "orivanta.reviewer",
+      "page_shown": "Provider screening",
+      "relationship_id": "rId54",
+      "package_target": "word/media/image44.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "Application review then Eligibility requests is the pre-application exception queue. It is currently empty because no prepared program enables this branch.",
+        "1. Open the request and compare the named applicant program original mismatches explanation and optional private attachment.",
+        "2. Approve an exception to apply or decline with a clear shared reason. If a file was submitted inspect it and acknowledge the evidence review.",
+        "3. Review the confirmation before recording the decision. Stale information cannot be approved. An approval does not pass screening award the scholarship or increase a DSS score."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 19,
+      "block_index": 294,
+      "section": "12 Formal application verification",
+      "subsection": "",
+      "signed_in_account": "orivanta.selection",
+      "page_shown": "Provider formal",
+      "relationship_id": "rId22",
+      "package_target": "word/media/image12.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "12 Formal application verification",
+        "Signed in account: orivanta.selection",
+        "Page shown: Provider formal",
+        "Formal application is the provider official application or verification stage. Follow its own instructions, deadline and assigned appointment when one exists. Passing the date alone does not remove the stage, mark attendance or record a pass or failure. Instructions remain available for a current or passed formal stage; completed or cancelled session records are retained under Schedule and Past activities."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 20,
+      "block_index": 306,
+      "section": "13 Examination and interview scheduling",
+      "subsection": "",
+      "signed_in_account": "orivanta.selection",
+      "page_shown": "Provider sessions",
+      "relationship_id": "rId23",
+      "package_target": "word/media/image13.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "13 Examination and interview scheduling",
+        "Signed in account: orivanta.selection",
+        "Page shown: Provider sessions",
+        "The selection officer assigns eligible applicants to sessions. Separate sessions support different dates or venues, while online interviews use a meeting link. For the Applied Science Scholarship use learner.brio for assignment, learner.cielo for exam acknowledgment and learner.dune for session completion. Session attendance and an individual result are separate records."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 21,
+      "block_index": 321,
+      "section": "14 Applicant examination schedule",
+      "subsection": "",
+      "signed_in_account": "learner.cielo",
+      "page_shown": "Applicant exam",
+      "relationship_id": "rId24",
+      "package_target": "word/media/image14.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "14 Applicant examination schedule",
+        "Signed in account: learner.cielo",
+        "Page shown: Applicant exam",
+        "The applicant reads the assigned examination date, venue, instructions, and acknowledgement action. Other prepared accounts cover completing the conducted session and recording an individual examination result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 22,
+      "block_index": 332,
+      "section": "14 Applicant examination schedule",
+      "subsection": "Read the exam calculation before confirming",
+      "signed_in_account": "orivanta.selection | Applicant Aurora | Orivanta Applied Science Scholarship",
+      "page_shown": "Applicant exam",
+      "relationship_id": "rId20",
+      "package_target": "word/media/image10.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "4. Session completion and an individual applicant result are separate actions; do not pass an applicant simply because the schedule exists.",
+        "Read the exam calculation before confirming",
+        "Signed in account: orivanta.selection | Applicant Aurora | Orivanta Applied Science Scholarship",
+        "Example only: knowledge 36/40, reasoning 32/40 and applied problems 18/20 produce 86 out of 100. A section can have a different real maximum; each section percentage is multiplied by its fixed criterion weight. Missing is not zero. A genuine zero is allowed. Keep the examination paper or score sheet with the activity proof."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 23,
+      "block_index": 337,
+      "section": "15 Applicant interview schedule",
+      "subsection": "",
+      "signed_in_account": "learner.brio",
+      "page_shown": "Applicant interview",
+      "relationship_id": "rId25",
+      "package_target": "word/media/image15.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "15 Applicant interview schedule",
+        "Signed in account: learner.brio",
+        "Page shown: Applicant interview",
+        "The interview schedule tells the applicant when and how to attend, including the meeting link for an online interview. An applicant acknowledgement does not prove the interview took place."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 24,
+      "block_index": 348,
+      "section": "15 Applicant interview schedule",
+      "subsection": "Review the criteria in the confirmation",
+      "signed_in_account": "orivanta.selection | Applicant Aurora | Orivanta Leadership Scholarship",
+      "page_shown": "Applicant interview",
+      "relationship_id": "rId27",
+      "package_target": "word/media/image17.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "4. An online meeting link or applicant acknowledgement is a schedule instruction, not evidence that the interview was completed.",
+        "Review the criteria in the confirmation",
+        "Signed in account: orivanta.selection | Applicant Aurora | Orivanta Leadership Scholarship",
+        "Ratings of 4.5, 4 and 5 give an interview score of 90. Choose Review outcome to inspect all three ratings, maxima and weights. Go back keeps editing; Record result saves both the evaluation and the appropriate stage result. The screenshot is an unsaved confirmation, not a completed interview decision."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 25,
+      "block_index": 353,
+      "section": "16 Recording conducted stage results",
+      "subsection": "",
+      "signed_in_account": "orivanta.selection",
+      "page_shown": "Provider interview result",
+      "relationship_id": "rId10",
+      "package_target": "word/media/image2.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "16 Recording conducted stage results",
+        "Signed in account: orivanta.selection",
+        "Page shown: Provider interview result",
+        "Attendance and proof remain prerequisites; they are not evaluation criteria or ranking points. On a passed exam or interview in a criteria-based intake, complete each criterion and review its calculated stage total. The criterion scores and stage outcome save together after confirmation. This does not select the applicant. Not passed keeps its existing reason workflow."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 26,
+      "block_index": 366,
+      "section": "17 Final scholarship decision",
+      "subsection": "Open the final decision form",
+      "signed_in_account": "orivanta.decisions",
+      "page_shown": "Decision comparison",
+      "relationship_id": "rId44",
+      "package_target": "word/media/image34.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. As orivanta.decisions, open Pending decisions, choose Orivanta Academic Merit Scholarship and open Applicant Aurora. Read the saved evaluations, capacity and provisional comparison reason. Applicant Dune is in this same intake, not a second scoring scholarship.",
+        "2. The current three totals are 95.5, 90.6 and 85.0; Dune has no final score. Because a pending evaluation is missing, do not describe the comparison as Ready to compare. Complete the missing assessment in the selection workspace, then reload and use the actual revised cohort order.",
+        "3. In Record final outcome, choose Selected, Waitlisted or Not selected. The amount input has been removed, and the final-decision confirmation and recorded-decision display no longer ask for a separate award amount. Program benefits and later release amounts remain separate. Add the required decision reason or internal rationale when the selected outcome differs from DSS guidance or resolves a cutoff tie.",
+        "4. Review the confirmation and save only the intended outcome. Reload if another decision or score changed. Selecting records the provider result and uses a slot; it does not confirm the applicant intention, sign the final provider contract or release money. A waitlist suggestion becomes an official position only after the provider saves that outcome."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 27,
+      "block_index": 375,
+      "section": "17 Final scholarship decision",
+      "subsection": "Compare final candidates using the DSS",
+      "signed_in_account": "orivanta.decisions",
+      "page_shown": "Decision comparison",
+      "relationship_id": "rId45",
+      "package_target": "word/media/image35.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. Inspect the actual four-candidate scores, ranks, ties and two remaining slots. Dune enters the order using the score the tester records, so do not assume the first two prepared rows will remain the highest. Suggestions are advisory and are not official outcomes.",
+        "3. Open the evaluation-breakdown icon. Compare screening, exam and interview weights, then expand Exam criteria or Interview criteria to inspect the individual recorded scores. These are assessment results, not the applicant matching percentage.",
+        "4. Open Record decision for the intended candidate. Follow the result controls and confirmation. Enter a clear internal reason if departing from guidance or resolving a cutoff tie.",
+        "5. Return to Pending decisions after saving. Capacity and suggestions update. Equal scores can share a rank; an unresolved tie at the cutoff must not be arbitrarily treated as an automatic winner."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 28,
+      "block_index": 384,
+      "section": "17 Final scholarship decision",
+      "subsection": "Read the scored stage breakdown",
+      "signed_in_account": "orivanta.decisions",
+      "page_shown": "Decision comparison",
+      "relationship_id": "rId13",
+      "package_target": "word/media/image3.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Open the evaluation-breakdown icon for Applicant Aurora.",
+        "2. Read each stage status, score and final weight. Expand Exam criteria and Interview criteria to see the actual section scores or panel ratings and their within-stage weights. Screening continues to reuse the reviewed academic-merit and financial-need rubric.",
+        "3. Treat formal verification as a prerequisite. It is not counted twice as additional points.",
+        "4. If a stage is incomplete or its result was reopened, review it through the responsible workspace before relying on the final total."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 29,
+      "block_index": 392,
+      "section": "17 Final scholarship decision",
+      "subsection": "Complete a missing evaluation before ranking",
+      "signed_in_account": "orivanta.selection",
+      "page_shown": "Decision comparison",
+      "relationship_id": "rId17",
+      "package_target": "word/media/image7.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. As orivanta.selection, open the completed interview through selection history, then the assigned applicant record. Confirm participation and the original assessment evidence.",
+        "2. Expand Earlier stage evaluations. Beside Interview, choose Add score and complete all three ratings out of 5. Use the displayed scale: 0 Not demonstrated, 1 Limited, 2 Developing, 3 Satisfactory, 4 Strong, 5 Excellent. Add a factual note, review the calculated total and confirm only the intended assessment.",
+        "3. To correct an existing evaluation, choose Correct score, review the saved criterion values and provide a reason of at least 10 characters. The new criterion breakdown is another revision; original totals and breakdowns remain in history. Correcting an evaluation never reopens or advances a stage by itself.",
+        "4. As orivanta.decisions, select this program in Pending decisions. A final score appears only after all scored and qualifying prerequisites are complete. Missing does not mean zero."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 30,
+      "block_index": 420,
+      "section": "18 Applicant confirmation of the scholarship offer",
+      "subsection": "Read the offer and confirm intention",
+      "signed_in_account": "learner.aurora",
+      "page_shown": "Applicant agreement",
+      "relationship_id": "rId46",
+      "package_target": "word/media/image36.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. Read the disclosed benefit summary, support period, provider expectations and the notice explaining that this is not the signed final provider contract. Ask the provider about any different or additional terms.",
+        "3. Choose the intended response and the required acknowledgement. Confirm intention means the applicant wishes to proceed; Decline offer means the applicant does not wish to continue.",
+        "4. Review the confirmation before saving. The provider can then plan the corresponding support or onboarding. This response neither pays the benefit nor records that a final external contract has been signed.",
+        "5. For an existing response, View offer summary shows the saved offer record. Use the pending Continuing Learners Grant offer to demonstrate a new response; never reset an accepted record just to repeat the step."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 31,
+      "block_index": 425,
+      "section": "19 Recipient support and agreement tracking",
+      "subsection": "",
+      "signed_in_account": "orivanta.recipients",
+      "page_shown": "Recipient closeout",
+      "relationship_id": "rId32",
+      "package_target": "word/media/image22.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "19 Recipient support and agreement tracking",
+        "Signed in account: orivanta.recipients",
+        "Page shown: Recipient closeout",
+        "Use orivanta.recipients to inspect Applicant Brio in Orivanta Term Assistance Grant. The agreement is accepted and its original-document check is closed. The support-status record is ready for a deliberate renewal or completion decision; agreement concerns and withdrawal branches are separate and are not pre-recorded."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 32,
+      "block_index": 438,
+      "section": "20 Applicant scholarship support and in person check in",
+      "subsection": "Open the appointment and prepare the originals",
+      "signed_in_account": "learner.cielo",
+      "page_shown": "Applicant check in",
+      "relationship_id": "rId33",
+      "package_target": "word/media/image23.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Open Orivanta Term Assistance Grant, then Check-ins and the upcoming appointment. Read its date, time, exact venue, map pin and the original records requested.",
+        "2. Open the upcoming appointment and read the Manila date, time, venue, and instructions.",
+        "3. Bring the current academic record and enrollment certificate. This record has no applicant upload form.",
+        "4. Use View map for the venue and follow the appointment instructions. Contact the provider for a different schedule; do not upload substitute files for this in-person check. Return after attendance for the provider-recorded results."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 33,
+      "block_index": 450,
+      "section": "21 Provider monitoring evidence review",
+      "subsection": "Select a recipient and open the monitoring checklist",
+      "signed_in_account": "orivanta.monitoring",
+      "page_shown": "Monitoring plan",
+      "relationship_id": "rId34",
+      "package_target": "word/media/image24.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. As orivanta.monitoring, open Orivanta Continuing Learners Grant and select Applicant Cielo in the attended check-in. Attendance is recorded; current academic and enrollment results still need the provider review.",
+        "2. Select Applicant Cielo from the roster. Attendance is already recorded; the two original documents still need provider results.",
+        "3. Open Current academic record. Compare the original, enter the verified grade and grading scale, select the result and record notes. Repeat for Current enrollment certificate. These are provider records, not applicant uploads.",
+        "4. Switch to Applicant Dune to demonstrate Close check-in after both items are met. Review the closure dialog and confirm the case outcome. Closing one check-in does not renew or end the scholarship."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 34,
+      "block_index": 459,
+      "section": "21 Provider monitoring evidence review",
+      "subsection": "Set up and activate the monitoring plan",
+      "signed_in_account": "orivanta.programs then orivanta.monitoring",
+      "page_shown": "Monitoring plan",
+      "relationship_id": "rId48",
+      "package_target": "word/media/image38.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. In Requirements, add only necessary academic, enrollment or other program checks. For academic progress, choose the required minimum and grading scale.",
+        "3. Configure the actual evidence method. The demonstrated check-ins require the provider to inspect originals at an appointment, not accept an applicant upload as verified proof.",
+        "4. Open Review and compare all settings with the published support terms. Save draft while preparing; activate only the intended complete plan after confirmation.",
+        "5. Use orivanta.monitoring to publish individual appointments from the active plan. Activating a plan does not by itself assign every recipient to a new appointment."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 35,
+      "block_index": 469,
+      "section": "21 Provider monitoring evidence review",
+      "subsection": "Publish a check in for the selected recipients",
+      "signed_in_account": "orivanta.monitoring",
+      "page_shown": "Monitoring plan",
+      "relationship_id": "rId49",
+      "package_target": "word/media/image39.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "2. Name the period, academic year and appointment. Set the actual date, time, venue, original documents to bring and short recipient instructions.",
+        "3. Choose the intended accepted recipients from the roster. Keep separate sessions or recipient arrangements for different dates and venues instead of publishing overlapping appointments.",
+        "4. Review the recipient count and instructions, then confirm Publish check-in only when ready. Cancel leaves the current data unchanged.",
+        "5. Sign in as an assigned applicant and open Scholarship Support then Check-ins. Confirm that the appointment and required originals appear for that applicant."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 36,
+      "block_index": 478,
+      "section": "21 Provider monitoring evidence review",
+      "subsection": "Record attendance originals and case closure",
+      "signed_in_account": "orivanta.monitoring",
+      "page_shown": "Monitoring plan",
+      "relationship_id": "rId36",
+      "package_target": "word/media/image26.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. For a new actual appointment, record Attended only after the applicant attends. If the appointment changes, use the reschedule controls and notify the recipient instead of pretending the old meeting occurred.",
+        "2. Review Applicant Cielo in Continuing Learners Grant. Open Current academic record, inspect the physical original, and record the verified grade, scale, result and notes. Repeat for enrollment. Applicant Dune in this same grant has both required items met and can demonstrate Close check-in.",
+        "3. If an extension, exception or follow-up is genuinely needed, record it through the available request or follow-up controls and resolve it before normal closure. Do not mark a pending item met to remove the blocker.",
+        "4. Select Applicant Dune. Both items are already met. Choose Close check-in, review the outcome and confirm it. The applicant can then read the closed result."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 37,
+      "block_index": 484,
+      "section": "22 Admin monitoring oversight",
+      "subsection": "",
+      "signed_in_account": "lumenops.reviews",
+      "page_shown": "Admin monitoring",
+      "relationship_id": "rId64",
+      "package_target": "word/media/image54.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "22 Admin monitoring oversight",
+        "Signed in account: lumenops.reviews",
+        "Page shown: Admin monitoring",
+        "The review officer can inspect monitoring records and supporting evidence through its own oversight workspace. This is separate from routine provider checklist review."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 38,
+      "block_index": 497,
+      "section": "23 Renewal completion and support decisions",
+      "subsection": "",
+      "signed_in_account": "orivanta.recipients",
+      "page_shown": "Recipient closeout",
+      "relationship_id": "rId32",
+      "package_target": "word/media/image22.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "23 Renewal completion and support decisions",
+        "Signed in account: orivanta.recipients",
+        "Page shown: Recipient closeout",
+        "Open Applicant Brio, learner.brio, in Orivanta Term Assistance Grant as orivanta.recipients, then Support status. Its check-in is closed and both allowance and school-supplies receipts are confirmed. Renew support if the award continues, or complete support when the agreed obligations are finished. The current support decision is deliberately left to the tester. Outstanding schedules, unconfirmed receipts and unresolved delivery issues block normal completion."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 39,
+      "block_index": 503,
+      "section": "23 Renewal completion and support decisions",
+      "subsection": "Read the applicant closeout summary",
+      "signed_in_account": "learner.brio",
+      "page_shown": "Recipient closeout",
+      "relationship_id": "rId37",
+      "package_target": "word/media/image27.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "In practice, the award terms determine whether support ends at graduation, at the end of a term, or through an early decision. A period ending without renewal is not the same as ending it early. Some programs require final documents before the last release. See UP Diliman DOST-ASTHRDP procedures and CHED Merit Scholarship guidelines on notice and appeal.",
+        "Read the applicant closeout summary",
+        "Signed in account: learner.brio",
+        "The screenshot shows learner.brio in the Term Assistance Grant support history before a current renewal or completion has been saved. There is no separate pre-renewed applicant. First record the intended eligible support decision as orivanta.recipients, then return with this same applicant to inspect its saved reason, effective date and available response. Completed support moves to Past support only after completion."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 40,
+      "block_index": 512,
+      "section": "23 Renewal completion and support decisions",
+      "subsection": "Renew support and read the recipient response",
+      "signed_in_account": "orivanta.recipients",
+      "page_shown": "Recipient closeout",
+      "relationship_id": "rId32",
+      "package_target": "word/media/image22.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Open Applicant Brio in Term Assistance Grant and inspect Support status. Check the closed document review, accepted agreement and settled cash and school-supplies benefits. Choose Renewed only when the provider intends to continue support.",
+        "2. Record a matching reason category, effective date, renewed support end, next review and the next-period terms. Review the confirmation before saving.",
+        "3. Sign in as the recipient. Open Support history and the renewal outcome, then read its dates, reasons and terms. Use the acknowledgment or permitted response rather than accepting a different current program page.",
+        "4. Do not look for a separate successful-renewal account. The response becomes available on learner.brio after this actual provider decision. Refresh the history if another tab was already open."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 41,
+      "block_index": 518,
+      "section": "24 Planning the first or one time benefit release",
+      "subsection": "",
+      "signed_in_account": "orivanta.releases",
+      "page_shown": "Provider release schedule",
+      "relationship_id": "rId38",
+      "package_target": "word/media/image28.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "24 Planning the first or one time benefit release",
+        "Signed in account: orivanta.releases",
+        "Page shown: Provider release schedule",
+        "The benefit release officer can schedule the first distribution after the required agreement state without creating recurring monitoring merely to distribute a benefit. One-time awards can use no recurring monitoring policy."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 42,
+      "block_index": 540,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Open the distribution record and record delivery",
+      "signed_in_account": "orivanta.releases",
+      "page_shown": "Provider benefit distribution record",
+      "relationship_id": "rId39",
+      "package_target": "word/media/image29.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Select the relevant release from Record distribution and confirm the title, schedule and recipients.",
+        "2. Select the intended recipient and inspect the current distribution status before entering a result.",
+        "3. Record actual delivery details and attach required proof. Do not mark a scheduled event as delivered merely because its date arrived.",
+        "4. The applicant must still confirm receipt with their own supporting upload or report a delivery problem. Provider evidence alone cannot make that response, and a receipt confirmation does not transfer money."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 43,
+      "block_index": 546,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Submit payout details for a digital benefit",
+      "signed_in_account": "learner.dune",
+      "page_shown": "Provider benefit distribution record",
+      "relationship_id": "rId86",
+      "package_target": "word/media/image76.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "Signed in account: learner.dune",
+        "1. Use a newly scheduled bank or e-wallet release that actually requests destination details to demonstrate entering them. The prepared learner.dune Term Assistance Grant record has already submitted its fictional e-wallet destination, so its current screen demonstrates the submitted status rather than an empty entry form. The provider must review it next.",
+        "2. Choose Add payout details. Enter the institution, account holder, and the fictional account number for the release method.",
+        "3. Review and submit. The provider must review the destination; saving the details does not send money."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 44,
+      "block_index": 552,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Review the payout destination",
+      "signed_in_account": "orivanta.releases",
+      "page_shown": "Provider benefit distribution record",
+      "relationship_id": "rId87",
+      "package_target": "word/media/image77.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "Signed in account: orivanta.releases",
+        "Use the scheduled Term Assistance Grant release for Applicant Dune. Its e-wallet details are submitted and still await provider review. Compare only the information necessary to confirm the destination; request a correction with a specific reason when it cannot be confirmed.",
+        "2. Inspect the submitted details. Approve a matching destination or request a correction from the applicant.",
+        "3. Approval unlocks recording a transfer. It does not send the benefit and does not confirm receipt."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 45,
+      "block_index": 558,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Record simulated transfer proof",
+      "signed_in_account": "orivanta.releases",
+      "page_shown": "Provider benefit distribution record",
+      "relationship_id": "rId87",
+      "package_target": "word/media/image77.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "Signed in account: orivanta.releases",
+        "1. For this same Applicant Dune release, finish the payout destination review first. The reset does not include a separate pre-approved bank transfer. Only after approval should the release officer record the actual simulated transfer date, reference and required provider proof. The platform records the evidence; it does not send bank money itself.",
+        "2. For the demo, record a simulated transfer date and attach fictional proof. Do not send real money. In actual use, record a transfer only after completing it outside the portal.",
+        "3. Review and confirm the recorded transfer. The applicant then checks actual receipt and submits their own proof, or reports the problem. Keep the provider transfer evidence separate from the applicant receipt attachment."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 46,
+      "block_index": 565,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Follow up a missed benefit release",
+      "signed_in_account": "orivanta.releases",
+      "page_shown": "Provider benefit distribution record",
+      "relationship_id": "rId39",
+      "package_target": "word/media/image29.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Open the distribution, select the recipient, and record the missed release only if the scheduled delivery did not happen. Find it again under Issues & follow-up.",
+        "2. Send a follow-up notice with instructions and at least seven days to reply. Allow at least two days between contact attempts. The reminder must leave at least two more days to reply and cannot shorten the original deadline.",
+        "3. The recipient can ask for a new arrangement or explicitly decline the benefit. Keep the missed attempt in history and link a replacement release when applicable. An actual reply stops closure for no response.",
+        "The reset does not pre-record a missed collection. learner.brio in Orivanta School Essentials Award has an upcoming collection appointment. Create a missed-release branch only after the scheduled time and actual non-attendance, then follow the required notice, reminder and response periods. Do not backdate contact or change the clock to unlock a shortcut."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 47,
+      "block_index": 573,
+      "section": "25 Recording actual benefit distribution",
+      "subsection": "Reply to an uncollected benefit notice",
+      "signed_in_account": "learner.brio",
+      "page_shown": "Provider benefit distribution record",
+      "relationship_id": "rId88",
+      "package_target": "word/media/image78.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Once a follow-up notice actually exists, sign in as the applicant, open the award, Benefit releases and the release follow-up. Read the instructions and response deadline.",
+        "2. Choose the available response to request a new arrangement if the applicant still wants the benefit, or explicitly decline it only if that is the intended decision. Explain the circumstances and confirm.",
+        "3. As orivanta.releases, open the same missed release. Read the actual recipient response. For continued collection, schedule and link an eligible replacement for the same person and benefit.",
+        "4. Keep the missed attempt and notice in history. Record actual replacement delivery and obtain recipient receipt confirmation; do not label the missed original as received."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 48,
+      "block_index": 585,
+      "section": "26 Applicant receipt and delivery reports",
+      "subsection": "Open a benefit record before confirming receipt",
+      "signed_in_account": "learner.aurora",
+      "page_shown": "Applicant benefit receipt record",
+      "relationship_id": "rId47",
+      "package_target": "word/media/image37.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "6080760",
+        "cy": "4222750"
+      },
+      "preceding_text": [
+        "1. Open Scholarship Support, choose Orivanta Term Assistance Grant, then Benefit releases and the released term allowance. learner.aurora is awaiting receipt confirmation. learner.cielo in School Essentials Award is a separate one-time example of the same process.",
+        "2. Read the recorded amount or benefit description, delivery date and provider proof. Choose Confirm receipt to open the form, and enter the actual received date. A transfer receipt date cannot be earlier than the provider recorded sent date or later than today.",
+        "3. Upload your own proof of receipt: one JPG, PNG or PDF up to 5 MB. Use a receipt, acknowledgement, photo of the received item or redacted transfer screenshot. Hide full account numbers, unrelated balances, passwords and OTPs. Review the preview, add an optional note, acknowledge receipt, choose Continue and confirm the final dialog.",
+        "4. A missing or invalid proof prevents confirmation. If upload or saving fails, the form retains the selected file for retry and no receipt is recorded. After success, View your receipt proof opens the saved private file. Existing responses cannot be submitted again; report any remaining problem through the delivery-report workflow."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 49,
+      "block_index": 594,
+      "section": "26 Applicant receipt and delivery reports",
+      "subsection": "Complete a one time award without recurring monitoring",
+      "signed_in_account": "orivanta.recipients",
+      "page_shown": "Applicant benefit receipt record",
+      "relationship_id": "rId90",
+      "package_target": "word/media/image80.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "2. Enter the actual date, attach the required applicant receipt proof, acknowledge and confirm only what was received. Otherwise report the issue. As of this guide check, learner.dune already has a historical confirmed receipt from before this upload requirement; do not invent a replacement proof or reset that history.",
+        "3. As orivanta.recipients, select Applicant Dune and open Support status. Before completing support shows the agreed one-time benefit settled with no outstanding distribution or delivery issue.",
+        "4. Choose Complete support with the accurate completion reason and effective date, then review and confirm. Do not create an unnecessary semester plan or grade check for this one-time award.",
+        "5. As Applicant Dune afterward, open Past support and the outcome to read the saved completion reason, dates, benefit summary and any permitted response."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 50,
+      "block_index": 608,
+      "section": "26 Applicant receipt and delivery reports",
+      "subsection": "Check receipt confirmation on a phone",
+      "signed_in_account": "learner.aurora",
+      "page_shown": "Applicant benefit receipt record",
+      "relationship_id": "rId55",
+      "package_target": "word/media/image45.png",
+      "pixels": [
+        390,
+        844
+      ],
+      "display_emu": {
+        "cx": "2408425",
+        "cy": "5212079"
+      },
+      "preceding_text": [
+        "Signed in account: learner.aurora",
+        "The same required-upload form works on the applicant mobile view. The screenshots show a selected test image and an unsaved response; no benefit was confirmed during capture.",
+        "1. Choose a receipt acknowledgement photo or document from the device. Check its preview and the received date.",
+        "2. Scroll within the modal to the acknowledgement and use Continue. Review the final confirmation; Go back returns to editing and Cancel leaves the saved release unchanged."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 51,
+      "block_index": 613,
+      "section": "27 Recipient withdrawal requests",
+      "subsection": "",
+      "signed_in_account": "orivanta.recipients",
+      "page_shown": "Recipient withdrawals",
+      "relationship_id": "rId91",
+      "package_target": "word/media/image81.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "27 Recipient withdrawal requests",
+        "Signed in account: orivanta.recipients",
+        "Page shown: Recipient withdrawals",
+        "An accepted recipient can request withdrawal with an explanation. Support does not end while the request is pending. A missed pickup or silence is not a withdrawal request. This process is separate from withdrawing an application before accepting an award."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 52,
+      "block_index": 627,
+      "section": "28 Agreement concerns before conclusions",
+      "subsection": "",
+      "signed_in_account": "orivanta.recipients",
+      "page_shown": "Recipient concerns",
+      "relationship_id": "rId92",
+      "package_target": "word/media/image82.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "28 Agreement concerns before conclusions",
+        "Signed in account: orivanta.recipients",
+        "Page shown: Recipient concerns",
+        "Agreement concerns begin as private drafts with a specific accepted obligation, factual explanation and proof. Sending the notice gives the applicant an opportunity to respond; a notice is not a confirmed breach. The live queue starts empty until a tester creates a case."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 53,
+      "block_index": 642,
+      "section": "29 Provider delivery investigation and correction",
+      "subsection": "",
+      "signed_in_account": "orivanta.releases",
+      "page_shown": "Provider delivery reports",
+      "relationship_id": "rId93",
+      "package_target": "word/media/image83.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "29 Provider delivery investigation and correction",
+        "Signed in account: orivanta.releases",
+        "Page shown: Provider delivery reports",
+        "The release officer responds to missing-benefit reports, requests information or proposes a documented delivery correction. The report stays unresolved until the applicant confirms receipt or gives the appropriate response."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 54,
+      "block_index": 657,
+      "section": "30 Independent review appeals and privacy",
+      "subsection": "",
+      "signed_in_account": "lumenops.reviews",
+      "page_shown": "Admin case review",
+      "relationship_id": "rId73",
+      "package_target": "word/media/image63.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "30 Independent review appeals and privacy",
+        "Signed in account: lumenops.reviews",
+        "Page shown: Admin case review",
+        "The admin reviewer examines the accepted obligation or benefit, evidence, statements and response opportunity, then records a reasoned outcome. A different authorized reviewer must decide an appeal of the first reviewers outcome. Privacy and access details are collapsed inside an opened case."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 55,
+      "block_index": 684,
+      "section": "31 Provider support and platform reports",
+      "subsection": "",
+      "signed_in_account": "orivanta.support",
+      "page_shown": "Provider support",
+      "relationship_id": "rId94",
+      "package_target": "word/media/image84.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "31 Provider support and platform reports",
+        "Signed in account: orivanta.support",
+        "Page shown: Provider support",
+        "Provider support staff handle questions and track replies within their organization. Platform problems and privacy requests can be escalated through the platform support process rather than changing an applicant decision informally."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 56,
+      "block_index": 690,
+      "section": "32 Admin support case handling",
+      "subsection": "",
+      "signed_in_account": "lumenops.support",
+      "page_shown": "Admin support",
+      "relationship_id": "rId95",
+      "package_target": "word/media/image85.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "32 Admin support case handling",
+        "Signed in account: lumenops.support",
+        "Page shown: Admin support",
+        "The Support Officer owns the final platform reply. For a sign-in, password, email or account restriction issue, it can send a limited access task to the Account Manager. The original report and attachments stay with Support. A reply is not profile verification or a scholarship decision."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 57,
+      "block_index": 702,
+      "section": "33 Provider staff and program assignment",
+      "subsection": "",
+      "signed_in_account": "orivanta.team",
+      "page_shown": "Provider team",
+      "relationship_id": "rId96",
+      "package_target": "word/media/image86.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "33 Provider staff and program assignment",
+        "Signed in account: orivanta.team",
+        "Page shown: Provider team",
+        "The team administrator manages staff access, role responsibilities and assigned scholarships. Limited program assignment prevents a staff member from automatically working on every program. Newly invited staff complete their first-login setup."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 58,
+      "block_index": 722,
+      "section": "34 Admin account management",
+      "subsection": "Inspect and manage the selected account",
+      "signed_in_account": "lumenops.accounts",
+      "page_shown": "Admin account",
+      "relationship_id": "rId97",
+      "package_target": "word/media/image87.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Open the account directory and select Applicant Aurora, learner.aurora, to inspect the current account controls. There is no pre-created support referral in this dataset. To demonstrate Return result, first create a justified access request and send it from lumenops.support, then open that task here.",
+        "2. Read the task, then inspect the relevant sign-in, verification-email, password or restriction controls. Use a separate access action only when it is actually required.",
+        "3. Select Return result, explain the checked account controls and any account-holder step, then confirm. The task returns to Support. No password reset, suspension or verification change is required merely to demonstrate this task.",
+        "4. Returning a result does not automatically change account access, verify the profile or close the support case. Support reviews the result and sends the final reply. A stale or already completed task cannot be saved twice."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 59,
+      "block_index": 727,
+      "section": "35 Provider paid services and requests",
+      "subsection": "",
+      "signed_in_account": "orivanta.billing",
+      "page_shown": "Provider billing",
+      "relationship_id": "rId98",
+      "package_target": "word/media/image88.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "35 Provider paid services and requests",
+        "Signed in account: orivanta.billing",
+        "Page shown: Provider billing",
+        "The provider billing role reviews available platform services, submits intake information, follows checkout and tracks delivery, files, meetings and acceptance. These are provider-to-platform services, not scholarship payments to applicants."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 60,
+      "block_index": 748,
+      "section": "36 Admin service intake delivery and closeout",
+      "subsection": "",
+      "signed_in_account": "lumenops.billing",
+      "page_shown": "Admin billing",
+      "relationship_id": "rId99",
+      "package_target": "word/media/image89.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "36 Admin service intake delivery and closeout",
+        "Signed in account: lumenops.billing",
+        "Page shown: Admin billing",
+        "The Billing Officer handles intake, assignment, service delivery, files, meetings and closeout. Its Finance follow-up queue also contains internal payment-record questions, including questions about already closed services. Delivery, payment and refund states remain separate."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 61,
+      "block_index": 760,
+      "section": "37 Admin finance and payment records",
+      "subsection": "",
+      "signed_in_account": "lumenops.finance",
+      "page_shown": "Admin finance",
+      "relationship_id": "rId100",
+      "package_target": "word/media/image90.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "37 Admin finance and payment records",
+        "Signed in account: lumenops.finance",
+        "Page shown: Admin finance",
+        "The Finance Officer reviews confirmed payments, receipts and exceptions. An internal financial check can be sent to Billing and returned to Finance without changing the underlying transaction. Gateway confirmation, delivery completion and external refunds have their own states."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 62,
+      "block_index": 776,
+      "section": "37 Admin finance and payment records",
+      "subsection": "Demonstrate the two admin handoffs from end to end",
+      "signed_in_account": "lumenops.finance",
+      "page_shown": "Admin finance",
+      "relationship_id": "rId100",
+      "package_target": "word/media/image90.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "2. Return to that same case as lumenops.support. Read the Account Manager finding and record the reporter-facing response. There is no separate account or seeded returned case for this step.",
+        "3. For Finance clarification, open a current paid service as lumenops.finance, use Request a Billing record check and confirm the precise question. Switch to lumenops.billing and respond in the same service record.",
+        "4. Reopen the same service as lumenops.finance, inspect the Billing response, then record the financial check and its finding. The prepared payment remains separate from the operational delivery status.",
+        "5. Use lumenops.records to follow the related service or support history afterward. Neither internal task completion sends money, closes the service automatically, verifies a profile or changes scholarship support."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 63,
+      "block_index": 782,
+      "section": "38 Admin audit history and exports",
+      "subsection": "",
+      "signed_in_account": "lumenops.records",
+      "page_shown": "Admin records",
+      "relationship_id": "rId101",
+      "package_target": "word/media/image91.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "38 Admin audit history and exports",
+        "Signed in account: lumenops.records",
+        "Page shown: Admin records",
+        "The Records Officer can follow exact related account, application, program, service or support records from an audit entry. The saved entry describes the event at that time; later events can supersede its outcome. Private handoff instructions and financial notes are not copied into audit metadata."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 64,
+      "block_index": 788,
+      "section": "39 Provider manager overview and combined workspaces",
+      "subsection": "",
+      "signed_in_account": "orivanta.manager",
+      "page_shown": "Provider manager",
+      "relationship_id": "rId102",
+      "package_target": "word/media/image92.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "39 Provider manager overview and combined workspaces",
+        "Signed in account: orivanta.manager",
+        "Page shown: Provider manager",
+        "The provider manager has a cross-workspace overview for its organization rather than a separate new scholarship process. It can move between permitted programs, reviews, selection, decisions, recipients, monitoring and releases. Program assignment and organization boundaries still apply."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 65,
+      "block_index": 794,
+      "section": "40 Organization representative view",
+      "subsection": "",
+      "signed_in_account": "orivanta",
+      "page_shown": "Provider representative",
+      "relationship_id": "rId103",
+      "package_target": "word/media/image93.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "40 Organization representative view",
+        "Signed in account: orivanta",
+        "Page shown: Provider representative",
+        "The organization representative is the organization owner account. Its visible navigation and actions follow the current role model; do not assume it is interchangeable with every specialist or the provider manager. Use the named operational account for the process being demonstrated."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 66,
+      "block_index": 800,
+      "section": "41 Portal manager overview",
+      "subsection": "",
+      "signed_in_account": "lumenops.manager",
+      "page_shown": "Admin manager",
+      "relationship_id": "rId104",
+      "package_target": "word/media/image94.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "41 Portal manager overview",
+        "Signed in account: lumenops.manager",
+        "Page shown: Admin manager",
+        "The Portal Manager has read-only oversight across admin service areas. Team action counts show work currently owned by staff. Waiting steps show another team, the account holder or gateway; failed sign-in history is reference information, not automatically unresolved work. Totals count work items, not unique people."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    },
+    {
+      "figure": 67,
+      "block_index": 819,
+      "section": "42 Superadmin governance view",
+      "subsection": "Open an admin team account in governance",
+      "signed_in_account": "lumenops.root",
+      "page_shown": "Superadmin",
+      "relationship_id": "rId105",
+      "package_target": "word/media/image95.png",
+      "pixels": [
+        1440,
+        1000
+      ],
+      "display_emu": {
+        "cx": "5661964",
+        "cy": "3931919"
+      },
+      "preceding_text": [
+        "1. Review role coverage and any area with open work but no available owner. Select its role-coverage link to open the filtered admin team list.",
+        "2. Inspect the staff member and readiness label, such as email verification needed, password reset required, missing role permissions or access suspended.",
+        "3. Make only the intended governance change after its confirmation. Restoring readiness does not complete the operational work or grant unrelated permissions.",
+        "4. Return to the specialist queue with its assigned account. Demonstrate manager oversight and superadmin governance last, after the actual operational handoffs."
+      ],
+      "replacement_path": null,
+      "new_signed_in_account": null,
+      "new_record_label": null,
+      "url": null,
+      "confirmed_fictional_only": false
+    }
+  ]
+}

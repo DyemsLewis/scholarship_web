@@ -37,6 +37,8 @@ const selectedRecord = computed(() => records.value.find((record) => record.id =
 const canMarkReleased = computed(() => release.value?.release_at && new Date(release.value.release_at) <= new Date());
 const isDigital = computed(() => ['bank_transfer', 'e_wallet'].includes(release.value?.release_method));
 const recordingTransfer = computed(() => isDigital.value && resultForm.value.status === 'released');
+const earliestTransferOn = computed(() => [selectedRecord.value?.payout?.approved_on,
+    selectedRecord.value?.release_readiness?.onboarding?.completed_on].filter(Boolean).sort().at(-1));
 const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Manila' }).format();
 const canReleaseSelected = computed(() => !!selectedRecord.value && canMarkReleased.value && selectedRecord.value.release_readiness?.eligible !== false
     && (!isDigital.value || selectedRecord.value.payout?.status === 'approved'));
@@ -48,8 +50,10 @@ const releaseHold = computed(() => {
         state: 'blocked',
         title: 'Release on hold',
         detail: readiness.hold_summary ?? readiness.reason,
-        owner: readiness.blocked_cycle_id ? 'Monitoring officer' : '',
-        action: readiness.monitoring_url ? { label: 'Open check-in', url: readiness.monitoring_url } : null,
+        owner: readiness.onboarding?.can_distribute === false ? 'Recipient officer or manager' : (readiness.blocked_cycle_id ? 'Monitoring officer' : ''),
+        action: readiness.onboarding?.can_distribute === false
+            ? (readiness.onboarding_url ? { label: 'Open onboarding', url: readiness.onboarding_url } : null)
+            : (readiness.monitoring_url ? { label: 'Open check-in', url: readiness.monitoring_url } : null),
     };
 });
 
@@ -75,12 +79,14 @@ const filteredRecords = computed(() => {
 function stateLabel(record) {
     if (record.follow_up) return record.follow_up.label;
     if (recordState(record) === 'issue') return 'Issue reported';
+    if (recordState(record) === 'pending' && record.release_readiness?.onboarding?.can_distribute === false) return 'Final agreement pending';
     return record.payout?.label ?? record.status_label;
 }
 
 function stateClass(record) {
     if (record.follow_up && !record.has_open_delivery_report && recordState(record) === 'issue') return 'border-amber-200 bg-amber-50 text-amber-900';
     if (recordState(record) === 'issue') return 'border-rose-200 bg-rose-50 text-rose-800';
+    if (recordState(record) === 'pending' && record.release_readiness?.onboarding?.can_distribute === false) return 'border-amber-200 bg-amber-50 text-amber-800';
     if (record.payout?.status === 'approved') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
     if (recordState(record) === 'pending') return 'border-amber-200 bg-amber-50 text-amber-800';
     if (record.status === 'released') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
@@ -290,7 +296,7 @@ onMounted(loadRecord);
                                             <div class="mt-4 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4">
                                                 <label class="text-sm font-semibold text-slate-700">
                                                     Date sent
-                                                    <input v-model="transferSentOn" type="date" name="transfer_sent_on" :min="selectedRecord.payout?.approved_on || undefined" :max="today" required class="mt-2 h-11 w-full rounded-sm border border-slate-300 bg-white px-3 font-normal">
+                                                    <input v-model="transferSentOn" type="date" name="transfer_sent_on" :min="earliestTransferOn" :max="today" required class="mt-2 h-11 w-full rounded-sm border border-slate-300 bg-white px-3 font-normal">
                                                 </label>
                                                 <label class="text-sm font-semibold text-slate-700">
                                                     Transfer proof <span class="font-normal text-slate-600">(required)</span>

@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
+use App\Services\RecipientOnboardingService;
 
 class RecipientAgreement
 {
@@ -38,7 +39,7 @@ class RecipientAgreement
     {
         $scholarship->loadMissing(['provider.providerProfile', 'benefits']);
 
-        return [
+        $snapshot = [
             'program_title' => $scholarship->title,
             'provider_name' => $scholarship->provider?->provider_name ?? $scholarship->provider?->name,
             'award_amount' => $application?->awarded_amount ?? $scholarship->award_amount,
@@ -56,6 +57,17 @@ class RecipientAgreement
             'return_service_contract' => $scholarship->return_service_contract,
             'other_contract_terms' => $scholarship->other_contract_terms,
         ];
+
+        $previous = $application?->provider_contract_terms_snapshot;
+        if (is_array($previous) && $previous !== []) {
+            if (array_key_exists('onboarding', $previous)) {
+                $snapshot['onboarding'] = $previous['onboarding'];
+            }
+        } elseif ($scholarship->onboarding_policy !== null) {
+            $snapshot['onboarding'] = RecipientOnboardingPolicy::normalize($scholarship->onboarding_policy);
+        }
+
+        return $snapshot;
     }
 
     public static function version(array $snapshot): string
@@ -89,6 +101,7 @@ class RecipientAgreement
             'can_respond' => $application->final_outcome === 'selected' && blank($application->student_response_status),
             'response_scope' => self::RESPONSE_SCOPE,
             'final_contract_recorded' => false,
+            'onboarding' => app(RecipientOnboardingService::class)->summary($application),
             'notice' => self::RESPONSE_NOTICE,
         ];
     }

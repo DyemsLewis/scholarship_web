@@ -20,6 +20,14 @@ final class ProviderApplicationNextStep
                 $workspace === 'recipient' ? null : $this->recordAction($application, $actor, 'recipient', 'manage_recipients', 'Open agreement'));
         }
 
+        if ($workspace === 'recipient' && $outcome === 'selected' && ($agreement['status'] ?? null) === 'accepted'
+            && ($agreement['onboarding']['final_agreement_required'] ?? false)
+            && ($agreement['onboarding']['status'] ?? null) === 'pending' && ! ($payload['support']['is_closed'] ?? false)) {
+            return $this->step('handoff', 'Complete provider onboarding',
+                'Publish practical instructions and confirm the final agreement through your organization. A separate signing appointment is not required.',
+                'Recipient officer', ['label' => 'Open onboarding', 'section' => 'onboarding']);
+        }
+
         if (in_array($application->application_state, ['closed', 'withdrawn'], true) || $outcome) {
             return null;
         }

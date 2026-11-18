@@ -9,6 +9,7 @@ import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import WithdrawalRequestPanel from '../../../components/withdrawals/WithdrawalRequestPanel.vue';
 import AgreementConcernPanel from '../../../components/agreement-concerns/AgreementConcernPanel.vue';
 import RecipientCaseReviewPanel from '../../../components/case-reviews/RecipientCaseReviewPanel.vue';
+import RecipientOnboardingPanel from '../../../components/provider/RecipientOnboardingPanel.vue';
 
 const applicationId = document.getElementById('app')?.dataset.applicationId;
 const returnTo = new URLSearchParams(window.location.search).get('return_to');
@@ -17,6 +18,7 @@ const safeReturnUrl = returnTo?.startsWith('/provider/workspaces/recipients')
     : '/provider/workspaces/recipients/agreements';
 const sections = [
     { key: 'agreement', label: 'Offer response', icon: 'fa-solid fa-file-signature' },
+    { key: 'onboarding', label: 'Onboarding', icon: 'fa-solid fa-clipboard-check' },
     { key: 'support', label: 'Support status', icon: 'fa-solid fa-hand-holding-heart' },
     { key: 'activity', label: 'Support activity', icon: 'fa-solid fa-list-check' },
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
@@ -148,7 +150,7 @@ async function loadRecord() {
         record.value = response.data.record;
         resetSupportForm();
         if (openResponse.value?.case_review_url) resolutionForm.value.resolution_outcome = 'support_reinstated';
-        if (!requestedSection && agreementAccepted.value) activeSection.value = 'support';
+        if (!requestedSection && agreementAccepted.value) activeSection.value = agreement.value.onboarding?.final_agreement_required && agreement.value.onboarding?.status === 'pending' ? 'onboarding' : 'support';
     } catch (error) {
         errorMessage.value = firstError(error, 'The recipient record could not be loaded.');
     } finally {
@@ -261,7 +263,7 @@ async function refreshAfterWithdrawal() {
         const response = await window.axios.get(`/provider/applications/${applicationId}/recipient-record`, { portalToast: false });
         record.value = response.data.record;
     } catch {
-        errorMessage.value = 'The withdrawal decision was saved, but the support summary could not refresh. Reload this record before recording another outcome.';
+        errorMessage.value = 'The recipient update was saved, but the support summary could not refresh. Reload this record before recording another outcome.';
     }
 }
 </script>
@@ -282,7 +284,7 @@ async function refreshAfterWithdrawal() {
                         <div class="flex items-center justify-between gap-8"><div class="flex min-w-0 items-start gap-4"><span class="grid h-12 w-12 shrink-0 place-items-center bg-slate-950 text-amber-300"><i class="fa-solid fa-user-shield" aria-hidden="true"></i></span><div><p class="text-xs font-bold uppercase tracking-[0.2em] text-amber-700">Recipient management</p><h1 id="recipient-record-title" class="application-page-title mt-1 font-display text-2xl font-bold tracking-tight text-slate-950">Manage recipient support</h1><p class="mt-2 text-sm leading-6 text-slate-600">Review the agreement, support status, and recorded outcomes.</p></div></div><div class="flex shrink-0 items-center gap-3"><WorkspaceGuide workspace="recipients" /><button v-if="decisionReopen.can_reopen" type="button" class="h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:border-slate-950" @click="showReopenDialog = true"><i class="fa-solid fa-rotate-left mr-2" aria-hidden="true"></i>Reopen final decision</button><span :class="['border px-3 py-2 text-xs font-bold uppercase tracking-wide', statusClass(support.is_closed ? 'closed' : agreement.status)]">{{ support.is_closed ? support.support_status_label : agreement.status_label }}</span></div></div>
                     </header>
 
-                    <ProviderNextStep :step="record.provider_next_step" />
+                    <ProviderNextStep :step="record.provider_next_step" @open-section="updateSection" />
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Recipient identity">
                         <div class="flex items-center gap-4 px-6 py-4"><img v-if="recipient.profile_photo_url" :src="recipient.profile_photo_url" :alt="`${recipient.name} profile`" class="h-14 w-14 shrink-0 border border-slate-200 object-cover"><span v-else class="grid h-14 w-14 shrink-0 place-items-center border border-slate-200 bg-slate-100 text-slate-400"><i class="fa-solid fa-user" aria-hidden="true"></i></span><div class="min-w-0 flex-1"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Recipient</p><h2 class="mt-1 application-text text-xl font-bold text-slate-950">{{ recipient.name }}</h2><p class="mt-1 application-text text-sm text-slate-500">{{ program.title }} · {{ recipient.email }}</p></div><div class="border-l border-slate-200 pl-6 text-right"><p class="text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Current support</p><p class="mt-1 text-sm font-bold text-slate-950">{{ support.support_status_label }}</p><p class="mt-1 text-xs text-slate-500">{{ agreement.status_label }}</p></div></div>
@@ -293,7 +295,7 @@ async function refreshAfterWithdrawal() {
                     <AgreementConcernPanel v-if="agreementAccepted" class="mt-4" :history-url="`/provider/applications/${applicationId}/agreement-concerns`" :context="program.title" provider />
                     <RecipientCaseReviewPanel :history-url="`/provider/applications/${applicationId}/case-reviews`" />
 
-                    <nav class="mt-4 grid grid-cols-4 border border-slate-200 bg-white shadow-sm" aria-label="Recipient record sections">
+                    <nav class="mt-4 grid grid-cols-5 border border-slate-200 bg-white shadow-sm" aria-label="Recipient record sections">
                         <button v-for="section in sections" :key="section.key" type="button" :class="['flex h-14 items-center justify-center gap-2 border-r border-slate-200 text-sm font-bold last:border-r-0', activeSection === section.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950']" @click="updateSection(section.key)"><i :class="[section.icon, activeSection === section.key ? 'text-amber-300' : 'text-slate-400']" aria-hidden="true"></i>{{ section.label }}</button>
                     </nav>
 
@@ -309,6 +311,8 @@ async function refreshAfterWithdrawal() {
                             <div v-if="displayValue(agreement.snapshot.recipient_expectation)" class="border-t border-slate-200 px-6 py-5"><h3 class="text-base font-bold text-slate-950">Recipient responsibilities</h3><p class="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">{{ displayValue(agreement.snapshot.recipient_expectation) }}</p></div>
                         </template>
                     </section>
+
+                    <RecipientOnboardingPanel v-else-if="activeSection === 'onboarding'" :endpoint="`/provider/applications/${applicationId}/onboarding`" :recipient-name="recipient.name" @saved="refreshAfterWithdrawal" />
 
                     <section v-else-if="activeSection === 'support'" class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-start gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-hand-holding-heart text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Support status</h2><p class="mt-1 text-sm text-slate-500">Record renewal, completion, or early termination only after onboarding.</p></div></header>

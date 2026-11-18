@@ -703,6 +703,7 @@ class ApplicantScholarshipDetailService
                 || filled($scholarship->return_service_contract)
                 || filled($scholarship->other_contract_terms),
             'recipient_terms' => [
+                'onboarding_policy' => $scholarship->onboarding_policy,
                 'renewal_policy' => $scholarship->renewal_policy,
                 'return_service_contract' => $scholarship->return_service_contract,
                 'other_contract_terms' => $scholarship->other_contract_terms,

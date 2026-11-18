@@ -1,0 +1,37 @@
+{
+    "program_id": 18,
+    "program_title": "Orivanta Welcome Scholars Award",
+    "application_id": 29,
+    "applicant": "learner.aurora",
+    "program_account": "orivanta.programs",
+    "recipient_account": "orivanta.recipients",
+    "release_account": "orivanta.releases",
+    "manager": "orivanta.manager",
+    "scope_before": {
+        "orivanta.programs": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10
+        ],
+        "orivanta.recipients": [
+            6,
+            7,
+            8
+        ],
+        "orivanta.releases": [
+            6,
+            7,
+            8
+        ]
+    },
+    "applicant_response": null,
+    "onboarding_completion": null,
+    "release_created": false
+}

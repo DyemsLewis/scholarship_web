@@ -28,7 +28,8 @@ class ApplicantMonitoringDetailService
         $view = in_array($view, self::VIEWS, true) ? $view : 'overview';
         [$checkIns, $releases, $decisions] = $this->supportContext($application, $applicant, $monitoring);
         $releaseGroups = $this->releaseGroups($application, $releases, $this->canShowSchedule($application, $monitoring));
-        $decision = $this->nextAction($application, $monitoring, $checkIns, $releases, $decisions);
+        $onboarding = $this->onboarding($application, $monitoring);
+        $decision = $this->nextAction($application, $monitoring, $checkIns, $releases, $decisions, $onboarding);
 
         return [
             'version' => 1,
@@ -38,7 +39,7 @@ class ApplicantMonitoringDetailService
             'status' => $this->status($application, $monitoring, $checkIns, $releases),
             'decision' => $decision,
             'summary' => $this->summary($monitoring, $checkIns, $releases),
-            'navigation' => $this->navigation($application, $view, $checkIns, $releases, $decisions),
+            'navigation' => $this->navigation($application, $view, $checkIns, $releases, $decisions, $onboarding),
             'content' => $this->content(
                 $view,
                 $application,
@@ -48,6 +49,7 @@ class ApplicantMonitoringDetailService
                 $decisions,
                 $decision,
                 $recordKey,
+                $onboarding,
             ),
             'permissions' => [
                 'can_submit_check_in' => $checkIns->contains(
@@ -81,7 +83,7 @@ class ApplicantMonitoringDetailService
                 'href' => $identity['monitoring_href'],
                 'history_href' => $this->viewUrl($application, 'history'),
                 'status' => $status,
-                'decision' => $this->nextAction($application, $monitoring, $checkIns, $releases, $decisions),
+                'decision' => $this->nextAction($application, $monitoring, $checkIns, $releases, $decisions, $this->onboarding($application, $monitoring)),
                 'past' => $past,
                 'schedule' => $this->canShowSchedule($application, $monitoring)
                     ? $this->upcomingSchedule($application, $checkIns, $releases)->all()
@@ -131,6 +133,64 @@ class ApplicantMonitoringDetailService
             && ($monitoring['agreement_accepted'] ?? false)
             && $application->student_response_status !== 'declined'
             && ! in_array($monitoring['support_status'] ?? null, ['completed', 'terminated'], true);
+    }
+
+    private function onboarding(ScholarshipApplication $application, array $monitoring): ?array
+    {
+        // Only the policy frozen into this offer may create an applicant requirement.
+        $summary = app(RecipientOnboardingService::class)->summary($application);
+        if (! $summary['final_agreement_required']) {
+            return null;
+        }
+
+        $accepted = $application->student_response_status === 'accepted';
+        $matches = $accepted && filled($application->provider_contract_terms_version)
+            && $application->student_response_terms_version === $application->provider_contract_terms_version;
+        $ended = in_array($monitoring['support_status'] ?? null, ['completed', 'terminated'], true);
+        $state = match (true) {
+            $summary['status'] === 'completed' => 'completed',
+            $application->student_response_status === 'declined' => 'declined',
+            $ended || ! ($monitoring['eligible'] ?? false) => 'inactive',
+            $accepted && ! $matches => 'needs_review',
+            ! $accepted => 'awaiting_intention',
+            default => 'pending',
+        };
+        $snapshot = $application->provider_contract_terms_snapshot ?? [];
+        $contact = $snapshot['provider_contact'] ?? [];
+        $email = filter_var($contact['email'] ?? '', FILTER_VALIDATE_EMAIL) ?: null;
+        $number = trim((string) ($contact['number'] ?? ''));
+        $phone = preg_replace('/[^0-9+]/', '', $number);
+
+        return [
+            ...$summary,
+            'state' => $state,
+            'status_label' => match ($state) {
+                'completed' => 'Completed', 'declined' => 'Offer declined',
+                'inactive' => 'Record only', 'needs_review' => 'Provider review needed',
+                'awaiting_intention' => 'After intention confirmation', default => 'Pending provider confirmation',
+            },
+            'guidance' => match ($state) {
+                'completed' => 'The provider recorded your final agreement as completed. Benefit schedules and receipt confirmations remain separate.',
+                'declined' => 'You declined this offer. These are the instructions originally disclosed with it; no onboarding action is requested.',
+                'inactive' => 'This support record is read-only. Contact the provider if you need clarification about the recorded requirement.',
+                'needs_review' => 'Your offer record needs provider review. Contact the provider before making new onboarding arrangements.',
+                'awaiting_intention' => 'Review your offer and confirm whether you intend to proceed first. Confirming intention does not sign the final agreement.',
+                default => 'Follow the provider instructions below to complete your final agreement outside the platform. The provider records completion; you do not need to upload a contract here.',
+            },
+            'can_proceed' => $state === 'pending' && $matches && ($monitoring['agreement_accepted'] ?? false),
+            'completed_label' => $summary['completed_on'] ? Carbon::parse($summary['completed_on'])->format('M d, Y') : null,
+            'instructions_published_label' => $summary['instructions_published_at'] ? Carbon::parse($summary['instructions_published_at'])->format('M d, Y') : null,
+            'href' => $this->viewUrl($application, 'check-ins').'#final-agreement',
+            'offer_href' => route('dashboard.applications.show.section', ['application' => $application, 'section' => 'outcome'], false)
+                .'?action='.($accepted ? 'view-agreement' : 'agreement'),
+            'benefits_href' => $this->viewUrl($application, 'benefits'),
+            'contact' => [
+                'email' => $email,
+                'email_href' => $email ? 'mailto:'.$email : null,
+                'number' => $phone && preg_match('/^\+?[0-9]{7,15}$/', $phone) ? $number : null,
+                'phone_href' => $phone && preg_match('/^\+?[0-9]{7,15}$/', $phone) ? 'tel:'.$phone : null,
+            ],
+        ];
     }
 
     private function upcomingSchedule(ScholarshipApplication $application, Collection $checkIns, Collection $releases): Collection
@@ -309,6 +369,7 @@ class ApplicantMonitoringDetailService
         Collection $checkIns,
         Collection $releases,
         Collection $decisions,
+        ?array $onboarding,
     ): array {
         $items = [
             [
@@ -323,7 +384,7 @@ class ApplicantMonitoringDetailService
                 'label' => 'Requirements',
                 'icon' => 'fa-solid fa-list-check',
                 'href' => $this->viewUrl($application, 'check-ins'),
-                'badge' => $checkIns->where('state', 'action_required')->count(),
+                'badge' => $checkIns->where('state', 'action_required')->count() + (int) ($onboarding['can_proceed'] ?? false),
             ],
             [
                 'key' => 'benefits',
@@ -344,6 +405,7 @@ class ApplicantMonitoringDetailService
         return collect($items)
             ->reject(fn (array $item): bool => $item['key'] === 'check-ins'
                 && $view !== 'check-ins'
+                && $onboarding === null
                 && $this->isOneTimeBenefit($application, $checkIns, $releases))
             ->map(fn (array $item): array => [
                 ...$item,
@@ -362,10 +424,12 @@ class ApplicantMonitoringDetailService
         Collection $decisions,
         array $decision,
         ?string $recordKey,
+        ?array $onboarding,
     ): array {
         return match ($view) {
             'check-ins' => [
                 'type' => 'check_ins',
+                'onboarding' => $onboarding,
                 'active' => $checkIns->whereIn('state', self::ACTIVE_CHECK_INS)->values(),
                 'upcoming' => $checkIns->where('state', 'upcoming')->values(),
                 'completed' => $checkIns->whereIn('state', self::PAST_CHECK_INS)->values(),
@@ -388,7 +452,7 @@ class ApplicantMonitoringDetailService
                 ],
                 'selected' => $this->selectedCheckIn($application, $checkIns, $recordKey, $this->canShowSchedule($application, $monitoring)),
                 'return_href' => $this->viewUrl($application, 'check-ins'),
-                'empty' => $this->checkInEmptyState($application, $monitoring, $checkIns),
+                'empty' => $onboarding && $checkIns->isEmpty() ? null : $this->checkInEmptyState($application, $monitoring, $checkIns),
             ],
             'benefits' => [
                 'type' => 'benefits',
@@ -414,6 +478,7 @@ class ApplicantMonitoringDetailService
             ),
             default => [
                 'type' => 'overview',
+                'onboarding' => $onboarding,
                 'next_action' => $decision,
                 'closeout' => in_array($monitoring['support_status'] ?? null, ['completed', 'terminated'], true)
                     && $application->student_response_status !== 'declined'
@@ -469,7 +534,7 @@ class ApplicantMonitoringDetailService
             'agreement_accepted' => (bool) ($monitoring['agreement_accepted'] ?? false),
             'agreement' => [
                 'label' => match ($application->student_response_status) {
-                    'accepted' => 'Accepted',
+                    'accepted' => 'Intention confirmed',
                     'declined' => 'Declined',
                     default => filled($application->provider_contract_terms_snapshot) ? 'Awaiting response' : 'No agreement on file',
                 },
@@ -504,6 +569,7 @@ class ApplicantMonitoringDetailService
         Collection $checkIns,
         Collection $releases,
         Collection $decisions,
+        ?array $onboarding,
     ): array {
         if (! ($monitoring['eligible'] ?? false)) {
             return $this->decisionRecord(
@@ -681,6 +747,14 @@ class ApplicantMonitoringDetailService
 
             return $this->decisionRecord('support_closed', 'neutral', 'No response needed right now',
                 'Your decision, benefit records, and support history remain available.', 'provider');
+        }
+
+        if ($onboarding['can_proceed'] ?? false) {
+            return $this->decisionRecord(
+                'onboarding_required', 'attention', 'Complete provider onboarding',
+                'Follow the final-agreement instructions in Requirements. Signing is handled by the provider outside the platform; your selection stays unchanged.',
+                'applicant', 'View final agreement', $onboarding['href'],
+            );
         }
 
         $upcomingRelease = $this->scheduledReleases($releases)->first();
