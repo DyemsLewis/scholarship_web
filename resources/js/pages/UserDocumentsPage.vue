@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
@@ -278,6 +279,7 @@ async function uploadPreparedDocument(documentName, event) {
         return;
     }
 
+    if (!await confirmChange({ title: "Save this document?", message: "The selected file will be added to My Documents for future applications." }, () => !uploadingPreparedName.value && updatingPreparedId.value === null) || !(!uploadingPreparedName.value && updatingPreparedId.value === null)) { event.target.value = ""; return; }
     uploadingPreparedName.value = documentName;
     errorMessage.value = '';
 
@@ -315,6 +317,7 @@ async function updatePreparedDocument(document, event) {
         return;
     }
 
+    if (!await confirmChange({ title: "Replace this saved document?", message: "This replaces the reusable document. Files already submitted to applications remain separate." }, () => !uploadingPreparedName.value && updatingPreparedId.value === null) || !(!uploadingPreparedName.value && updatingPreparedId.value === null)) { event.target.value = ""; return; }
     updatingPreparedId.value = document.id;
     errorMessage.value = '';
 
@@ -410,10 +413,7 @@ onBeforeUnmount(cancelConfirmation);
                 </div>
 
                 <div v-else class="mt-5 space-y-5">
-                    <div v-if="errorMessage" class="flex items-start gap-3 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
-                        <i class="fa-solid fa-circle-exclamation mt-0.5" aria-hidden="true"></i>
-                        <p>{{ errorMessage }}</p>
-                    </div>
+                    <template v-if="errorMessage"><FeedbackToast :message="errorMessage" /></template>
                     <section v-if="documentView === 'prepared'" class="student-card overflow-hidden">
                         <header class="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center sm:justify-between">
                             <div class="flex items-center gap-3">

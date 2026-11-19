@@ -99,13 +99,14 @@ function hideBrokenImage(event) {
 
         <section class="student-page">
             <div class="mx-auto w-full max-w-[90rem]">
-                <a
-                    href="/dashboard/applications"
-                    class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950"
-                >
-                    <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
-                    Back to applications
-                </a>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <a href="/dashboard/applications" class="inline-flex min-h-8 items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">
+                        <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to applications
+                    </a>
+                    <a v-if="detail.identity.conversation_href" :href="detail.identity.conversation_href" class="student-button student-button-secondary" data-message-provider>
+                        <i class="fa-regular fa-comment-dots" aria-hidden="true"></i>Message provider
+                    </a>
+                </div>
 
                 <header class="mt-4 overflow-hidden rounded-md border border-slate-300 border-t-4 border-t-amber-400 bg-white shadow-sm" data-application-detail-header>
                     <div class="grid bg-portal-navy text-white lg:grid-cols-[minmax(0,1.65fr)_minmax(16rem,1fr)]">

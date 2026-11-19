@@ -19,9 +19,10 @@ const props = defineProps({
         type: String,
         required: true,
     },
+    actionLabel: { type: String, default: '' },
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'action']);
 
 const tone = computed(() => {
     if (props.type === 'error') {
@@ -54,7 +55,7 @@ const tone = computed(() => {
         >
             <div
                 v-if="show"
-                class="fixed right-4 top-4 z-[100] w-[calc(100%-2rem)] max-w-sm"
+                class="fixed right-4 top-4 z-[5000] w-[calc(100%-2rem)] max-w-sm"
                 :role="type === 'error' ? 'alert' : 'status'"
             >
                 <div
@@ -79,6 +80,7 @@ const tone = computed(() => {
                         <p :class="['mt-1 text-sm leading-5', tone.message]">
                             {{ message }}
                         </p>
+                        <button v-if="actionLabel" type="button" class="mt-2 rounded border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-800 hover:bg-slate-50" @click="emit('action')">{{ actionLabel }}</button>
                     </div>
 
                     <button

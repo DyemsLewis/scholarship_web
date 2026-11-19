@@ -148,9 +148,7 @@ onMounted(loadPrograms);
                 <div v-if="isLoading" class="provider-panel mt-4 p-6 text-sm text-slate-500">
                     Loading programs...
                 </div>
-                <div v-else-if="errorMessage" class="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-700 shadow-sm">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
                 <section v-else class="provider-panel mt-4 overflow-hidden">
                     <div class="flex flex-col gap-3 border-b border-slate-200 bg-slate-50/70 p-3 sm:flex-row sm:items-center sm:justify-between">
                         <label class="relative w-full sm:max-w-sm">

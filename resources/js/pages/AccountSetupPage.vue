@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, onMounted, ref } from 'vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import ToastMessage from '../components/ToastMessage.vue';
@@ -38,6 +39,7 @@ async function loadSetup() {
 }
 
 async function resendVerification() {
+    if (!await confirmChange({ title: "Send another verification email?", message: "A verification link will be sent to your account email address." }, () => !resending.value) || !(!resending.value)) { return; }
     resending.value = true;
 
     try {
@@ -73,6 +75,7 @@ async function checkVerification() {
 
 async function savePassword() {
     errors.value = {};
+    if (!await confirmChange({ title: "Save your new password?", message: "Your new password will replace the temporary account password." }, () => !saving.value) || !(!saving.value)) { return; }
     saving.value = true;
 
     try {
@@ -88,6 +91,7 @@ async function savePassword() {
 }
 
 async function logout() {
+    if (!await confirmChange({ title: "Sign out?", message: "You will leave account setup and return to the sign-in page." }, () => !saving.value) || !(!saving.value)) { return; }
     try {
         await window.axios.post('/logout');
     } finally {

@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
@@ -16,6 +17,7 @@ import ApplicantProfileRecord from '../components/profile/ApplicantProfileRecord
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
+import { venueAddressFromMap } from '../support/venueAddress';
 import PrivacyNoticeCard from '../components/PrivacyNoticeCard.vue';
 import { useConfirmationDialog } from '../composables/useConfirmationDialog';
 import { limitPhoneNumber } from '../support/phoneNumber';
@@ -225,6 +227,7 @@ const fieldLabels = {
 const profileFieldControlIds = {
     first_name: 'profile-first-name',
     last_name: 'profile-last-name',
+    has_profile_photo: 'profile-photo-upload',
     middle_initial: 'profile-middle',
     suffix: 'profile-suffix',
     gender: 'profile-gender',
@@ -459,6 +462,7 @@ const requiredFieldData = computed(() => requiredProfileFields.value.map((key) =
     value: profileFieldValue(key),
 })));
 const missingProfileFields = computed(() => requiredFieldData.value.filter((field) => !hasValue(field.value)));
+const missingEditorFields = computed(() => new Set(missingProfileFields.value.map(({ key }) => key)));
 const profileVerificationStatus = computed(() => user.value?.applicant_verification_status ?? 'unsubmitted');
 const academicVerificationDocument = computed(() => verificationDocuments.value
     .find((document) => document.document_type === 'academic_record') ?? null);
@@ -572,8 +576,9 @@ const profileOverview = computed(() => applicantProfileOverview({
 }));
 
 function continueProfileOverview(action) {
+    if (action.field) return editMissingProfileField(action.field);
     if (action.evidence) requestedEvidenceType.value = action.evidence;
-    openProfileEditor(action.field ? sectionForField(action.field) : action.section);
+    openProfileEditor(action.section);
 }
 const profileEditorCopy = computed(() => ({
     personal: {
@@ -836,7 +841,12 @@ async function focusProfileField(field) {
     const controlId = activeSection.value === 'verification'
         ? ({ gwa: 'fallback-academic-result', grading_scale: 'fallback-grading-scale' }[field] ?? profileFieldControlIds[field])
         : profileFieldControlIds[field];
-    const control = controlId ? document.getElementById(controlId) : null;
+    const locationPrerequisite = {
+        province: !form.value.region ? 'profile-region' : null,
+        city: !form.value.region ? 'profile-region' : !form.value.province ? 'profile-province' : null,
+    }[field];
+    const targetId = locationPrerequisite || controlId;
+    const control = targetId ? document.getElementById(targetId) : null;
 
     if (control) {
         for (let ancestor = control.parentElement; ancestor; ancestor = ancestor.parentElement) {
@@ -849,6 +859,13 @@ async function focusProfileField(field) {
     }
 
     await focusProfileAlert();
+}
+
+async function editMissingProfileField(field) {
+    const section = sectionForField(field);
+    if (section === 'verification') requestedEvidenceType.value = 'academic_record';
+    openProfileEditor(section);
+    if (section !== 'verification') await focusProfileField(field);
 }
 
 async function focusProfileAlert() {
@@ -1120,6 +1137,7 @@ const applicantProfileRecord = computed(() => ({
 const applicantProfileSections = computed(() => applicantProfileDetails(user.value, {
     combineResidence: true,
     requiresGuardian: savedProfileReadiness.value?.requires_guardian,
+    missingFields: savedProfileReadiness.value?.missing,
     labels: {
         gender: genderLabel, citizenship: citizenshipLabel, accountManager: accountManagerLabel,
         educationLevel: educationLevelLabel, schoolType: schoolTypeLabel, gradingScale: gradingScaleLabel,
@@ -1288,6 +1306,7 @@ async function saveProfilePhoto(file, input = null) {
         return false;
     }
 
+    if (!await confirmChange({ title: "Save this applicant photo?", message: "The photo will replace the saved applicant photo and may require another review." }, () => !profileEditorBusy.value) || !(!profileEditorBusy.value)) { if (input) input.value = ''; return null; }
     isUploadingProfilePhoto.value = true;
     errorMessage.value = '';
     const payload = new FormData();
@@ -1415,7 +1434,7 @@ async function captureProfilePhoto() {
 
         if (uploaded) {
             closeProfileCamera();
-        } else {
+        } else if (uploaded === false) {
             profileCameraError.value = errorMessage.value || 'The captured photo could not be uploaded.';
         }
     } catch (error) {
@@ -1562,43 +1581,24 @@ function handleApplicantCityChange() {
 }
 
 function handleProfileLocationResolved(location) {
-    form.value.latitude = Number(location.latitude).toFixed(7);
-    form.value.longitude = Number(location.longitude).toFixed(7);
-    locationMessage.value = 'Map updated from your city, province, and region. Save your profile to keep this map point.';
+    handleProfileLocationPicked(location);
 }
 
 function handleProfileLocationPicked(location) {
-    const address = location.address ?? {};
-    const streetAddress = [
-        address.house_number,
-        address.road,
-    ].filter(Boolean).join(' ');
-
+    const resolved = venueAddressFromMap(location.address);
     form.value.latitude = Number(location.latitude).toFixed(7);
     form.value.longitude = Number(location.longitude).toFixed(7);
-    form.value.address = streetAddress || location.displayName || form.value.address;
-    form.value.barangay = address.neighbourhood
-        || address.suburb
-        || address.quarter
-        || address.village
-        || form.value.barangay;
-    form.value.city = address.city
-        || address.municipality
-        || address.town
-        || address.city_district
-        || form.value.city;
-    form.value.province = address.province
-        || address.state
-        || address.county
-        || form.value.province;
-    const resolvedRegion = findPhilippineRegion(address.region
-        || address.state
-        || form.value.region);
-    form.value.region = resolvedRegion?.value || form.value.region;
-    loadApplicantLocationHierarchy();
-    locationMessage.value = location.displayName
-        ? 'Pin set. Address fields were filled from the selected map point.'
-        : 'Pin set. Save your profile to keep this map point.';
+    if (resolved) {
+        const sameArea = ['region', 'province', 'city'].every(key => !form.value[key]
+            || Boolean(findLocationOption([{ value: form.value[key] }], resolved[key])));
+        form.value.address = resolved.street || (sameArea ? form.value.address : '');
+        form.value.barangay = resolved.barangay || (sameArea ? form.value.barangay : '');
+        for (const key of ['region', 'province', 'city']) form.value[key] = resolved[key];
+        loadApplicantLocationHierarchy();
+    }
+    locationMessage.value = resolved
+        ? 'Pin set. Review the address fields and complete any missing street or landmark details before saving.'
+        : 'Pin set, but its address could not be filled. Review and complete the written address before saving.';
 }
 
 function handleProfileLocationError(message) {
@@ -1745,6 +1745,7 @@ async function uploadVerificationDocument(documentType, event) {
 
 async function retryAcademicRecordScan(document) {
     if (profileEditorBusy.value || evidenceRefreshRequired.value) return;
+    if (!await confirmChange({ title: "Scan this academic record again?", message: "The scan result will be updated. A reviewer still needs to confirm the academic result." }, () => !profileEditorBusy.value && !evidenceRefreshRequired.value) || !(!profileEditorBusy.value && !evidenceRefreshRequired.value)) { return; }
     evidenceActionPending.value = true;
     rescanningAcademicDocumentId.value = document.id;
     errorMessage.value = ''; evidenceSuccess.value = '';
@@ -1853,6 +1854,7 @@ async function saveProfile(requireComplete = false, nextSectionId = null) {
         return true;
     }
 
+    if (!await confirmChange({ title: "Save your applicant profile?", message: "The updated details will be saved to the record used by scholarship reviewers." }, () => !profileEditorBusy.value) || !(!profileEditorBusy.value)) { return; }
     isSaving.value = true;
     errorMessage.value = '';
     fieldErrors.value = {};
@@ -2036,14 +2038,14 @@ watch(() => form.value.grading_scale, (scale) => {
                                 <span><i class="fa-solid fa-spinner fa-spin mr-2" aria-hidden="true"></i>Opening camera...</span>
                             </div>
                             <div v-else-if="profileCameraError && !profileCameraStream" class="absolute inset-0 grid place-items-center p-6 text-center text-sm leading-6 text-white">
-                                <span><i class="fa-solid fa-camera-slash mb-3 block text-2xl text-amber-300" aria-hidden="true"></i>{{ profileCameraError }}</span>
+                                <span><i class="fa-solid fa-camera-slash mb-3 block text-2xl text-amber-300" aria-hidden="true"></i>Camera unavailable. Close and try again, or choose an existing photo.</span>
                             </div>
                             <div v-if="profileCameraStream" class="pointer-events-none absolute inset-5 rounded-full border border-dashed border-white/60"></div>
                         </div>
                     </div>
 
                     <div class="space-y-3 border-t border-slate-200 px-5 py-4">
-                        <p v-if="profileCameraError && profileCameraStream" class="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ profileCameraError }}</p>
+                        <FeedbackToast :message="profileCameraError" />
                         <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                             <button type="button" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-100" @click="closeProfileCamera">Cancel</button>
                             <button
@@ -2081,16 +2083,14 @@ watch(() => form.value.grading_scale, (scale) => {
                     <div class="h-32 bg-white"></div>
                 </div>
 
-                <div v-else-if="!user" class="student-card rounded-md border-slate-300 p-5 sm:p-6" role="alert">
+                <div v-else-if="!user" class="student-card rounded-md border-slate-300 p-5 sm:p-6" role="status">
+                    <FeedbackToast :message="errorMessage || 'Please try again to view your saved applicant record.'" retry-label="Try again" @retry="loadProfile" />
                     <h2 class="font-bold text-slate-950">Your profile could not be loaded</h2>
-                    <p class="mt-2 text-sm text-slate-600">{{ errorMessage || 'Please try again to view your saved applicant record.' }}</p>
                     <button type="button" class="mt-4 inline-flex min-h-10 items-center gap-2 rounded-sm bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800" @click="loadProfile"><i class="fa-solid fa-rotate-right text-xs" aria-hidden="true"></i>Try again</button>
                 </div>
 
                 <div v-else class="space-y-5">
-                    <div v-if="errorMessage && !showProfileEditorModal" class="student-card p-4">
-                        <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
-                    </div>
+                    <FeedbackToast v-if="!showProfileEditorModal" :message="errorMessage" />
 
                     <ApplicantProfileRecord
                         :record="applicantProfileRecord"
@@ -2107,7 +2107,7 @@ watch(() => form.value.grading_scale, (scale) => {
                             <ApplicantProfileReadiness :state="profileOverview" @continue="continueProfileOverview" />
                         </template>
                         <template #details>
-                            <ApplicantProfileDetails :sections="applicantProfileSections" editable tinted-headers @edit="openProfileEditor" />
+                            <ApplicantProfileDetails :sections="applicantProfileSections" editable tinted-headers @edit="openProfileEditor" @complete-field="editMissingProfileField" />
                         </template>
                     </ApplicantProfileRecord>
 
@@ -2148,16 +2148,13 @@ watch(() => form.value.grading_scale, (scale) => {
                     @save="finishProfileEditor"
                 >
                         <div
-                            v-if="errorMessage || validationErrorEntries.length"
+                            v-if="validationErrorEntries.length"
                             ref="profileValidationAlert"
                             class="mx-4 mt-4 border-l-4 border-rose-500 bg-rose-50 p-4 outline-none sm:mx-6"
                             role="alert"
                             aria-live="assertive"
                             tabindex="-1"
                         >
-                            <p v-if="errorMessage" class="text-sm font-semibold text-rose-700">
-                                {{ errorMessage }}
-                            </p>
                             <div v-if="validationErrorEntries.length" class="mt-3 flex flex-wrap gap-2">
                                 <button
                                     v-for="error in validationErrorEntries.slice(0, 5)"
@@ -2171,9 +2168,11 @@ watch(() => form.value.grading_scale, (scale) => {
                             </div>
                         </div>
 
+                        <FeedbackToast :message="errorMessage" />
                         <ApplicantPersonalEditor
                             v-if="activeSection === 'personal'"
                             v-model="form"
+                            :missing-fields="missingEditorFields"
                             :photo-url="profilePhotoUrl"
                             :applicant-name="profileDisplayName"
                             :photo-review-status="user?.profile_photo_review_status || ''"
@@ -2198,6 +2197,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         <ApplicantHouseholdEditor
                             v-if="activeSection === 'household'"
                             v-model="form"
+                            :missing-fields="missingEditorFields"
                             :income-options="incomeOptions"
                             :relationship-options="guardianRelationshipOptions"
                             :portal-scholarships="platformActiveScholarships"
@@ -2210,6 +2210,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         <ApplicantLearningEditor
                             v-if="activeSection === 'academic'"
                             v-model="form"
+                            :missing-fields="missingEditorFields"
                             :education-options="educationLevelOptions"
                             :enrollment-options="enrollmentOptions"
                             :course-options="coursePathOptions"
@@ -2231,6 +2232,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         <ApplicantAddressEditor
                             v-if="activeSection === 'location'"
                             v-model="form"
+                            :missing-fields="missingEditorFields"
                             :province-options="applicantProvinceOptions"
                             :city-options="applicantCityOptions"
                             :loading-provinces="isLoadingApplicantProvinces"
@@ -2248,6 +2250,7 @@ watch(() => form.value.grading_scale, (scale) => {
                         <ApplicantEvidenceEditor
                             v-if="activeSection === 'verification'"
                             v-model="form"
+                            :missing-fields="missingEditorFields"
                             v-model:consent="verificationDocumentTermsAccepted"
                             :groups="verificationDocumentGroups"
                             :title="verificationUploadCopy.title"

@@ -46,9 +46,7 @@ onMounted(loadService);
 
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading service details...</p></div>
 
-                <div v-else-if="errorMessage || !plan" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-8 text-center text-sm font-semibold text-rose-800">
-                    {{ errorMessage || 'This support service is not available.' }}
-                </div>
+                <FeedbackToast v-else-if="errorMessage || !plan" :message="errorMessage || 'This support service is not available.'" fallback />
 
                 <template v-else>
                     <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">

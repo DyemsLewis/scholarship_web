@@ -108,8 +108,8 @@ function serviceRecordLink(href) {
             </a>
         </nav>
 
-        <p v-if="errorMessage && recordReady" ref="actionError" tabindex="-1" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
-        <p v-if="successMessage" class="mt-4 border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800" role="status">{{ successMessage }}</p>
+        <FeedbackToast v-if="errorMessage &amp;&amp; recordReady" :message="errorMessage" />
+        <FeedbackToast v-if="successMessage" :message="successMessage" type="success" />
         <section v-if="loading || loadError" class="admin-panel mt-4"><AdminLoadState :loading="loading" :error="loadError" loading-message="Loading service request..." @retry="$emit('retry')" /></section>
         <slot v-else-if="purchase"></slot>
     </AdminWorkspacePage>

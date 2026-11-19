@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { showPortalToast } from '../support/portalToast';
 
@@ -44,6 +45,7 @@ async function checkVerificationReminder() {
 }
 
 async function resendVerificationEmail() {
+    if (!await confirmChange({ title: "Send another verification email?", message: "A verification link will be sent to your account email address." }, () => !isSending.value) || !(!isSending.value)) { return; }
     isSending.value = true;
 
     try {

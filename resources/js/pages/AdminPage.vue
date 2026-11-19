@@ -204,9 +204,7 @@ onMounted(loadAdminData);
                     Loading admin dashboard...
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
 
                 <div v-else class="admin-content-stack">
                     <section v-if="canManageReviews" class="admin-panel overflow-hidden">

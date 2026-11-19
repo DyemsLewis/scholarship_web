@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
@@ -792,6 +793,7 @@ async function handleDocumentFileChange(event) {
         return;
     }
 
+    if (!await confirmChange({ title: "Save this requirement document?", message: "The selected file will be stored for your application requirements." }, () => !isUploadingDocument.value) || !(!isUploadingDocument.value)) { event.target.value = ""; activeUploadRequirement.value = ""; return; }
     isUploadingDocument.value = true;
     errorMessage.value = '';
 
@@ -1089,9 +1091,7 @@ watch(selectedScholarship, (scholarship) => {
                 </div>
 
                 <div v-else class="mt-6 space-y-6">
-                    <div v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
-                        {{ errorMessage }}
-                    </div>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <template v-if="activeWorkspace === 'new'">
                     <div v-if="scholarshipRequirementsHref" data-application-preparation-handoff class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-5 py-4">

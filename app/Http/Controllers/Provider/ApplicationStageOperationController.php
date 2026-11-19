@@ -84,6 +84,10 @@ class ApplicationStageOperationController extends Controller
         ], false);
         $nextStep = match (true) {
             $session->status === 'cancelled' => null,
+            $session->status === 'completed' && $session->needsSessionProof() =>
+                $steps->step('blocked', 'Upload session proof',
+                    'The session is complete. Upload the required proof before recording individual outcomes.', $owner,
+                    ['label' => 'Open proof', 'section' => 'proof']),
             $session->status === 'completed' => $hasPendingResults
                 ? $steps->step('handoff', 'Record individual applicant outcomes',
                     'Completing the session does not advance applicants. Record an outcome for each applicant still at this stage.', $owner,
@@ -105,8 +109,6 @@ class ApplicationStageOperationController extends Controller
                     ['label' => 'Open roster', 'section' => 'roster']),
                 'attendance' => $steps->step('blocked', 'Record attendance', $blocker['message'], $owner,
                     ['label' => 'Open roster', 'section' => 'roster']),
-                'proof' => $steps->step('blocked', 'Upload session proof', $blocker['message'], $owner,
-                    ['label' => 'Open proof', 'section' => 'proof']),
                 default => null,
             },
         };
@@ -210,7 +212,7 @@ class ApplicationStageOperationController extends Controller
         $blockedReason = match (true) {
             ! $progress || in_array($application->application_state, ['closed', 'withdrawn'], true) => 'This application is no longer ready for a stage result.',
             in_array($application->correction_status, ['requested', 'submitted'], true) => 'Resolve the open correction request before recording the result.',
-            ! app(ApplicationStageResultGate::class)->activityComplete($application, $stage) => 'Complete the activity and its required attendance and proof before recording a result.',
+            ! app(ApplicationStageResultGate::class)->activityComplete($application, $stage) => 'Record attendance, complete the activity, and add any required proof before recording a result.',
             default => null,
         };
         $steps = app(ProviderApplicationNextStep::class);
@@ -232,13 +234,15 @@ class ApplicationStageOperationController extends Controller
             $session?->status === 'draft' => $steps->step('blocked', 'Publish the session',
                 'The schedule is still a draft. Publish it before recording the activity result.', $owner, $sessionAction()),
             $session?->starts_at?->isFuture() && $session->status !== 'completed' => $steps->step('waiting', 'Wait for the scheduled activity',
-                'The session has not started. Record attendance and any required proof after the activity.', 'Scheduled start', $sessionAction()),
+                'The session has not started. Record attendance after the activity begins.', 'Scheduled start', $sessionAction()),
             $session && ($assignment->attendance?->status ?? 'pending') === 'pending' => $steps->step('blocked', 'Record attendance',
                 'This applicant has no attendance result for the session.', $owner, $sessionAction('Open roster', 'roster')),
-            $session?->proof_required && $proofCount === 0 => $steps->step('blocked', 'Upload session proof',
-                'Add the required proof to the session before recording the outcome.', $owner, $sessionAction('Open proof', 'proof')),
-            $session !== null => $steps->step('blocked', 'Complete the session',
+            $session && $session->status !== 'completed' => $steps->step('blocked', 'Complete the session',
                 'Open the session to finish the remaining checks before recording an outcome.', $owner, $sessionAction()),
+            $session?->proof_required && $proofCount === 0 => $steps->step('blocked', 'Upload session proof',
+                'Add the required proof to the completed session before recording the outcome.', $owner, $sessionAction('Open proof', 'proof')),
+            $session !== null => $steps->step('blocked', 'Review the session record',
+                $blockedReason, $owner, $sessionAction()),
             $legacySchedule !== null => $steps->step('blocked', 'Complete the scheduled activity',
                 'Finish the existing appointment before recording an outcome.', $owner),
             default => $steps->step('blocked', 'Schedule the '.strtolower($stageLabel),
@@ -414,7 +418,9 @@ class ApplicationStageOperationController extends Controller
         $this->log($request, 'application_stage_session_completed', $scholarship, $session);
 
         return response()->json([
-            'message' => 'Session completed. Applicant outcomes must still be reviewed and recorded separately.',
+            'message' => $session->needsSessionProof()
+                ? 'Session completed. Upload the required proof before recording applicant outcomes.'
+                : 'Session completed. Applicant outcomes must still be reviewed and recorded separately.',
             'session' => (new ApplicationStageSessionResource($session))->resolve($request),
         ]);
     }

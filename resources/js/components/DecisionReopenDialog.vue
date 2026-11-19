@@ -63,7 +63,7 @@ async function submit() {
                         <p v-if="recordName" class="mb-1 font-bold">{{ recordName }}</p>
                         Current result: <strong>{{ decision.result_label || 'Recorded' }}</strong>
                     </div>
-                    <p v-if="error" role="alert" class="mt-4 rounded-sm border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{{ error }}</p>
+                    <FeedbackToast v-if="error" :message="error" />
                     <label class="mt-5 block text-sm font-semibold text-slate-700">
                         Reason for reopening
                         <textarea

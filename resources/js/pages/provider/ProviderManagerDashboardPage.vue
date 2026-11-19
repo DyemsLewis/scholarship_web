@@ -126,7 +126,7 @@ onMounted(loadDashboard);
                     </template>
                 </WorkspaceDashboardHeader>
 
-                <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm font-semibold text-slate-500 shadow-sm">Loading organization overview...</div>
 
                 <template v-else-if="!errorMessage">

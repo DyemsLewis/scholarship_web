@@ -33,6 +33,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'export_data',
     ];
 
+    public const PROVIDER_MESSAGING_PERMISSION = 'manage_application_messages';
+
     public const PROVIDER_PERMISSIONS = [
         'manage_programs',
         'verify_applications',
@@ -42,6 +44,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'manage_monitoring',
         'manage_benefit_releases',
         'manage_reports',
+        self::PROVIDER_MESSAGING_PERMISSION,
         'manage_profile',
         'manage_team',
         'manage_billing',
@@ -295,6 +298,12 @@ class User extends Authenticatable implements MustVerifyEmail
                 if ($permissions->contains($legacyPermission)) {
                     $permissions = $permissions->merge($expandedPermissions);
                 }
+            }
+
+            // Existing solo operators keep full access; managed staff need an explicit grant.
+            if (! $this->isManagedAccount()
+                && array_diff(self::PROVIDER_PERMISSIONS, $permissions->all(), [self::PROVIDER_MESSAGING_PERMISSION]) === []) {
+                $permissions->push(self::PROVIDER_MESSAGING_PERMISSION);
             }
         }
 

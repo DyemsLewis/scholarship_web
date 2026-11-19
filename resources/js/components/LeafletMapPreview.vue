@@ -173,6 +173,8 @@ async function geocodeAddress(address = props.address) {
     }
 
     statusMessage.value = 'Searching address on OpenStreetMap...';
+    const revision = props.picker ? ++selectionRevision : selectionRevision;
+    reverseController?.abort();
     geocodeController?.abort();
     geocodeController = new AbortController();
     const activeController = geocodeController;
@@ -185,6 +187,7 @@ async function geocodeAddress(address = props.address) {
             limit: '1',
             addressdetails: '1',
             countrycodes: 'ph',
+            'accept-language': 'en',
             q: philippineSearchQuery(query),
         });
         const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
@@ -202,7 +205,7 @@ async function geocodeAddress(address = props.address) {
         const results = await response.json();
         const firstResult = results[0];
 
-        if (!isMounted || activeController.signal.aborted || query !== props.address.trim()) {
+        if (!isMounted || revision !== selectionRevision || activeController.signal.aborted || query !== props.address.trim()) {
             return null;
         }
 
@@ -223,7 +226,7 @@ async function geocodeAddress(address = props.address) {
             reportError('The address search did not find a land location in the Philippines. Place the pin manually.');
             return null;
         }
-        if (!isMounted || activeController.signal.aborted || query !== props.address.trim()) return null;
+        if (!isMounted || revision !== selectionRevision || activeController.signal.aborted || query !== props.address.trim()) return null;
         if (props.picker) acceptedCoordinates = coordinates;
 
         pendingGeocodedCoordinates = coordinates;
@@ -231,6 +234,7 @@ async function geocodeAddress(address = props.address) {
 
         return coordinates;
     } catch (error) {
+        if (!isMounted || revision !== selectionRevision) return null;
         if (error?.name === 'AbortError') {
             if (geocodeController === activeController) reportError('Address search timed out. You can still place the pin manually.');
             return null;
@@ -243,7 +247,7 @@ async function geocodeAddress(address = props.address) {
         clearTimeout(timeout);
         if (geocodeController === activeController) {
             geocodeController = null;
-            if (isMounted && props.picker) selectionState();
+            if (isMounted && props.picker && revision === selectionRevision) selectionState();
         }
     }
 }
@@ -461,6 +465,7 @@ async function renderMap(coordinates = currentCoordinates(), preserveView = fals
 
 async function setPickedCoordinates(coordinates) {
     const revision = ++selectionRevision;
+    window.clearTimeout(automaticGeocodeTimer);
     const search = geocodeController;
     geocodeController = null;
     search?.abort();
@@ -478,14 +483,7 @@ async function setPickedCoordinates(coordinates) {
         pendingPickedCoordinates = coordinates;
         await renderMap(coordinates, true);
         if (!isMounted || revision !== selectionRevision) return;
-        emit('picked', coordinates);
-        selectionState();
-        statusMessage.value = 'Land location selected. You can use this pin now.';
-        // An optional address lookup must not delay using a validated land pin.
-        const location = props.reverseGeocodeOnPick ? await reverseGeocodeCoordinates(coordinates) : null;
-        if (!isMounted || revision !== selectionRevision) return;
-        if (location) emit('picked', location);
-        statusMessage.value = 'Land location selected. Choose Use this pin to confirm, then review the address fields.';
+        await publishPickedCoordinates(coordinates, revision);
     } catch (error) {
         if (!isMounted || revision !== selectionRevision) return;
         await renderMap(acceptedCoordinates, true);
@@ -493,6 +491,16 @@ async function setPickedCoordinates(coordinates) {
     } finally {
         if (isMounted && revision === selectionRevision) selectionState();
     }
+}
+
+async function publishPickedCoordinates(coordinates, revision) {
+    // Confirm only after the address response, so closing the modal cannot abort it.
+    const location = props.reverseGeocodeOnPick ? await reverseGeocodeCoordinates(coordinates) : coordinates;
+    if (!isMounted || revision !== selectionRevision) return;
+    emit('picked', location || { ...coordinates, addressLookupFailed: true });
+    statusMessage.value = location
+        ? 'Land location selected. Choose Use this pin to confirm, then review the address fields.'
+        : 'The pin is valid, but its address could not be found. Use this pin, then complete the address fields manually.';
 }
 
 async function handleMapClick(event) {
@@ -511,8 +519,8 @@ async function handleMarkerDragEnd(event) {
     });
 }
 
-async function previewAddress() {
-    const savedCoordinates = currentCoordinates();
+async function previewAddress(forceSearch = false) {
+    const savedCoordinates = forceSearch ? null : currentCoordinates();
     const coordinates = savedCoordinates || await geocodeAddress();
 
     if (!coordinates) {
@@ -588,7 +596,7 @@ watch(
     () => props.geocodeTrigger,
     () => {
         if (props.geocodeTrigger > 0) {
-            previewAddress();
+            previewAddress(true);
         }
     },
 );
@@ -608,14 +616,23 @@ onMounted(async () => {
     isMounted = true;
 
     if (props.picker && currentCoordinates()) {
+        const coordinates = currentCoordinates();
+        const revision = ++selectionRevision;
         selectionState(true);
         try {
-            if (await isAllowed(currentCoordinates())) acceptedCoordinates = currentCoordinates();
+            const allowed = await isAllowed(coordinates);
+            if (!isMounted || revision !== selectionRevision) return;
+            if (allowed) acceptedCoordinates = coordinates;
+            await renderMap(coordinates);
+            if (!isMounted || revision !== selectionRevision) return;
+            if (allowed) await publishPickedCoordinates(coordinates, revision);
+            else reportError(PHILIPPINE_LAND_MESSAGE);
         } catch (error) {
-            reportError(error.message);
+            if (revision === selectionRevision) reportError(error.message);
+        } finally {
+            if (isMounted && revision === selectionRevision) selectionState();
         }
-        if (!isMounted) return;
-        selectionState();
+        return;
     }
 
     if (currentCoordinates()) {

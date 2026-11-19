@@ -4,6 +4,7 @@ import AuthShell from '../components/AuthShell.vue';
 import TermsAgreement from '../components/TermsAgreement.vue';
 import ToastMessage from '../components/ToastMessage.vue';
 import { limitPhoneNumber } from '../support/phoneNumber';
+import { clearRegistrationProgress, readRegistrationProgress, registrationStorage, saveRegistrationProgress } from '../support/registrationProgress';
 
 const formElement = ref(null);
 const isProviderRegistration = (window.portalPathname?.() ?? window.location.pathname).startsWith('/provider/register');
@@ -12,6 +13,7 @@ const registrationStep = ref('details');
 const registrationToken = ref('');
 const verificationEmail = ref('');
 const verificationCode = ref('');
+const resumingAccount = ref(false);
 const resendSeconds = ref(0);
 const form = ref({
     firstName: '',
@@ -78,8 +80,8 @@ const shellCopy = computed(() => {
             title: 'Check your email',
             description: `Enter the six-digit code sent to ${verificationEmail.value || 'your email'}.`,
             panelBadge: 'Secure Registration',
-            panelTitle: 'Verify before account creation',
-            panelText: 'Your account is created only after the email code is confirmed.',
+            panelTitle: resumingAccount.value ? 'Finish verifying your account' : 'Verify before account creation',
+            panelText: resumingAccount.value ? 'Your existing username, password, and profile details will stay unchanged.' : 'Your account is created only after the email code is confirmed.',
             panelHighlights: [],
             panelNote: 'The code expires after 10 minutes.',
         };
@@ -152,14 +154,17 @@ function startResendCountdown(seconds) {
 }
 
 function returnToDetails() {
+    clearRegistrationProgress(registrationStorage(), registrationRole);
     registrationStep.value = 'details';
     registrationToken.value = '';
     verificationCode.value = '';
     verificationEmail.value = '';
+    resumingAccount.value = false;
     startResendCountdown(0);
 }
 
 async function submitForm() {
+    if (isSubmitting.value) return;
     if (!formElement.value?.reportValidity()) {
         return;
     }
@@ -216,6 +221,10 @@ async function submitForm() {
         verificationEmail.value = response.data.email ?? form.value.email;
         verificationCode.value = '';
         registrationStep.value = 'verification';
+        resumingAccount.value = Boolean(response.data.resuming_account);
+        persistVerificationProgress(response.data);
+        form.value.password = '';
+        form.value.passwordConfirmation = '';
         startResendCountdown(response.data.resend_after ?? 60);
         showToast('success', 'Code sent', response.data.message ?? 'Check your email for the verification code.');
     } catch (error) {
@@ -227,6 +236,7 @@ async function submitForm() {
 }
 
 async function verifyRegistration() {
+    if (isVerifying.value) return;
     if (!/^\d{6}$/.test(verificationCode.value)) {
         showToast('error', 'Verification failed', 'Enter the complete six-digit verification code.');
         return;
@@ -239,7 +249,8 @@ async function verifyRegistration() {
             registration_token: registrationToken.value,
             code: verificationCode.value,
         });
-        showToast('success', 'Account created', response.data.message);
+        clearRegistrationProgress(registrationStorage(), registrationRole);
+        showToast('success', resumingAccount.value ? 'Email verified' : 'Account created', response.data.message);
         window.setTimeout(() => {
             window.location.href = response.data.redirect ?? '/login?registered=1&verified=1';
         }, 500);
@@ -267,6 +278,7 @@ async function resendVerificationCode() {
             registration_token: registrationToken.value,
         });
         verificationCode.value = '';
+        persistVerificationProgress(response.data);
         startResendCountdown(response.data.resend_after ?? 60);
         showToast('success', 'New code sent', response.data.message);
     } catch (error) {
@@ -283,6 +295,25 @@ async function resendVerificationCode() {
     } finally {
         isResending.value = false;
     }
+}
+
+function persistVerificationProgress(data) {
+    saveRegistrationProgress(registrationStorage(), registrationRole, {
+        token: registrationToken.value,
+        email: verificationEmail.value,
+        resumingAccount: resumingAccount.value,
+        expiresIn: data.expires_in ?? 600,
+        resendAfter: data.resend_after ?? 60,
+    });
+}
+
+const savedVerification = readRegistrationProgress(registrationStorage(), registrationRole);
+if (savedVerification) {
+    registrationToken.value = savedVerification.token;
+    verificationEmail.value = savedVerification.email;
+    resumingAccount.value = Boolean(savedVerification.resumingAccount);
+    registrationStep.value = 'verification';
+    startResendCountdown(Math.max(0, Math.ceil((savedVerification.resendAt - Date.now()) / 1000)));
 }
 
 onBeforeUnmount(() => {
@@ -437,7 +468,7 @@ onBeforeUnmount(() => {
                     Code sent to {{ verificationEmail }}
                 </p>
                 <p class="mt-1 text-xs leading-5 text-slate-500">
-                    Enter the code to create your account. It expires after 10 minutes.
+                    {{ resumingAccount ? 'Enter the code to verify your existing account. Your login and profile details will not change.' : 'Enter the code to create your account.' }} The code expires after 10 minutes.
                 </p>
             </div>
 
@@ -466,7 +497,7 @@ onBeforeUnmount(() => {
                 :disabled="isVerifying || verificationCode.length !== 6"
                 :class="primaryButtonClass"
             >
-                {{ isVerifying ? 'Verifying...' : 'Verify and create account' }}
+                {{ isVerifying ? 'Verifying...' : resumingAccount ? 'Verify email' : 'Verify and create account' }}
             </button>
 
             <div class="flex flex-col items-center justify-between gap-3 border-t border-slate-200 pt-4 text-sm sm:flex-row">

@@ -119,7 +119,7 @@ onMounted(loadRecord);
 
         <template v-else-if="provider">
             <AdminReviewGuide :workflow="provider.review_workflow" kind="provider" @continue="continueReview" />
-            <p v-if="successMessage" class="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800" role="status">{{ successMessage }}</p>
+            <FeedbackToast v-if="successMessage" :message="successMessage" type="success" />
 
             <section class="admin-panel mt-4 overflow-hidden">
                 <div class="flex items-center gap-4 border-b border-slate-200 px-6 py-5">
@@ -174,7 +174,7 @@ onMounted(loadRecord);
 
             <form id="provider-final-decision" class="admin-panel mt-4 p-6 scroll-mt-5" :aria-busy="saving" @submit.prevent="saveDecision">
                 <div class="flex items-start justify-between gap-8"><div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-gavel" aria-hidden="true"></i></span><div><p class="text-[10px] font-bold uppercase tracking-[0.15em] text-amber-700">Step 2</p><h2 class="mt-0.5 text-lg font-black text-slate-950">Final provider account decision</h2><p class="mt-0.5 text-sm text-slate-500">Approval requires every current document to be accepted. This does not change individual file outcomes.</p></div></div><button type="submit" :disabled="!canSave" class="bg-slate-950 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">{{ saving ? 'Saving...' : 'Save decision' }}</button></div>
-                <p v-if="errorMessage" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                 <p v-if="decision === 'approved' && !documentSummary.can_approve" class="mt-4 text-sm font-semibold text-amber-800">{{ documentSummary.unavailable_files ? 'A saved file is unavailable. Request a replacement before approval.' : documentSummary.total ? 'Finish the document reviews in Step 1. Unreviewed files and replacement requests block approval.' : 'Uploaded organization proof is required before approval.' }}</p>
                 <button v-if="stale" type="button" class="mt-3 text-sm font-bold underline underline-offset-2" @click="refreshReviews()">Reload current record</button>
                 <fieldset :disabled="saving" class="mt-5 grid grid-cols-[14rem_minmax(0,1fr)] gap-4"><label><span class="mb-1.5 block text-sm font-bold text-slate-700">Outcome</span><select v-model="decision" class="h-11 w-full border border-slate-300 bg-white px-3"><option value="approved">Approve</option><option value="rejected">Reject</option><option value="pending">Return to pending</option></select></label><label><span class="mb-1.5 block text-sm font-bold text-slate-700">Review note <span v-if="decision === 'rejected'" class="text-rose-700">required</span></span><textarea v-model="notes" :required="decision === 'rejected'" rows="3" maxlength="1500" class="w-full border border-slate-300 px-3 py-2" placeholder="State what must be corrected."></textarea></label></fieldset>

@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, nextTick, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import LocationMapModal from '../components/LocationMapModal.vue';
@@ -263,6 +264,7 @@ async function toggleSave() {
         return;
     }
 
+    if (!await confirmChange({ title: "Update your saved scholarships?", message: "This scholarship will be added to or removed from your saved list. This does not submit an application." }, () => !isPreview && !isSaving.value && Boolean(detail.value?.saved)) || !(!isPreview && !isSaving.value && Boolean(detail.value?.saved))) { return; }
     isSaving.value = true;
     errorMessage.value = '';
 
@@ -350,9 +352,7 @@ onMounted(async () => {
                     Loading scholarship details...
                 </div>
 
-                <div v-else-if="errorMessage && !detail" class="mt-5 border border-rose-200 bg-rose-50 p-6 text-sm font-semibold text-rose-800 shadow-sm">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-else-if="errorMessage &amp;&amp; !detail" :message="errorMessage" fallback />
 
                 <div v-else-if="detail" class="mt-5 space-y-4">
                     <header class="student-card overflow-hidden rounded-md border-slate-300 border-t-4 border-t-amber-400" data-scholarship-detail-header>
@@ -413,9 +413,7 @@ onMounted(async () => {
                         </div>
                     </nav>
 
-                    <p v-if="errorMessage" class="border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800">
-                        {{ errorMessage }}
-                    </p>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <div ref="sectionContent" class="space-y-4 focus:outline-none" role="region" :aria-label="sectionLabel" tabindex="-1" data-scholarship-section-content>
                     <ScholarshipOverview

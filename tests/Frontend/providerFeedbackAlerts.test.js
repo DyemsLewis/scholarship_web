@@ -37,7 +37,7 @@ test('notifications prompt only for explicit provider interactions, preserving t
     const source = read(files[1]);
     assert.match(source, /if \(!providerAlerts \|\| interactive\) errorMessage.value/);
     assert.match(source, /silent: notifications.value.length > 0, interactive: true/);
-    assert.match(source, /errorMessage && !providerAlerts/);
+    assert.match(source, /<FeedbackToast v-else-if="errorMessage &amp;&amp; !providerAlerts"/);
 });
 test('dismissing venue errors retains manual fallback fields and typing does not re-open the alert', () => {
     const source = read(files[2]);

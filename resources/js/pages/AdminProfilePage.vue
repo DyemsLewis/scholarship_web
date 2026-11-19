@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, onMounted, reactive, ref } from 'vue';
 import AdminWorkspaceSidebar from '../components/AdminWorkspaceSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
@@ -61,6 +62,7 @@ async function loadProfile() {
 
 async function saveProfile() {
     if (isSaving.value || isLoading.value || !user.value) return;
+    if (!await confirmChange({ title: "Save your admin profile?", message: "The updated account and contact details will be saved." }, () => !isSaving.value && !isLoading.value && Boolean(user.value)) || !(!isSaving.value && !isLoading.value && Boolean(user.value))) { return; }
     isSaving.value = true;
     errorMessage.value = '';
     successMessage.value = '';
@@ -106,12 +108,8 @@ onMounted(loadProfile);
                 </section>
 
                 <div v-else-if="user" class="admin-content-stack">
-                    <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm" role="alert">
-                        {{ errorMessage }}
-                    </p>
-                    <p v-if="successMessage" class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 shadow-sm" role="status">
-                        {{ successMessage }}
-                    </p>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
+                    <FeedbackToast v-if="successMessage" :message="successMessage" type="success" />
 
                     <form class="admin-panel overflow-hidden" @submit.prevent="saveProfile">
                         <div class="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">

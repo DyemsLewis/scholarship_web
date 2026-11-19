@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { confirmOutcome } from './helpers/acceptedOutcome.js';
+import { confirmChange, confirmOutcome } from './helpers/acceptedOutcome.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, reactive, ref, watch } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -27,7 +27,7 @@ function workspace(section = 'delivery') {
 }
 function harness(name, exposed, context = workspace()) {
     const source = parse(page(name)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
-    const deps = { confirmOutcome, computed, reactive, ref, watch: (source, callback) => watch(source, callback, { flush: 'sync' }),
+    const deps = { confirmChange, confirmOutcome, computed, reactive, ref, watch: (source, callback) => watch(source, callback, { flush: 'sync' }),
         useAdminServiceWorkspace: () => context.service, adminServiceDateInput, adminServiceTargetDateError,
         window: context.window, URL, FormData };
     return { ...new Function(...Object.keys(deps), `${source}\nreturn { ${exposed} };`)(...Object.values(deps)), ...context };
@@ -163,7 +163,7 @@ test('all record subpages provide retry, and shell errors focus without replacin
         assert.match(page(name), /:load-error="loadError"/); assert.match(page(name), /@retry="loadRecord"/);
     }
     const shell = page('components/AdminServiceWorkspaceShell');
-    for (const value of ['recordReady', 'AdminLoadState', 'actionError.value?.focus', 'scrollIntoView', 'role="alert"']) assert.ok(shell.includes(value), value);
+    for (const value of ['recordReady', 'AdminLoadState', 'actionError.value?.focus', 'scrollIntoView', '<FeedbackToast']) assert.ok(shell.includes(value), value);
     assert.match(page('AdminServiceUpdatesPage'), /Internal: visible only to administrators/);
     assert.match(page('AdminServiceFilesPage'), /data-file-preview="true"/);
     assert.doesNotMatch(page('AdminServiceFilesPage'), /FilePreviewModal|truncate/);

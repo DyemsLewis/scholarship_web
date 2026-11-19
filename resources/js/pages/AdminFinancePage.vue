@@ -147,9 +147,7 @@ onMounted(() => loadFinance());
                     </button>
                 </nav>
 
-                <div v-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                 <div v-if="activeView === 'overview' && isLoading" class="admin-panel mt-4 p-10 text-center text-sm font-semibold text-slate-500">
                     Loading financial overview...

@@ -404,14 +404,7 @@ class ApplicationStageOperationsService
                 $lockedSession->update(['status' => 'ongoing', 'updated_by' => $actor->id]);
             }
 
-            $hasProof = ! $lockedSession->proof_required
-                || $lockedSession->evidence()->where('is_current', true)->exists()
-                || $lockedAssignment->evidence()->where('is_current', true)->exists();
-            $this->updateProgress(
-                $lockedAssignment->application,
-                $lockedSession,
-                $hasProof ? 'ready_for_review' : 'needs_action',
-            );
+            $this->updateProgress($lockedAssignment->application, $lockedSession, 'needs_action');
             $this->audit($lockedSession, $actor, 'attendance_recorded', $previous, $status, [
                 'application_id' => $lockedAssignment->scholarship_application_id,
                 'attendance_id' => $attendance->id,
@@ -447,8 +440,9 @@ class ApplicationStageOperationsService
                 'updated_by' => $actor->id,
             ]);
 
+            $progressStatus = $locked->needsSessionProof() ? 'needs_action' : 'ready_for_review';
             foreach ($activeAssignments as $assignment) {
-                $this->updateProgress($assignment->application, $locked, 'ready_for_review');
+                $this->updateProgress($assignment->application, $locked, $progressStatus);
             }
 
             $this->audit($locked, $actor, 'session_completed', $session->status, 'completed', [
@@ -521,9 +515,11 @@ class ApplicationStageOperationsService
             $this->assertAssignmentBelongsToSession($assignment, $session);
         }
 
-        if ($session->status === 'cancelled') {
+        if ($session->status !== 'completed') {
             throw ValidationException::withMessages([
-                'session' => 'Proof cannot be added to a cancelled session.',
+                'session' => $session->status === 'cancelled'
+                    ? 'Proof cannot be added to a cancelled session.'
+                    : 'Complete the session before uploading proof.',
             ]);
         }
 
@@ -550,6 +546,7 @@ class ApplicationStageOperationsService
                 $disk,
                 $path,
             ): ApplicationStageEvidence {
+                ApplicationStageSession::query()->lockForUpdate()->findOrFail($session->id);
                 $query = ApplicationStageEvidence::query()
                     ->where('application_stage_session_id', $session->id)
                     ->where('scope', $assignment ? 'applicant' : 'session')
@@ -594,7 +591,9 @@ class ApplicationStageOperationsService
                     'scope' => $evidence->scope,
                     'supersedes_evidence_id' => $previous?->id,
                 ], $assignment);
-                $this->refreshProgressAfterEvidence($session, $assignment);
+                if (! $assignment) {
+                    $this->refreshProgressAfterSessionProof($session);
+                }
 
                 return $evidence->fresh('uploader');
             });
@@ -714,16 +713,12 @@ class ApplicationStageOperationsService
             ]);
     }
 
-    private function refreshProgressAfterEvidence(
-        ApplicationStageSession $session,
-        ?ApplicationStageAssignment $assignment,
-    ): void {
-        $assignments = $assignment
-            ? collect([$assignment->loadMissing(['application.stageProgresses', 'attendance'])])
-            : $session->assignments()
-                ->with(['application.stageProgresses', 'attendance'])
-                ->whereIn('status', self::ACTIVE_ASSIGNMENT_STATUSES)
-                ->get();
+    private function refreshProgressAfterSessionProof(ApplicationStageSession $session): void
+    {
+        $assignments = $session->assignments()
+            ->with(['application', 'attendance'])
+            ->whereIn('status', self::ACTIVE_ASSIGNMENT_STATUSES)
+            ->get();
 
         foreach ($assignments as $item) {
             if (($item->attendance?->status ?? 'pending') !== 'pending') {

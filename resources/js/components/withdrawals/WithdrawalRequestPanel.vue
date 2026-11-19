@@ -54,7 +54,7 @@ onBeforeUnmount(invalidate);
             <button v-if="!reviewer && canRequest && !error" type="button" :disabled="loading" class="min-h-10 shrink-0 border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 disabled:opacity-40" @click="show(null, 'create')">Request withdrawal</button>
         </header>
         <p v-if="success" role="status" class="border-t border-emerald-200 bg-emerald-50 px-5 py-3 text-sm text-emerald-900">{{ success }}</p>
-        <div v-if="error" role="alert" class="border-t border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-950">{{ error }} <button type="button" :disabled="loading" class="ml-2 font-bold underline" @click="reload()">Try again</button></div>
+        <template v-if="error"><FeedbackToast :message="error" retry-label="Try again" @retry="reload()" /><button type="button" :disabled="loading" class="ml-2 font-bold underline" @click="reload()">Try again</button></template>
         <p v-else-if="loading" role="status" class="border-t border-slate-200 px-5 py-4 text-sm text-slate-500">Loading withdrawal requests...</p>
         <template v-else>
             <div v-if="latest" class="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">

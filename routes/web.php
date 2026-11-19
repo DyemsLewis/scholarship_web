@@ -14,6 +14,7 @@ use App\Http\Controllers\Admin\SupportOfficerWorkspaceController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\ApplicantBenefitPayoutController;
 use App\Http\Controllers\ApplicantDashboardController;
+use App\Http\Controllers\ApplicationConversationController;
 use App\Http\Controllers\EligibilityReviewController;
 use App\Http\Controllers\ApplicationDocumentController;
 use App\Http\Controllers\AuthController;
@@ -45,6 +46,7 @@ use App\Http\Controllers\RecipientCasePrivacyController;
 use App\Http\Controllers\RecipientCaseReviewController;
 use App\Http\Controllers\RecipientWithdrawalController;
 use App\Http\Controllers\SupportReportController;
+use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [PageController::class, 'home'])->name('home');
@@ -103,6 +105,14 @@ Route::get('/dashboard/overview-data', [ApplicantDashboardController::class, 'ov
 Route::get('/dashboard/applications/data', [ApplicantDashboardController::class, 'applicationsData'])->middleware('auth')->name('dashboard.applications.data');
 Route::get('/dashboard/applications/{application}', [ApplicantDashboardController::class, 'applicationDetail'])->middleware('auth')->name('dashboard.applications.show');
 Route::get('/dashboard/applications/{application}/data', [ApplicantDashboardController::class, 'applicationDetailData'])->middleware('auth')->name('dashboard.applications.show.data');
+Route::get('/dashboard/applications/{application}/messages', [ApplicationConversationController::class, 'page'])
+    ->middleware('auth')->whereNumber('application')->name('dashboard.application-conversations.page');
+Route::prefix('dashboard/applications/{application}/conversation')->name('dashboard.application-conversations.')
+    ->middleware('auth')->where(['application' => '[0-9]+'])->group(function (): void {
+        Route::get('/', [ApplicationConversationController::class, 'show'])->name('show');
+        Route::post('/messages', [ApplicationConversationController::class, 'store'])->middleware('throttle:15,1,application-chat-send')->name('store');
+        Route::patch('/read', [ApplicationConversationController::class, 'markRead'])->middleware('throttle:60,1,application-chat-read')->name('read');
+    });
 Route::get('/dashboard/applications/{application}/{section}', [ApplicantDashboardController::class, 'applicationDetail'])->middleware('auth')->where('section', 'submission|activities|outcome|history')->name('dashboard.applications.show.section');
 Route::get('/dashboard/documents/data', [ApplicantDashboardController::class, 'documentsData'])->middleware('auth')->name('dashboard.documents.data');
 Route::post('/dashboard/student-documents', [ApplicantDashboardController::class, 'uploadPreparedDocument'])->middleware(['auth', 'throttle:20,1'])->name('dashboard.student-documents.store');
@@ -152,6 +162,8 @@ Route::get('/documents/{document}/download', [ApplicationDocumentController::cla
 Route::get('/service-files/{file}/view', [BillingController::class, 'viewServiceFile'])->middleware('auth')->name('service-files.view');
 Route::get('/service-files/{file}/download', [BillingController::class, 'downloadServiceFile'])->middleware('auth')->name('service-files.download');
 Route::get('/notifications', [NotificationController::class, 'index'])->middleware('auth')->name('notifications.index');
+Route::get('/notifications/application-messages', [ApplicationConversationController::class, 'unreadAlerts'])
+    ->middleware(['auth', 'throttle:60,1,application-chat-alerts'])->name('notifications.application-messages');
 Route::patch('/notifications/read-all', [NotificationController::class, 'markAllRead'])->middleware('auth')->name('notifications.read-all');
 Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->middleware('auth')->name('notifications.read');
 Route::middleware('auth')->prefix('dashboard')->name('dashboard.')->group(function (): void {
@@ -390,6 +402,18 @@ Route::middleware(['auth', 'provider'])
         Route::patch('/account/password', [ProviderAccountController::class, 'updatePassword'])
             ->middleware('throttle:5,1')
             ->name('account.password.update');
+        Route::prefix('workspaces/messages')->name('application-conversations.')
+            ->middleware(['provider.approved', 'permission:'.User::PROVIDER_MESSAGING_PERMISSION])->group(function (): void {
+                Route::get('/', [ApplicationConversationController::class, 'providerInbox'])->name('inbox');
+                Route::get('/data', [ApplicationConversationController::class, 'providerInboxData'])->name('inbox-data');
+                Route::get('/{application}', [ApplicationConversationController::class, 'providerThread'])->whereNumber('application')->name('thread');
+            });
+        Route::prefix('applications/{application}/conversation')->name('application-conversations.')
+            ->middleware(['provider.approved', 'permission:'.User::PROVIDER_MESSAGING_PERMISSION])->where(['application' => '[0-9]+'])->group(function (): void {
+                Route::get('/', [ApplicationConversationController::class, 'show'])->name('show');
+                Route::post('/messages', [ApplicationConversationController::class, 'store'])->middleware('throttle:15,1,application-chat-send')->name('store');
+                Route::patch('/read', [ApplicationConversationController::class, 'markRead'])->middleware('throttle:60,1,application-chat-read')->name('read');
+            });
         Route::get('/governance', [ProviderWorkspacePageController::class, 'governance'])->name('governance');
         Route::get('/governance/data', [ProviderController::class, 'governanceData'])->name('governance.data');
         Route::patch('/governance/operating-mode', [ProviderController::class, 'updateOperatingMode'])

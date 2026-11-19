@@ -75,6 +75,7 @@ function harness(initial = []) {
     const writes = [], confirmations = [];
     const window = { axios: Object.fromEntries(['get', 'post', 'delete'].map((method) => [method, async (...args) => { writes.push([method, ...args]); return respond(...args); }])) };
     const deps = { ...state, window, evidenceFileError, FormData, nextTick: async () => {}, preparationParams: {}, showPortalToast() {}, markFormSaved() {}, focusProfileAlert: async () => {},
+        confirmChange: async (options, allowed) => allowed() && await confirm(options) && allowed(),
         requestConfirmation: async (options) => { confirmations.push(options); return confirm(options); }, document: { querySelector: () => ({ scrollIntoView() {}, focus() {} }) } };
     const result = new Function(...Object.keys(deps), `${actions}\nreturn { applyAcademicResponse, uploadVerificationDocument, retryAcademicRecordScan, deleteVerificationDocument, refreshEvidence };`)(...Object.values(deps));
     return { ...state, ...result, writes, confirmations, respond: (fn) => { respond = fn; }, confirm: (fn) => { confirm = fn; } };

@@ -26,6 +26,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
     {
         [$provider, $applicant, $program, $application, $plan] = $this->selectedRecipient();
         $program->update(['image_path' => 'uploads/scholarships/support-logo.png']);
+        $application->update(['submitted_at' => now()->subWeek()]);
         $cycle = $this->cycle($program, $plan, [
             'title' => 'Next check-in period',
             'opens_at' => now()->addDays(3)->toDateString(),
@@ -63,6 +64,7 @@ class ApplicantMonitoringDetailContractTest extends TestCase
         $landing->assertJsonPath('support.schedule.0.title', 'Next learning allowance')
             ->assertJsonPath('support.schedule.1.title', 'Next check-in period');
         $detail = $this->getJson(route('dashboard.monitoring.show.data', $application))->assertOk()
+            ->assertJsonPath('detail.identity.conversation_href', route('dashboard.application-conversations.page', ['application' => $application, 'from' => 'support'], false))
             ->assertJsonCount(2, 'detail.content.schedule')
             ->assertJsonPath('detail.content.schedule.0.title', 'Next learning allowance')
             ->assertJsonPath('detail.content.schedule.0.context', 'In person')

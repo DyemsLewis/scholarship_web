@@ -135,9 +135,7 @@ onMounted(() => loadLogs());
                         Loading activity logs...
                     </div>
 
-                    <div v-else-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                        {{ errorMessage }}
-                    </div>
+                    <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
 
                     <div v-else-if="entries.length" class="divide-y divide-slate-200">
                         <article

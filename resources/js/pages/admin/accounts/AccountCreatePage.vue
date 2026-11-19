@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { reactive, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
 import AdminWorkspacePage from '../components/AdminWorkspacePage.vue';
@@ -28,6 +29,7 @@ function fieldError(field) {
 
 async function createAccount() {
     if (saving.value) return;
+    if (!await confirmChange({ title: "Create this account?", message: "The account will be created with the details shown. Share its access details securely." }, () => !saving.value) || !(!saving.value)) { return; }
     saving.value = true;
     errorMessage.value = '';
     errors.value = {};
@@ -63,7 +65,7 @@ async function createAccount() {
             icon="fa-solid fa-user-plus"
         />
 
-        <p v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
+        <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
         <form class="admin-panel mt-4 w-full overflow-hidden" :aria-busy="saving" @submit.prevent="createAccount">
             <fieldset :disabled="saving" class="min-w-0">

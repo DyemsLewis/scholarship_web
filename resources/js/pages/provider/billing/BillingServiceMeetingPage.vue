@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { computed, reactive, watch } from 'vue';
 import { formatServiceDateTime, localServiceDateTime, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
 import BillingServiceWorkspaceShell from './components/BillingServiceWorkspaceShell.vue';
@@ -30,6 +31,7 @@ watch(purchase, (value) => {
 
 async function requestMeeting() {
     if (!canRequestMeeting.value) return;
+    if (!await confirmChange({ title: "Request this meeting?", message: "The proposed meeting details will be sent to the platform service team." }, () => canRequestMeeting.value && !isSaving.value) || !(canRequestMeeting.value && !isSaving.value)) { return; }
     await runAction(
         () => window.axios.post(`/provider/billing/${purchaseId}/meeting`, { ...meetingForm }),
         'Meeting request sent.',

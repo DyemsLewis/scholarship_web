@@ -215,6 +215,41 @@ test('attendance restores its original select value on Cancel and saves only aft
     } finally { unregister(); }
 });
 
+test('session proof upload stays locked until completion and the proof tab opens when required', async () => {
+    const writes = [];
+    let confirmations = 0;
+    let savedSession = { status: 'ongoing', proof_required: true, evidence: [] };
+    const window = { location: { search: '' }, axios: {
+        get: async () => ({ data: { session: savedSession } }),
+        post: async (path) => {
+            writes.push(path);
+            if (path.endsWith('/complete')) savedSession = { ...savedSession, status: 'completed' };
+            return { data: { message: 'Saved' } };
+        },
+    } };
+    const state = harness('pages/provider/selection/SelectionSessionRecordPage.vue', {
+        window,
+        document: { getElementById: () => ({ dataset: { sessionId: 1, programId: 2 } }) },
+        confirmChange: async (_, allowed) => { confirmations++; return allowed(); },
+    }, 'session, proofForm, activeSection, pendingAction, canUploadProof, confirmSessionAction, uploadProof');
+    state.proofForm.value.evidence_file = new Blob(['attendance']);
+    for (const status of ['draft', 'scheduled', 'ongoing', 'cancelled']) {
+        state.session.value = { ...savedSession, status };
+        assert.equal(state.canUploadProof.value, false);
+        await state.uploadProof();
+    }
+    assert.equal(confirmations, 0);
+    assert.deepEqual(writes, []);
+    state.session.value = savedSession;
+    state.pendingAction.value = 'complete';
+    await state.confirmSessionAction();
+    assert.equal(state.activeSection.value, 'proof');
+    assert.equal(state.canUploadProof.value, true);
+    await state.uploadProof();
+    assert.equal(confirmations, 1);
+    assert.deepEqual(writes, ['/provider/scholarships/2/stage-sessions/1/complete', '/provider/scholarships/2/stage-sessions/1/evidence']);
+});
+
 test('exam result confirmation preserves notes on Cancel and records the chosen result once', async () => {
     const dialog = useConfirmationDialog(), writes = [];
     const unregister = registerOutcomeConfirmationPresenter(dialog.requestConfirmation);

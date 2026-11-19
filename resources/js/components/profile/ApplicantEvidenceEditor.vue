@@ -2,11 +2,12 @@
 import { computed } from 'vue';
 import ApplicantProfileEvidenceList from './ApplicantProfileEvidenceList.vue';
 import TermsAgreement from '../TermsAgreement.vue';
-import { disclosureSummary, inputClass, labelClass, optionalLabel, secondaryButton, sectionTitle } from '../../support/profileEditorStyles';
+import { disclosureSummary, inputClass, labelClass, missingLabel, optionalLabel, secondaryButton, sectionTitle } from '../../support/profileEditorStyles';
 
 const form = defineModel({ type: Object, required: true });
 const consent = defineModel('consent', { type: Boolean, default: false });
 const props = defineProps({
+    missingFields: { type: Set, default: () => new Set() },
     groups: { type: Array, default: () => [] },
     title: { type: String, default: '' },
     description: { type: String, default: '' },
@@ -36,9 +37,9 @@ defineEmits(['upload', 'preview', 'remove', 'scan', 'refresh']);
 
 <template>
     <div id="profile-verification" data-evidence-editor class="px-4 pb-4 pt-4 sm:px-6">
-        <p v-if="success" data-evidence-success role="status" class="mb-4 border-l-2 border-emerald-400 bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-900">{{ success }}</p>
+        <FeedbackToast :message="success" type="success" />
         <p v-if="showProfileNote" data-evidence-reviewer-note class="mb-4 border-l-2 border-amber-400 pl-3 text-xs leading-5 text-slate-700"><strong>Profile reviewer note:</strong> {{ reviewerNote }}</p>
-        <div v-if="refreshRequired" role="alert" data-evidence-refresh class="mb-4 border-l-2 border-amber-400 bg-amber-50 px-3 py-3 text-xs leading-5 text-amber-950"><p>This record changed in another session. Refresh before replacing or removing files. No files were changed by this action.</p><button type="button" :disabled="refreshing" :class="[secondaryButton, 'mt-2']" @click="$emit('refresh')">{{ refreshing ? 'Refreshing...' : 'Refresh current evidence' }}</button></div>
+        <div v-if="refreshRequired" data-evidence-refresh class="mb-4 flex justify-end"><FeedbackToast message="This record changed in another session. Refresh before replacing or removing files. No files were changed by this action." retry-label="Refresh current evidence" @retry="$emit('refresh')" /><button type="button" :disabled="refreshing" :class="secondaryButton" @click="$emit('refresh')">{{ refreshing ? 'Refreshing...' : 'Refresh current evidence' }}</button></div>
         <p v-if="legacyApproval && verificationStatus === 'approved'" class="mb-4 text-xs leading-5 text-slate-600">Your earlier profile verification is retained. Older document approvals have no individual review record; you do not need to upload them again unless they change or a reviewer asks.</p>
         <ApplicantProfileEvidenceList
             :groups="groups" :title="title" :description="description" :ocr="ocr"
@@ -57,8 +58,8 @@ defineEmits(['upload', 'preview', 'remove', 'scan', 'refresh']);
                     <h4 id="evidence-manual-result-title" :class="sectionTitle">Enter the result shown on your record</h4>
                     <p class="mt-1 text-xs leading-5 text-slate-500">Use the exact result. It stays pending until a reviewer confirms it.</p>
                     <div class="mt-3 grid items-start gap-4 sm:grid-cols-2">
-                        <div class="min-w-0"><label :class="labelClass" for="fallback-grading-scale">Grading scale</label><select id="fallback-grading-scale" v-model="form.grading_scale" :class="inputClass"><option value="">Select grading scale</option><option v-for="option in gradingScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
-                        <div v-if="['percentage', 'grade_point'].includes(form.grading_scale)" class="min-w-0"><label :class="labelClass" for="fallback-academic-result">{{ resultInputLabel }}</label><input id="fallback-academic-result" v-model="form.gwa" type="number" min="0" :max="form.grading_scale === 'grade_point' ? 5 : 100" step="0.01" :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'" :class="inputClass"></div>
+                        <div class="min-w-0"><label :class="labelClass" for="fallback-grading-scale">Grading scale <span v-if="missingFields.has('grading_scale')" :class="missingLabel" data-missing-field="grading_scale">Missing</span></label><select id="fallback-grading-scale" v-model="form.grading_scale" :class="inputClass"><option value="">Select grading scale</option><option v-for="option in gradingScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+                        <div v-if="['percentage', 'grade_point'].includes(form.grading_scale)" class="min-w-0"><label :class="labelClass" for="fallback-academic-result">{{ resultInputLabel }} <span v-if="missingFields.has('gwa')" :class="missingLabel" data-missing-field="gwa">Missing</span></label><input id="fallback-academic-result" v-model="form.gwa" type="number" min="0" :max="form.grading_scale === 'grade_point' ? 5 : 100" step="0.01" :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'" :class="inputClass"></div>
                     </div>
                     <p class="mt-2 text-xs leading-5 text-slate-500">Select Save changes below to submit this result for review.</p>
                 </section>

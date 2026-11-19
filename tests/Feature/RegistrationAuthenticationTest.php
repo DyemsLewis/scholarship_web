@@ -237,6 +237,116 @@ class RegistrationAuthenticationTest extends TestCase
         ])->assertCreated();
     }
 
+    #[DataProvider('registrationRoles')]
+    public function test_abandoned_registration_can_restart_with_the_same_email_and_username(string $role): void
+    {
+        Mail::fake();
+        $payload = $role === 'provider' ? $this->providerPayload() : $this->applicantPayload();
+        $first = $this->postJson('/register', $payload)->assertStatus(202);
+        $second = $this->postJson('/register', $payload)->assertStatus(202);
+        $this->assertNotSame($first->json('registration_token'), $second->json('registration_token'));
+        $this->assertSame(1, PendingRegistration::query()->where('email', $payload['email'])->count());
+        $this->assertDatabaseMissing('users', ['email' => $payload['email']]);
+        $this->postJson('/register/verify', ['registration_token' => $first->json('registration_token'), 'code' => '000000'])
+            ->assertUnprocessable()->assertJsonPath('restart_required', true);
+        $mail = null;
+        Mail::assertSent(RegistrationVerificationCodeMail::class, function ($sent) use ($payload, &$mail) {
+            if ($sent->hasTo($payload['email'])) {
+                $mail = $sent;
+            }
+
+            return $sent->hasTo($payload['email']);
+        });
+        $this->postJson('/register/verify', ['registration_token' => $second->json('registration_token'), 'code' => $mail->verificationCode])->assertCreated();
+    }
+
+    public static function registrationRoles(): array
+    {
+        return ['applicant' => ['applicant'], 'provider' => ['provider']];
+    }
+
+    public function test_existing_unverified_accounts_can_finish_verification_without_replacing_the_account(): void
+    {
+        Mail::fake();
+        foreach ([$this->applicantPayload(), $this->providerPayload()] as $payload) {
+            $user = User::factory()->unverified()->create(['email' => $payload['email'], 'username' => $payload['username'], 'role' => $payload['role'], 'password' => 'password123']);
+            $password = $user->password;
+            $profile = $user->isProvider() ? $user->providerProfile : $user->studentProfile;
+            $profile->update(['first_name' => 'Original', 'last_name' => 'Owner']);
+            $registration = $this->postJson('/register', array_merge($payload, ['first_name' => 'Different']))
+                ->assertStatus(202)->assertJsonPath('resuming_account', true);
+            $mail = $this->sentRegistrationMail($payload['email']);
+            $this->assertTrue($mail->resumingAccount);
+            $this->assertFalse($user->fresh()->hasVerifiedEmail());
+            $this->postJson('/register/verify', ['registration_token' => $registration->json('registration_token'), 'code' => $mail->verificationCode])
+                ->assertOk()->assertJsonPath('redirect', '/login?verified=1');
+            $this->assertTrue($user->fresh()->hasVerifiedEmail());
+            $this->assertSame($password, $user->fresh()->password);
+            $this->assertSame('Original', $profile->fresh()->first_name);
+            $this->assertSame(1, User::query()->where('email', $payload['email'])->count());
+            $this->assertGuest();
+        }
+    }
+
+    public function test_unverified_existing_account_requires_its_original_password(): void
+    {
+        Mail::fake();
+        $payload = $this->applicantPayload();
+        $user = User::factory()->unverified()->create(['email' => $payload['email'], 'username' => $payload['username'], 'password' => 'original-password']);
+        $this->postJson('/register', $payload)->assertUnprocessable()->assertJsonValidationErrors('email');
+        $this->assertFalse($user->fresh()->hasVerifiedEmail());
+        $this->assertDatabaseCount('pending_registrations', 0);
+        Mail::assertNothingSent();
+    }
+
+    public function test_verified_email_is_protected_even_with_different_casing(): void
+    {
+        Mail::fake();
+        $payload = $this->applicantPayload();
+        $user = User::factory()->create(['email' => strtoupper($payload['email']), 'username' => $payload['username'], 'password' => 'password123']);
+        $this->postJson('/register', $payload)->assertUnprocessable()->assertJsonValidationErrors('email');
+        $this->assertTrue($user->fresh()->hasVerifiedEmail());
+        $this->assertDatabaseCount('pending_registrations', 0);
+        Mail::assertNothingSent();
+    }
+
+    public function test_suspended_managed_and_different_role_accounts_cannot_be_resumed_through_registration(): void
+    {
+        Mail::fake();
+        $parent = User::factory()->create(['role' => 'provider']);
+        foreach ([['account_status' => 'suspended'], ['parent_account_id' => $parent->id], ['role' => 'admin'], ['must_reset_password' => true], ['role' => 'provider']] as $index => $changes) {
+            $payload = array_merge($this->applicantPayload(), ['email' => "protected{$index}@example.test", 'username' => "protected{$index}"]);
+            User::factory()->unverified()->create(array_merge(['email' => $payload['email'], 'username' => $payload['username'], 'password' => 'password123'], $changes));
+            $this->postJson('/register', $payload)->assertUnprocessable()->assertJsonValidationErrors('email');
+        }
+        $this->assertDatabaseCount('pending_registrations', 0);
+        Mail::assertNothingSent();
+    }
+
+    public function test_a_resumed_verification_cannot_be_used_after_the_password_changes(): void
+    {
+        Mail::fake();
+        $payload = $this->applicantPayload();
+        $user = User::factory()->unverified()->create(['email' => $payload['email'], 'username' => $payload['username'], 'password' => 'password123']);
+        $registration = $this->postJson('/register', $payload)->assertStatus(202);
+        $mail = $this->sentRegistrationMail($payload['email']);
+        $user->update(['password' => 'replacement-password']);
+        $this->postJson('/register/verify', ['registration_token' => $registration->json('registration_token'), 'code' => $mail->verificationCode])
+            ->assertUnprocessable()->assertJsonPath('restart_required', true);
+        $this->assertFalse($user->fresh()->hasVerifiedEmail());
+    }
+
+    public function test_expired_pending_registration_does_not_reserve_the_email(): void
+    {
+        Mail::fake();
+        $payload = $this->applicantPayload();
+        $this->postJson('/register', $payload)->assertStatus(202);
+        PendingRegistration::query()->update(['expires_at' => now()->subMinute()]);
+        $this->postJson('/register', $payload)->assertStatus(202);
+        $this->assertDatabaseCount('pending_registrations', 1);
+        $this->assertDatabaseMissing('users', ['email' => $payload['email']]);
+    }
+
     private function sentRegistrationMail(string $email): RegistrationVerificationCodeMail
     {
         $sentMail = null;

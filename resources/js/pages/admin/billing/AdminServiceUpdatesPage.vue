@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { computed, ref } from 'vue';
 import { formatAdminServiceDateTime, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
@@ -12,6 +13,7 @@ const messageValid = computed(() => updateForm.value.message.trim().length >= 3 
 
 async function addUpdate() {
     if (!canPost.value || isSaving.value || !messageValid.value || (updateForm.value.kind === 'clarification_request' && !canRequestInformation.value)) return;
+    if (!await confirmChange({ title: "Send this service update?", message: "The message or information request will be shared with the provider." }, () => canPost.value && !isSaving.value && messageValid.value) || !(canPost.value && !isSaving.value && messageValid.value)) { return; }
     const saved = await runAction(
         (config) => window.axios.post(`/admin/billing/${purchaseId}/updates`, { kind: updateForm.value.kind, message: updateForm.value.message.trim() }, config),
         'Update added.',

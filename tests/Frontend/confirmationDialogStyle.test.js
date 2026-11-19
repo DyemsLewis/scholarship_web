@@ -40,8 +40,8 @@ test('provider busy and error feedback survive the shared rendering', async () =
     const html = await render(Provider, { title: 'Remove proof?', danger: true, busy: true, error: 'The file could not be removed.' });
     assert.match(html, /data-provider-action-dialog/);
     assert.match(html, /border-t-rose-600/);
-    assert.match(html, /role="alert"/);
-    assert.match(html, /The file could not be removed/);
+    assert.doesNotMatch(html, /<p[^>]*>The file could not be removed/);
+    assert.match(read('components/ConfirmationDialog.vue'), /<FeedbackToast[^>]*:message="error"/);
     assert.match(html, /Saving\.\.\./);
     assert.equal((html.match(/<button[^>]* disabled/g) || []).length, 2);
 });

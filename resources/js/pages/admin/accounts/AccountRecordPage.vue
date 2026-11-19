@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from '../../../support/outcomeConfirmation.js';
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, ref } from 'vue';
 import AdminWorkspaceHeader from '../components/AdminWorkspaceHeader.vue';
@@ -63,6 +64,11 @@ async function loadAccount() {
 
 async function runAction(key, request, successTitle) {
     if (actionBusy.value || handoffBusy.value || loading.value || errorMessage.value || !account.value) return;
+    if (key !== 'status' && !await confirmChange({
+        title: key === 'password' ? 'Require a password reset?' : 'Send a verification email?',
+        message: key === 'password' ? 'This account will need to set a new password before signing in again.' : 'A verification link will be sent to the account email address.',
+        confirmLabel: key === 'password' ? 'Require reset' : 'Send email',
+    }, () => !actionBusy.value && !handoffBusy.value && !loading.value && !errorMessage.value && Boolean(account.value))) return;
     actionBusy.value = key;
     actionError.value = '';
 
@@ -172,7 +178,7 @@ const backToQueue = staffQueueReturn(window, 'accounts', '/admin/workspaces/acco
                     <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span><div><h2 class="text-base font-black text-slate-950">Sign-in controls</h2><p class="mt-0.5 text-sm text-slate-500">These actions affect sign-in only. Profile and provider verification stay with the Review Officer.</p></div></div>
                 </header>
 
-                <p v-if="actionError && !statusDialogOpen" class="border-b border-rose-200 bg-rose-50 px-6 py-3 text-sm font-semibold text-rose-800" role="alert">{{ actionError }}</p>
+                <FeedbackToast v-if="actionError &amp;&amp; !statusDialogOpen" :message="actionError" />
 
                 <div class="divide-y divide-slate-200">
                     <div class="flex items-center justify-between gap-6 px-6 py-5">

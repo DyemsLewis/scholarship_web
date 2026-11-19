@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from '../support/outcomeConfirmation.js';
 import { computed, onMounted, ref, watch } from 'vue';
 import AccountManagerSidebar from '../components/AccountManagerSidebar.vue';
 import PortalManagerSidebar from '../components/PortalManagerSidebar.vue';
@@ -160,6 +161,11 @@ async function openAccountById(accountId) {
 
 async function runAccountAction(action, request, successTitle) {
     if (!selectedAccount.value || activeAction.value) return;
+    if (!await confirmChange({
+        title: action === 'password' ? 'Require a password reset?' : action === 'status' ? 'Change this account status?' : 'Send a verification email?',
+        message: action === 'password' ? 'The account holder must set a new password before signing in again.' : action === 'status' ? 'This changes whether the account holder can access the platform.' : 'A verification link will be sent to the account email address.',
+        confirmLabel: action === 'verification' ? 'Send email' : 'Confirm change',
+    }, () => Boolean(selectedAccount.value) && !activeAction.value)) return;
     activeAction.value = action;
     modalError.value = '';
 
@@ -247,7 +253,7 @@ onMounted(async () => {
                     </template>
                 </TaskPageHeader>
 
-                <div v-if="errorMessage" class="mt-5 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                 <section class="mt-5 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm sm:grid-cols-3">
                     <div class="border-b border-slate-200 px-5 py-4 sm:border-b-0 sm:border-r">
@@ -350,7 +356,7 @@ onMounted(async () => {
                     <label><span class="text-sm font-bold text-slate-700">Username</span><input v-model="createForm.username" required minlength="4" class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
                     <label><span class="text-sm font-bold text-slate-700">Temporary password</span><input v-model="createForm.password" required type="password" minlength="8" class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
                     <label><span class="text-sm font-bold text-slate-700">Confirm password</span><input v-model="createForm.password_confirmation" required type="password" minlength="8" class="mt-2 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm"></label>
-                    <p v-if="modalError" class="sm:col-span-2 rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ modalError }}</p>
+                    <FeedbackToast v-if="modalError" :message="modalError" />
                 </div>
                 <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button type="button" class="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700" @click="closeCreateAccount">Cancel</button><button type="submit" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50" :disabled="isSaving">{{ isSaving ? 'Creating...' : 'Create account' }}</button></footer>
             </form>
@@ -373,7 +379,7 @@ onMounted(async () => {
                     <div class="flex items-center justify-between gap-4 p-5"><div><p class="text-sm font-bold text-slate-950">Password access</p><p class="mt-1 text-xs text-slate-500">Require a secure password change on the next sign-in.</p></div><button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 disabled:opacity-50" :disabled="Boolean(activeAction)" @click="requirePasswordReset">{{ activeAction === 'password' ? 'Sending...' : 'Require reset' }}</button></div>
                     <div class="p-5"><p class="text-sm font-bold text-slate-950">Account status</p><p class="mt-1 text-xs text-slate-500">{{ selectedAccount.account_status === 'suspended' ? 'Restore access when the issue is resolved.' : 'Suspending prevents this account from signing in.' }}</p><textarea v-if="selectedAccount.account_status !== 'suspended'" v-model="suspensionReason" rows="2" maxlength="1000" class="mt-3 w-full rounded-md border border-slate-300 px-3 py-2.5 text-sm" placeholder="Reason for suspension"></textarea><button type="button" :class="['mt-3 rounded-md px-3 py-2 text-xs font-bold disabled:opacity-50', selectedAccount.account_status === 'suspended' ? 'bg-slate-950 text-white' : 'border border-rose-300 bg-white text-rose-700']" :disabled="Boolean(activeAction)" @click="changeAccountStatus">{{ activeAction === 'status' ? 'Saving...' : selectedAccount.account_status === 'suspended' ? 'Reactivate account' : 'Suspend account' }}</button></div>
                 </div>
-                <p v-if="modalError" class="mx-5 mb-5 rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ modalError }}</p>
+                <FeedbackToast v-if="modalError" :message="modalError" />
             </div>
         </section>
     </div>

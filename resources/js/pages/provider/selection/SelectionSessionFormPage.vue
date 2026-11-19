@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -149,6 +150,7 @@ async function saveSession() {
         errorMessage.value = 'Add the meeting link for an online or hybrid session.';
         return;
     }
+    if (!await confirmChange({ title: "Save this selection session?", message: "The session date, venue and instructions will be saved. Any applicant selected for this session will be assigned." }, () => !isSaving.value && !isLoading.value) || !(!isSaving.value && !isLoading.value)) { return; }
     isSaving.value = true;
     try {
         const programId = form.value.program_id;
@@ -200,7 +202,7 @@ onMounted(loadForm);
                     </div>
                 </header>
 
-                <div v-if="errorMessage" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading session setup...</p></div>
 
                 <template v-else>
@@ -230,7 +232,7 @@ onMounted(loadForm);
                                 <ProviderVenueAddress v-if="usesVenue" v-model="form.address_details" v-model:address="form.location_address" v-model:venue="form.venue" v-model:latitude="form.latitude" v-model:longitude="form.longitude" :include-venue-in-address="false" class="col-span-2" />
                                 <label v-if="usesMeetingLink" class="col-span-2 text-sm font-semibold text-slate-700">Meeting link<input v-model="form.meeting_url" type="url" maxlength="2000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="https://"></label>
                                 <label class="col-span-2 text-sm font-semibold text-slate-700">Applicant instructions <span class="font-normal text-slate-600">(optional)</span><textarea v-model="form.instructions" rows="4" maxlength="3000" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950" placeholder="What to bring or how to prepare"></textarea></label>
-                                <label class="col-span-2 flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3"><input v-model="form.proof_required" type="checkbox" class="mt-1 h-4 w-4 border-slate-300 text-slate-950 focus:ring-slate-950"><span><span class="block text-sm font-bold text-slate-900">Require provider proof before completion</span><span class="mt-1 block text-xs leading-5 text-slate-500">Useful for attendance sheets, score sheets, and interview evaluation records.</span></span></label>
+                                <label class="col-span-2 flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3"><input v-model="form.proof_required" type="checkbox" class="mt-1 h-4 w-4 border-slate-300 text-slate-950 focus:ring-slate-950"><span><span class="block text-sm font-bold text-slate-900">Require proof before recording outcomes</span><span class="mt-1 block text-xs leading-5 text-slate-500">Upload attendance sheets, score sheets, or evaluation records after completing the session.</span></span></label>
                             </div>
                         </section>
 

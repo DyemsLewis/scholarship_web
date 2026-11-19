@@ -122,7 +122,7 @@ onMounted(loadFinance);
                     </template>
                 </TaskPageHeader>
 
-                <p v-if="errorMessage" class="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                 <div v-if="isLoading" class="admin-panel mt-5 p-6 text-sm text-slate-500">Loading financial records...</div>
 
                 <div v-else-if="!isReceiptsPage" class="admin-content-stack">

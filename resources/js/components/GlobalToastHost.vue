@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, reactive } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, shallowRef } from 'vue';
 import { PORTAL_TOAST_EVENT } from '../support/portalToast';
 import ToastMessage from './ToastMessage.vue';
 
@@ -8,7 +8,9 @@ const toast = reactive({
     type: 'success',
     title: '',
     message: '',
+    actionLabel: '',
 });
+const action = shallowRef(null);
 
 let hideTimer = null;
 let lastFingerprint = '';
@@ -21,6 +23,7 @@ function closeToast() {
     }
 
     toast.show = false;
+    action.value = null;
 }
 
 function handleToast(event) {
@@ -36,6 +39,10 @@ function handleToast(event) {
     const shownAt = Date.now();
 
     if (fingerprint === lastFingerprint && shownAt - lastShownAt < 800) {
+        if (typeof detail.action === 'function') {
+            toast.actionLabel = detail.actionLabel || 'Try again';
+            action.value = detail.action;
+        }
         return;
     }
 
@@ -50,6 +57,8 @@ function handleToast(event) {
     toast.title = detail.title
         || (type === 'error' ? 'Action failed' : 'Action successful');
     toast.message = message;
+    toast.actionLabel = typeof detail.action === 'function' ? detail.actionLabel || 'Try again' : '';
+    action.value = typeof detail.action === 'function' ? detail.action : null;
     toast.show = true;
 
     const requestedDuration = Number(detail.duration);
@@ -58,6 +67,12 @@ function handleToast(event) {
         : 4000;
 
     hideTimer = window.setTimeout(closeToast, duration);
+}
+
+function runAction() {
+    const retry = action.value;
+    closeToast();
+    retry?.();
 }
 
 onMounted(() => {
@@ -76,6 +91,8 @@ onBeforeUnmount(() => {
         :type="toast.type"
         :title="toast.title"
         :message="toast.message"
+        :action-label="toast.actionLabel"
+        @action="runAction"
         @close="closeToast"
     />
 </template>

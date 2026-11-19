@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { confirmChange } from './helpers/acceptedOutcome.js';
 import { createStaffQueueState, staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, reactive, ref } from 'vue';
@@ -52,7 +53,7 @@ test('new rules are provider-scoped, maintain full-width forms and avoid styling
 test('dialogs share scroll and focus protections without altering file or role permissions', () => {
     for (const path of ['components/ConfirmationDialog.vue', 'components/CoverImagePickerModal.vue']) {
         const source = read(path);
-        for (const token of ['useModalAccessibility', 'tabindex="-1"', 'settings-dialog-body', 'if (!props.busy)', 'role="alert"']) assert.ok(source.includes(token), `${path}: ${token}`);
+        for (const token of ['useModalAccessibility', 'tabindex="-1"', 'settings-dialog-body', 'if (!props.busy)', '<FeedbackToast']) assert.ok(source.includes(token), `${path}: ${token}`);
     }
     assert.match(read('components/ProviderActionDialog.vue'), /<ConfirmationDialog/);
     const team = read('pages/provider/team/TeamAccountFormPage.vue');
@@ -67,7 +68,7 @@ function harness(path, exposed, overrides = {}) {
     const writes = [];
     const window = { location: { pathname: '/provider/team/accounts/88/edit', href: '', search: '' }, scrollTo() {}, clearTimeout() {}, setTimeout() {},
         axios: { get: async () => { throw new Error('Unavailable'); }, patch: async (...args) => { writes.push(args); return { data: {} }; }, post: async (...args) => { writes.push(args); return { data: { user: { provider_logo_url: '/new-logo.png' } } }; }, delete: async (...args) => { writes.push(args); return { data: {} }; } } };
-    const deps = { createStaffQueueState, staffQueueReturn, ref, reactive, computed, onMounted() {}, onBeforeUnmount() {}, watch() {}, window, URLSearchParams,
+    const deps = { createStaffQueueState, staffQueueReturn, confirmChange, ref, reactive, computed, onMounted() {}, onBeforeUnmount() {}, watch() {}, window, URLSearchParams,
         FormData: class { append() {} }, labelFromKey: (value) => value, limitPhoneNumber: (value) => value, ...overrides };
     return { ...new Function(...Object.keys(deps), `${source}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes };
 }

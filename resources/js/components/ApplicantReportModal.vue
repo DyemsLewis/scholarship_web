@@ -238,7 +238,7 @@ watch(() => form.value.category, (category) => {
                     <p v-if="form.category" class="mt-4 rounded-md bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600 ring-1 ring-slate-200">
                         {{ destinationMessage }}
                     </p>
-                    <p v-if="errorMessage" class="mt-3 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <footer class="mt-5 flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
                         <button

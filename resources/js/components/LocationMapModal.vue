@@ -144,7 +144,7 @@ function retryAddressSearch() {
 
                 <footer class="flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                     <p class="text-xs font-semibold leading-5" :class="locationMessage ? 'text-slate-700' : 'text-slate-500'">
-                        {{ picker && selection.pending ? 'Checking the selected location...' : locationMessage || (picker ? 'Choose a land location within the Philippines.' : 'The location is shown inside the portal.') }}
+                        {{ picker && selection.pending ? 'Checking the location and looking up its address...' : locationMessage || (picker ? 'Choose a land location within the Philippines.' : 'The location is shown inside the portal.') }}
                     </p>
                     <div class="flex flex-wrap justify-end gap-2 sm:shrink-0">
                         <a

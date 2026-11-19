@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -82,6 +83,7 @@ async function loadIntake() {
 
 async function continueToReview() {
     if (isLoading.value || !plan.value || !canSaveRequest.value || isSaving.value) return;
+    if (!await confirmChange({ title: "Save this service request?", message: "The request will be saved before the review page opens. This does not confirm a payment." }, () => !isLoading.value && canSaveRequest.value && !isSaving.value) || !(!isLoading.value && canSaveRequest.value && !isSaving.value)) { return; }
     isSaving.value = true;
     errorMessage.value = '';
     errors.value = {};
@@ -119,9 +121,7 @@ onMounted(loadIntake);
 
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading request form...</p></div>
 
-                <div v-else-if="!plan" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-8 text-center text-sm font-semibold text-rose-800">
-                    {{ errorMessage || 'This request form is not available.' }}
-                </div>
+                <FeedbackToast v-else-if="!plan" :message="errorMessage || 'This request form is not available.'" fallback />
 
                 <template v-else>
                     <div class="mt-4 grid grid-cols-3 border border-slate-200 bg-white shadow-sm" aria-label="Request progress">
@@ -149,7 +149,7 @@ onMounted(loadIntake);
                         </div>
                     </header>
 
-                    <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <form class="mt-4 border border-slate-200 bg-white shadow-sm" :aria-busy="isSaving" @submit.prevent="continueToReview">
                         <fieldset :disabled="isSaving || !canSaveRequest" class="min-w-0">

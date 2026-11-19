@@ -189,8 +189,8 @@ class ProviderWorkspaceGuides
                     'title' => 'Record what happened', 'icon' => 'fa-solid fa-file-shield',
                     'items' => [
                         ['label' => 'Attendance', 'text' => 'After the session starts, record attendance for every assigned applicant. Attendance alone does not pass anyone.'],
-                        ['label' => 'Proof', 'text' => 'Upload the attendance sheet, score sheet, or other appropriate evidence. Proof is required when the session says so.'],
-                        ['label' => 'Complete session', 'text' => 'Resolve the completion blockers first. Completing the session makes its records ready for review; individual outcomes remain separate.'],
+                        ['label' => 'Complete session', 'text' => 'Complete the session after recording attendance. This does not record individual applicant outcomes.'],
+                        ['label' => 'Proof', 'text' => 'After completion, upload the attendance sheet, score sheet, or other appropriate evidence. Any required proof must be uploaded before recording outcomes.'],
                     ],
                 ],
                 [

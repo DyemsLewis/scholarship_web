@@ -148,9 +148,7 @@ onMounted(() => {
                         <button type="submit" class="rounded-md bg-slate-900 px-5 py-2.5 text-sm font-bold text-white hover:bg-slate-800">Apply</button>
                     </form>
 
-                    <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">
-                        {{ errorMessage }}
-                    </div>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <div v-if="isLoading" class="p-8 text-center text-sm text-slate-500">Loading service payments...</div>
                     <div v-else-if="purchases.length === 0" class="p-8 text-center">

@@ -53,9 +53,7 @@ onMounted(loadCatalog);
                     </div>
                 </header>
 
-                <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                 <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Available support services">
                     <div class="flex items-center justify-between border-b border-slate-200 px-6 py-4">

@@ -1,10 +1,11 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { completedQualificationOptions, profileValueLabel } from '../../support/applicantProfileLabels';
-import { disclosureSummary, inputClass, labelClass, optionalLabel, secondaryButton, sectionTitle } from '../../support/profileEditorStyles';
+import { disclosureSummary, inputClass, labelClass, missingLabel, optionalLabel, secondaryButton, sectionTitle } from '../../support/profileEditorStyles';
 
 const form = defineModel({ type: Object, required: true });
 const props = defineProps({
+    missingFields: { type: Set, default: () => new Set() },
     educationOptions: { type: Array, required: true },
     enrollmentOptions: { type: Array, required: true },
     courseOptions: { type: Array, required: true },
@@ -51,14 +52,14 @@ function changeQualification() {
             <p v-if="form.enrollment_status === 'Not currently enrolled'" class="mt-1 text-xs leading-5 text-slate-500">Use your most recent school record. If the listed education paths do not fit, choose Other; do not invent a strand or Grade 12. Record your completed qualification below.</p>
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-2">
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-education-level">Education level</label>
+                    <label :class="labelClass" for="profile-education-level">Education level <span v-if="missingFields.has('education_level')" :class="missingLabel" data-missing-field="education_level">Missing</span></label>
                     <select id="profile-education-level" v-model="form.education_level" required :class="inputClass">
                         <option value="">Select education level</option>
                         <option v-for="option in educationOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                     </select>
                 </div>
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-enrollment">Enrollment status</label>
+                    <label :class="labelClass" for="profile-enrollment">Enrollment status <span v-if="missingFields.has('enrollment_status')" :class="missingLabel" data-missing-field="enrollment_status">Missing</span></label>
                     <select id="profile-enrollment" v-model="form.enrollment_status" required :class="inputClass">
                         <option value="">Select status</option>
                         <option v-if="form.enrollment_status && !enrollmentOptions.includes(form.enrollment_status)" :value="form.enrollment_status">{{ profileValueLabel('enrollmentStatus', form.enrollment_status) }}</option>
@@ -66,11 +67,11 @@ function changeQualification() {
                     </select>
                 </div>
                 <div class="min-w-0 sm:col-span-2">
-                    <label :class="labelClass" for="profile-school">School / learning institution</label>
+                    <label :class="labelClass" for="profile-school">School / learning institution <span v-if="missingFields.has('school')" :class="missingLabel" data-missing-field="school">Missing</span></label>
                     <input id="profile-school" v-model="form.school" required maxlength="255" placeholder="School or learning center" :class="inputClass">
                 </div>
                 <div v-if="fieldRelevant('course_or_strand')" class="min-w-0">
-                    <label :class="labelClass" for="profile-course">{{ pathCopy.courseLabel }} <span v-if="!fieldRequired('course_or_strand')" :class="optionalLabel">(optional)</span></label>
+                    <label :class="labelClass" for="profile-course">{{ pathCopy.courseLabel }} <span v-if="!fieldRequired('course_or_strand')" :class="optionalLabel">(optional)</span> <span v-if="missingFields.has('course_or_strand')" :class="missingLabel" data-missing-field="course_or_strand">Missing</span></label>
                     <select v-if="courseOptions.length" id="profile-course" v-model="form.course_or_strand" :required="fieldRequired('course_or_strand')" :class="inputClass">
                         <option value="">Select {{ pathCopy.courseLabel.toLowerCase() }}</option>
                         <option v-if="form.course_or_strand && !courseOptions.includes(form.course_or_strand)" :value="form.course_or_strand">{{ form.course_or_strand }}</option>
@@ -80,7 +81,7 @@ function changeQualification() {
                     <input v-if="customCourse" v-model="form.course_or_strand" :aria-label="`Exact ${pathCopy.courseLabel.toLowerCase()}`" maxlength="255" :placeholder="`Type exact ${pathCopy.courseLabel.toLowerCase()}`" :class="[inputClass, 'mt-2']">
                 </div>
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-year">{{ pathCopy.yearLabel }} <span v-if="!fieldRequired('year_level')" :class="optionalLabel">(if known)</span></label>
+                    <label :class="labelClass" for="profile-year">{{ pathCopy.yearLabel }} <span v-if="!fieldRequired('year_level')" :class="optionalLabel">(if known)</span> <span v-if="missingFields.has('year_level')" :class="missingLabel" data-missing-field="year_level">Missing</span></label>
                     <select v-if="yearOptions.length" id="profile-year" v-model="form.year_level" :required="fieldRequired('year_level')" :class="inputClass">
                         <option value="">Select {{ pathCopy.yearLabel.toLowerCase() }}</option>
                         <option v-if="form.year_level && !yearOptions.includes(form.year_level)" :value="form.year_level">{{ form.year_level }}</option>
@@ -96,7 +97,7 @@ function changeQualification() {
             <p class="mt-1 text-xs leading-5 text-slate-500">Use the period shown on your academic record.</p>
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-2">
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-academic-year">Academic year</label>
+                    <label :class="labelClass" for="profile-academic-year">Academic year <span v-if="missingFields.has('academic_year')" :class="missingLabel" data-missing-field="academic_year">Missing</span></label>
                     <input v-if="customAcademicYear" id="profile-academic-year" v-model="form.academic_year" :required="fieldRequired('academic_year')" maxlength="20" pattern="[0-9]{4}-[0-9]{4}" placeholder="Example: 2013-2014" :class="inputClass">
                     <select v-else id="profile-academic-year" v-model="form.academic_year" :required="fieldRequired('academic_year')" :class="inputClass">
                         <option value="">Select academic year</option>
@@ -106,7 +107,7 @@ function changeQualification() {
                     <button type="button" data-custom-academic-year class="mt-2 text-xs font-semibold text-slate-600 underline underline-offset-2 hover:text-slate-950" @click="customAcademicYear = !customAcademicYear">{{ customAcademicYear ? 'Use listed years' : 'Use an earlier / other year' }}</button>
                 </div>
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-academic-term">Term / grading period</label>
+                    <label :class="labelClass" for="profile-academic-term">Term / grading period <span v-if="missingFields.has('academic_term')" :class="missingLabel" data-missing-field="academic_term">Missing</span></label>
                     <select id="profile-academic-term" v-model="form.academic_term" :required="fieldRequired('academic_term')" :class="inputClass">
                         <option value="">Select record period</option>
                         <option v-for="option in termOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
@@ -115,7 +116,7 @@ function changeQualification() {
                 <div v-if="ocrActive && fieldRelevant('grading_scale')" data-managed-academic-result class="min-w-0 sm:col-span-2">
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div class="min-w-0">
-                            <p class="text-xs text-slate-500">Academic result</p>
+                            <p class="text-xs text-slate-500">Academic result <span v-if="missingFields.has('gwa') || missingFields.has('grading_scale')" :class="missingLabel" data-missing-field="managed_academic_result">Missing</span></p>
                             <p class="mt-1 break-words text-sm font-semibold text-slate-950">{{ extractedResult }}</p>
                         </div>
                         <button type="button" :class="secondaryButton" @click="$emit('open-evidence')">Supporting evidence<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></button>
@@ -123,14 +124,14 @@ function changeQualification() {
                     <p class="mt-2 text-xs leading-5 text-slate-500">{{ manualResultAllowed ? 'Scan needs attention. Enter the result in Supporting evidence for review.' : 'Read from your supporting evidence. A reviewer confirms this result.' }}</p>
                 </div>
                 <div v-else-if="fieldRelevant('grading_scale')" class="min-w-0">
-                    <label :class="labelClass" for="profile-grading-scale">Grading scale</label>
+                    <label :class="labelClass" for="profile-grading-scale">Grading scale <span v-if="missingFields.has('grading_scale')" :class="missingLabel" data-missing-field="grading_scale">Missing</span></label>
                     <select id="profile-grading-scale" v-model="form.grading_scale" :required="fieldRequired('grading_scale')" :class="inputClass">
                         <option value="">Select grading scale</option>
                         <option v-for="option in gradingScaleOptions" :key="option.value" :value="option.value">{{ option.label }}</option>
                     </select>
                 </div>
                 <div v-if="!ocrActive && fieldRelevant('gwa')" class="min-w-0">
-                    <label :class="labelClass" for="profile-gwa">{{ pathCopy.gwaLabel }}</label>
+                    <label :class="labelClass" for="profile-gwa">{{ pathCopy.gwaLabel }} <span v-if="missingFields.has('gwa')" :class="missingLabel" data-missing-field="gwa">Missing</span></label>
                     <input id="profile-gwa" v-model="form.gwa" type="number" min="0" :max="form.grading_scale === 'grade_point' ? 5 : 100" step="0.01" :required="fieldRequired('gwa')" :placeholder="form.grading_scale === 'grade_point' ? 'Example: 1.75' : 'Example: 92.50'" :class="inputClass">
                 </div>
             </div>
@@ -153,11 +154,11 @@ function changeQualification() {
                 </div>
                 <template v-if="hasQualification">
                     <div v-if="form.completed_qualification === 'other'" class="min-w-0 sm:col-span-2">
-                        <label :class="labelClass" for="profile-qualification-details">Qualification name</label>
+                        <label :class="labelClass" for="profile-qualification-details">Qualification name <span v-if="missingFields.has('completed_qualification_details')" :class="missingLabel" data-missing-field="completed_qualification_details">Missing</span></label>
                         <input id="profile-qualification-details" v-model="form.completed_qualification_details" required maxlength="255" placeholder="Use the name on your completion record" :class="inputClass">
                     </div>
                     <div class="min-w-0">
-                        <label :class="labelClass" for="profile-qualification-school">Awarding school / institution</label>
+                        <label :class="labelClass" for="profile-qualification-school">Awarding school / institution <span v-if="missingFields.has('completed_qualification_school')" :class="missingLabel" data-missing-field="completed_qualification_school">Missing</span></label>
                         <input id="profile-qualification-school" v-model="form.completed_qualification_school" required maxlength="255" placeholder="School or institution on your completion record" :class="inputClass">
                     </div>
                     <div class="min-w-0">

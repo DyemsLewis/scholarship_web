@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, ref } from 'vue';
 import { formatServiceDateTime, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
@@ -37,6 +38,7 @@ function updateLabel(kind) {
 
 async function addUpdate() {
     if (!canModify.value || !updateMessage.value.trim()) return;
+    if (!await confirmChange({ title: "Send this service update?", message: "Your message will be saved in the service history and shared with the platform team." }, () => canModify.value && !isSaving.value) || !(canModify.value && !isSaving.value)) { return; }
     const saved = await runAction(
         () => window.axios.post(`/provider/billing/${purchaseId}/updates`, { message: updateMessage.value.trim() }),
         'Response sent.',

@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { computed, onMounted, ref, watch } from 'vue';
@@ -225,6 +226,7 @@ async function savePlan(status) {
         return;
     }
 
+    if (!await confirmChange({ title: "Save the monitoring plan?", message: "The selected draft or activation action will be recorded. Existing recipient records are not replaced." }, () => canEdit.value && !isSaving.value) || !(canEdit.value && !isSaving.value)) { return; }
     isSaving.value = true;
     errorMessage.value = '';
     try {
@@ -322,7 +324,7 @@ onMounted(loadPlan);
                         </div>
                     </header>
 
-                    <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                     <div v-if="!canEdit" class="mt-4 border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">This plan is read-only for your role. A program manager can update it.</div>
                     <div v-else-if="activePlan && !canPublishCheckIn" class="mt-4 border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-700">The plan is active. A monitoring officer publishes each check-in period.</div>
 
@@ -374,7 +376,7 @@ onMounted(loadPlan);
                     </section>
                 </template>
 
-                <div v-else class="border border-rose-200 bg-rose-50 px-6 py-8 text-sm font-semibold text-rose-800">{{ errorMessage || 'The monitoring plan is unavailable.' }}</div>
+                <FeedbackToast :message="errorMessage || 'The monitoring plan is unavailable.'" />
             </div>
         </section>
 
@@ -383,7 +385,7 @@ onMounted(loadPlan);
             <form ref="requirementDialog" class="provider-monitoring-workspace monitoring-dialog w-full max-w-2xl border border-slate-300 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="requirement-editor-title" tabindex="-1" @keydown="handleRequirementKeydown" @submit.prevent="saveRequirement">
                 <header class="flex items-start justify-between border-b border-slate-200 px-6 py-5"><div><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Monitoring record</p><h2 id="requirement-editor-title" class="mt-1 text-xl font-bold text-slate-950">{{ editingIndex >= 0 ? 'Edit requirement' : 'Add requirement' }}</h2></div><button type="button" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-600" aria-label="Close" @click="closeRequirementEditor"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></header>
                 <div class="monitoring-dialog-body grid grid-cols-2 gap-5 p-6">
-                    <p v-if="requirementError" class="col-span-2 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ requirementError }}</p>
+                    <FeedbackToast v-if="requirementError" :message="requirementError" />
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Type</span><select v-model="requirementEditor.type" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm" @change="changeRequirementType"><option v-for="type in requirementTypes" :key="type.value" :value="type.value">{{ type.label }}</option></select></label>
                     <label class="block"><span class="mb-2 block text-xs font-bold text-slate-700">Title</span><input v-model="requirementEditor.title" required maxlength="120" class="h-11 w-full border border-slate-300 px-3 text-sm"></label>
                     <label class="col-span-2 block"><span class="mb-2 block text-xs font-bold text-slate-700">What should the recipient bring?</span><textarea v-model="requirementEditor.evidence_description" :required="requirementEditor.requires_file" rows="3" maxlength="1000" class="w-full resize-y border border-slate-300 px-3 py-3 text-sm"></textarea></label>

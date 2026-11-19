@@ -109,6 +109,9 @@ class ApplicantApplicationDetailService
                 'tone' => $this->statusTone($application, $workflow),
             ],
             'submitted_at' => $application->submitted_at?->format('M d, Y h:i A'),
+            'conversation_href' => $application->submitted_at
+                ? route('dashboard.application-conversations.page', $application, false)
+                : null,
         ];
     }
 

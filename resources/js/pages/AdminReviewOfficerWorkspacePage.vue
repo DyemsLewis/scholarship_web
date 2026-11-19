@@ -297,7 +297,7 @@ onMounted(loadData);
                 <div v-if="isLoading" class="admin-panel mt-5 p-6 text-sm text-slate-500">Loading review queues...</div>
 
                 <div v-else class="admin-content-stack">
-                    <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <section class="admin-panel overflow-hidden">
                         <dl class="grid divide-y divide-slate-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">

@@ -88,7 +88,7 @@ async function submit() {
                         <i class="fa-solid fa-lock mt-1 shrink-0 text-xs text-slate-600" aria-hidden="true"></i>
                         <p>Use the account where you want to receive this benefit. Never enter a password, PIN, or one-time code.</p>
                     </div>
-                    <p v-if="error" role="alert" class="rounded-sm border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">{{ error }}</p>
+                    <FeedbackToast v-if="error" :message="error" />
                     <label class="block text-sm font-bold text-slate-700">
                         {{ wallet ? 'Wallet provider' : 'Bank name' }}
                         <input v-model.trim="form.institution" name="institution" required maxlength="120" :disabled="busy" class="mt-1.5 block min-h-11 w-full rounded-sm border border-slate-300 px-3 font-normal text-slate-950">

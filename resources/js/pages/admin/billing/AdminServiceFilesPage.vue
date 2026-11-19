@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { computed } from 'vue';
 import { formatAdminServiceDateTime, useAdminServiceWorkspace } from '../../../composables/useAdminServiceWorkspace.js';
 import AdminServiceWorkspaceShell from './components/AdminServiceWorkspaceShell.vue';
@@ -15,6 +16,7 @@ async function uploadDeliverable(event) {
     const file = input.files?.[0];
     if (!file || isUploading.value || !canEdit.value) return;
     if (file.size > 10 * 1024 * 1024) { errorMessage.value = 'Choose a supported file up to 10 MB.'; input.value = ''; return; }
+    if (!await confirmChange({ title: "Share this deliverable?", message: "The selected file will be saved as a deliverable and made available to the provider." }, () => canEdit.value && !isUploading.value) || !(canEdit.value && !isUploading.value)) { return; }
     const data = new FormData();
     data.append('service_file', file);
     try {

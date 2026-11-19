@@ -68,7 +68,7 @@ class SelectionSessionWorkspaceController extends Controller
                     'assignments as active_assignments_count' => fn (Builder $assignmentQuery) => $assignmentQuery
                         ->whereIn('status', ['assigned', 'acknowledged']),
                     'evidence as current_evidence_count' => fn (Builder $evidenceQuery) => $evidenceQuery
-                        ->where('is_current', true),
+                        ->where('scope', 'session')->where('is_current', true),
                     'assignments as pending_attendance_count' => fn (Builder $assignmentQuery) => $assignmentQuery
                         ->whereIn('status', ['assigned', 'acknowledged'])
                         ->whereHas('attendance', fn (Builder $attendanceQuery) => $attendanceQuery

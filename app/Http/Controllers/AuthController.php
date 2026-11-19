@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -29,7 +30,31 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
-        $validated = $request->validate($this->registrationRules());
+        $existing = User::query()->whereRaw('LOWER(email) = ?', [$request->input('email')])->first();
+        $resume = null;
+        if ($existing && $this->canResumeRegistration($existing, (string) $request->input('role'))) {
+            $key = 'registration-resume:'.hash('sha256', $request->input('email'));
+            if (RateLimiter::tooManyAttempts($key, 5)) {
+                $retryAfter = RateLimiter::availableIn($key);
+
+                return response()->json(['message' => 'Too many attempts. Please wait before trying again.', 'retry_after' => $retryAfter], 429)
+                    ->header('Retry-After', (string) $retryAfter);
+            }
+            if (Hash::check((string) $request->input('password'), $existing->password)) {
+                $resume = $existing;
+                RateLimiter::clear($key);
+            } else {
+                RateLimiter::hit($key, 60);
+            }
+        }
+        if ($existing && ! $resume) {
+            throw ValidationException::withMessages([
+                'email' => 'This email already has an account. Sign in to continue, or use Forgot password if needed.',
+            ]);
+        }
+        $validated = $request->validate($this->registrationRules($resume), [
+            'email.unique' => 'This email already has an account. Sign in to continue, or use Forgot password if needed.',
+        ]);
         $email = strtolower(trim($validated['email']));
         $username = trim($validated['username']);
 
@@ -59,8 +84,8 @@ class AuthController extends Controller
                 'password',
                 'password_confirmation',
                 'terms_accepted',
-            ])->all(),
-            'password_hash' => Hash::make($validated['password']),
+            ])->all() + ($resume ? ['existing_user_id' => $resume->id] : []),
+            'password_hash' => $resume?->password ?? Hash::make($validated['password']),
             'code_hash' => Hash::make($verificationCode),
             'attempts' => 0,
             'expires_at' => now()->addMinutes(PendingRegistration::CODE_TTL_MINUTES),
@@ -87,6 +112,7 @@ class AuthController extends Controller
             'email' => $this->maskEmail($pending->email),
             'expires_in' => PendingRegistration::CODE_TTL_MINUTES * 60,
             'resend_after' => PendingRegistration::RESEND_COOLDOWN_SECONDS,
+            'resuming_account' => $resume !== null,
         ], 202);
     }
 
@@ -129,6 +155,31 @@ class AuthController extends Controller
                     'message' => "The verification code is incorrect. {$remainingAttempts} attempt".($remainingAttempts === 1 ? '' : 's').' remaining.',
                     'attempts_remaining' => $remainingAttempts,
                 ], 422);
+            }
+
+            if ($existingId = $pending->payload['existing_user_id'] ?? null) {
+                $user = User::query()->lockForUpdate()->find($existingId);
+                if (! $user || ! $this->canResumeRegistration($user, $pending->role)
+                    || strtolower(trim($user->email)) !== $pending->email
+                    || ! hash_equals((string) $user->password, (string) $pending->password_hash)) {
+                    $pending->delete();
+
+                    return response()->json([
+                        'message' => 'This account has changed. Sign in to continue verification or use Forgot password.',
+                        'restart_required' => true,
+                    ], 422);
+                }
+                $user->markEmailAsVerified();
+                event(new Verified($user));
+                PortalNotification::query()->where('user_id', $user->id)->where('type', 'email_verification')->update(['read_at' => now()]);
+                $pending->delete();
+                ActivityLog::record($user, 'email_verified', "{$user->name} completed an unfinished email verification.", $request);
+
+                return response()->json([
+                    'message' => 'Email verified. Sign in with your existing account details.',
+                    'redirect' => '/login?verified=1',
+                    'email_verified' => true,
+                ]);
             }
 
             if (User::query()->where('email', $pending->email)->exists()) {
@@ -257,6 +308,7 @@ class AuthController extends Controller
         $attemptKey = 'login-account:'.hash('sha256', mb_strtolower($loginValue));
         if (RateLimiter::tooManyAttempts($attemptKey, 5)) {
             $retryAfter = RateLimiter::availableIn($attemptKey);
+
             return response()->json([
                 'message' => 'Too many sign-in attempts. Please wait before trying again.',
                 'retry_after' => $retryAfter,
@@ -623,14 +675,21 @@ class AuthController extends Controller
         return app()->isLocal() || app()->runningUnitTests();
     }
 
-    private function registrationRules(): array
+    private function canResumeRegistration(User $user, string $role): bool
+    {
+        return ! $user->hasVerifiedEmail() && $user->isActive() && ! $user->isManagedAccount()
+            && ! $user->must_reset_password && in_array($user->role, ['applicant', 'provider'], true)
+            && $user->role === $role;
+    }
+
+    private function registrationRules(?User $resume = null): array
     {
         return [
             'first_name' => ['required', 'string', 'max:255'],
             'last_name' => ['required', 'string', 'max:255'],
             'middle_initial' => ['nullable', 'string', 'size:1', 'regex:/^[A-Za-z]$/'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', 'unique:users,username'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($resume?->id)],
+            'username' => ['required', 'string', 'min:4', 'max:255', 'regex:/^[A-Za-z0-9_.-]+$/', Rule::unique('users', 'username')->ignore($resume?->id)],
             'number' => ['required', 'string', 'max:30', new PhoneNumber],
             'role' => ['required', 'string', 'in:applicant,provider'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
@@ -650,6 +709,7 @@ class AuthController extends Controller
                 $pending->payload['first_name'] ?? 'Applicant',
                 $code,
                 PendingRegistration::CODE_TTL_MINUTES,
+                isset($pending->payload['existing_user_id']),
             ));
 
             return true;

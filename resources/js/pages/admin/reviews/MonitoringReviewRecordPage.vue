@@ -97,7 +97,7 @@ const backToQueue = staffQueueReturn(window, 'adminReviews', '/admin/workspaces/
         <section v-if="loading || errorMessage" class="admin-panel mt-4"><AdminLoadState :loading="loading" :error="errorMessage" loading-message="Loading monitoring record..." @retry="loadRecord" /></section>
 
         <template v-else-if="record">
-            <p v-if="successMessage" role="status" class="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{{ successMessage }}</p>
+            <FeedbackToast v-if="successMessage" :message="successMessage" type="success" />
 
             <section class="admin-panel mt-4 overflow-hidden">
                 <div class="flex items-center gap-4 border-b border-slate-200 px-6 py-5">

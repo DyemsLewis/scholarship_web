@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { formatServiceMoney, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
@@ -33,6 +34,7 @@ watch(purchase, (value) => {
 
 async function saveBrief() {
     if (!canModify.value) return;
+    if (!await confirmChange({ title: "Save the service brief?", message: "The updated brief and requested outcome will be shared with the service team." }, () => canModify.value && !isSaving.value) || !(canModify.value && !isSaving.value)) { return; }
     const saved = await runAction(
         () => window.axios.patch(`/provider/billing/${purchaseId}/request`, { ...briefForm }),
         'Request brief updated.',

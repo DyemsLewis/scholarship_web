@@ -61,6 +61,16 @@ test('replacement requests remain actionable and keep the reviewer explanation v
     assert.doesNotMatch(resubmitted, /data-photo-controls[ >]/);
 });
 
+test('missing name, contact, and photo are called out beside the relevant labels', async () => {
+    const html = await render({ photoUrl: '', missingFields: new Set(['first_name', 'contact_number', 'has_profile_photo']) });
+    assert.match(html, /for="profile-first-name"[^>]*>First name <span[^>]+data-missing-field="first_name">Missing/);
+    assert.match(html, /for="profile-contact"[^>]*>Contact number <span[^>]+data-missing-field="contact_number">Missing/);
+    assert.match(html, /data-missing-field="has_profile_photo">Missing/);
+    assert.match(html, /id="profile-photo-upload"/);
+    assert.equal((html.match(/data-missing-field=/g) || []).length, 3);
+    assert.doesNotMatch(await render(), /data-missing-field=/);
+});
+
 test('photo operations disable conflicting actions while they are running', async () => {
     for (const busy of [{ uploadingPhoto: true }, { deletingPhoto: true }]) {
         const html = await render({ photoReviewStatus: 'needs_replacement', ...busy });

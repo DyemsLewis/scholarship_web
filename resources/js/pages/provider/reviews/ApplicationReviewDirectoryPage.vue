@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -123,6 +124,7 @@ async function loadApplications(page = 1) {
 
 async function claimAndOpen(application) {
     if (isLoading.value || errorMessage.value || claimingId.value !== null) return;
+    if (!await confirmChange({ title: "Claim this application review?", message: "You will be assigned as its reviewer before the applicant record opens." }, () => !isLoading.value && claimingId.value === null) || !(!isLoading.value && claimingId.value === null)) { return; }
     claimingId.value = application.id;
     claimError.value = '';
 
@@ -226,7 +228,7 @@ onBeforeUnmount(() => {
                         </label>
                     </header>
 
-                    <div v-if="claimError" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ claimError }}</div>
+                    <FeedbackToast v-if="claimError" :message="claimError" />
 
                     <div class="staff-table-viewport" :aria-busy="isLoading">
                         <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadApplications(requestedPage)" />

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -82,6 +83,21 @@ class ApplicationStageSession extends Model
     public function evidence(): HasMany
     {
         return $this->hasMany(ApplicationStageEvidence::class);
+    }
+
+    public function needsSessionProof(): bool
+    {
+        return $this->proof_required && ($this->relationLoaded('evidence')
+            ? $this->evidence->where('scope', 'session')->where('is_current', true)->isEmpty()
+            : ! $this->evidence()->where('scope', 'session')->where('is_current', true)->exists());
+    }
+
+    public function scopeReadyForOutcomes(Builder $query): Builder
+    {
+        return $query->where('status', 'completed')
+            ->where(fn (Builder $proof) => $proof->where('proof_required', false)
+                ->orWhereHas('evidence', fn (Builder $evidence) => $evidence
+                    ->where('scope', 'session')->where('is_current', true)));
     }
 
     public function auditEvents(): HasMany

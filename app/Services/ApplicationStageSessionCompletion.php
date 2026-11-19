@@ -31,19 +31,7 @@ final class ApplicationStageSessionCompletion
                 'field' => 'attendance',
                 'message' => 'Record attendance for every assigned applicant first.',
             ],
-            $session->proof_required && ! $this->hasSessionProof($session) => [
-                'key' => 'proof',
-                'field' => 'evidence',
-                'message' => 'Upload session proof before marking this activity complete.',
-            ],
             default => null,
         };
-    }
-
-    private function hasSessionProof(ApplicationStageSession $session): bool
-    {
-        return $session->relationLoaded('evidence')
-            ? $session->evidence->where('scope', 'session')->where('is_current', true)->isNotEmpty()
-            : $session->evidence()->where('scope', 'session')->where('is_current', true)->exists();
     }
 }

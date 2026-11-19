@@ -107,7 +107,7 @@ function close() { if (!saving.value) emit('close'); }
                         </form>
                         <p v-else class="border-t border-slate-200 pt-4 text-sm text-slate-600">{{ retired ? 'Retired evidence: kept for reference, not required for profile verification.' : 'This is a read-only record. A review officer records document decisions.' }}</p>
                         <p class="text-xs leading-5 text-slate-500">Acceptance is a reviewer decision, not authentication by the issuing authority. It does not verify the whole profile or pass an application.</p>
-                        <div v-if="error" role="alert" class="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950"><p>{{ error }}</p><button v-if="stale" type="button" class="mt-2 underline underline-offset-2 font-bold" @click="emit('reload')">Reload current record</button></div>
+                        <template v-if="error"><FeedbackToast :message="error" :retry-label="stale ? 'Reload current record' : ''" @retry="emit('reload')" /><button v-if="stale" type="button" class="mt-2 underline underline-offset-2 font-bold" @click="emit('reload')">Reload current record</button></template>
                     </div>
                 </div>
                 <footer class="flex shrink-0 items-center justify-between gap-4 border-t border-slate-200 bg-slate-50 px-6 py-4">

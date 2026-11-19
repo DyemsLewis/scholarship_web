@@ -151,7 +151,7 @@ onMounted(loadRecord);
                 </TaskPageHeader>
 
                 <div v-if="isLoading" class="admin-panel mt-5 p-6 text-sm text-slate-500">Loading monitoring record...</div>
-                <div v-else-if="errorMessage" class="mt-5 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">{{ errorMessage }}</div>
+                <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
 
                 <div v-else-if="record" class="admin-content-stack">
                     <section class="admin-panel flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center">
@@ -243,7 +243,7 @@ onMounted(loadRecord);
                     </header>
                     <form @submit.prevent="submitReview">
                         <div class="space-y-4 px-5 py-5">
-                            <p v-if="reviewError" class="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">{{ reviewError }}</p>
+                            <FeedbackToast v-if="reviewError" :message="reviewError" />
                             <fieldset><legend class="text-xs font-bold text-slate-700">Outcome</legend><div class="mt-2 space-y-2">
                                 <label v-for="option in [{ value: 'reviewed', label: 'Reviewed', help: 'No admin action is currently required.' }, { value: 'follow_up_required', label: 'Provider follow-up required', help: 'Ask the provider to clarify or correct the record.' }, { value: 'escalated', label: 'Escalate concern', help: 'Record a serious issue for administrative follow-up.' }]" :key="option.value" :class="['flex cursor-pointer gap-3 rounded-md border p-3', reviewForm.outcome === option.value ? 'border-slate-950 bg-slate-50' : 'border-slate-200']"><input v-model="reviewForm.outcome" type="radio" :value="option.value" class="mt-1"><span><strong class="block text-sm">{{ option.label }}</strong><span class="mt-0.5 block text-xs text-slate-500">{{ option.help }}</span></span></label>
                             </div></fieldset>

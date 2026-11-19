@@ -25,6 +25,11 @@ final class SelectionWorkspaceQueues
             ->whereIn('scholarship_id', $programIds)
             ->whereIn('workflow_stage', ApplicationStageCatalog::SESSION_STAGES)
             ->whereNotIn('application_state', ['closed', 'withdrawn']);
+        $currentAssignment = fn (Builder $assignment) => $assignment
+            ->whereIn('status', ['assigned', 'acknowledged'])
+            ->whereHas('session', fn (Builder $session) => $session
+                ->whereColumn('stage_key', 'scholarship_applications.workflow_stage')
+                ->where('status', '!=', 'cancelled'));
 
         return [
             'active' => (clone $sessions)->whereIn('status', ['draft', 'scheduled', 'ongoing']),
@@ -37,7 +42,13 @@ final class SelectionWorkspaceQueues
                     ->where(fn (Builder $status) => $status
                         ->whereNull('operational_status')
                         ->orWhereIn('operational_status', ['not_started', 'waiting_for_schedule']))),
-            'results' => $applications->where(fn (Builder $ready) => $ready
+            'results' => $applications->where(fn (Builder $eligible) => $eligible
+                ->whereDoesntHave('stageAssignments', $currentAssignment)
+                ->orWhereHas('stageAssignments', function (Builder $assignment) use ($currentAssignment): void {
+                    $currentAssignment($assignment)
+                        ->whereHas('attendance', fn (Builder $attendance) => $attendance->where('status', '!=', 'pending'))
+                        ->whereHas('session', fn (Builder $session) => $session->readyForOutcomes());
+                }))->where(fn (Builder $ready) => $ready
                 ->whereHas('stageProgresses', fn (Builder $progress) => $progress
                     ->where('status', 'current')
                     ->where('operational_status', 'ready_for_review')

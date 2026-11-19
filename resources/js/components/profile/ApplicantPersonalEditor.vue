@@ -1,9 +1,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { inputClass, labelClass, secondaryButton } from '../../support/profileEditorStyles';
+import { inputClass, labelClass, missingLabel, secondaryButton } from '../../support/profileEditorStyles';
 
 const form = defineModel({ type: Object, required: true });
 const props = defineProps({
+    missingFields: { type: Set, default: () => new Set() },
     photoUrl: { type: String, default: '' },
     applicantName: { type: String, default: 'Applicant' },
     photoReviewStatus: { type: String, default: '' },
@@ -39,7 +40,7 @@ watch(() => props.photoUrl, () => { photoUnavailable.value = false; });
                     <img v-else :src="'/images/demo/default-applicant-avatar.jpg'" alt="No applicant photo available" class="h-full w-full object-cover">
                 </div>
                 <div class="min-w-0 flex-1">
-                    <h3 id="personal-photo-title" class="text-sm font-bold text-slate-950">Applicant photo</h3>
+                    <h3 id="personal-photo-title" class="text-sm font-bold text-slate-950">Applicant photo <span v-if="missingFields.has('has_profile_photo')" :class="missingLabel" data-missing-field="has_profile_photo">Missing</span></h3>
                     <p :class="['mt-1 text-xs leading-5', replacementNeeded || !photoUrl ? 'font-semibold text-amber-800' : 'text-slate-500']">
                         {{ replacementNeeded ? 'Replacement requested' : photoUrl ? 'Photo saved' : 'Required for your profile' }}
                     </p>
@@ -57,7 +58,7 @@ watch(() => props.photoUrl, () => { photoUnavailable.value = false; });
             <div v-if="photoActionsVisible" id="personal-photo-controls" data-photo-controls class="mt-4">
                 <div class="flex flex-wrap items-center gap-2">
                     <label :class="[secondaryButton, 'relative overflow-hidden focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-amber-600', photoBusy ? 'opacity-50' : 'cursor-pointer']">
-                        <input type="file" accept="image/jpeg,image/png" class="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Upload applicant photo" :disabled="photoBusy" @change="$emit('upload-photo', $event)">
+                        <input id="profile-photo-upload" type="file" accept="image/jpeg,image/png" class="absolute inset-0 h-full w-full cursor-pointer opacity-0" aria-label="Upload applicant photo" :disabled="photoBusy" @change="$emit('upload-photo', $event)">
                         <i :class="uploadingPhoto ? 'fa-solid fa-spinner fa-spin' : 'fa-solid fa-arrow-up-from-bracket'" aria-hidden="true"></i>
                         {{ uploadingPhoto ? 'Uploading...' : 'Choose photo' }}
                     </label>
@@ -72,8 +73,8 @@ watch(() => props.photoUrl, () => { photoUnavailable.value = false; });
             <h3 id="personal-name-title" class="text-sm font-bold text-slate-950">Official name</h3>
             <p class="mt-1 text-xs leading-5 text-slate-500">Use the name on your school records.</p>
             <div class="mt-4 grid grid-cols-2 items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_7rem_8rem]">
-                <div class="min-w-0"><label :class="labelClass" for="profile-first-name">First name</label><input id="profile-first-name" v-model="form.first_name" autocomplete="given-name" required :class="inputClass"></div>
-                <div class="min-w-0"><label :class="labelClass" for="profile-last-name">Last name</label><input id="profile-last-name" v-model="form.last_name" autocomplete="family-name" required :class="inputClass"></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-first-name">First name <span v-if="missingFields.has('first_name')" :class="missingLabel" data-missing-field="first_name">Missing</span></label><input id="profile-first-name" v-model="form.first_name" autocomplete="given-name" required :class="inputClass"></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-last-name">Last name <span v-if="missingFields.has('last_name')" :class="missingLabel" data-missing-field="last_name">Missing</span></label><input id="profile-last-name" v-model="form.last_name" autocomplete="family-name" required :class="inputClass"></div>
                 <div class="min-w-0"><label :class="labelClass" for="profile-middle">M.I. <span class="font-normal text-slate-400">(optional)</span></label><input id="profile-middle" :value="form.middle_initial" maxlength="1" aria-label="Middle initial (optional)" :class="[inputClass, 'uppercase']" @input="$emit('middle-initial-input', $event)"></div>
                 <div class="min-w-0">
                     <label :class="labelClass" for="profile-suffix">Suffix <span class="font-normal text-slate-400">(optional)</span></label>
@@ -86,19 +87,19 @@ watch(() => props.photoUrl, () => { photoUnavailable.value = false; });
             <h3 id="personal-identity-title" class="text-sm font-bold text-slate-950">Personal details</h3>
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-3">
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-birthdate">Date of birth</label><input id="profile-birthdate" v-model="form.birthdate" type="date" :min="birthdateMin" :max="birthdateMax" required :class="inputClass">
+                    <label :class="labelClass" for="profile-birthdate">Date of birth <span v-if="missingFields.has('birthdate')" :class="missingLabel" data-missing-field="birthdate">Missing</span></label><input id="profile-birthdate" v-model="form.birthdate" type="date" :min="birthdateMin" :max="birthdateMax" required :class="inputClass">
                     <p v-if="age !== null" class="mt-1 text-xs leading-5 text-slate-500">{{ age }} years old<span v-if="guardianRequired">. Guardian details required.</span></p>
                 </div>
                 <div class="min-w-0"><label :class="labelClass" for="profile-gender">Gender <span class="font-normal text-slate-400">(optional)</span></label><select id="profile-gender" v-model="form.gender" :class="inputClass"><option value="">Select gender</option><option v-for="option in genderOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
-                <div class="min-w-0"><label :class="labelClass" for="profile-citizenship">Citizenship</label><select id="profile-citizenship" v-model="form.citizenship_status" required :class="inputClass"><option value="">Select citizenship</option><option v-for="option in citizenshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-citizenship">Citizenship <span v-if="missingFields.has('citizenship_status')" :class="missingLabel" data-missing-field="citizenship_status">Missing</span></label><select id="profile-citizenship" v-model="form.citizenship_status" required :class="inputClass"><option value="">Select citizenship</option><option v-for="option in citizenshipOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
             </div>
         </section>
 
         <section class="py-4" aria-labelledby="personal-contact-title">
             <h3 id="personal-contact-title" class="text-sm font-bold text-slate-950">Contact and account</h3>
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-2">
-                <div class="min-w-0"><label :class="labelClass" for="profile-contact">Contact number</label><input id="profile-contact" :value="form.contact_number" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="09XX XXX XXXX" required :class="inputClass" @input="$emit('phone-input', $event)"></div>
-                <div class="min-w-0"><label :class="labelClass" for="profile-account-manager">Account managed by</label><select id="profile-account-manager" v-model="form.account_managed_by" required :class="inputClass"><option value="">Select account manager</option><option v-for="option in accountManagerOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-contact">Contact number <span v-if="missingFields.has('contact_number')" :class="missingLabel" data-missing-field="contact_number">Missing</span></label><input id="profile-contact" :value="form.contact_number" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="09XX XXX XXXX" required :class="inputClass" @input="$emit('phone-input', $event)"></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-account-manager">Account managed by <span v-if="missingFields.has('account_managed_by')" :class="missingLabel" data-missing-field="account_managed_by">Missing</span></label><select id="profile-account-manager" v-model="form.account_managed_by" required :class="inputClass"><option value="">Select account manager</option><option v-for="option in accountManagerOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select></div>
             </div>
             <p class="mt-4 text-xs leading-5 text-slate-500">These details are shared only with authorized reviewers.</p>
         </section>

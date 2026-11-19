@@ -341,10 +341,7 @@ onMounted(loadProvider);
                     Loading provider review details...
                 </div>
 
-                <div v-else-if="loadError || !provider" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-5 shadow-sm">
-                    <p class="text-sm font-bold text-rose-800">Provider details could not be loaded</p>
-                    <p class="mt-1 text-sm leading-6 text-rose-700">{{ loadError }}</p>
-                </div>
+                <template v-else-if="loadError || !provider"><FeedbackToast :message="loadError" fallback /></template>
 
                 <div v-else class="mt-4 space-y-4">
                     <section class="admin-panel overflow-hidden">
@@ -718,9 +715,7 @@ onMounted(loadProvider);
                             @input="decisionError = ''"
                         ></textarea>
 
-                        <p v-if="decisionError" class="mt-3 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs font-semibold leading-5 text-rose-700">
-                            {{ decisionError }}
-                        </p>
+                        <FeedbackToast v-if="decisionError" :message="decisionError" />
 
                         <div class="mt-4 grid gap-2 sm:auto-cols-fr sm:grid-flow-col">
                             <button

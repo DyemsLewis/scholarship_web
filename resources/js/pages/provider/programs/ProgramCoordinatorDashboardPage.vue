@@ -90,9 +90,7 @@ onMounted(loadDashboard);
                     </template>
                 </WorkspaceDashboardHeader>
 
-                <div v-if="errorMessage" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                 <template v-else>
                     <WorkspaceMetricStrip :metrics="metrics" :loading="isLoading" />

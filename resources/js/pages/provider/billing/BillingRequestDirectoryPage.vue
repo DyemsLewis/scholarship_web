@@ -183,7 +183,7 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
 
-                    <div v-if="paymentError" class="border-b border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-800" role="alert">{{ paymentError }}</div>
+                    <FeedbackToast v-if="paymentError" :message="paymentError" />
                     <StaffTableLoadError v-if="errorMessage" :message="errorMessage" @retry="loadEntries(requestedPage)" />
                     <div v-else-if="isLoading" class="px-6 py-14 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading service records...</p></div>
                     <div v-else-if="!entries.length && !errorMessage" class="min-h-96 px-6 py-14 text-center">

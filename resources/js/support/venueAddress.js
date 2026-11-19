@@ -8,6 +8,7 @@ export function venueAddressText(details, includeVenue = true) {
 }
 
 export function venueAddressFromMap(address = {}) {
+    if (!address) return null;
     if (String(address.country_code ?? '').toLowerCase() !== 'ph') return null;
     const text = value => cleanPhilippineLocationName(value).trim();
     const region = [address.region, address.state_district, address.state].map(findPhilippineRegion).find(Boolean);
@@ -17,13 +18,14 @@ export function venueAddressFromMap(address = {}) {
         region: region.value,
         province: region.value === 'NCR' ? 'Metro Manila' : text(province),
         city: text(address.city || address.municipality || address.town),
-        barangay: text(address.village || address.neighbourhood || address.suburb || address.quarter),
+        barangay: text(address.quarter || address.village || address.suburb || address.neighbourhood),
         street: [address.house_number, address.road].map(text).filter(Boolean).join(' '),
     };
 }
 
 export async function lookupVenuePinAddress(location, signal) {
     if (location.address?.country_code) return location.address;
+    if (location.addressLookupFailed) throw new Error('Map address lookup unavailable.');
     const query = new URLSearchParams({ format: 'jsonv2', addressdetails: '1', lat: String(location.latitude), lon: String(location.longitude), 'accept-language': 'en' });
     const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${query}`, {
         headers: { Accept: 'application/json' }, referrerPolicy: 'strict-origin', signal,

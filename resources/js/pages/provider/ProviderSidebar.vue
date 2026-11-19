@@ -1,5 +1,6 @@
 <script setup>
 import RoleSidebar from '../../components/RoleSidebar.vue';
+import { providerApplicationMessagesLinks } from '../../support/providerApplicationMessagesLink';
 
 const permissions = new Set(window.portalUser?.permissions ?? []);
 const usesManagerNavigation = Boolean(
@@ -14,6 +15,7 @@ const navLinks = [
         icon: 'fa-solid fa-gauge-high',
         exact: true,
     },
+    ...providerApplicationMessagesLinks(window.portalUser),
 ];
 
 if (permissions.has('manage_programs')) {

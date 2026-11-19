@@ -341,8 +341,8 @@ onMounted(loadRecord);
         <section class="student-page" aria-labelledby="monitoring-record-title">
             <div class="provider-monitoring-workspace mx-auto max-w-[94rem]">
                 <a :href="safeReturnUrl" class="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to monitoring</a>
-                <div v-if="errorMessage" class="mb-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                <div v-if="successMessage" class="mb-4 border-l-4 border-emerald-500 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800" role="status">{{ successMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
+                <FeedbackToast v-if="successMessage" :message="successMessage" type="success" />
                 <div v-if="isLoading" class="border border-slate-200 bg-white px-6 py-16 text-center">
                     <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
                     <p class="mt-3 text-sm font-semibold text-slate-500">Loading monitoring check-in...</p>
@@ -498,7 +498,7 @@ onMounted(loadRecord);
                         <button type="button" :disabled="caseDecisionBusy" class="grid h-9 w-9 place-items-center border border-slate-300 text-slate-500 disabled:opacity-50" aria-label="Close" @click="closeCaseDecision"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                     </header>
                     <div class="monitoring-dialog-body space-y-5 px-6 py-5">
-                        <p v-if="caseDecisionError" class="border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ caseDecisionError }}</p>
+                        <FeedbackToast v-if="caseDecisionError" :message="caseDecisionError" />
                         <label v-if="caseDecisionMode === 'close' && selectedRecipient?.monitoring_case?.status === 'ready_to_close'" class="block text-sm font-bold text-slate-700">Outcome
                             <select v-model="caseDecisionForm.outcome" class="mt-2 h-11 w-full border border-slate-300 bg-white px-3 font-normal">
                                 <option value="completed">Completed</option>

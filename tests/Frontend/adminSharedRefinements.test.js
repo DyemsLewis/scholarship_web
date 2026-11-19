@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
-import { confirmOutcome, afterConfirmation } from './helpers/acceptedOutcome.js';
+import { confirmChange, confirmOutcome, afterConfirmation } from './helpers/acceptedOutcome.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, createSSRApp, effectScope, h, reactive, ref } from 'vue';
 import { renderToString } from '@vue/server-renderer';
@@ -120,9 +120,10 @@ test('load feedback distinguishes loading, failure, and successful empty states'
     assert.match(loading, /Loading verification queue/);
     assert.doesNotMatch(loading, /Hidden previous error|Try again/);
     const error = await render(LoadState, { error: '<script>unavailable</script>' });
-    assert.match(error, /role="alert"/);
+    assert.match(error, /role="status"/);
     assert.match(error, /Try again/);
-    assert.match(error, /&lt;script&gt;/);
+    assert.doesNotMatch(error, /<script>unavailable<\/script>/);
+    assert.match(read('pages/admin/components/AdminLoadState.vue'), /<FeedbackToast :message="error"/);
     assert.doesNotMatch(await render(LoadState), /role="alert"|role="status"|Try again/);
 });
 
@@ -178,7 +179,8 @@ test('shared dialogs retain labelled form semantics and disable controls during 
     const context = {};
     await renderToString(createSSRApp({ render: () => h(Dialog, { open: true, title: 'Record review', titleId: 'review-title', description: 'Provider oversight', error: 'Could not save', busy: true }, { default: () => h('textarea', { name: 'notes' }) }) }), context);
     const html = context.teleports.body;
-    for (const value of ['role="dialog"', 'aria-modal="true"', 'aria-labelledby="review-title"', 'aria-busy="true"', 'tabindex="-1"', 'role="alert"', 'Could not save', 'admin-dialog-body', '<fieldset disabled', 'Saving...']) assert.ok(html.includes(value), value);
+    for (const value of ['role="dialog"', 'aria-modal="true"', 'aria-labelledby="review-title"', 'aria-busy="true"', 'tabindex="-1"', 'admin-dialog-body', '<fieldset disabled', 'Saving...']) assert.ok(html.includes(value), value);
+    assert.match(read('pages/admin/components/AdminDialog.vue'), /<FeedbackToast[^>]*:message="error"/);
     assert.equal((html.match(/<form\b/g) ?? []).length, 1);
     assert.equal((html.match(/<button[^>]* disabled/g) ?? []).length, 3);
     assert.match(read('pages/admin/components/AdminDialog.vue'), /useModalAccessibility\(\(\) => props.open && isFormDialog.value, dialog, close\)/);
@@ -203,7 +205,7 @@ function harness(path, exposed) {
         post: async (...args) => { writes.push(args); return { data: {} }; },
         patch: async (...args) => { writes.push(args); return { data: { user: { first_name: 'Saved' } } }; },
     } };
-    const deps = { staffQueueReturn, confirmOutcome, ref, reactive, computed, useAdminResource, reviewErrorMessage, watch() {}, onMounted() {}, onBeforeUnmount() {}, window, URLSearchParams, limitPhoneNumber: (value) => value, showPortalToast() {} };
+    const deps = { staffQueueReturn, confirmChange, confirmOutcome, ref, reactive, computed, useAdminResource, reviewErrorMessage, watch() {}, onMounted() {}, onBeforeUnmount() {}, window, URLSearchParams, limitPhoneNumber: (value) => value, showPortalToast() {} };
     return { ...new Function(...Object.keys(deps), `${script}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes };
 }
 
@@ -230,7 +232,7 @@ test('profile saves preserve drafts on failure and reject duplicate submissions'
     await state.loadProfile(); state.form.first_name = 'Draft name';
     const pending = deferred();
     state.window.axios.patch = (...args) => { state.writes.push(args); return pending.promise; };
-    const saving = state.saveProfile(); await state.saveProfile();
+    const saving = state.saveProfile(); await afterConfirmation(); await state.saveProfile();
     assert.equal(state.writes.length, 1);
     pending.reject({ response: { data: { errors: { username: ['Already in use'] } } } }); await saving;
     assert.equal(state.form.first_name, 'Draft name');

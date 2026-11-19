@@ -201,9 +201,7 @@ onMounted(loadPage);
                     Loading providers...
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-5 text-sm font-semibold text-rose-700">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
 
                 <template v-else-if="!isDetail">
                     <section class="student-card mt-5 overflow-hidden">

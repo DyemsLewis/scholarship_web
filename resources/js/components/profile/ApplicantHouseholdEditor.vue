@@ -1,9 +1,10 @@
 <script setup>
-import { disclosureSummary, inputClass, labelClass, optionalLabel, sectionTitle } from '../../support/profileEditorStyles';
+import { disclosureSummary, inputClass, labelClass, missingLabel, optionalLabel, sectionTitle } from '../../support/profileEditorStyles';
 import { labelFromKey } from '../../support/display';
 
 const form = defineModel({ type: Object, required: true });
 defineProps({
+    missingFields: { type: Set, default: () => new Set() },
     incomeOptions: { type: Array, required: true },
     relationshipOptions: { type: Array, required: true },
     portalScholarships: { type: Array, default: () => [] },
@@ -19,8 +20,8 @@ defineEmits(['guardian-phone-input']);
         <section class="py-4" aria-labelledby="household-eligibility-title">
             <h3 id="household-eligibility-title" :class="sectionTitle">Household eligibility</h3>
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-2">
-                <div class="min-w-0"><label :class="labelClass" for="profile-income">Household income bracket</label><select id="profile-income" v-model="form.income_bracket" required :class="inputClass"><option value="">Select income bracket</option><option v-for="option in incomeOptions" :key="option" :value="option">{{ option }}</option></select></div>
-                <div class="min-w-0"><label :class="labelClass" for="profile-household-size">Household size</label><input id="profile-household-size" v-model="form.household_size" type="number" min="1" max="30" required placeholder="Number of people" :class="inputClass"></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-income">Household income bracket <span v-if="missingFields.has('income_bracket')" :class="missingLabel" data-missing-field="income_bracket">Missing</span></label><select id="profile-income" v-model="form.income_bracket" required :class="inputClass"><option value="">Select income bracket</option><option v-for="option in incomeOptions" :key="option" :value="option">{{ option }}</option></select></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-household-size">Household size <span v-if="missingFields.has('household_size')" :class="missingLabel" data-missing-field="household_size">Missing</span></label><input id="profile-household-size" v-model="form.household_size" type="number" min="1" max="30" required placeholder="Number of people" :class="inputClass"></div>
             </div>
         </section>
 
@@ -31,10 +32,10 @@ defineEmits(['guardian-phone-input']);
             </component>
             <p class="mt-1 text-xs leading-5 text-slate-500">{{ guardianRequired ? guardianReason : 'Optional for applicants aged 19 and above. Provide these details if a scholarship provider requests them.' }}</p>
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-2">
-                <div class="min-w-0"><label :class="labelClass" for="profile-guardian">Guardian name</label><input id="profile-guardian" v-model="form.guardian_name" :required="guardianRequired" maxlength="255" placeholder="Parent or guardian" :class="inputClass"></div>
-                <div class="min-w-0"><label :class="labelClass" for="profile-guardian-relationship">Relationship to applicant</label><select id="profile-guardian-relationship" v-model="form.guardian_relationship" :required="guardianRequired" :class="inputClass"><option value="">Select relationship</option><option v-if="form.guardian_relationship && !relationshipOptions.includes(form.guardian_relationship)" :value="form.guardian_relationship">{{ labelFromKey(form.guardian_relationship) }}</option><option v-for="option in relationshipOptions" :key="option" :value="option">{{ option }}</option></select></div>
-                <div class="min-w-0"><label :class="labelClass" for="profile-guardian-contact">Guardian contact number</label><input id="profile-guardian-contact" :value="form.guardian_contact" type="tel" inputmode="tel" maxlength="20" :required="guardianRequired" placeholder="09XX XXX XXXX" :class="inputClass" @input="$emit('guardian-phone-input', $event)"></div>
-                <div class="min-w-0"><label :class="labelClass" for="profile-guardian-email">Guardian email</label><input id="profile-guardian-email" v-model="form.guardian_email" type="email" :required="guardianRequired" maxlength="255" placeholder="guardian@example.com" :class="inputClass"></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-guardian">Guardian name <span v-if="missingFields.has('guardian_name')" :class="missingLabel" data-missing-field="guardian_name">Missing</span></label><input id="profile-guardian" v-model="form.guardian_name" :required="guardianRequired" maxlength="255" placeholder="Parent or guardian" :class="inputClass"></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-guardian-relationship">Relationship to applicant <span v-if="missingFields.has('guardian_relationship')" :class="missingLabel" data-missing-field="guardian_relationship">Missing</span></label><select id="profile-guardian-relationship" v-model="form.guardian_relationship" :required="guardianRequired" :class="inputClass"><option value="">Select relationship</option><option v-if="form.guardian_relationship && !relationshipOptions.includes(form.guardian_relationship)" :value="form.guardian_relationship">{{ labelFromKey(form.guardian_relationship) }}</option><option v-for="option in relationshipOptions" :key="option" :value="option">{{ option }}</option></select></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-guardian-contact">Guardian contact number <span v-if="missingFields.has('guardian_contact')" :class="missingLabel" data-missing-field="guardian_contact">Missing</span></label><input id="profile-guardian-contact" :value="form.guardian_contact" type="tel" inputmode="tel" maxlength="20" :required="guardianRequired" placeholder="09XX XXX XXXX" :class="inputClass" @input="$emit('guardian-phone-input', $event)"></div>
+                <div class="min-w-0"><label :class="labelClass" for="profile-guardian-email">Guardian email <span v-if="missingFields.has('guardian_email')" :class="missingLabel" data-missing-field="guardian_email">Missing</span></label><input id="profile-guardian-email" v-model="form.guardian_email" type="email" :required="guardianRequired" maxlength="255" placeholder="guardian@example.com" :class="inputClass"></div>
             </div>
             <label class="mt-4 flex cursor-pointer items-start gap-2.5 text-xs font-semibold leading-5 text-slate-700"><input id="profile-guardian-account-owner" v-model="form.guardian_is_account_owner" type="checkbox" class="mt-0.5 h-4 w-4 rounded-sm border-slate-300 accent-slate-950">Guardian signs in and manages this account</label>
         </component>

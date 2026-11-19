@@ -104,7 +104,7 @@ onMounted(loadData);
         </AdminWorkspaceHeader>
 
         <div ref="feedback" tabindex="-1" class="admin-export-feedback">
-            <p v-if="exportError" class="mt-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ exportError }}</p>
+            <FeedbackToast v-if="exportError" :message="exportError" />
             <p v-else-if="exportMessage" class="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900" role="status">{{ exportMessage }}</p>
             <p v-else-if="exporting" class="mt-4 border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700" role="status">Preparing your CSV download. Keep this page open.</p>
         </div>

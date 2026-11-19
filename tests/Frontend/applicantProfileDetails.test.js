@@ -137,6 +137,20 @@ test('missing values and older enum keys remain readable instead of becoming fal
     assert.equal(applicantProfileDetails(null).length, 4);
 });
 
+test('only fields flagged by saved readiness get completion markers on the applicant record', () => {
+    const profile = { ...savedProfile(), first_name: '', has_profile_photo: false, contact_number: '', gender: '', grading_scale: '', city: '', barangay: '' };
+    const missingFields = ['first_name', 'has_profile_photo', 'contact_number', 'grading_scale', 'city'].map((key) => ({ key }));
+    const sections = applicantProfileDetails(profile, { combineResidence: true, missingFields });
+
+    for (const { key } of missingFields) assert.equal(findField(sections, key).missing, true, key);
+    for (const key of ['gender', 'barangay', 'last_name', 'gwa']) assert.notEqual(findField(sections, key)?.missing, true, key);
+
+    const redacted = applicantProfileDetails(profile, { omitUnavailable: true, missingFields });
+    assert.equal(findField(redacted, 'contact_number').missing, undefined);
+    assert.equal(findField(redacted, 'first_name'), undefined);
+    assert.equal(findField(applicantProfileDetails(profile), 'city').missing, undefined);
+});
+
 test('date-only birthdates are not shifted or silently repaired', () => {
     assert.equal(profileBirthdateLabel('2008-06-15'), 'Jun 15, 2008');
     for (const value of [null, '', 'invalid', '2008-02-31', '2008-06-15T00:00:00Z']) assert.equal(profileBirthdateLabel(value), '');
@@ -183,10 +197,12 @@ test('the detailed record compiles with consistent field grids and read-only map
     assert.match(source, /<LocationMapLink/);
     assert.match(source, /:aria-label="section.editLabel \|\| `Edit/);
     assert.match(source, /Not provided/);
+    assert.match(source, /v-if="editable && item.missing"[^>]*@click="\$emit\('complete-field', item.key\)"/);
     const page = readFileSync(new URL('../../resources/js/pages/UserProfilePage.vue', import.meta.url), 'utf8');
     const mapper = page.slice(page.indexOf('const applicantProfileSections = computed'), page.indexOf('const yearLevelOptions'));
     assert.match(mapper, /applicantProfileDetails\(user\.value/);
     assert.match(mapper, /combineResidence: true/);
+    assert.match(mapper, /missingFields: savedProfileReadiness.value\?\.missing/);
     assert.doesNotMatch(mapper, /form\.value/);
     assert.match(page, /<template #details>\s*<ApplicantProfileDetails/);
 });

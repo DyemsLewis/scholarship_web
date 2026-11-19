@@ -51,7 +51,7 @@ function chooseUpload(event) {
                 </header>
 
                 <div class="settings-dialog-body min-h-0 flex-1 overflow-y-auto px-6 py-5">
-                    <p v-if="error" class="mb-5 border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ error }}</p>
+                    <FeedbackToast v-if="error" :message="error" />
                     <div v-if="providerCoverUrl" class="mb-5 border-b border-slate-200 pb-5">
                         <button
                             type="button"

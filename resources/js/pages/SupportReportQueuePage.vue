@@ -330,9 +330,7 @@ onMounted(() => loadReports());
                         Loading reports...
                     </div>
 
-                    <p v-else-if="errorMessage" class="border-t border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
-                        {{ errorMessage }}
-                    </p>
+                    <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
 
                     <div v-else-if="reports.length" :class="isAdmin ? 'divide-y divide-slate-200 bg-white' : 'bg-white'">
                         <div v-if="!isAdmin" class="portal-record-head hidden grid-cols-[minmax(0,1fr)_16rem_8rem] items-center gap-3 lg:grid">
@@ -491,7 +489,7 @@ onMounted(() => loadReports());
                         <span class="mt-2 block text-xs text-slate-500">JPG, PNG, WebP, or PDF up to 5MB.</span>
                     </label>
 
-                    <p v-if="providerReportError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ providerReportError }}</p>
+                    <FeedbackToast v-if="providerReportError" :message="providerReportError" />
                 </div>
 
                 <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
@@ -603,7 +601,7 @@ onMounted(() => loadReports());
                         </div>
                     </dl>
 
-                    <p v-if="actionError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ actionError }}</p>
+                    <FeedbackToast v-if="actionError" :message="actionError" />
                 </div>
 
                 <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">

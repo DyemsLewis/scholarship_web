@@ -91,7 +91,7 @@ watch(() => props.busy, (busy) => {
                         <p :class="['text-[10px] font-bold uppercase tracking-[0.16em]', tone === 'danger' ? 'text-rose-700' : 'text-amber-700']">{{ eyebrow }}</p>
                         <h2 :id="headingId" class="mt-1 break-words text-lg font-bold text-slate-950">{{ title }}</h2>
                         <p :id="descriptionId" class="mt-2 whitespace-pre-line break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere]">{{ message }}</p>
-                        <p v-if="error" role="alert" class="mt-4 border-l-4 border-rose-500 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800 [overflow-wrap:anywhere]">{{ error }}</p>
+                        <FeedbackToast v-if="error" :message="error" />
                     </div>
                 </div>
                 <div class="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:justify-end">

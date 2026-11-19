@@ -6,7 +6,7 @@ defineProps({
     editable: { type: Boolean, default: false },
     tintedHeaders: { type: Boolean, default: false },
 });
-defineEmits(['edit']);
+defineEmits(['edit', 'complete-field']);
 const hasValue = (value) => value !== null && value !== undefined && String(value).trim() !== '';
 const spanClasses = { two: 'sm:col-span-2 lg:col-span-2', full: 'sm:col-span-2 lg:col-span-3' };
 </script>
@@ -38,7 +38,10 @@ const spanClasses = { two: 'sm:col-span-2 lg:col-span-2', full: 'sm:col-span-2 l
                         <div v-for="item in group.items" :key="item.key" :data-profile-field="item.key" :class="['min-w-0', spanClasses[item.span] || '']">
                             <dt class="text-xs font-medium leading-5 text-slate-500">{{ item.label }}</dt>
                             <dd class="mt-1">
-                                <span :class="['block whitespace-pre-line break-words text-sm leading-6', hasValue(item.value) ? 'font-semibold text-slate-950' : 'text-slate-400']">{{ hasValue(item.value) ? item.value : 'Not provided' }}</span>
+                                <button v-if="editable && item.missing" type="button" data-profile-missing-field class="inline-flex min-h-7 items-center gap-1.5 rounded-sm border border-amber-200 bg-amber-50 px-2 text-xs font-bold text-amber-900 hover:border-amber-500 hover:bg-amber-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-600" :aria-label="`Missing: ${item.label}. Open editor`" @click="$emit('complete-field', item.key)">
+                                    <i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i>Missing<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
+                                </button>
+                                <span v-else :class="['block whitespace-pre-line break-words text-sm leading-6', hasValue(item.value) ? 'font-semibold text-slate-950' : 'text-slate-400']">{{ hasValue(item.value) ? item.value : 'Not provided' }}</span>
                                 <span v-if="item.detail" class="mt-0.5 block break-words text-xs leading-5 text-slate-500">{{ item.detail }}</span>
                             </dd>
                         </div>

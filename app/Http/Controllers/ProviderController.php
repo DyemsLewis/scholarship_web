@@ -11,6 +11,7 @@ use App\Http\Controllers\Concerns\HandlesProviderRecipientLifecycle;
 use App\Http\Controllers\Concerns\HandlesProviderReporting;
 use App\Http\Controllers\Concerns\HandlesProviderRoleWorkspaceData;
 use App\Http\Controllers\Concerns\HandlesProviderTeamAdministration;
+use App\Models\User;
 use App\Services\AcademicRecordOcrService;
 use App\Services\ApplicationWorkflowService;
 use App\Services\ScholarshipEligibilityService;
@@ -59,6 +60,7 @@ class ProviderController extends Controller
             'manage_monitoring',
             'manage_benefit_releases',
             'manage_reports',
+            User::PROVIDER_MESSAGING_PERMISSION,
             'manage_profile',
             'manage_team',
             'manage_billing',
@@ -125,6 +127,13 @@ class ProviderController extends Controller
             'label' => 'Applicant support',
             'description' => 'Responds to reports and program concerns.',
             'role' => 'Support staff',
+        ],
+    ];
+
+    private const PROVIDER_ADDITIONAL_TEAM_PERMISSIONS = [
+        User::PROVIDER_MESSAGING_PERMISSION => [
+            'label' => 'Application messages',
+            'description' => 'Reads and replies to private application conversations for assigned programs.',
         ],
     ];
 

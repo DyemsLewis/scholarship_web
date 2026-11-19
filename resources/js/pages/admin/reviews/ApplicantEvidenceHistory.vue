@@ -34,7 +34,7 @@ watch(() => props.version, () => {
         <summary class="cursor-pointer px-6 py-4 text-sm font-bold text-slate-700"><i class="fa-solid fa-clock-rotate-left mr-2 text-slate-500" aria-hidden="true"></i>Document review history <span class="ml-2 font-normal text-slate-500">Uploads, decisions, and changes</span></summary>
         <div class="border-t border-slate-200 px-6 py-4" :aria-busy="loading">
             <p v-if="loading" role="status" class="py-4 text-sm text-slate-500">Loading review history...</p>
-            <div v-else-if="error" role="alert" class="py-3 text-sm text-slate-600">{{ error }} <button type="button" class="ml-2 font-bold underline" @click="loadPage(page)">Try again</button></div>
+            <template v-else-if="error"><FeedbackToast :message="error" fallback /></template>
             <ol v-else-if="events.length" class="divide-y divide-slate-200">
                 <li v-for="event in events" :key="event.id" class="py-4">
                     <div class="flex items-baseline justify-between gap-6"><h3 class="text-sm font-bold text-slate-950">{{ evidenceEventLabel(event.action) }} <span class="font-normal text-slate-500">| {{ evidenceLabel(applicant, event.document_type) }}</span></h3><time class="shrink-0 text-xs text-slate-500">{{ evidenceReviewDate(event.created_at) }}</time></div>

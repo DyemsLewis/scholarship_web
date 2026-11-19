@@ -3,6 +3,7 @@ import { createApp } from 'vue';
 import GlobalToastHost from './components/GlobalToastHost.vue';
 import StaffFilePreviewHost from './components/StaffFilePreviewHost.vue';
 import OutcomeConfirmationHost from './components/OutcomeConfirmationHost.vue';
+import FeedbackToast from './components/FeedbackToast.vue';
 import { installModalScrollEnvironment } from './support/modalScrollEnvironment';
 import { registerPortalPwa } from './support/portalPwa';
 
@@ -26,6 +27,9 @@ function loadIconCdn() {
 }
 
 const appElement = document.getElementById('app');
+function createPortalApp(component) {
+    return createApp(component).component('FeedbackToast', FeedbackToast);
+}
 const pages = {
     accountSetup: () => import('./pages/AccountSetupPage.vue'),
     admin: () => import('./pages/AdminPage.vue'),
@@ -94,6 +98,9 @@ const pages = {
     dashboardApplicationActivities: () => import('./pages/UserApplicationActivitiesPage.vue'),
     dashboardApplicationOutcome: () => import('./pages/UserApplicationOutcomePage.vue'),
     dashboardApplicationHistory: () => import('./pages/UserApplicationHistoryPage.vue'),
+    dashboardApplicationMessages: () => import('./pages/UserApplicationMessagesPage.vue'),
+    providerApplicationMessageThread: () => import('./pages/UserApplicationMessagesPage.vue'),
+    providerApplicationMessageInbox: () => import('./pages/provider/messages/ApplicationMessagesInboxPage.vue'),
     dashboardApplicationDetail: () => import('./pages/UserApplicationDetailPage.vue'),
     dashboardApplications: () => import('./pages/UserApplicationsPage.vue'),
     dashboardDocuments: () => import('./pages/UserDocumentsPage.vue'),
@@ -176,7 +183,7 @@ function mountGlobalToastHost() {
     const toastHost = document.createElement('div');
     toastHost.id = 'portal-toast-host';
     document.body.appendChild(toastHost);
-    createApp(GlobalToastHost).mount(toastHost);
+    createPortalApp(GlobalToastHost).mount(toastHost);
 }
 
 function mountStaffFilePreviewHost() {
@@ -191,7 +198,7 @@ function mountStaffFilePreviewHost() {
     const previewHost = document.createElement('div');
     previewHost.id = 'staff-file-preview-host';
     document.body.appendChild(previewHost);
-    createApp(StaffFilePreviewHost).mount(previewHost);
+    createPortalApp(StaffFilePreviewHost).mount(previewHost);
 }
 
 function mountOutcomeConfirmationHost() {
@@ -199,7 +206,7 @@ function mountOutcomeConfirmationHost() {
     const host = document.createElement('div');
     host.id = 'outcome-confirmation-host';
     document.body.appendChild(host);
-    const app = createApp(OutcomeConfirmationHost);
+    const app = createPortalApp(OutcomeConfirmationHost);
     app.config.idPrefix = 'outcome-';
     app.mount(host);
 }
@@ -216,6 +223,6 @@ if (appElement) {
     const loadPage = pages[page] ?? pages.landing;
 
     loadPage().then(({ default: component }) => {
-        createApp(component).mount(appElement);
+        createPortalApp(component).mount(appElement);
     });
 }

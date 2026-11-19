@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { staffQueueLink, staffQueueReturn } from '../../../support/staffQueueState.js';
 import { confirmOutcome } from '../../../support/outcomeConfirmation.js';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
@@ -35,6 +36,7 @@ async function requestRevision() {
 
 async function requestCancellation() {
     if (!canRequestCancellation.value) return;
+    if (!await confirmChange({ title: "Request service cancellation?", message: "The cancellation reason will be submitted for review. This does not automatically issue a refund." }, () => canRequestCancellation.value && !isSaving.value) || !(canRequestCancellation.value && !isSaving.value)) { return; }
     const saved = await runAction(() => window.axios.post(`/provider/billing/${purchaseId}/cancellation`, {
         reason: cancellationReason.value.trim(),
     }), 'Cancellation request sent.');

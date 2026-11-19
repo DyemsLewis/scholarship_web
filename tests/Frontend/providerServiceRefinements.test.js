@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { confirmChange, afterConfirmation } from './helpers/acceptedOutcome.js';
 import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, reactive, ref } from 'vue';
@@ -84,7 +85,7 @@ function pageHarness(path, exposed, overrides = {}) {
     const navigation = [];
     const window = { location: { pathname: '/provider/workspaces/billing/service-requests/1/review', href: 'http://localhost/provider', search: '', assign: (url) => navigation.push(url) }, history: { replaceState() {} },
         axios: { post: async (...args) => { writes.push(args); return { data: {} }; }, patch: async (...args) => { writes.push(args); return { data: {} }; } } };
-    const deps = { staffQueueReturn, ref, reactive, computed, onMounted() {}, watch() {}, window, URLSearchParams, URL, FormData: class { append() {} }, ...overrides };
+    const deps = { staffQueueReturn, confirmChange, ref, reactive, computed, onMounted() {}, watch() {}, window, URLSearchParams, URL, FormData: class { append() {} }, ...overrides };
     return { ...new Function(...Object.keys(deps), `${source}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes, navigation };
 }
 
@@ -180,6 +181,7 @@ test('repeated checkout clicks open only one checkout request', async () => {
     let calls = 0;
     state.window.axios.post = () => { calls++; return new Promise((resolve) => { finish = resolve; }); };
     const first = state.startCheckout();
+    await afterConfirmation();
     await state.startCheckout();
     assert.equal(calls, 1);
     finish({ data: { checkout_url: 'https://checkout.example.test/demo' } });

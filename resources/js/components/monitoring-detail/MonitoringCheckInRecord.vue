@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../support/outcomeConfirmation.js";
 import { confirmOutcome } from '../../support/outcomeConfirmation.js';
 import { computed, ref, watch } from 'vue';
 import FilePreviewModal from '../FilePreviewModal.vue';
@@ -127,6 +128,7 @@ async function uploadRecord(event) {
     const target = activeUploadRequirement.value;
     if (!file || !target || !canUpload.value || !target.requirement.can_submit) return;
 
+    if (!await confirmChange({ title: "Upload this support record?", message: "The selected file will be submitted to the displayed support requirement." }, () => !uploadingKey.value && canUpload.value && target.requirement.can_submit) || !(!uploadingKey.value && canUpload.value && target.requirement.can_submit)) { event.target.value = ""; activeUploadRequirement.value = null; return; }
     uploadingKey.value = target.key;
     const data = new FormData();
     const isLegacy = props.record.record_type === 'academic_record';

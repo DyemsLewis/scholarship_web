@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { providerDate } from '../../../support/providerDates';
 import WorkspaceTextSummary from '../../../components/workspace-dashboard/WorkspaceTextSummary.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
@@ -72,6 +73,7 @@ async function loadVerification() {
 
 async function saveLegalDetails() {
     if (!profile.value || isLoading.value || isSaving.value) return;
+    if (!await confirmChange({ title: "Save legal verification details?", message: "These details will be saved for administrator verification. Changes may require another review." }, () => Boolean(profile.value) && !isSaving.value) || !(Boolean(profile.value) && !isSaving.value)) { return; }
     isSaving.value = true;
     errors.value = {};
     errorMessage.value = '';
@@ -92,6 +94,7 @@ function chooseFile(event) {
 
 async function uploadProof() {
     if (!canUpload.value) return;
+    if (!await confirmChange({ title: "Submit organization proof?", message: "The selected document will be submitted for review. An uploaded file does not approve the organization." }, () => canUpload.value && !isUploading.value) || !(canUpload.value && !isUploading.value)) { return; }
     isUploading.value = true;
     errorMessage.value = '';
     const payload = new FormData();
@@ -171,7 +174,7 @@ onMounted(loadVerification);
                     </div>
                 </header>
 
-                <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading legal verification...</p></div>
 
                 <template v-else-if="profile">

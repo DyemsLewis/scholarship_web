@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { scheduleAcknowledgementPrompt } from '../support/applicationConfirmations.js';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
@@ -876,6 +877,7 @@ async function uploadDocument() {
         return;
     }
 
+    if (!await confirmChange({ title: "Submit this application document?", message: "The selected file will be attached to this application for provider review." }, () => !isUploading.value && Boolean(application.value)) || !(!isUploading.value && Boolean(application.value))) { return; }
     isUploading.value = true;
     errorMessage.value = '';
 
@@ -1060,14 +1062,10 @@ onBeforeUnmount(cancelConfirmation);
                     Loading application...
                 </div>
 
-                <div v-else-if="errorMessage && !application" class="mt-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-else-if="errorMessage &amp;&amp; !application" :message="errorMessage" fallback />
 
                 <div v-else-if="application" class="mt-5 space-y-4">
-                    <div v-if="errorMessage" class="rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">
-                        {{ errorMessage }}
-                    </div>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <header class="student-card overflow-hidden rounded-md border-slate-300 border-t-4 border-t-amber-400 shadow-[0_8px_22px_rgba(15,23,42,0.07)]">
                         <div class="flex flex-col gap-4 bg-[linear-gradient(120deg,#ffffff_0%,#ffffff_72%,#f8fafc_100%)] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">

@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from '../../../support/outcomeConfirmation.js';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AlertDialog from '../../../components/AlertDialog.vue';
 import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewModal.vue';
@@ -896,10 +897,10 @@ async function saveDraft() {
         openStep('basics');
         return;
     }
+    if (!await confirmChange({ title: 'Save this program draft?', message: 'The program will remain private so you can continue editing it.' }, () => !isSaving.value && !isReadOnly.value) || !(!isSaving.value && !isReadOnly.value)) return;
     const saved = await save('draft');
     if (saved) {
         openStep(activeStep.value, true);
-        showAlert('Draft saved', 'Your program remains private. You can continue editing it from Drafts & changes.');
     }
 }
 
@@ -916,6 +917,7 @@ async function submitProgram() {
     }
 
     const requestedStatus = originalStatus.value === 'published' ? 'published' : 'pending_review';
+    if (!await confirmChange({ title: requestedStatus === 'published' ? 'Submit program changes?' : 'Submit this program for review?', message: 'The program details and recipient requirements will be sent for publication review.' }, () => !isSaving.value && !isReadOnly.value) || !(!isSaving.value && !isReadOnly.value)) return;
     const saved = await save(requestedStatus, true);
     if (saved) leaveProgramPage(`/provider/programs/${saved.id}`);
 }
@@ -1014,7 +1016,7 @@ onBeforeUnmount(() => {
                                 <i :class="isSaving ? 'fa-solid fa-spinner animate-spin' : hasUnsavedChanges ? 'fa-solid fa-pen' : hasSavedProgram ? 'fa-solid fa-circle-check' : 'fa-regular fa-floppy-disk'" aria-hidden="true"></i>
                                 {{ saveStatus }}
                             </p>
-                            <p v-if="savedMessage && !hasUnsavedChanges && !isSaving" class="program-text text-xs font-semibold text-slate-600" role="status">{{ savedMessage }}</p>
+                            <FeedbackToast :message="savedMessage" type="success" />
                             <span v-if="!isCreateMode" class="program-status border border-slate-200 bg-slate-50 px-3 py-2 font-bold uppercase tracking-wide text-slate-700">
                                 {{ programStatusLabel }}
                             </span>

@@ -26,6 +26,8 @@ function open(action) {
         appointment_at: '',
         appointment_location: appointment.value.location,
         address_details: appointment.value.address_details ? { ...appointment.value.address_details } : null,
+        latitude: appointment.value.latitude ?? null,
+        longitude: appointment.value.longitude ?? null,
         attendance_status: attendance.value || '',
         reason: '',
     };
@@ -105,10 +107,10 @@ async function save() {
                     <button type="button" :disabled="saving" class="grid h-9 w-9 shrink-0 place-items-center rounded border border-slate-300 text-slate-600" aria-label="Close" @click="close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 </header>
                 <div class="monitoring-dialog-body space-y-4 p-6">
-                    <p v-if="error" role="alert" class="border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{{ error }}</p>
+                    <FeedbackToast v-if="error" :message="error" />
                     <template v-if="mode === 'reschedule'">
                         <label class="block"><span class="mb-1.5 block text-xs font-bold text-slate-700">New date and time (Philippine time)</span><input v-model="form.appointment_at" type="datetime-local" :min="nextProviderMinute()" required class="h-11 w-full rounded border border-slate-300 px-3 text-sm"></label>
-                        <ProviderVenueAddress v-model="form.address_details" v-model:address="form.appointment_location" />
+                        <ProviderVenueAddress v-model="form.address_details" v-model:address="form.appointment_location" v-model:latitude="form.latitude" v-model:longitude="form.longitude" />
                     </template>
                     <label v-else class="block"><span class="mb-1.5 block text-xs font-bold text-slate-700">Attendance</span><select v-model="form.attendance_status" required class="h-11 w-full rounded border border-slate-300 bg-white px-3 text-sm"><option disabled value="">Select attendance</option><option value="attended">Attended</option><option value="no_show">Missed appointment</option></select></label>
                     <label v-if="mode === 'reschedule' || attendance" class="block"><span class="mb-1.5 block text-xs font-bold text-slate-700">Reason for the change <span class="font-normal">(internal)</span></span><textarea v-model="form.reason" required minlength="10" maxlength="1500" rows="2" class="w-full rounded border border-slate-300 px-3 py-2 text-sm"></textarea></label>

@@ -65,6 +65,16 @@ test('learning keeps core fields visible and only school identifiers behind a di
     assert.match(html, /Current studies[^]*?Record period and result[^]*?School identifiers/);
 });
 
+test('educational, household and address editors display only the active missing fields', async () => {
+    const indicators = (html) => [...html.matchAll(/data-missing-field="([^"]+)"/g)].map((match) => match[1]);
+    assert.deepEqual(indicators(await render(learning, learningProps({ missingFields: new Set(['school', 'grading_scale']) }))), ['school', 'grading_scale']);
+    assert.deepEqual(indicators(await render(learning, learningProps({ ocrActive: true, missingFields: new Set(['gwa', 'grading_scale']) }))), ['managed_academic_result']);
+    assert.deepEqual(indicators(await render(household, householdProps({ guardianRequired: true, missingFields: new Set(['guardian_name', 'guardian_contact']) }))), ['guardian_name', 'guardian_contact']);
+    assert.deepEqual(indicators(await render(household, householdProps())), []);
+    assert.deepEqual(indicators(await render(address, addressProps({ missingFields: new Set(['city']) }))), ['city']);
+    assert.deepEqual(indicators(await render(address, addressProps())), []);
+});
+
 test('learning preserves custom study paths and saved years outside the current option list', async () => {
     const props = learningProps();
     props.modelValue = { ...props.modelValue, course_or_strand: 'Special curriculum', year_level: 'Legacy level', academic_year: '2022-2023', enrollment_status: 'Graduated' };
@@ -237,7 +247,7 @@ test('location selectors protect dependent fields, preserve saved values and off
     html = await render(address, addressProps({ provinceOptions: [], cityOptions: [], optionsError: 'Locations could not be loaded.' }));
     assert.match(html, /<option value="Rizal">/);
     assert.match(html, /<option value="Antipolo City">/);
-    assert.match(html, /role="alert"/);
+    assert.match(readFileSync(new URL('../../resources/js/components/profile/ApplicantAddressEditor.vue', import.meta.url), 'utf8'), /<FeedbackToast :message="optionsError"/);
     assert.match(html, /Try loading locations again/);
     const alias = await render(address, addressProps({ cityOptions: [{ code: '2', value: 'City of Antipolo', label: 'City of Antipolo' }] }));
     assert.match(alias, /<option value="Antipolo City">Antipolo City<\/option>/);

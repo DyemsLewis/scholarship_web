@@ -424,6 +424,7 @@ trait HandlesProviderTeamAdministration
     private function providerTeamConfiguration(User $actor): array
     {
         $permissions = $this->grantableProviderPermissions($actor);
+        $permissionDetails = self::PROVIDER_GOVERNANCE_RESPONSIBILITIES + self::PROVIDER_ADDITIONAL_TEAM_PERMISSIONS;
         $roles = collect(self::PROVIDER_TEAM_ROLES)
             ->filter(function (string $label, string $value) use ($permissions): bool {
                 if ($value === 'custom') {
@@ -431,6 +432,10 @@ trait HandlesProviderTeamAdministration
                 }
 
                 $preset = self::PROVIDER_TEAM_ROLE_PERMISSION_PRESETS[$value] ?? [];
+                if ($value === 'manager') {
+                    // Managers without messaging can still delegate the original role, but not chat access.
+                    $preset = array_diff($preset, [User::PROVIDER_MESSAGING_PERMISSION]);
+                }
 
                 return $preset !== [] && array_diff($preset, $permissions) === [];
             })
@@ -445,8 +450,8 @@ trait HandlesProviderTeamAdministration
             'permission_catalog' => collect($permissions)
                 ->map(fn (string $permission): array => [
                     'value' => $permission,
-                    'label' => self::PROVIDER_GOVERNANCE_RESPONSIBILITIES[$permission]['label'] ?? str($permission)->headline()->toString(),
-                    'description' => self::PROVIDER_GOVERNANCE_RESPONSIBILITIES[$permission]['description'] ?? 'Provides access to this provider responsibility.',
+                    'label' => $permissionDetails[$permission]['label'] ?? str($permission)->headline()->toString(),
+                    'description' => $permissionDetails[$permission]['description'] ?? 'Provides access to this provider responsibility.',
                 ])
                 ->values(),
             'available_roles' => $roles,

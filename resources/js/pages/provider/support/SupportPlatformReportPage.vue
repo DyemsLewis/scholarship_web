@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -33,6 +34,7 @@ function selectAttachment(event) {
 
 async function submitReport() {
     if (isLoading.value || !workspace.value || isSubmitting.value) return;
+    if (!await confirmChange({ title: "Submit this platform report?", message: "Your report and any selected attachment will be sent to platform support." }, () => !isLoading.value && Boolean(workspace.value) && !isSubmitting.value) || !(!isLoading.value && Boolean(workspace.value) && !isSubmitting.value)) { return; }
     isSubmitting.value = true;
     errorMessage.value = '';
     const payload = new FormData();
@@ -73,7 +75,7 @@ onMounted(loadForm);
 
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center shadow-sm"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading report form...</p></div>
 
-                <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                 <form v-if="!isLoading && workspace" class="mt-4 border border-slate-200 bg-white shadow-sm" :aria-busy="isSubmitting" @submit.prevent="submitReport">
                     <fieldset :disabled="isSubmitting" class="min-w-0">

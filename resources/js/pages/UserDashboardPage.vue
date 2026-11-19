@@ -77,17 +77,7 @@ onMounted(loadDashboard);
                     </div>
                 </div>
 
-                <section v-else-if="errorMessage" class="student-card mt-5 border-rose-200 p-5" role="alert">
-                    <p class="text-sm font-bold text-slate-950">Your dashboard could not be loaded</p>
-                    <p class="mt-1 text-sm text-slate-600">{{ errorMessage }}</p>
-                    <button
-                        type="button"
-                        class="student-button student-button-primary mt-4"
-                        @click="loadDashboard"
-                    >
-                        Try again
-                    </button>
-                </section>
+                <template v-else-if="errorMessage"><FeedbackToast :message="errorMessage" fallback /></template>
 
                 <ApplicantDashboardOverview v-else :dashboard="dashboard" />
             </div>

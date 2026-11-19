@@ -164,11 +164,7 @@ onMounted(() => loadOutcome(true));
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to applications
                 </a>
-                <section class="mt-5 rounded-md border border-rose-200 bg-white px-5 py-8 text-center shadow-sm">
-                    <h1 class="text-lg font-bold text-slate-950">Outcome unavailable</h1>
-                    <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">{{ errorMessage }}</p>
-                    <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white" @click="loadOutcome(true)">Try again</button>
-                </section>
+                <FeedbackToast :message="errorMessage" fallback />
             </div>
         </section>
     </main>

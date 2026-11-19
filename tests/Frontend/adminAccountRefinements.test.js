@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { confirmChange } from './helpers/acceptedOutcome.js';
 import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, createSSRApp, reactive, ref } from 'vue';
@@ -40,7 +41,7 @@ function harness(path, exposed, options = {}) {
             post: async (...args) => { writes.push(args); return { data: { user: { id: 2, role: 'admin' } } }; },
         },
     };
-    const deps = { staffQueueReturn,
+    const deps = { staffQueueReturn, confirmChange,
         computed, reactive, ref, useAdminResource, normalizeWorkspaceDashboard,
         nextTick: async () => {}, onMounted: (callback) => mounted.push(callback), onBeforeUnmount() {},
         watch: (...args) => watchers.push(args), window, document: { getElementById: () => ({ dataset: { area: options.area ?? 'team' } }) },
@@ -200,7 +201,7 @@ test('account dashboard offers retry feedback while the shared frame retains its
     assert.match(value, /title: 'Account dashboard'/);
     const frame = read('components/workspace-dashboard/WorkspaceDashboardFrame.vue');
     assert.match(frame, /<slot name="error">/);
-    assert.match(frame, /role="alert"/);
+    assert.match(frame, /<FeedbackToast[^>]*fallback/);
     assert.match(frame, /v-if="!errorMessage && !loading"/);
 });
 

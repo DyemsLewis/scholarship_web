@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
@@ -30,6 +31,10 @@ function applyValues(values = {}) {
     for (const key of Object.keys(form)) form[key] = values[key] ?? '';
 }
 
+function applyMapAddress(location) {
+    if (location.displayName && !location.addressLookupFailed) form.provider_address = location.displayName;
+}
+
 async function loadProfile() {
     isLoading.value = true;
     errorMessage.value = '';
@@ -46,6 +51,7 @@ async function loadProfile() {
 
 async function saveContact() {
     if (!hasLoaded.value || isLoading.value || isSaving.value) return;
+    if (!await confirmChange({ title: "Save contact and location?", message: "Public contact details will change. A changed verified office address may require another review." }, () => hasLoaded.value && !isLoading.value && !isSaving.value) || !(hasLoaded.value && !isLoading.value && !isSaving.value)) { return; }
     isSaving.value = true;
     errors.value = {};
     errorMessage.value = '';
@@ -79,7 +85,7 @@ onMounted(loadProfile);
                     </div>
                 </header>
 
-                <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading contact and location...</p></div>
 
                 <form v-else-if="hasLoaded" id="organization-contact-form" class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="saveContact">
@@ -96,7 +102,7 @@ onMounted(loadProfile);
                     <section class="px-6 py-6" aria-labelledby="organization-location-title">
                         <div class="flex items-center gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-location-dot" aria-hidden="true"></i></span><div><h2 id="organization-location-title" class="text-lg font-bold text-slate-950">Location and reach</h2><p class="mt-1 text-sm text-slate-500">Use an office address and a simple description of the communities served.</p></div></div>
                         <label class="mt-6 block"><span :class="labelClass">Office address</span><textarea v-model="form.provider_address" rows="3" class="mt-2 w-full border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-950" placeholder="Building, street, city or municipality, province"></textarea><span v-if="firstError('provider_address')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('provider_address') }}</span></label>
-                        <LocationPinField v-model:latitude="form.provider_latitude" v-model:longitude="form.provider_longitude" :address="form.provider_address" title="Organization office" />
+                        <LocationPinField v-model:latitude="form.provider_latitude" v-model:longitude="form.provider_longitude" :address="form.provider_address" title="Organization office" @selected="applyMapAddress" />
                         <label class="mt-5 block"><span :class="labelClass">Service area</span><textarea v-model="form.provider_service_area" rows="3" class="mt-2 w-full border border-slate-300 bg-white px-3.5 py-3 text-sm leading-6 text-slate-900 outline-none focus:border-slate-950" placeholder="Example: Students residing in Rizal Province"></textarea><span v-if="firstError('provider_service_area')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('provider_service_area') }}</span></label>
                     </section>
 

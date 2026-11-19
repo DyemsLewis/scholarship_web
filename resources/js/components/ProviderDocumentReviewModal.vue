@@ -171,9 +171,7 @@ async function submitReview() {
                             </p>
                         </div>
 
-                        <div v-if="displayedError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
-                            {{ displayedError }}
-                        </div>
+                        <FeedbackToast v-if="displayedError" :message="displayedError" />
 
                         <div class="mt-5 grid gap-2">
                             <button

@@ -13,11 +13,9 @@ defineEmits(['retry']);
         <i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i>
         <span>{{ loadingMessage }}</span>
     </div>
-    <div v-else-if="error" class="flex items-center justify-between gap-6 border-l-4 border-rose-500 bg-rose-50 px-6 py-5" role="alert">
-        <div class="min-w-0">
-            <h2 class="text-sm font-bold text-rose-900">{{ errorTitle }}</h2>
-            <p class="mt-1 break-words text-sm leading-6 text-rose-800">{{ error }}</p>
-        </div>
+    <div v-else-if="error" class="flex items-center justify-between gap-6 border border-slate-200 bg-slate-50 px-6 py-5" role="status">
+        <FeedbackToast :message="error" :title="errorTitle" retry-label="Try again" @retry="$emit('retry')" />
+        <h2 class="min-w-0 text-sm font-bold text-slate-700">{{ errorTitle }}</h2>
         <button type="button" class="inline-flex h-10 shrink-0 items-center gap-2 rounded-sm border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:border-slate-700" @click="$emit('retry')">
             <i class="fa-solid fa-rotate-right text-xs" aria-hidden="true"></i>Try again
         </button>

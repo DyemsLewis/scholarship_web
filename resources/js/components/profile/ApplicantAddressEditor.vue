@@ -1,9 +1,10 @@
 <script setup>
 import { findPhilippineRegion, philippineRegionOptions } from '../../support/philippineLocations';
-import { disclosureSummary, inputClass, labelClass, optionalLabel, secondaryButton, sectionTitle } from '../../support/profileEditorStyles';
+import { disclosureSummary, inputClass, labelClass, missingLabel, optionalLabel, secondaryButton, sectionTitle } from '../../support/profileEditorStyles';
 
 const form = defineModel({ type: Object, required: true });
 defineProps({
+    missingFields: { type: Set, default: () => new Set() },
     provinceOptions: { type: Array, required: true },
     cityOptions: { type: Array, required: true },
     loadingProvinces: { type: Boolean, default: false },
@@ -22,19 +23,19 @@ defineEmits(['region-change', 'province-change', 'city-change', 'retry-options',
             <p class="mt-1 text-xs leading-5 text-slate-500">Your city, province, and region are used for residency checks.</p>
             <div class="mt-4 grid items-start gap-4 sm:grid-cols-3">
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-region">Region</label>
+                    <label :class="labelClass" for="profile-region">Region <span v-if="missingFields.has('region')" :class="missingLabel" data-missing-field="region">Missing</span></label>
                     <select id="profile-region" v-model="form.region" required :class="inputClass" @change="$emit('region-change')"><option value="">Select region</option><option v-if="form.region && !findPhilippineRegion(form.region)" :value="form.region">{{ form.region }}</option><option v-for="region in philippineRegionOptions" :key="region.code" :value="region.value">{{ region.label }}</option></select>
                 </div>
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-province">Province</label>
+                    <label :class="labelClass" for="profile-province">Province <span v-if="missingFields.has('province')" :class="missingLabel" data-missing-field="province">Missing</span></label>
                     <select id="profile-province" v-model="form.province" required :class="inputClass" :disabled="!form.region || loadingProvinces" @change="$emit('province-change')"><option value="">{{ loadingProvinces ? 'Loading provinces...' : 'Select province' }}</option><option v-if="form.province && !provinceOptions.some((option) => option.value === form.province)" :value="form.province">{{ form.province }}</option><option v-for="province in provinceOptions" :key="province.code" :value="province.value">{{ province.label }}</option></select>
                 </div>
                 <div class="min-w-0">
-                    <label :class="labelClass" for="profile-city">City / municipality</label>
+                    <label :class="labelClass" for="profile-city">City / municipality <span v-if="missingFields.has('city')" :class="missingLabel" data-missing-field="city">Missing</span></label>
                     <select id="profile-city" v-model="form.city" required :class="inputClass" :disabled="!form.province || loadingCities" @change="$emit('city-change')"><option value="">{{ loadingCities ? 'Loading cities...' : 'Select city / municipality' }}</option><option v-if="form.city && !cityOptions.some((option) => option.value === form.city)" :value="form.city">{{ form.city }}</option><option v-for="city in cityOptions" :key="city.code" :value="city.value">{{ city.label }}</option></select>
                 </div>
             </div>
-            <div v-if="optionsError" class="mt-3 border-l-2 border-rose-500 pl-3" role="alert"><p class="text-xs leading-5 text-rose-700">{{ optionsError }}</p><button type="button" class="mt-1 text-xs font-bold text-rose-800 underline underline-offset-2 disabled:opacity-50" :disabled="loadingProvinces || loadingCities" @click="$emit('retry-options')">Try loading locations again</button></div>
+            <template v-if="optionsError"><FeedbackToast :message="optionsError" retry-label="Try loading locations again" @retry="$emit('retry-options')" /><button type="button" class="mt-1 text-xs font-bold text-rose-800 underline underline-offset-2 disabled:opacity-50" :disabled="loadingProvinces || loadingCities" @click="$emit('retry-options')">Try loading locations again</button></template>
         </section>
 
         <details data-address-details class="group py-4" :open="Boolean(form.barangay || form.address)">
@@ -55,7 +56,7 @@ defineEmits(['region-change', 'province-change', 'city-change', 'retry-options',
                 <button type="button" data-profile-map-action :class="secondaryButton" @click="$emit('open-map')">{{ hasPin ? 'Review map pin' : 'Set map pin' }}<i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i></button>
             </div>
             <p class="mt-3 text-xs leading-5 text-slate-500">Choose a nearby point for distance estimates; it does not need to identify your exact home.</p>
-            <p v-if="locationMessage" class="mt-2 text-xs font-semibold leading-5 text-slate-700" role="status">{{ locationMessage }}</p>
+            <FeedbackToast :message="locationMessage" :type="locationMessage.includes('could not') || locationMessage.includes('manually') ? 'error' : 'success'" />
             <p class="mt-3 text-xs leading-5 text-slate-500">Your home location is not shown on your public profile.</p>
         </section>
     </div>

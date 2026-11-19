@@ -267,6 +267,9 @@ class ApplicantMonitoringDetailService
             ],
             'application_href' => route('dashboard.applications.show', $application, false),
             'monitoring_href' => route('dashboard.monitoring.show', $application, false),
+            'conversation_href' => $application->submitted_at
+                ? route('dashboard.application-conversations.page', ['application' => $application, 'from' => 'support'], false)
+                : null,
         ];
     }
 

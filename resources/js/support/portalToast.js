@@ -62,6 +62,8 @@ export function showPortalToast({
     title = type === 'error' ? 'Action failed' : 'Action successful',
     message,
     duration = 4000,
+    actionLabel = '',
+    action = null,
 } = {}) {
     const cleanMessage = typeof message === 'string' ? message.trim() : '';
 
@@ -75,6 +77,8 @@ export function showPortalToast({
             title,
             message: cleanMessage,
             duration,
+            actionLabel: typeof actionLabel === 'string' ? actionLabel : '',
+            action: typeof action === 'function' ? action : null,
         },
     }));
 }

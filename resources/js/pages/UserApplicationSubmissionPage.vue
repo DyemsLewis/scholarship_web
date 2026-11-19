@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, onMounted, ref } from 'vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
 import FilePreviewModal from '../components/FilePreviewModal.vue';
@@ -118,6 +119,7 @@ async function uploadDocument(event) {
     }
 
     const requirement = uploadRequirement.value;
+    if (!await confirmChange({ title: "Submit this application document?", message: "The selected file will be attached to this application for provider review." }, () => Boolean(submission.value?.actions?.upload_endpoint)) || !(Boolean(submission.value?.actions?.upload_endpoint))) { event.target.value = ""; uploadRequirement.value = ""; return; }
     const payload = new FormData();
     payload.append('document_name', requirement);
     payload.append('document_file', file);
@@ -207,11 +209,7 @@ onMounted(loadSubmission);
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to applications
                 </a>
-                <section class="mt-5 rounded-md border border-rose-200 bg-white px-5 py-8 text-center shadow-sm">
-                    <h1 class="text-lg font-bold text-slate-950">Submission record unavailable</h1>
-                    <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">{{ errorMessage }}</p>
-                    <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white" @click="loadSubmission">Try again</button>
-                </section>
+                <FeedbackToast :message="errorMessage" fallback />
             </div>
         </section>
     </main>

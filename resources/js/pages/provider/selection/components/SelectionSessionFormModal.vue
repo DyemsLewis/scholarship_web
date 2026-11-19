@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../../support/outcomeConfirmation.js";
 import { computed, nextTick, ref, watch } from 'vue';
 import ProviderVenueAddress from '../../../../components/ProviderVenueAddress.vue';
 import { sessionScheduleError } from '../../../../support/selectionSessionValidation';
@@ -169,6 +170,7 @@ async function saveSession() {
         return;
     }
 
+    if (!await confirmChange({ title: "Save this selection session?", message: "The session date, venue and instructions will be saved. Any applicant selected for this session will be assigned." }, () => props.open && !isSaving.value && !isLoading.value) || !(props.open && !isSaving.value && !isLoading.value)) { return; }
     isSaving.value = true;
     try {
         const programId = form.value.program_id;
@@ -223,7 +225,7 @@ watch(() => form.value.stage_key, () => {
                     <button type="button" :class="['flex min-h-14 items-center gap-3 px-6 text-left', step === 2 ? 'bg-slate-950 text-white' : 'text-slate-700']" @click="continueToDelivery"><span :class="['grid h-8 w-8 place-items-center text-xs font-bold', step === 2 ? 'bg-amber-300 text-slate-950' : 'bg-white text-slate-600']">2</span><span><span class="block text-xs font-bold uppercase tracking-[0.14em] opacity-70">Step 2</span><span class="text-sm font-bold">Delivery</span></span></button>
                 </nav>
 
-                <div v-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-6 py-3 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                 <div v-if="isLoading" class="grid min-h-72 place-items-center px-6 py-14 text-center"><div><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading session setup...</p></div></div>
 
                 <form v-else class="flex min-h-0 flex-1 flex-col" @submit.prevent="saveSession">
@@ -246,7 +248,7 @@ watch(() => form.value.stage_key, () => {
                             <ProviderVenueAddress v-if="usesVenue" v-model="form.address_details" v-model:address="form.location_address" v-model:venue="form.venue" v-model:latitude="form.latitude" v-model:longitude="form.longitude" :include-venue-in-address="false" class="col-span-2" />
                             <label v-if="usesMeetingLink" class="col-span-2 text-sm font-semibold text-slate-700">Meeting link<input v-model="form.meeting_url" type="url" maxlength="2000" class="mt-2 h-11 w-full border border-slate-300 px-3 font-normal outline-none focus:border-slate-950" placeholder="https://"></label>
                             <label class="col-span-2 text-sm font-semibold text-slate-700">Applicant instructions <span class="font-normal text-slate-600">(optional)</span><textarea v-model="form.instructions" rows="3" maxlength="3000" class="mt-2 w-full border border-slate-300 px-3 py-3 font-normal outline-none focus:border-slate-950" placeholder="What to bring or how to prepare"></textarea></label>
-                            <label class="col-span-2 flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3"><input v-model="form.proof_required" type="checkbox" class="mt-1 h-4 w-4 border-slate-300 text-slate-950 focus:ring-slate-950"><span><span class="block text-sm font-bold text-slate-900">Require provider proof before completion</span><span class="mt-1 block text-xs leading-5 text-slate-500">For attendance sheets, score sheets, or interview records.</span></span></label>
+                            <label class="col-span-2 flex items-start gap-3 border border-slate-200 bg-slate-50 px-4 py-3"><input v-model="form.proof_required" type="checkbox" class="mt-1 h-4 w-4 border-slate-300 text-slate-950 focus:ring-slate-950"><span><span class="block text-sm font-bold text-slate-900">Require proof before recording outcomes</span><span class="mt-1 block text-xs leading-5 text-slate-500">Upload attendance sheets, score sheets, or interview records after completing the session.</span></span></label>
                         </div>
                     </section>
 

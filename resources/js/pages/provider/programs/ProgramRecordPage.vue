@@ -97,9 +97,7 @@ const backLabel = computed(() => originatingWorkspace ? 'Back to queue' : canBro
                     <p class="mt-2 text-sm font-semibold text-slate-500">Loading program record...</p>
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-5 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
 
                 <template v-else-if="program">
                     <header class="mt-5 border border-slate-200 border-t-2 border-t-slate-950 bg-white shadow-sm">

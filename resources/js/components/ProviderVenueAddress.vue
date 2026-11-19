@@ -4,6 +4,7 @@ import FeedbackAlertModal from './FeedbackAlertModal.vue';
 import LocationPinField from './LocationPinField.vue';
 import { citiesForLocation, findLocationOption, findPhilippineRegion, philippineRegionOptions, provincesForRegion } from '../support/philippineLocations';
 import { emptyVenueAddress, lookupVenuePinAddress, venueAddressFromMap, venueAddressText } from '../support/venueAddress';
+import { hasLocationPin } from '../support/locationPins';
 
 const props = defineProps({
     modelValue: { type: Object, default: null },
@@ -21,6 +22,10 @@ const provinces = ref([]), cities = ref([]), loading = ref(false), error = ref('
 const useManualLocation = ref(false);
 const pinValues = ref({});
 const pinMessage = ref('');
+const pinFeedbackType = ref('success');
+const pinLookupPending = ref(false);
+const coordinates = computed(() => props.modelValue ? fields.value : { latitude: props.latitude, longitude: props.longitude });
+const hasPin = computed(() => hasLocationPin(coordinates.value.latitude, coordinates.value.longitude));
 const fieldClass = 'mt-1.5 h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 disabled:bg-slate-50';
 let version = 0;
 let pinRevision = 0, pinController = null;
@@ -29,19 +34,22 @@ function cancelPinLookup() {
     pinRevision++;
     pinController?.abort();
     pinMessage.value = '';
+    pinLookupPending.value = false;
 }
 
 function change(key, value) {
     cancelPinLookup();
     pinValues.value = {};
-    const next = { ...fields.value, [key]: value, latitude: null, longitude: null };
+    const movesArea = ['region', 'province', 'city'].includes(key);
+    const next = { ...fields.value, ...coordinates.value, [key]: value };
+    if (movesArea) Object.assign(next, { latitude: null, longitude: null });
     if (key === 'region') Object.assign(next, { province: '', city: '', barangay: '' });
     if (key === 'province') Object.assign(next, { city: '', barangay: '' });
     if (key === 'city') next.barangay = '';
     emit('update:modelValue', next);
     emit('update:address', venueAddressText(next, props.includeVenueInAddress));
     emit('update:venue', next.venue);
-    emit('update:latitude', null); emit('update:longitude', null);
+    emit('update:latitude', next.latitude); emit('update:longitude', next.longitude);
 }
 
 function pin(key, value) {
@@ -56,24 +64,35 @@ async function fillFromPin(location) {
     const revision = pinRevision;
     const controller = pinController = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
+    pinLookupPending.value = true;
     pinMessage.value = 'Pin selected. Looking up its address...';
     try {
         const address = await lookupVenuePinAddress(location, controller.signal);
         await nextTick();
         if (revision !== pinRevision || controller.signal.aborted
-            || Number(props.latitude) !== Number(location.latitude) || Number(props.longitude) !== Number(location.longitude)) return;
+            || Number(coordinates.value.latitude) !== Number(location.latitude) || Number(coordinates.value.longitude) !== Number(location.longitude)) return;
         const resolved = venueAddressFromMap(address);
         if (!resolved) throw new Error('Address not recognized.');
+        const sameArea = ['region', 'province', 'city'].every(key => !fields.value[key]
+            || Boolean(findLocationOption([{ value: fields.value[key] }], resolved[key])));
         const next = { ...fields.value, ...resolved, latitude: Number(location.latitude).toFixed(7), longitude: Number(location.longitude).toFixed(7) };
+        if (sameArea) for (const key of ['street', 'barangay']) next[key] ||= fields.value[key];
         pinValues.value = { latitude: next.latitude, longitude: next.longitude };
         emit('update:modelValue', next);
         emit('update:address', venueAddressText(next, props.includeVenueInAddress));
         pinMessage.value = 'Available address fields filled from the confirmed pin. Review them and complete any missing details before saving.';
+        pinFeedbackType.value = 'success';
     } catch {
-        if (revision === pinRevision) pinMessage.value = 'Pin selected. The address could not be filled automatically; select the region, province, and city yourself before saving.';
+        if (revision === pinRevision) {
+            pinFeedbackType.value = 'error';
+            pinMessage.value = 'Pin selected. The address could not be filled automatically; complete the address fields manually. Your pin will be kept while you add venue, street, and barangay details.';
+        }
     } finally {
         clearTimeout(timeout);
-        if (pinController === controller) pinController = null;
+        if (pinController === controller) {
+            pinController = null;
+            pinLookupPending.value = false;
+        }
     }
 }
 
@@ -98,6 +117,12 @@ watch(() => [fields.value.region, fields.value.province], (current, previous) =>
     if (useManualLocation.value && previous && current[0] === previous[0]) return;
     loadOptions();
 }, { immediate: true });
+// Older saved venues and copied organization locations may have only text and a pin.
+watch(() => [props.modelValue, props.latitude, props.longitude], () => {
+    if (!props.modelValue && hasPin.value) {
+        void fillFromPin({ latitude: props.latitude, longitude: props.longitude });
+    }
+}, { immediate: true });
 onBeforeUnmount(() => { version++; cancelPinLookup(); });
 </script>
 
@@ -114,7 +139,9 @@ onBeforeUnmount(() => { version++; cancelPinLookup(); });
         <FeedbackAlertModal v-model="error" title="Venue location lists unavailable" retry-label="Try again" :busy="loading" @retry="loadOptions" />
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-barangay`">Barangay <span class="font-normal text-slate-500">(optional)</span><input :id="`${id}-barangay`" :value="fields.barangay" maxlength="100" :class="fieldClass" @input="change('barangay', $event.target.value)"></label>
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-street`">Street / address details <span class="font-normal text-slate-500">(optional)</span><input :id="`${id}-street`" :value="fields.street" maxlength="160" :class="fieldClass" placeholder="Street and building number" @input="change('street', $event.target.value)"></label>
-        <LocationPinField :address="venueAddressText(modelValue) || address || venue" :latitude="modelValue ? fields.latitude : latitude" :longitude="modelValue ? fields.longitude : longitude" :reset-on-address-change="false" :reverse-geocode-on-pick="false" title="Venue location" @update:latitude="pin('latitude', $event)" @update:longitude="pin('longitude', $event)" @selected="fillFromPin" />
-        <p v-if="pinMessage" class="text-xs leading-5 text-slate-600" role="status" aria-live="polite" data-pin-address-status>{{ pinMessage }}</p>
+        <LocationPinField :address="venueAddressText(modelValue) || address || venue" :latitude="coordinates.latitude" :longitude="coordinates.longitude" :reset-on-address-change="false" title="Venue location" @update:latitude="pin('latitude', $event)" @update:longitude="pin('longitude', $event)" @selected="fillFromPin" />
+        <button v-if="hasPin" type="button" :disabled="pinLookupPending" class="inline-flex min-h-9 items-center gap-2 rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50" data-fill-pin-address @click="fillFromPin(coordinates)"><i class="fa-solid fa-location-dot text-amber-700" aria-hidden="true"></i>{{ pinLookupPending ? 'Filling address...' : 'Fill address from pin' }}</button>
+        <p v-if="pinLookupPending" class="text-xs leading-5 text-slate-600" role="status" aria-live="polite" data-pin-address-status>Pin selected. Looking up its address...</p>
+        <FeedbackToast :message="pinLookupPending ? '' : pinMessage" :type="pinFeedbackType" />
     </fieldset>
 </template>

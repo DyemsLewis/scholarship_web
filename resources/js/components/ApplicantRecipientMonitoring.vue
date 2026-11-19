@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import ReceiptProofUpload from './monitoring-detail/ReceiptProofUpload.vue';
 import { confirmOutcome } from '../support/outcomeConfirmation.js';
 import { computed, ref } from 'vue';
@@ -285,6 +286,7 @@ async function uploadGradeRecord(event) {
     const file = event.target.files?.[0];
     const cycle = activeCycle.value;
     if (!file || !cycle) return;
+    if (!await confirmChange({ title: "Upload this academic record?", message: "The selected file will be submitted for this academic support period." }, () => uploadingCycleId.value === null && activeCycle.value?.id === cycle.id) || !(uploadingCycleId.value === null && activeCycle.value?.id === cycle.id)) { event.target.value = ""; activeCycle.value = null; return; }
     uploadingCycleId.value = cycle.id;
     const data = new FormData();
     data.append('grade_record', file);

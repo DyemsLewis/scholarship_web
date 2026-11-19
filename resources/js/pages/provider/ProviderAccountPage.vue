@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../support/outcomeConfirmation.js";
 import { computed, onMounted, reactive, ref } from 'vue';
 import { limitPhoneNumber } from '../../support/phoneNumber';
 import ProviderSidebar from './ProviderSidebar.vue';
@@ -72,6 +73,7 @@ async function loadAccount() {
 
 async function saveAccount() {
     if (!account.value || isLoading.value || isSavingAccount.value || isSavingPassword.value) return;
+    if (!await confirmChange({ title: "Save account details?", message: "Your sign-in or representative details will be updated. An email change requires verification." }, () => Boolean(account.value) && !isSavingAccount.value && !isSavingPassword.value) || !(Boolean(account.value) && !isSavingAccount.value && !isSavingPassword.value)) { return; }
     isSavingAccount.value = true;
     accountErrors.value = {};
     accountMessage.value = { type: '', text: '' };
@@ -94,6 +96,7 @@ async function saveAccount() {
 
 async function savePassword() {
     if (!account.value || isLoading.value || isSavingAccount.value || isSavingPassword.value) return;
+    if (!await confirmChange({ title: "Change your password?", message: "Your new password will replace the current password." }, () => Boolean(account.value) && !isSavingAccount.value && !isSavingPassword.value) || !(Boolean(account.value) && !isSavingAccount.value && !isSavingPassword.value)) { return; }
     isSavingPassword.value = true;
     passwordErrors.value = {};
     passwordMessage.value = { type: '', text: '' };
@@ -138,7 +141,7 @@ onMounted(loadAccount);
                     </div>
                 </header>
 
-                <div v-if="loadError" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ loadError }}</div>
+                <FeedbackToast v-if="loadError" :message="loadError" />
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center text-sm font-semibold text-slate-500 shadow-sm">Loading your account...</div>
 
                 <template v-else-if="account && !loadError">
@@ -154,7 +157,7 @@ onMounted(loadAccount);
                             <span :class="['inline-flex items-center gap-2 border px-3 py-2 text-xs font-bold', account.email_verified ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-amber-200 bg-amber-50 text-amber-800']"><i :class="account.email_verified ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-exclamation'" aria-hidden="true"></i>{{ account.email_verified ? 'Email verified' : 'Email verification required' }}</span>
                         </header>
 
-                        <p v-if="accountMessage.text" :class="['m-6 border px-4 py-3 text-sm font-semibold', messageClass(accountMessage.type)]" role="status">{{ accountMessage.text }}</p>
+                        <FeedbackToast v-if="accountMessage.text" :message="accountMessage.text" :type="accountMessage.type" />
 
                         <form @submit.prevent="saveAccount">
                             <section class="px-6 py-5">
@@ -194,7 +197,7 @@ onMounted(loadAccount);
                             <div><h2 id="account-security-title" class="text-base font-bold text-slate-950">Password security</h2><p class="mt-1 text-xs text-slate-500">Use at least eight characters and do not share your password.</p></div>
                         </header>
 
-                        <p v-if="passwordMessage.text" :class="['mx-6 mt-5 border px-4 py-3 text-sm font-semibold', messageClass(passwordMessage.type)]" role="status">{{ passwordMessage.text }}</p>
+                        <FeedbackToast v-if="passwordMessage.text" :message="passwordMessage.text" :type="passwordMessage.type" />
 
                         <form class="px-6 py-5" @submit.prevent="savePassword">
                             <div class="grid grid-cols-3 gap-5">

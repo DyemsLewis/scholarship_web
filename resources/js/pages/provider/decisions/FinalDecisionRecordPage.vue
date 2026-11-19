@@ -243,8 +243,8 @@ onMounted(loadApplication);
             <div class="provider-application-workspace mx-auto max-w-[94rem]">
                 <a :href="safeReturnUrl" class="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to final decisions</a>
 
-                <div v-if="errorMessage" class="mb-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                <div v-if="successMessage" class="mb-4 border-l-4 border-emerald-500 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800" role="status">{{ successMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
+                <FeedbackToast v-if="successMessage" :message="successMessage" type="success" />
                 <div v-if="isLoading" class="border border-slate-200 bg-white px-6 py-16 text-center">
                     <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>
                     <p class="mt-3 text-sm font-semibold text-slate-500">Loading final decision record...</p>

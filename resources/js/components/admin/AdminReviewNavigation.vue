@@ -8,7 +8,7 @@ defineEmits(['retry']);
         <a :href="backUrl" class="inline-flex items-center gap-2 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to review queue</a>
         <span v-if="loading" class="text-xs font-normal text-slate-500" role="status">Finding the next matching record...</span>
         <a v-else-if="next" :href="next.url" :aria-label="`Next record: ${next.name}`" class="inline-flex items-center gap-2 hover:text-slate-950">Next record<i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
-        <button v-else-if="error" type="button" class="text-xs underline" @click="$emit('retry')">{{ error }} Retry</button>
+        <template v-else-if="error"><FeedbackToast :message="error" retry-label="Retry" @retry="$emit('retry')" /><button type="button" class="text-xs underline" @click="$emit('retry')">Retry next record</button></template>
         <span v-else class="text-xs font-normal text-slate-500">No later record in this queue</span>
     </nav>
 </template>

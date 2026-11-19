@@ -21,8 +21,8 @@ Part 3 connects the normalized stage records to authorized provider actions. The
 | Publish | Locks in a scheduled session and notifies assigned applicants |
 | Reschedule | Preserves the previous assignment and links the replacement |
 | Record attendance | Stores attendance without deciding pass or fail |
-| Upload proof | Stores private versioned evidence for a session or applicant |
-| Complete | Requires attendance and required session proof, then marks records ready for review |
+| Complete | Requires recorded attendance; outcomes stay locked until any required shared proof is uploaded |
+| Upload proof | Stores private versioned evidence for a completed session or one of its applicants |
 | Cancel | Cancels active assignments, notifies applicants, and returns them to waiting for a schedule |
 
 ## Safeguards

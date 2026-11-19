@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import ProviderNextStep from '../../../components/ProviderNextStep.vue';
 import { computed, onMounted, ref } from 'vue';
@@ -161,6 +162,7 @@ async function loadApplication() {
 }
 
 async function claimReview() {
+    if (!await confirmChange({ title: "Claim this application review?", message: "You will become the assigned reviewer for this applicant record." }, () => !actionBusy.value) || !(!actionBusy.value)) { return; }
     actionBusy.value = true;
     errorMessage.value = '';
     try {
@@ -233,6 +235,7 @@ async function reviewPhoto(action) {
 }
 
 async function requestCorrection() {
+    if (!await confirmChange({ title: "Send this correction request?", message: "The applicant will be notified of the changes and documents you requested." }, () => !actionBusy.value && Boolean(correctionForm.value.message.trim())) || !(!actionBusy.value && Boolean(correctionForm.value.message.trim()))) { return; }
     actionBusy.value = true;
     errorMessage.value = '';
     try {
@@ -252,6 +255,7 @@ async function requestCorrection() {
 }
 
 async function resolveCorrection() {
+    if (!await confirmChange({ title: "Resolve this correction request?", message: "The correction request will be marked resolved. Eligibility and the stage decision remain separate." }, () => !actionBusy.value) || !(!actionBusy.value)) { return; }
     actionBusy.value = true;
     try {
         const response = await window.axios.patch(`/provider/applications/${applicationId}/correction`, { action: 'resolve' });
@@ -341,8 +345,8 @@ onMounted(loadApplication);
             <div class="provider-application-workspace mx-auto max-w-[94rem]">
                 <a :href="safeReturnUrl" class="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to review queue</a>
 
-                <div v-if="errorMessage" class="mb-4 border-l-4 border-rose-500 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
-                <div v-if="successMessage" class="mb-4 border-l-4 border-emerald-500 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800" role="status">{{ successMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
+                <FeedbackToast v-if="successMessage" :message="successMessage" type="success" />
 
                 <div v-if="isLoading" class="border border-slate-200 bg-white px-6 py-16 text-center">
                     <span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-spinner fa-spin text-sm" aria-hidden="true"></i></span>

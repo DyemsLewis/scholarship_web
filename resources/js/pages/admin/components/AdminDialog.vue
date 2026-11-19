@@ -62,7 +62,7 @@ watch(() => props.busy, (busy) => {
                     <button type="button" :disabled="busy" class="grid h-10 w-10 shrink-0 place-items-center rounded-sm border border-slate-300 text-slate-600 hover:border-slate-700 disabled:opacity-50" aria-label="Close dialog" @click="close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 </header>
                 <div ref="body" class="admin-dialog-body space-y-5 px-6 py-5">
-                    <p v-if="error" class="border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-800" role="alert">{{ error }}</p>
+                    <FeedbackToast v-if="error" :message="error" />
                     <fieldset :disabled="busy" :inert="busy || undefined" class="min-w-0 space-y-5"><slot></slot></fieldset>
                 </div>
                 <footer class="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">

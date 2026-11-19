@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, ref } from 'vue';
@@ -81,6 +82,7 @@ async function syncPayment(reference) {
 async function startCheckout() {
     if (!canStartCheckout.value || isLoading.value || !serviceRequest.value || isOpeningCheckout.value || isSyncing.value) return;
 
+    if (!await confirmChange({ title: "Continue to secure checkout?", message: "A checkout session will be prepared for this service request. Payment is authorized separately on the payment page." }, () => canStartCheckout.value && !isOpeningCheckout.value && !isSyncing.value) || !(canStartCheckout.value && !isOpeningCheckout.value && !isSyncing.value)) { return; }
     isOpeningCheckout.value = true;
     errorMessage.value = '';
 
@@ -133,9 +135,7 @@ const backToServices = staffQueueReturn(window, 'providerBilling', '/provider/wo
 
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading request review...</p></div>
 
-                <div v-else-if="!plan || !serviceRequest" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-8 text-center text-sm font-semibold text-rose-800">
-                    {{ errorMessage || 'This service request is not available.' }}
-                </div>
+                <FeedbackToast v-else-if="!plan || !serviceRequest" :message="errorMessage || 'This service request is not available.'" fallback />
 
                 <template v-else>
                     <div class="mt-4 grid grid-cols-3 border border-slate-200 bg-white shadow-sm" aria-label="Request progress">
@@ -167,7 +167,7 @@ const backToServices = staffQueueReturn(window, 'providerBilling', '/provider/wo
                     <div v-if="notice" :class="['mt-4 border px-5 py-4 text-sm font-semibold', notice.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : notice.type === 'error' ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-slate-300 bg-white text-slate-700']">
                         {{ notice.message }}
                     </div>
-                    <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800">{{ errorMessage }}</div>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-center justify-between border-b border-slate-200 px-6 py-5">

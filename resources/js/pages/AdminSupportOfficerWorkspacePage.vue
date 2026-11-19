@@ -178,7 +178,7 @@ onMounted(loadReports);
                 <div v-if="isLoading && !reports.length" class="admin-panel mt-5 p-6 text-sm text-slate-500">Loading support queue...</div>
 
                 <div v-else class="admin-content-stack">
-                    <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700">{{ errorMessage }}</p>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <section class="admin-panel overflow-hidden">
                         <dl class="grid divide-y divide-slate-200 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
@@ -308,7 +308,7 @@ onMounted(loadReports);
                         <p v-if="selectedReport.program"><strong class="text-slate-700">Program:</strong> {{ selectedReport.program.title }}</p>
                     </div>
 
-                    <p v-if="actionError" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{{ actionError }}</p>
+                    <FeedbackToast v-if="actionError" :message="actionError" />
                 </div>
 
                 <footer class="flex flex-col-reverse gap-2 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:justify-end sm:px-6">

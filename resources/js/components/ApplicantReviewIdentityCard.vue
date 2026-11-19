@@ -194,7 +194,7 @@ watch(() => props.applicant?.profile_photo_review_status, () => {
                             <p class="mt-1 text-xs text-slate-500">The applicant will see this reason and receive a link to upload a new photo.</p>
                         </div>
 
-                        <p v-if="localError || error" class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700">{{ localError || error }}</p>
+                        <FeedbackToast v-if="localError || error" :message="localError || error" />
 
                         <div v-if="canReviewPhoto" class="mt-5 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
                             <button v-if="applicant.profile_photo_url" type="button" :disabled="busy" class="rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60" @click="emit('approve-photo')">

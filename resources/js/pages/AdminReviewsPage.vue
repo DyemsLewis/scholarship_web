@@ -440,9 +440,7 @@ onMounted(loadReviewData);
                 </div>
 
                 <div v-else class="admin-content-stack">
-                    <p v-if="errorMessage" class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 shadow-sm">
-                        {{ errorMessage }}
-                    </p>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                     <section class="admin-panel overflow-hidden">
                         <div class="flex flex-col gap-3 bg-slate-50 p-3 lg:flex-row lg:items-center">
                             <label class="relative w-full sm:max-w-md">

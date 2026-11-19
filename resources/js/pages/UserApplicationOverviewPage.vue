@@ -51,16 +51,7 @@ onMounted(loadOverview);
                     <i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>
                     Back to applications
                 </a>
-                <section class="mt-5 rounded-md border border-rose-200 bg-white px-5 py-8 text-center shadow-sm">
-                    <span class="mx-auto grid h-11 w-11 place-items-center rounded-md bg-rose-50 text-rose-700">
-                        <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
-                    </span>
-                    <h1 class="mt-3 text-lg font-bold text-slate-950">Application record unavailable</h1>
-                    <p class="mx-auto mt-1 max-w-xl text-sm leading-6 text-slate-600">{{ errorMessage }}</p>
-                    <button type="button" class="mt-4 rounded-md bg-slate-950 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800" @click="loadOverview">
-                        Try again
-                    </button>
-                </section>
+                <FeedbackToast :message="errorMessage" fallback />
             </div>
         </section>
     </main>

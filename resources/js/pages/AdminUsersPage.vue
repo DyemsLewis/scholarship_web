@@ -193,9 +193,7 @@ onMounted(loadAdminData);
                         Loading accounts...
                     </div>
 
-                    <div v-else-if="errorMessage" class="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                        {{ errorMessage }}
-                    </div>
+                    <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
 
                     <div v-else-if="users.length" class="bg-white">
                         <div class="portal-record-head hidden grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_12rem_5.5rem] items-center gap-3 lg:grid">

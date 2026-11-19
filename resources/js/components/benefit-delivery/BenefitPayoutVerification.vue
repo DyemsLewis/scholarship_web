@@ -129,7 +129,7 @@ async function review(decision) {
 
                 <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                     <p v-if="loading" role="status" class="text-sm text-slate-600">Opening payout details...</p>
-                    <p v-if="error" role="alert" class="mb-3 border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm text-rose-900">{{ error }}</p>
+                    <FeedbackToast v-if="error" :message="error" />
                     <template v-if="record">
                         <div class="flex items-start justify-between gap-3">
                             <div>

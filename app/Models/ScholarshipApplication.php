@@ -125,6 +125,11 @@ class ScholarshipApplication extends Model
         return $this->belongsTo(User::class, 'applicant_id');
     }
 
+    public function conversation(): HasOne
+    {
+        return $this->hasOne(ApplicationConversation::class);
+    }
+
     public function documents(): HasMany
     {
         return $this->hasMany(ApplicationDocument::class);

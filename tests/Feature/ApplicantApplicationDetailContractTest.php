@@ -33,6 +33,7 @@ class ApplicantApplicationDetailContractTest extends TestCase
             ->assertJsonPath('detail.view', 'summary')
             ->assertJsonPath('detail.identity.provider.name', 'Harborlight Education Foundation')
             ->assertJsonPath('detail.identity.provider.verified', true)
+            ->assertJsonPath('detail.identity.conversation_href', route('dashboard.application-conversations.page', $application, false))
             ->assertJsonPath('detail.decision.state', 'action_required')
             ->assertJsonPath('detail.decision.actor', 'applicant')
             ->assertJsonPath('detail.decision.due_label', 'Application deadline '.$application->scholarship->deadline->format('M d, Y'))

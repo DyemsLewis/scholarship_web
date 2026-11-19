@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { confirmChange } from './helpers/acceptedOutcome.js';
 import { createStaffQueueState } from '../../resources/js/support/staffQueueState.js';
 import { compileScript, parse } from '@vue/compiler-sfc';
 import { computed, createSSRApp, effectScope, ref, watch } from 'vue';
@@ -24,7 +25,7 @@ function harness(path, pathname, exposed) {
     };
     const scope = effectScope();
     const source = parse(read(path)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
-    const deps = { createStaffQueueState, computed, ref, watch, window, onMounted() {}, onBeforeUnmount: (fn) => unmount.push(fn) };
+    const deps = { createStaffQueueState, confirmChange, computed, ref, watch, window, onMounted() {}, onBeforeUnmount: (fn) => unmount.push(fn) };
     const state = scope.run(() => new Function(...Object.keys(deps), `${source}\nreturn {${exposed}};`)(...Object.values(deps)));
     return { ...state, window, runTimer: () => [...timers.values()][0]?.(),
         dispose: () => { unmount.forEach((fn) => fn()); scope.stop(); } };
@@ -163,8 +164,9 @@ const alertUrl = moduleUrl(compile('components/StaffTableLoadError.vue'));
 test('provider table refresh feedback is accessible and escapes server messages', async () => {
     const { default: Alert } = await import(alertUrl);
     const html = await renderToString(createSSRApp(Alert, { message: '<script>Offline</script>' }));
-    assert.match(html, /role="alert"/);
-    assert.match(html, /&lt;script&gt;Offline&lt;\/script&gt;/);
+    assert.match(html, /role="status"/);
+    assert.doesNotMatch(html, /<script>Offline<\/script>/);
+    assert.match(read('components/StaffTableLoadError.vue'), /<FeedbackToast :message="message" retry-label="Retry"/);
     assert.match(html, /<button type="button"[^>]*>.*Retry/s);
 });
 
@@ -174,6 +176,9 @@ const reviewRow = { id: 1, applicant: { name: 'Earlier applicant', verification_
 
 async function renderReviewQueue(applications, failRefresh = false) {
     const source = compile(reviews, {
+        '../../../support/outcomeConfirmation.js': new URL('../../resources/js/support/outcomeConfirmation.js', import.meta.url).href,
+        '../../../components/provider/WorkspaceGuide.vue': moduleUrl('export default { render: () => null }'),
+        '../../../components/ProviderProgramQueueContext.vue': moduleUrl('export default { render: () => null }'),
         '../ProviderSidebar.vue': moduleUrl('export default { render: () => null }'),
         '../../../components/StaffTableIdentity.vue': moduleUrl(compile('components/StaffTableIdentity.vue')),
         '../../../components/StaffTableLoadError.vue': alertUrl,
@@ -260,6 +265,7 @@ async function renderAdminTable(path, pathname, items) {
         '../components/AdminTableFrame.vue': passthrough,
         '../components/AdminWorkspaceHeader.vue': blank,
         '../components/AdminEmptyState.vue': blank,
+        '../../../components/admin/FinanceRecordReviewDialog.vue': blank,
         '../../../composables/useAdminResource.js': resource('composables/useAdminResource.js'),
         '../../../support/staffQueueState.js': resource('support/staffQueueState.js'),
         '../../../support/display.js': resource('support/display.js'),

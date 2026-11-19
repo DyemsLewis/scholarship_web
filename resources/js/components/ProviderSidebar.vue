@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import RoleSidebar from './RoleSidebar.vue';
 import { supplementalProviderWorkspaceLinks } from '../support/providerWorkspaceNavigation';
+import { providerApplicationMessagesLinks } from '../support/providerApplicationMessagesLink';
 
 const hasPermission = (permission) => Boolean(
     window.portalUser?.has_full_access
@@ -299,6 +300,7 @@ const workspaceNavLinks = computed(() => usesDedicatedWorkspace
 ]);
 const navLinks = computed(() => [
     ...workspaceNavLinks.value,
+    ...providerApplicationMessagesLinks(window.portalUser),
     {
         href: '/provider/account',
         label: 'My profile',

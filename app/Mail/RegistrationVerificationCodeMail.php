@@ -14,6 +14,7 @@ class RegistrationVerificationCodeMail extends Mailable
         public readonly string $recipientName,
         public readonly string $verificationCode,
         public readonly int $expiresInMinutes,
+        public readonly bool $resumingAccount = false,
     ) {}
 
     public function build(): self

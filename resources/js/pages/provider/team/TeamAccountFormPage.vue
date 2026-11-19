@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { staffQueueReturn } from '../../../support/staffQueueState.js';
 import { computed, onMounted, reactive, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
@@ -165,6 +166,7 @@ async function saveAccount() {
             return;
         }
     }
+    if (!await confirmChange({ title: "Save the team account?", message: "The account details, permissions and assigned program access will be saved." }, () => hasLoaded.value && !isLoading.value && !isSaving.value) || !(hasLoaded.value && !isLoading.value && !isSaving.value)) { return; }
     isSaving.value = true;
     errors.value = {};
     errorMessage.value = '';
@@ -222,7 +224,7 @@ const backToQueue = staffQueueReturn(window, 'team', '/provider/workspaces/team'
                     <button v-for="item in steps" :key="item.number" type="button" :aria-current="item.number === step ? 'step' : undefined" :disabled="item.number > step" :class="['flex min-h-16 items-center gap-3 border-r border-slate-200 px-5 text-left last:border-r-0', item.number === step ? 'bg-slate-950 text-white' : item.number < step ? 'bg-white text-slate-800' : 'cursor-not-allowed bg-slate-50 text-slate-400']" @click="item.number < step && (step = item.number)"><span :class="['grid h-8 w-8 place-items-center text-xs font-black', item.number === step ? 'bg-amber-300 text-slate-950' : item.number < step ? 'bg-slate-950 text-white' : 'bg-slate-200 text-slate-500']"><i v-if="item.number < step" class="fa-solid fa-check" aria-hidden="true"></i><template v-else>{{ item.number }}</template></span><span class="text-sm font-bold">{{ item.label }}</span></button>
                 </nav>
 
-                <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-16 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading account setup...</p></div>
 
                 <form v-else-if="hasLoaded" class="mt-4 border border-slate-200 bg-white shadow-sm" @submit.prevent="saveAccount">

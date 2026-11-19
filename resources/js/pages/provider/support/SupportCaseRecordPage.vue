@@ -157,7 +157,7 @@ const originatingQueue = staffQueueReturn(window, 'providerSupport');
                 <a :href="originatingQueue || backUrl" class="inline-flex items-center gap-2 text-sm font-bold text-slate-600 hover:text-slate-950"><i class="fa-solid fa-arrow-left text-xs" aria-hidden="true"></i>Back to support cases</a>
 
                 <div v-if="isLoading" class="mt-4 border border-slate-200 bg-white px-6 py-20 text-center shadow-sm"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-500"><i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i></span><p class="mt-3 text-sm font-semibold text-slate-500">Loading support case...</p></div>
-                <div v-else-if="!report" class="mt-4 border border-rose-200 bg-rose-50 px-6 py-12 text-center text-sm font-semibold text-rose-800" role="alert">{{ errorMessage || 'This support case is unavailable.' }}</div>
+                <FeedbackToast v-else-if="!report" :message="errorMessage || 'This support case is unavailable.'" fallback />
 
                 <template v-else>
                     <header class="mt-4 border border-slate-200 border-t-2 border-t-slate-950 bg-white px-7 py-5 shadow-sm">
@@ -170,7 +170,7 @@ const originatingQueue = staffQueueReturn(window, 'providerSupport');
                         </div>
                     </header>
 
-                    <div v-if="errorMessage" class="mt-4 border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</div>
+                    <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                     <section class="mt-4 border border-slate-200 bg-white shadow-sm" aria-label="Case identity">
                         <div class="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.75fr)] divide-x divide-slate-200">

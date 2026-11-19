@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ApplicantPageHeader from '../components/ApplicantPageHeader.vue';
 import ApplicantSidebar from '../components/ApplicantSidebar.vue';
@@ -803,6 +804,7 @@ function resetFilters() {
 }
 
 async function toggleSave(scholarship) {
+    if (!await confirmChange({ title: "Update your saved scholarships?", message: "This scholarship will be added to or removed from your saved list. This does not submit an application." }, () => savingId.value === null) || !(savingId.value === null)) { return; }
     savingId.value = scholarship.id;
     errorMessage.value = '';
 
@@ -931,9 +933,7 @@ onBeforeUnmount(() => {
                     Loading scholarships...
                 </div>
 
-                <div v-else-if="errorMessage" class="mt-6 rounded-lg border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700 shadow-sm">
-                    {{ errorMessage }}
-                </div>
+                <FeedbackToast v-else-if="errorMessage" :message="errorMessage" fallback />
 
                 <section v-else class="mt-6 space-y-5">
                     <section class="scholarship-filters student-card overflow-hidden">

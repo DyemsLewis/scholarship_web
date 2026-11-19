@@ -19,21 +19,17 @@ final class ApplicationStageResultGate
             ->whereHas('session', fn (Builder $session) => $session
                 ->where('stage_key', $stage)->where('status', '!=', 'cancelled'));
 
-        if ((clone $assignments)
-            ->whereHas('attendance', fn (Builder $attendance) => $attendance->where('status', '!=', 'pending'))
-            ->whereHas('session', fn (Builder $session) => $session
-                ->where('status', 'completed')
-                ->where(fn (Builder $proof) => $proof->where('proof_required', false)
-                    ->orWhereHas('evidence', fn (Builder $evidence) => $evidence
-                        ->where('scope', 'session')->where('is_current', true))))
-            ->exists()) {
-            return true;
+        if ($assignments->exists()) {
+            return $assignments
+                ->whereHas('attendance', fn (Builder $attendance) => $attendance->where('status', '!=', 'pending'))
+                ->whereHas('session', fn (Builder $session) => $session->readyForOutcomes())
+                ->exists();
         }
 
         $schedules = $application->schedules()->where('type', $stage)->where('status', '!=', 'cancelled');
 
         // Formal applications can be reviewed directly unless a session or appointment was assigned.
-        return ($stage === 'formal_application' && ! $assignments->exists() && ! (clone $schedules)->exists())
+        return ($stage === 'formal_application' && ! (clone $schedules)->exists())
             || $schedules->where('status', 'completed')->exists();
     }
 }

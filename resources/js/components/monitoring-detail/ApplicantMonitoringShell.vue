@@ -50,6 +50,9 @@ function useLogoFallback(event) {
                     </div>
                     <div class="flex shrink-0 flex-wrap items-center justify-between gap-2.5 lg:justify-end">
                         <span :class="['student-badge', statusClass]">{{ detail.status.label }}</span>
+                        <a v-if="detail.identity.conversation_href" :href="detail.identity.conversation_href" class="student-button student-button-secondary" data-message-provider>
+                            <i class="fa-regular fa-comment-dots" aria-hidden="true"></i>Message provider
+                        </a>
                         <a :href="detail.identity.application_href" class="student-button student-button-secondary">
                             Application record <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
                         </a>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import LocationMapModal from './LocationMapModal.vue';
 import { hasLocationPin } from '../support/locationPins';
 
@@ -14,23 +14,29 @@ const props = defineProps({
 const emit = defineEmits(['update:latitude', 'update:longitude', 'selected']);
 const open = ref(false);
 const message = ref('');
+const errorMessage = ref('');
+let applyingPin = false;
 const hasPin = computed(() => hasLocationPin(props.latitude, props.longitude));
 
 function setPin(location) {
     if (!hasLocationPin(location.latitude, location.longitude)) return;
+    applyingPin = true;
     emit('update:latitude', Number(location.latitude).toFixed(7));
     emit('update:longitude', Number(location.longitude).toFixed(7));
-    message.value = 'Map pin selected. Save the form to keep this location.';
+    errorMessage.value = location.addressLookupFailed ? 'The pin was kept, but its address could not be filled. Complete the written address before saving.' : '';
+    message.value = errorMessage.value || 'Map pin selected. Save the form to keep this location.';
     emit('selected', location);
+    nextTick(() => { applyingPin = false; });
 }
 
 function clearPin() {
     emit('update:latitude', null);
     emit('update:longitude', null);
     message.value = '';
+    errorMessage.value = '';
 }
 
-watch(() => props.address.trim(), () => { if (props.resetOnAddressChange) clearPin(); });
+watch(() => props.address.trim(), () => { if (props.resetOnAddressChange && !applyingPin) clearPin(); });
 </script>
 
 <template>
@@ -46,6 +52,7 @@ watch(() => props.address.trim(), () => { if (props.resetOnAddressChange) clearP
                 {{ hasPin ? 'Review map pin' : 'Set map pin' }}
             </button>
         </div>
+        <FeedbackToast v-if="errorMessage &amp;&amp; !open" :message="errorMessage" />
         <LocationMapModal :open="open" :title="title" :address="address" :latitude="latitude" :longitude="longitude" :marker-text="title" :location-message="message" :reverse-geocode-on-pick="reverseGeocodeOnPick" picker @picked="setPin" @resolved="setPin" @error="message = $event" @close="open = false" />
     </div>
 </template>

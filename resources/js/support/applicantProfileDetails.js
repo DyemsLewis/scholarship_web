@@ -11,14 +11,15 @@ export function profileBirthdateLabel(value) {
     return new Intl.DateTimeFormat('en-PH', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(date);
 }
 
-export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardian, omitUnavailable = false, combineResidence = false } = {}) {
+export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardian, omitUnavailable = false, combineResidence = false, missingFields = [] } = {}) {
     const saved = user ?? {};
+    const missing = new Set(omitUnavailable ? [] : missingFields.map(({ key }) => key));
     const label = (key, value) => {
         if (!hasValue(value)) return '';
         const result = labels[key]?.(value);
         return hasValue(result) && result !== value ? result : profileValueLabel(key, value);
     };
-    const item = (key, title, value, extra = {}) => ({ key, label: title, value: value ?? '', ...extra });
+    const item = (key, title, value, extra = {}) => ({ key, label: title, value: value ?? '', ...extra, ...(missing.has(key) ? { missing: true } : {}) });
     const level = saved.education_level;
     const pathRequired = ['senior_high_school', 'college', 'tvet'].includes(level);
     const pathLabel = {
@@ -47,6 +48,9 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
             id: 'personal', title: 'Personal and contact', icon: 'fa-regular fa-address-card',
             description: 'Identity and current contact information.',
             groups: [{ id: 'personal', items: [
+                ...[
+                    ['first_name', 'First name'], ['last_name', 'Last name'], ['has_profile_photo', 'Applicant photo'],
+                ].filter(([key]) => missing.has(key)).map(([key, title]) => item(key, title, '')),
                 item('birthdate', 'Date of birth', profileBirthdateLabel(saved.birthdate_iso || saved.birthdate), {
                     detail: hasValue(saved.age) ? `${saved.age} years old` : '',
                 }),
@@ -71,6 +75,7 @@ export function applicantProfileDetails(user = {}, { labels = {}, requiresGuardi
                         detail: academicScale || (numericGrade ? 'Grading scale not provided' : ''),
                     }),
                 ] : []),
+                ...(missing.has('grading_scale') ? [item('grading_scale', 'Grading scale', '')] : []),
                 item('academic_year', 'Academic year', saved.academic_year),
                 item('academic_term', 'Record period', label('academicTerm', saved.academic_term)),
                 ...(hasValue(saved.learner_reference_number) ? [item('learner_reference_number', 'Student / learner reference', saved.learner_reference_number, { span: 'full' })] : []),

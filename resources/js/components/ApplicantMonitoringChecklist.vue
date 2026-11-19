@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { ref } from 'vue';
 import FilePreviewModal from './FilePreviewModal.vue';
 import MonitoringCaseHistoryModal from './MonitoringCaseHistoryModal.vue';
@@ -143,6 +144,7 @@ async function uploadRequirement(event) {
     const requirement = activeRequirement.value;
     if (!file || !requirement) return;
 
+    if (!await confirmChange({ title: "Upload this requirement record?", message: "The selected file will be submitted to this support requirement." }, () => uploadingRequirementId.value === null && activeRequirement.value?.id === requirement.id) || !(uploadingRequirementId.value === null && activeRequirement.value?.id === requirement.id)) { event.target.value = ""; activeRequirement.value = null; return; }
     uploadingRequirementId.value = requirement.id;
     const data = new FormData();
     data.append('supporting_record', file);
@@ -188,6 +190,7 @@ async function saveManualGrade(requirement) {
         return;
     }
 
+    if (!await confirmChange({ title: "Save this reported grade?", message: "The entered result will be saved with this requirement. It still needs provider review." }, () => savingGradeId.value === null) || !(savingGradeId.value === null)) { return; }
     savingGradeId.value = requirement.id;
     try {
         const response = await window.axios.patch(

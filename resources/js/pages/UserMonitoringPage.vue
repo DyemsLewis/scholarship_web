@@ -61,10 +61,7 @@ onMounted(loadSupport);
                     <div class="h-56 rounded-md border border-slate-200 bg-white"></div>
                 </section>
 
-                <section v-else-if="errorMessage" class="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-md border border-rose-200 bg-white px-5 py-4">
-                    <p class="text-sm font-semibold text-rose-800" role="alert">{{ errorMessage }}</p>
-                    <button type="button" class="student-button student-button-secondary" @click="loadSupport">Try again</button>
-                </section>
+                <template v-else-if="errorMessage"><FeedbackToast :message="errorMessage" fallback /></template>
 
                 <section v-else-if="!support.active.length && !support.past.length" class="mt-5 rounded-md border border-slate-300 bg-white px-5 py-9 text-center shadow-sm" data-support-empty>
                     <span class="mx-auto grid h-12 w-12 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i></span>

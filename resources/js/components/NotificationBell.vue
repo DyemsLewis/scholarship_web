@@ -1,7 +1,12 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import FeedbackAlertModal from './FeedbackAlertModal.vue';
+import { APPLICATION_MESSAGES_READ_EVENT } from '../support/applicationMessageEvents.js';
+import { providerApplicationMessagesLinks } from '../support/providerApplicationMessagesLink.js';
+import { startVisiblePolling } from '../support/visiblePolling.js';
 const providerAlerts = window.portalUser?.role === 'provider';
+const chatEnabled = window.portalUser?.role === 'applicant' || providerApplicationMessagesLinks(window.portalUser).length > 0;
 
 const NOTIFICATION_SYNC_EVENT = 'portal-notifications:sync';
 
@@ -31,6 +36,13 @@ const errorMessage = ref('');
 const loadFailed = ref(false);
 const notifications = ref([]);
 const unreadCount = ref(0);
+const chatAlerts = ref([]);
+const unreadChats = ref(0);
+const totalUnread = computed(() => unreadCount.value + unreadChats.value);
+const chatLifetime = new AbortController();
+let loadingChats = false;
+let reloadChats = false;
+let stopChatPolling;
 const root = ref(null);
 const selectedNotification = ref(null);
 
@@ -85,11 +97,50 @@ async function loadNotifications({ silent = false, interactive = false } = {}) {
     }
 }
 
+async function loadChatAlerts() {
+    if (!chatEnabled || loadingChats || chatLifetime.signal.aborted) return;
+    loadingChats = true;
+    try {
+        const { data } = await window.axios.get('/notifications/application-messages', {
+            headers: { Accept: 'application/json' },
+            signal: chatLifetime.signal,
+            portalToast: false,
+            timeout: 10000,
+        });
+        if (chatLifetime.signal.aborted) return;
+        chatAlerts.value = Array.isArray(data?.conversations) ? data.conversations : [];
+        unreadChats.value = Number(data?.unread_count) || 0;
+    } catch (error) {
+        if ([401, 403, 404].includes(error.response?.status)) {
+            chatAlerts.value = [];
+            unreadChats.value = 0;
+        }
+    } finally {
+        loadingChats = false;
+        if (reloadChats) {
+            reloadChats = false;
+            void loadChatAlerts();
+        }
+    }
+}
+
+function refreshAfterRead() {
+    if (document.visibilityState !== 'visible') return;
+    if (loadingChats) reloadChats = true;
+    else void loadChatAlerts();
+}
+
+function refreshNotifications() {
+    void loadChatAlerts();
+    void loadNotifications({ interactive: true });
+}
+
 function toggleDropdown() {
     isOpen.value = !isOpen.value;
 
     if (isOpen.value) {
         loadNotifications({ silent: notifications.value.length > 0, interactive: true });
+        void loadChatAlerts();
     }
 }
 
@@ -217,6 +268,12 @@ async function markAllRead() {
         return;
     }
 
+    const canMark = () => unreadCount.value > 0 && !isMarkingAllRead.value;
+    if (!await confirmChange({
+        title: chatEnabled ? 'Mark all portal updates as read?' : 'Mark all notifications as read?',
+        message: chatEnabled ? 'Unread chats stay in the bell until you read them in their conversations.'
+            : 'All unread notifications will be marked read. Their messages will remain available.',
+    }, canMark) || !canMark()) return;
     isMarkingAllRead.value = true;
     errorMessage.value = '';
 
@@ -243,12 +300,20 @@ onMounted(() => {
     document.addEventListener('keydown', closeOnEscape);
     window.addEventListener(NOTIFICATION_SYNC_EVENT, syncFromEvent);
     loadNotifications();
+    if (chatEnabled) {
+        window.addEventListener(APPLICATION_MESSAGES_READ_EVENT, refreshAfterRead);
+        if (document.visibilityState === 'visible' && navigator.onLine !== false) void loadChatAlerts();
+        stopChatPolling = startVisiblePolling(loadChatAlerts, { interval: 30000 });
+    }
 });
 
 onBeforeUnmount(() => {
     document.removeEventListener('click', closeOnOutsideClick);
     document.removeEventListener('keydown', closeOnEscape);
     window.removeEventListener(NOTIFICATION_SYNC_EVENT, syncFromEvent);
+    window.removeEventListener(APPLICATION_MESSAGES_READ_EVENT, refreshAfterRead);
+    stopChatPolling?.();
+    chatLifetime.abort();
 });
 </script>
 
@@ -274,13 +339,13 @@ onBeforeUnmount(() => {
                 </span>
             </span>
             <span
-                v-if="unreadCount > 0"
+                v-if="totalUnread > 0"
                 :class="[
                     'flex items-center justify-center rounded-full bg-amber-300 font-black text-slate-950',
                     isSidebar ? 'min-w-5 px-1.5 py-0.5 text-[10px]' : 'absolute -right-1 -top-1 h-5 min-w-5 px-1 text-[10px]',
                 ]"
             >
-                {{ unreadCount > 9 ? '9+' : unreadCount }}
+                {{ totalUnread > 9 ? '9+' : totalUnread }}
             </span>
             <span v-else-if="isSidebar" class="text-xs font-bold text-slate-500">
                 0
@@ -327,12 +392,12 @@ onBeforeUnmount(() => {
                                 class="rounded-md px-2.5 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                                 @click.stop="markAllRead"
                             >
-                                {{ isMarkingAllRead ? 'Marking...' : 'Mark all' }}
+                                {{ isMarkingAllRead ? 'Marking...' : chatEnabled ? 'Mark updates read' : 'Mark all' }}
                             </button>
                             <button
                                 type="button"
                                 class="rounded-md px-2.5 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
-                                @click.stop="loadNotifications({ interactive: true })"
+                                @click.stop="refreshNotifications"
                             >
                                 Refresh
                             </button>
@@ -349,45 +414,67 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
 
-                    <div v-if="isLoading" class="px-4 py-5 text-sm text-slate-500">
-                        Loading notifications...
-                    </div>
-
-                    <div v-else-if="errorMessage && !providerAlerts" class="px-4 py-5 text-sm text-rose-700">
-                        {{ errorMessage }}
-                    </div>
-
-                    <div v-else-if="providerAlerts && loadFailed && notifications.length === 0" class="px-4 py-5"><button type="button" class="text-sm font-bold text-slate-700 underline" @click="loadNotifications({ interactive: true })">Retry loading notifications</button></div>
-                    <div v-else-if="notifications.length === 0" class="px-4 py-5 text-sm text-slate-500">
-                        You are all caught up.
-                    </div>
-
-                    <div v-else class="max-h-80 overflow-y-auto">
-                        <button
-                            v-for="notification in notifications"
-                            :key="notification.id"
-                            type="button"
-                            class="block w-full border-t border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50"
-                            @click="openNotification(notification)"
-                        >
-                            <div class="flex items-start justify-between gap-3">
-                                <p class="text-sm font-black leading-5 text-slate-950">
-                                    {{ notification.title }}
-                                </p>
-                                <span
-                                    v-if="!notification.is_read"
-                                    class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-amber-800"
-                                >
-                                    New
+                    <div class="max-h-[min(55dvh,24rem)] overflow-y-auto">
+                        <section v-if="chatAlerts.length" class="border-b border-slate-200" aria-label="Unread application messages">
+                            <h3 class="flex items-center gap-2 bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700">
+                                <i class="fa-regular fa-comments" aria-hidden="true"></i>Unread chats ({{ unreadChats }})
+                            </h3>
+                            <a
+                                v-for="chat in chatAlerts"
+                                :key="chat.key"
+                                :href="chat.href"
+                                class="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-left transition hover:bg-amber-50"
+                            >
+                                <span class="min-w-0 break-words">
+                                    <span class="block text-sm font-bold text-slate-950">{{ chat.applicant_name || chat.program_title }}</span>
+                                    <span class="block text-xs leading-5 text-slate-600">{{ chat.applicant_name ? chat.program_title + ' / ' : '' }}{{ chat.unread_count }} unread {{ chat.unread_count === 1 ? 'message' : 'messages' }}</span>
                                 </span>
-                            </div>
-                            <p class="mt-1 text-xs leading-5 text-slate-600">
-                                {{ notification.message }}
-                            </p>
-                            <p v-if="notification.created_at" class="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                                {{ formatDate(notification.created_at) }}
-                            </p>
-                        </button>
+                                <i class="fa-solid fa-arrow-right shrink-0 text-xs text-slate-500" aria-hidden="true"></i>
+                            </a>
+                            <a v-if="unreadChats > chatAlerts.length" :href="providerAlerts ? '/provider/workspaces/messages?filter=unread' : '/dashboard/applications'" class="block px-4 py-2 text-xs font-bold text-amber-800 underline">
+                                {{ providerAlerts ? 'See all unread in Messages' : 'Go to your applications' }}
+                            </a>
+                        </section>
+
+                        <div v-if="isLoading" class="px-4 py-5 text-sm text-slate-500">
+                            Loading notifications...
+                        </div>
+
+                        <FeedbackToast v-else-if="errorMessage &amp;&amp; !providerAlerts" :message="errorMessage" fallback />
+
+                        <div v-else-if="providerAlerts && loadFailed && notifications.length === 0" class="px-4 py-5"><button type="button" class="text-sm font-bold text-slate-700 underline" @click="loadNotifications({ interactive: true })">Retry loading notifications</button></div>
+                        <div v-else-if="notifications.length === 0 && chatAlerts.length === 0" class="px-4 py-5 text-sm text-slate-500">
+                            You are all caught up.
+                        </div>
+
+                        <div v-else-if="notifications.length">
+                            <h3 v-if="chatAlerts.length" class="bg-slate-50 px-4 py-2 text-xs font-bold text-slate-700">Portal updates</h3>
+                            <button
+                                v-for="notification in notifications"
+                                :key="notification.id"
+                                type="button"
+                                class="block w-full border-t border-slate-100 px-4 py-3 text-left transition hover:bg-slate-50"
+                                @click="openNotification(notification)"
+                            >
+                                <div class="flex items-start justify-between gap-3">
+                                    <p class="text-sm font-black leading-5 text-slate-950">
+                                        {{ notification.title }}
+                                    </p>
+                                    <span
+                                        v-if="!notification.is_read"
+                                        class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.12em] text-amber-800"
+                                    >
+                                        New
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-xs leading-5 text-slate-600">
+                                    {{ notification.message }}
+                                </p>
+                                <p v-if="notification.created_at" class="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                                    {{ formatDate(notification.created_at) }}
+                                </p>
+                            </button>
+                        </div>
                     </div>
                 </section>
             </div>

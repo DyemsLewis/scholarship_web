@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import { computed, ref } from 'vue';
 import { formatServiceDateTime, formatServiceFileSize, useProviderServiceWorkspace } from '../../../composables/useProviderServiceWorkspace.js';
 import BillingServiceWorkspaceShell from './components/BillingServiceWorkspaceShell.vue';
@@ -27,6 +28,7 @@ async function uploadFile(event) {
     const input = event.target;
     const file = input.files?.[0];
     if (!file || !canModify.value || isLoading.value || isUploading.value) return;
+    if (!await confirmChange({ title: "Upload this supporting file?", message: "The selected file will be shared with the platform service team." }, () => canModify.value && !isLoading.value && !isUploading.value) || !(canModify.value && !isLoading.value && !isUploading.value)) { return; }
     isUploading.value = true;
     errorMessage.value = '';
     successMessage.value = '';

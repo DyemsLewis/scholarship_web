@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from '../../support/outcomeConfirmation.js';
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
 import { useModalAccessibility } from '../../composables/useModalAccessibility';
 import { useConcernMutation } from '../../composables/useConcernMutation.js';
@@ -89,11 +90,13 @@ async function addFile() {
     if (!upload.value || locked.value || stale.value) return;
     const warning = evidenceError([upload.value], 1);
     if (warning) { error.value = warning; return; }
+    if (!await confirmChange({ title: 'Attach this concern evidence?', message: 'This file will be saved with the concern draft.', confirmLabel: 'Attach file' }, () => Boolean(upload.value) && !locked.value && !stale.value) || locked.value || stale.value) return;
     const body = new FormData(); body.append('expected_revision', current.value.revision); body.append('evidence', upload.value);
     const result = await run('post', current.value.upload_url, body);
     if (accept(result)) { upload.value = null; const input = dialog.value?.querySelector('[data-provider-file]'); if (input) input.value = ''; }
 }
 async function removeFile(file) {
+    if (!await confirmChange({ title: 'Remove this concern evidence?', message: 'This file will be removed from the concern draft. Other evidence will remain.', confirmLabel: 'Remove file', danger: true }, () => !locked.value && !stale.value) || locked.value || stale.value) return;
     accept(await run('delete', file.remove_url, { data: { expected_revision: current.value.revision } }));
 }
 async function cancelDraft() {
@@ -165,7 +168,7 @@ onBeforeUnmount(reset);
                     </form>
                     <details v-if="current?.history?.length && !editing && !replying" class="border-t border-slate-200 pt-3"><summary class="cursor-pointer text-sm font-bold text-slate-600">Case history</summary><ol class="mt-2 divide-y divide-slate-200"><li v-for="event in current.history" :key="event.revision" class="py-3"><p class="text-sm leading-6">{{ event.note }}</p><p class="mt-1 text-xs text-slate-500">{{ event.actor_name }} &middot; {{ concernDate(event.created_at) }}</p></li></ol></details>
                     <details v-if="provider && !editing && (subject !== savedSubject || details !== savedDetails)" class="border-t border-slate-200 pt-3"><summary class="cursor-pointer text-sm font-bold">Your unsaved draft text</summary><p class="mt-3 text-sm font-bold">{{ subject }}</p><p class="mt-2 whitespace-pre-line break-words text-sm leading-6">{{ details }}</p></details>
-                    <div v-if="error" data-concern-error role="alert" tabindex="-1" class="border-l-2 border-amber-400 bg-amber-50 px-3 py-3 text-sm leading-6"><p>{{ error }}</p><button v-if="stale && current?.read_url" type="button" :disabled="locked" class="mt-2 font-bold underline" @click="reload">Reload current concern</button><p v-else-if="stale" class="mt-2 text-xs">Close this dialog to reload the list and find any saved draft. Your unsaved text remains here until you close.</p></div>
+                    <template v-if="error"><FeedbackToast :message="stale && !current?.read_url ? error + ' Close this dialog to reload the list and find any saved draft. Unsaved text remains until you close.' : error" :retry-label="stale &amp;&amp; current?.read_url ? 'Reload current concern' : ''" @retry="reload" /><button v-if="stale && current?.read_url" type="button" :disabled="locked" class="mt-2 font-bold underline" @click="reload">Reload current concern</button></template>
                 </div>
                 <footer class="shrink-0 border-t border-slate-200 bg-slate-50 px-4 py-3 sm:px-6">
                     <div v-if="discard || cancelPrompt" role="alert" class="space-y-3"><p class="text-sm font-bold">{{ cancelPrompt ? 'Cancel this saved, unsent draft?' : 'Close without saving your latest text?' }}</p><p class="text-xs text-slate-600">{{ cancelPrompt ? 'No notice will be sent. Scholarship support stays unchanged.' : 'Previously saved draft content remains available.' }}</p><div class="flex flex-wrap justify-end gap-2"><button data-concern-keep type="button" class="min-h-10 border border-slate-300 bg-white px-4 text-sm font-bold" @click="discard = false; cancelPrompt = false">Keep editing</button><button type="button" :disabled="locked" class="min-h-10 bg-slate-950 px-4 text-sm font-bold text-white" @click="cancelPrompt ? cancelDraft() : emit('close')">{{ cancelPrompt ? 'Cancel saved draft' : 'Close without saving' }}</button></div></div>

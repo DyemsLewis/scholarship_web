@@ -1,4 +1,5 @@
 <script setup>
+import { confirmChange } from "../support/outcomeConfirmation.js";
 import { computed, nextTick, onMounted, ref } from 'vue';
 import AdminSidebar from '../components/AdminSidebar.vue';
 import ConfirmationDialog from '../components/ConfirmationDialog.vue';
@@ -426,6 +427,7 @@ async function saveAccount() {
         return;
     }
 
+    if (!await confirmChange({ title: "Save this account?", message: "The account details and selected access permissions will be saved." }, () => !isSaving.value && formAvailable.value) || !(!isSaving.value && formAvailable.value)) { return; }
     isSaving.value = true;
 
     const payload = {
@@ -484,6 +486,7 @@ async function updateAccountStatus(status) {
         return;
     }
 
+    if (!await confirmChange({ title: "Change this account status?", message: "This changes whether the account holder can access the platform." }, () => formAvailable.value && !accountAction.value && !isSaving.value) || !(formAvailable.value && !accountAction.value && !isSaving.value)) { return; }
     accountAction.value = status === 'suspended' ? 'suspend' : 'activate';
 
     try {
@@ -541,6 +544,7 @@ async function verifyEmail() {
 
     errorMessage.value = '';
     supportLink.value = '';
+    if (!await confirmChange({ title: "Mark this email as verified?", message: "Only confirm after independently checking that the account holder controls this email." }, () => formAvailable.value && !accountAction.value && !isSaving.value) || !(formAvailable.value && !accountAction.value && !isSaving.value)) { return; }
     accountAction.value = 'verify-email';
 
     try {
@@ -561,6 +565,7 @@ async function resendVerificationEmail() {
 
     errorMessage.value = '';
     supportLink.value = '';
+    if (!await confirmChange({ title: "Send this verification email?", message: "A verification link will be sent to the account email address." }, () => formAvailable.value && !accountAction.value && !isSaving.value) || !(formAvailable.value && !accountAction.value && !isSaving.value)) { return; }
     accountAction.value = 'resend-verification';
 
     try {
@@ -594,6 +599,7 @@ async function updateApplicantVerification(status) {
         return;
     }
 
+    if (!await confirmChange({ title: "Save this profile verification outcome?", message: "This changes the applicant verification status. Required evidence checks remain enforced." }, () => formAvailable.value && !accountAction.value && !isSaving.value) || !(formAvailable.value && !accountAction.value && !isSaving.value)) { return; }
     accountAction.value = `profile-verification-${status}`;
     errorMessage.value = '';
 
@@ -693,13 +699,7 @@ onMounted(() => {
                     </button>
                 </nav>
 
-                <p
-                    v-if="errorMessage"
-                    class="mt-4 rounded-md border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700"
-                    role="alert"
-                >
-                    {{ errorMessage }}
-                </p>
+                <FeedbackToast v-if="errorMessage" :message="errorMessage" />
 
                 <form
                     v-if="formAvailable && activeWorkspaceSection === 'details'"

@@ -80,7 +80,7 @@ async function save() {
                             </fieldset>
                         </form>
                         <p class="text-xs leading-5 text-slate-500">Accepting this file does not verify the provider account or authenticate it with the issuing authority. The final organization decision is separate.</p>
-                        <div v-if="error" role="alert" class="border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-950"><p>{{ error }}</p><button v-if="stale" type="button" class="mt-2 font-bold underline underline-offset-2" @click="emit('reload')">Reload current record</button></div>
+                        <template v-if="error"><FeedbackToast :message="error" :retry-label="stale ? 'Reload current record' : ''" @retry="emit('reload')" /><button v-if="stale" type="button" class="mt-2 font-bold underline underline-offset-2" @click="emit('reload')">Reload current record</button></template>
                     </div>
                 </div>
                 <footer class="flex shrink-0 items-center justify-between gap-4 border-t border-slate-200 bg-slate-50 px-6 py-4"><p class="text-xs text-slate-500">Review one document at a time.</p><div class="flex shrink-0 gap-3"><button type="button" :disabled="saving" class="h-10 border border-slate-300 bg-white px-4 text-sm font-bold disabled:opacity-40" @click="close">Cancel</button><button type="submit" form="provider-document-decision" :disabled="!canSave" class="h-10 bg-slate-950 px-5 text-sm font-bold text-white disabled:opacity-40">{{ saving ? 'Saving...' : outcome === 'rejected' ? 'Request replacement' : 'Accept document' }}</button></div></footer>
