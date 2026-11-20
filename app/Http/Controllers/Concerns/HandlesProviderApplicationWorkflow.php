@@ -24,6 +24,7 @@ use App\Services\ScholarshipEventService;
 use App\Services\SelectionEvaluationService;
 use App\Support\AcademicRequirement;
 use App\Support\ApplicationDecisionReason;
+use App\Support\ApplicationDocumentReviewReceipt;
 use App\Support\ApplicationSchedulePayload;
 use App\Support\ReviewRubric;
 use App\Support\ScholarshipEventPayload;
@@ -1927,6 +1928,7 @@ trait HandlesProviderApplicationWorkflow
         $validated = $request->validate([
             'status' => ['required', Rule::in(['pending', 'accepted', 'rejected', 'needs_replacement'])],
             'review_notes' => [Rule::requiredIf(in_array($request->input('status'), ['rejected', 'needs_replacement'], true)), 'nullable', 'string', 'max:1000'],
+            'view_receipt' => ['nullable', 'string', 'max:4096'],
         ]);
 
         [$document, $previousStatus] = DB::transaction(function () use ($document, $validated, $request): array {
@@ -1947,6 +1949,15 @@ trait HandlesProviderApplicationWorkflow
                 ->where('scholarship_application_id', $lockedApplication->id)
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if ($validated['status'] === 'accepted' && ! ApplicationDocumentReviewReceipt::valid(
+                $validated['view_receipt'] ?? null, $lockedDocument, $request->user(),
+            )) {
+                throw ValidationException::withMessages([
+                    'view_receipt' => 'Open the current file before accepting it. If you already opened it, close the review and open it again.',
+                ]);
+            }
+
             $previousStatus = $lockedDocument->status;
             $lockedDocument->update([
                 'status' => $validated['status'],

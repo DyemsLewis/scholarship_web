@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Scholarship;
+use App\Support\ProgramApplicationRules;
 use App\Support\ProgramConfigurationRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
@@ -14,7 +15,10 @@ class ScholarshipPublicationGuard
         $scholarship->loadMissing(['provider.providerProfile', 'benefits']);
 
         $provider = $scholarship->provider;
-        $errors = ProgramConfigurationRules::errors([], $scholarship);
+        $errors = [
+            ...ProgramConfigurationRules::errors([], $scholarship, enforceFullTimeline: true),
+            ...ProgramApplicationRules::errors([], $scholarship),
+        ];
 
         if (! $provider?->isProvider() || ! $provider->isActive()) {
             $errors['status'] = 'The provider account must be active before this program can be published.';

@@ -16,7 +16,7 @@ const start = source.indexOf("    const response = await fetch(origin + '/login'
 const end = source.indexOf('} catch (error) { report.failure', start);
 source = source.slice(0, start) + String.raw`
     const openSelection = () => navigate('/provider/programs/8/edit/selection', "!!document.querySelector('[data-program-scoring]')");
-    const weights = () => client.evaluate("Object.fromEntries([...document.querySelectorAll('[data-scoring-stage]')].map(e=>[e.dataset.scoringStage,Number(e.lastElementChild.innerText.replace('%',''))]))");
+    const weights = () => client.evaluate("Object.fromEntries([...document.querySelectorAll('[data-scoring-stage]')].map(e=>[e.dataset.scoringStage,Number(e.lastElementChild.textContent.replace('%',''))]))");
     const state = () => client.evaluate("document.querySelector('[data-scoring-state]').innerText");
     const toggle = async(label,count) => {
         await client.evaluate("(()=>{const b=[...document.querySelector('[data-program-scoring]').parentElement.querySelectorAll('button')].find(b=>b.querySelector('span.block')?.textContent==="+JSON.stringify(label)+");if(!b)throw new Error('Missing stage button');b.click()})()");
@@ -29,6 +29,8 @@ source = source.slice(0, start) + String.raw`
     assert.equal(await state(),'Fixed for this intake');
     assert.deepEqual(await weights(),original.selection_scoring_policy.weights);
     assert.ok(await client.evaluate("document.querySelector('[data-program-scoring]').innerText.includes('You still make the final decision')"));
+    assert.equal(await client.evaluate("document.querySelector('[data-scoring-breakdown]').open"),false);
+    await client.evaluate("document.querySelector('[data-scoring-breakdown] summary').click()");
     await client.evaluate("document.querySelector('[data-program-scoring]').scrollIntoView({block:'center'})");
     await delay(200);
     const clip = await client.evaluate("(()=>{const r=document.querySelector('[data-program-scoring]').getBoundingClientRect();return{x:r.x-14,y:r.y+scrollY-6,width:r.width+28,height:r.height+22,scale:1}})()");
@@ -39,11 +41,15 @@ source = source.slice(0, start) + String.raw`
     assert.match(await client.evaluate("document.querySelector('[data-program-scoring]').innerText"),/Changing its stage path requires a new intake/);
 
     // Read-only response fixtures exercise a new plan without modifying the demo database.
-    programFixture={...original,status:'draft',selection_scoring_policy:null,applications_count:0,selection_stages:['screening','formal_application','decision']};
+    programFixture={...original,status:'draft',selection_scoring_policy:null,applications_count:0,exam_scoring_method:'criteria',selection_stages:['screening','formal_application','decision']};
     await login('nuvareya.programs');await openSelection();
     const presets=await client.evaluate("JSON.parse(document.getElementById('app').dataset.scoringPresets)");
     assert.equal(await state(),'Plan preview');assert.deepEqual(await weights(),presets.screening.weights);
     await toggle('Exam',2);assert.deepEqual(await weights(),presets.exam.weights);
+    assert.equal(await client.evaluate("document.querySelector('[data-criterion-stage=exam] input')"),null);
+    await click('Edit criteria',"document.querySelector('[data-criterion-stage=exam]')");
+    await wait(()=>client.evaluate("!!document.querySelector('#program-stage-criteria-options [data-criterion-key]')"),'exam criteria dialog');
+    await click('Cancel',"document.querySelector('#program-stage-criteria-options')");
     await toggle('Interview',3);assert.deepEqual(await weights(),presets['exam+interview'].weights);
     await toggle('Exam',2);assert.deepEqual(await weights(),presets.interview.weights);
     await toggle('Interview',1);assert.deepEqual(await weights(),presets.screening.weights);
@@ -51,7 +57,7 @@ source = source.slice(0, start) + String.raw`
     programFixture={...programFixture,applications_count:2};
     await login('nuvareya.manager');await openSelection();
     assert.equal(await state(),'Existing intake');assert.deepEqual(await weights(),{});
-    assert.match(await client.evaluate("document.querySelector('[data-program-scoring]').innerText"),/without adding a numeric ranking score/);
+    assert.match(await client.evaluate("document.querySelector('[data-program-scoring]').innerText"),/do not add a numeric ranking score/);
     programFixture=null;
     assert.deepEqual((await get('/provider/scholarships/8')).body.scholarship.selection_scoring_policy,original.selection_scoring_policy);
     assert.deepEqual(report.errors,[]);assert.deepEqual(report.serverErrors,[]);assert.deepEqual(report.blockedWrites,[]);

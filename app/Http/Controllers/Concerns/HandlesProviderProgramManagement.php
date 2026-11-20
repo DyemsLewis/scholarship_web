@@ -20,6 +20,7 @@ use App\Support\EducationEligibilityPolicy;
 use App\Support\EligibilityRulePolicy;
 use App\Support\LearnerProgramPath;
 use App\Support\OpaqueRecordUrl;
+use App\Support\ProgramApplicationRules;
 use App\Support\ProgramConfigurationRules;
 use App\Support\RecipientOnboardingPolicy;
 use App\Support\ReviewRubric;
@@ -319,6 +320,7 @@ trait HandlesProviderProgramManagement
         $validated = $this->normalizeScholarshipProgramPaths($validated);
         $validated = $this->normalizeScholarshipRequirements($validated);
         $validated = $this->normalizeScholarshipEligibilityConditions($validated, $request);
+        ProgramApplicationRules::assertConsistent($validated);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request);
         $validated = $this->normalizeScholarshipApplicationQuestions($validated, $request);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request);
@@ -421,8 +423,9 @@ trait HandlesProviderProgramManagement
         $validated = $this->normalizeScholarshipRecipientAgreement($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipAcademicRequirement($validated);
         $validated = $this->normalizeScholarshipProgramPaths($validated);
-        $validated = $this->normalizeScholarshipRequirements($validated);
+        $validated = $this->normalizeScholarshipRequirements($validated, $scholarship);
         $validated = $this->normalizeScholarshipEligibilityConditions($validated, $request, $scholarship);
+        ProgramApplicationRules::assertConsistent($validated, $scholarship);
         $validated = $this->normalizeScholarshipReviewRubric($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipApplicationQuestions($validated, $request, $scholarship);
         $validated = $this->normalizeScholarshipSelectionStages($validated, $request, $scholarship);
@@ -501,6 +504,7 @@ trait HandlesProviderProgramManagement
                 }
                 $scholarship->refresh();
                 ProgramConfigurationRules::assertConsistent($validated, $locked);
+                ProgramApplicationRules::assertConsistent($validated, $locked);
                 $requestedSlots = array_key_exists('slots_available', $validated)
                     ? $validated['slots_available']
                     : $locked->slots_available;
@@ -829,9 +833,7 @@ trait HandlesProviderProgramManagement
         }
 
         if ($conditionKeys->contains('required_documents')) {
-            if ($value('application_mode') === 'provider_review') {
-                $errors['application_mode'] = 'Required documents cannot be checked in profile review only. Choose a portal document review method or remove the condition.';
-            } elseif (blank($value('requirements'))) {
+            if ($value('application_mode') !== 'provider_review' && blank($value('requirements'))) {
                 $errors['requirements'] = 'Select at least one pre-screening file or remove the required documents condition.';
             }
         }
@@ -1156,7 +1158,10 @@ trait HandlesProviderProgramManagement
             $validated['handoff_longitude'] = $validated['handoff_longitude'] ?? null;
         }
 
-        if (! in_array($validated['handoff_mode'] ?? $scholarship?->handoff_mode, ['onsite', 'hybrid'], true)) {
+        $mode = $validated['handoff_mode'] ?? $scholarship?->handoff_mode;
+        if (! ProgramApplicationRules::usesHandoffVenue($mode)) {
+            $validated['handoff_location_name'] = null;
+            $validated['handoff_location_address'] = null;
             $validated['handoff_latitude'] = null;
             $validated['handoff_longitude'] = null;
             $validated['handoff_address_details'] = null;
@@ -1165,6 +1170,10 @@ trait HandlesProviderProgramManagement
             && ! array_key_exists('handoff_latitude', $validated)) {
             $validated['handoff_latitude'] = null;
             $validated['handoff_longitude'] = null;
+        }
+
+        if (! ProgramApplicationRules::usesHandoffLink($mode)) {
+            $validated['handoff_url'] = null;
         }
 
         return $validated;
@@ -1179,8 +1188,12 @@ trait HandlesProviderProgramManagement
         return $validated;
     }
 
-    private function normalizeScholarshipRequirements(array $validated): array
+    private function normalizeScholarshipRequirements(array $validated, ?Scholarship $scholarship = null): array
     {
+        if (($validated['application_mode'] ?? $scholarship?->application_mode) === 'provider_review') {
+            // Retain prior selections for switching back, but don't edit inactive lists.
+            unset($validated['requirements'], $validated['optional_requirements']);
+        }
         foreach (['requirements', 'optional_requirements', 'post_qualification_requirements'] as $field) {
             if (! array_key_exists($field, $validated)) {
                 continue;

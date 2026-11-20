@@ -1,0 +1,22 @@
+[
+    {"group":"School records","label":"Certificate of enrollment","aliases":["Proof of enrollment","Certificate of registration","Enrollment certificate"]},
+    {"group":"School records","label":"Latest report card or grades","aliases":["Latest report card","Report card","Latest grades","Copy of grades","Grade report","Report card / transcript","Latest grade report"]},
+    {"group":"School records","label":"Transcript of records","aliases":["Transcript","Official transcript of records","TOR"]},
+    {"group":"School records","label":"Recent school ID","aliases":["School ID","Student ID","Current school ID","Recent school identification"]},
+    {"group":"School records","label":"Certificate of good moral character","aliases":["Good moral certificate","Certificate of good moral","Good moral character certificate"]},
+    {"group":"School records","label":"Certificate of graduation","aliases":["Graduation certificate"]},
+    {"group":"School records","label":"Diploma","aliases":[]},
+    {"group":"Identity","label":"PSA birth certificate","aliases":["Birth certificate","PSA-issued birth certificate"]},
+    {"group":"Identity","label":"Valid government-issued ID","aliases":["Government ID","Valid government ID"]},
+    {"group":"Identity","label":"Recent 2x2 photo","aliases":["2x2 photo","2x2 ID photo","Recent ID photo"]},
+    {"group":"Income and residency","label":"Certificate of indigency","aliases":["Barangay certificate of indigency","Indigency certificate"]},
+    {"group":"Income and residency","label":"Proof of income","aliases":["Household income proof","Income certificate","Family income certificate"]},
+    {"group":"Income and residency","label":"Income tax return","aliases":["ITR","Parent or guardian income tax return"]},
+    {"group":"Income and residency","label":"Certificate of tax exemption","aliases":["Tax exemption certificate","BIR certificate of tax exemption"]},
+    {"group":"Income and residency","label":"Recent payslip","aliases":["Payslip","Parent or guardian payslip"]},
+    {"group":"Income and residency","label":"Certificate of employment","aliases":["Employment certificate","Parent or guardian certificate of employment"]},
+    {"group":"Income and residency","label":"Certificate of residency","aliases":["Barangay certificate of residency","Residency certificate","Proof of residency"]},
+    {"group":"Other supporting records","label":"Recommendation letter","aliases":["Letter of recommendation"]},
+    {"group":"Other supporting records","label":"Achievement certificate","aliases":["Award certificate","Certificate of achievement","Achievement certificates"]},
+    {"group":"Other supporting records","label":"Parent or guardian consent","aliases":["Parental consent","Parent consent form","Guardian consent"]}
+]

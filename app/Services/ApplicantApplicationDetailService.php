@@ -8,6 +8,7 @@ use App\Models\ScholarshipApplication;
 use App\Models\User;
 use App\Support\ApplicantStageActivityPayload;
 use App\Support\ApplicationSchedulePayload;
+use App\Support\ProgramApplicationRules;
 use App\Support\RecipientAgreement;
 use App\Support\Terms;
 use Illuminate\Support\Str;
@@ -928,15 +929,9 @@ class ApplicantApplicationDetailService
 
         return [
             'requirements' => $this->eligibilityService->splitDocumentRequirements($scholarship?->post_qualification_requirements),
-            'mode' => $scholarship?->handoff_mode ?: 'provider_contact',
+            ...ProgramApplicationRules::handoffChannel($scholarship),
             'instructions' => $scholarship?->handoff_instructions,
             'deadline' => $scholarship?->handoff_deadline?->format('M d, Y'),
-            'location_name' => $scholarship?->handoff_location_name,
-            'location_address' => $scholarship?->handoff_location_address,
-            'latitude' => $scholarship?->handoff_latitude,
-            'longitude' => $scholarship?->handoff_longitude,
-            'map_url' => $scholarship?->handoffMapUrl(),
-            'url' => $scholarship?->handoff_url,
             'contact' => [
                 'name' => $scholarship?->contact_person,
                 'department' => $scholarship?->contact_department,

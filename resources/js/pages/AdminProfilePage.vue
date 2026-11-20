@@ -132,7 +132,7 @@ onMounted(loadProfile);
                                 <div class="grid items-end gap-4 md:grid-cols-[1fr_7rem_1fr]">
                                     <label>
                                         <span :class="labelClass">First name</span>
-                                        <input v-model="form.first_name" type="text" placeholder="First name" :class="inputClass">
+                                        <input v-model="form.first_name" v-capitalize-name autocapitalize="sentences" type="text" placeholder="First name" :class="inputClass">
                                         <span v-if="fieldError('first_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('first_name') }}</span>
                                     </label>
                                     <label>
@@ -142,13 +142,13 @@ onMounted(loadProfile);
                                     </label>
                                     <label>
                                         <span :class="labelClass">Last name</span>
-                                        <input v-model="form.last_name" type="text" placeholder="Last name" :class="inputClass">
+                                        <input v-model="form.last_name" v-capitalize-name autocapitalize="sentences" type="text" placeholder="Last name" :class="inputClass">
                                         <span v-if="fieldError('last_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('last_name') }}</span>
                                     </label>
                                 </div>
                                 <label class="mt-4 block">
                                     <span :class="labelClass">Display name</span>
-                                    <input v-model="form.display_name" type="text" placeholder="Scholarship Admin" :class="inputClass">
+                                    <input v-model="form.display_name" v-capitalize-name autocapitalize="sentences" type="text" placeholder="Scholarship Admin" :class="inputClass">
                                     <span v-if="fieldError('display_name')" class="mt-1 block text-xs font-semibold text-rose-600">{{ fieldError('display_name') }}</span>
                                 </label>
                             </div>

@@ -12,7 +12,7 @@ function picker(overrides = {}) {
     const events = [];
     const script = descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
     const state = new Function('computed', 'ref', 'watch', 'defineProps', 'defineEmits', 'useModalAccessibility', 'hasLocationPin',
-        script + ';return {stageLocation,confirmSelection,close,selection,draftLocation};')(
+        script + ';return {stageLocation,confirmSelection,close,selection,draftLocation,handleKeydown};')(
         computed, ref, watch, () => props, () => (...args) => events.push(args), () => ({ handleKeydown() {} }), hasLocationPin,
     );
     return { ...state, props, events };
@@ -51,4 +51,13 @@ test('read-only maps continue to forward location resolution without a picker co
     const result = { latitude: 14.676, longitude: 121.0437 };
     state.stageLocation(result, 'resolved');state.confirmSelection();
     assert.deepEqual(state.events, [['resolved', result], ['close']]);
+});
+
+test('Escape closes only the inline map editor without confirming the pin', () => {
+    const state = picker({ inline: true });
+    state.stageLocation({ latitude: 14.5861, longitude: 121.1756 }, 'picked');
+    let stopped = false;
+    state.handleKeydown({ key: 'Escape', preventDefault() {}, stopPropagation() { stopped = true; } });
+    assert.equal(stopped, true);
+    assert.deepEqual(state.events, [['close']]);
 });

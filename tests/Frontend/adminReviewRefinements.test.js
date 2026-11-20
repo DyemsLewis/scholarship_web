@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { confirmOutcome, afterConfirmation } from './helpers/acceptedOutcome.js';
-import { profileVerificationLabel } from '../../resources/js/support/applicantProfileLabels.js';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
 import { computed, ref } from 'vue';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
@@ -20,7 +19,7 @@ function harness(name, exposed, payload, pathname = '/admin/workspaces/reviews/a
         patch: async (...args) => { writes.push(args); return { data: payload }; },
         post: async (...args) => { writes.push(args); return { data: payload }; },
     } };
-    const deps = { staffQueueReturn, confirmOutcome, profileVerificationLabel, reviewStatusLabel, ref, computed, useAdminResource, reviewErrorMessage, reviewRequirementItems, onMounted() {}, window, URLSearchParams,
+    const deps = { staffQueueReturn, confirmOutcome, reviewStatusLabel, ref, computed, useAdminResource, reviewErrorMessage, reviewRequirementItems, onMounted() {}, window, URLSearchParams,
         useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/applicants', load() {} }),
         applicantProfileDetails: () => [], profileEducationSummary: () => '', evidenceRows, evidenceReviewDate };
     return { ...new Function(...Object.keys(deps), `${script}\nreturn { ${exposed} };`)(...Object.values(deps)), window, writes, gets };
@@ -46,7 +45,7 @@ test('queue badges distinguish oversight from release or session status', () => 
     }
     assert.equal(reviewQueueStatus({ status: 'pending_review' }, 'programs'), 'pending_review');
     assert.equal(reviewQueueStatus({ verification_status: 'approved', status: 'pending' }, 'applicants'), 'approved');
-    assert.equal(reviewStatusLabel('approved', 'applicants'), 'Evidence reviewed');
+    assert.equal(reviewStatusLabel('approved', 'applicants'), 'Profile reviewed');
     assert.equal(reviewStatusLabel('rejected', 'applicants'), 'Needs replacement');
     assert.equal(reviewStatusLabel('rejected', 'programs'), 'Returned to provider');
     assert.equal(reviewStatusLabel('pending_review'), 'In review');

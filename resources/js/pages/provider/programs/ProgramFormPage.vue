@@ -5,7 +5,6 @@ import AlertDialog from '../../../components/AlertDialog.vue';
 import ApplicantPagePreviewModal from '../../../components/ApplicantPagePreviewModal.vue';
 import ConfirmationDialog from '../../../components/ConfirmationDialog.vue';
 import CoverImagePickerModal from '../../../components/CoverImagePickerModal.vue';
-import ProviderVenueAddress from '../../../components/ProviderVenueAddress.vue';
 import { useConfirmationDialog } from '../../../composables/useConfirmationDialog';
 import { useModalAccessibility } from '../../../composables/useModalAccessibility';
 import UserScholarshipDetailPage from '../../UserScholarshipDetailPage.vue';
@@ -16,23 +15,32 @@ import EducationEligibilityPolicyEditor from './components/EducationEligibilityP
 import EligibilityOptionPicker from './components/EligibilityOptionPicker.vue';
 import EligibilityCheckboxPicker from './components/EligibilityCheckboxPicker.vue';
 import EligibilityLocationPicker from './components/EligibilityLocationPicker.vue';
+import EligibilityReconsiderationEditor from './components/EligibilityReconsiderationEditor.vue';
+import EligibilitySummaryEditor from './components/EligibilitySummaryEditor.vue';
 import DocumentRequirementsPicker from './components/DocumentRequirementsPicker.vue';
 import SelectionScoringPreview from './components/SelectionScoringPreview.vue';
 import StageCriterionLabelsEditor from './components/StageCriterionLabelsEditor.vue';
 import ProgramOnboardingPolicyFields from './components/ProgramOnboardingPolicyFields.vue';
+import ProgramFormalApplicationEditor from './components/ProgramFormalApplicationEditor.vue';
+import ProgramLocationEditor from './components/ProgramLocationEditor.vue';
+import ProgramPublicContactEditor from './components/ProgramPublicContactEditor.vue';
+import ProgramRecipientTermsEditor from './components/ProgramRecipientTermsEditor.vue';
 import ProgramReviewSummary from './components/ProgramReviewSummary.vue';
 import { normalizeEducationPolicy, educationPolicyError } from '../../../support/educationEligibilityPolicy';
 import { configuredEligibilityRules, normalizeEligibilityRuleModes } from '../../../support/providerEligibilityRules';
-import { programConfigurationErrors, programDateToday } from '../../../support/programConfiguration';
+import { programConfigurationErrors, programDateToday, programTimelineMinimums } from '../../../support/programConfiguration';
+import { programDocumentErrors } from '../../../support/programDocumentRequirements';
+import { copyFormalApplication, formalApplicationIssue } from '../../../support/programFormalApplication';
 import { latestDate } from '../../../support/providerDates';
 import { programDraftSnapshot, programSaveLabel, shouldGuardProgramLink } from '../../../support/programSaveState';
-import { eligibilitySummaryFromRules, eligibilitySummaryReviewKey } from '../../../support/programEligibilitySummary';
+import { eligibilitySummaryFromRules } from '../../../support/programEligibilitySummary';
 import { programEligibilityOptions, educationSelectionImpact, eligibilityListValues } from '../../../support/programEligibilityOptions';
-import { organizationProgramLocation, organizationLocationWouldReplace } from '../../../support/programOrganizationLocation';
+import { organizationProgramLocation } from '../../../support/programOrganizationLocation';
+import { copyProgramLocation, copyProgramPublicContact } from '../../../support/programScheduleDetails';
 import { hasLocationPin } from '../../../support/locationPins';
-import { programReviewSummary } from '../../../support/programReviewSummary';
+import { programReviewDate, programReviewSummary } from '../../../support/programReviewSummary';
 import { programCriterionLabels, programCriterionLabelErrors, programScoringPreview } from '../../../support/programScoringPreview';
-import { normalizeProgramRecipientAgreement } from '../../../support/programRecipientAgreement.js';
+import { normalizeProgramRecipientAgreement, recipientTermsIssue } from '../../../support/programRecipientAgreement.js';
 import { programOnboardingPolicy, onboardingPolicyError } from '../../../support/recipientOnboarding';
 
 const pathMatch = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/programs\/(\d+)\/edit(?:\/([a-z-]+))?$/);
@@ -76,7 +84,6 @@ const coverFile = ref(null);
 const coverPreviewUrl = ref('');
 const recommendedCoverKey = ref('learning-together');
 const providerCoverUrl = ref(portalUser.provider_cover_url ?? '');
-const mapMessage = ref('');
 const benefitType = ref('');
 const benefitDialogOpen = ref(false);
 const benefitDraft = ref(null);
@@ -187,6 +194,19 @@ const form = ref(emptyForm());
 const criterionLabelErrors = computed(() => programCriterionLabelErrors(form.value.stageCriterionLabels));
 const scoringPreview = computed(() => programScoringPreview(scoringPresets, form.value.selectionStages, fixedScoringPolicy.value, applicationsCount.value, form.value.examScoringMethod, form.value.stageCriterionLabels));
 const programHasLocationPin = computed(() => hasLocationPin(form.value.latitude, form.value.longitude));
+const programLocation = computed({
+    get: () => copyProgramLocation(form.value),
+    set: value => Object.assign(form.value, copyProgramLocation(value)),
+});
+const publicContact = computed({
+    get: () => copyProgramPublicContact(form.value),
+    set: value => Object.assign(form.value, copyProgramPublicContact(value)),
+});
+const formalApplication = computed({
+    get: () => copyFormalApplication(form.value),
+    set: value => Object.assign(form.value, copyFormalApplication(value)),
+});
+const handoffIssue = computed(() => formalApplicationIssue(formalApplication.value));
 const coursesNeedChoice = ref(false);
 const yearsNeedChoice = ref(false);
 const educationChangePending = ref(false);
@@ -201,11 +221,7 @@ const eligibilityRules = computed(() => configuredEligibilityRules(form.value, {
 const eligibilityOptions = computed(() => programEligibilityOptions(form.value.eligibleEducationLevels));
 const suggestedEligibilitySummary = computed(() => eligibilitySummaryFromRules(eligibilityRules.value));
 const useGeneratedEligibilitySummary = ref(true);
-const reviewedEligibilitySummary = ref('');
 const eligibilitySummary = computed(() => useGeneratedEligibilitySummary.value ? suggestedEligibilitySummary.value : form.value.eligibility);
-const currentEligibilitySummaryKey = computed(() => eligibilitySummaryReviewKey(eligibilityRules.value, eligibilitySummary.value));
-const customSummaryNeedsReview = computed(() => !isReadOnly.value && !useGeneratedEligibilitySummary.value
-    && Boolean(eligibilitySummary.value.trim()) && reviewedEligibilitySummary.value !== currentEligibilitySummaryKey.value);
 const draftSnapshot = computed(() => programDraftSnapshot({ ...form.value, eligibility: eligibilitySummary.value }, coverSource.value, coverKey.value));
 const savedSnapshot = ref(draftSnapshot.value);
 const hasPendingBenefitChanges = computed(() => benefitDialogOpen.value && programDraftSnapshot(benefitDraft.value) !== benefitSavedSnapshot.value);
@@ -240,7 +256,7 @@ const coverSourceLabel = computed(() => ({
     provider: 'Organization background',
     upload: 'Uploaded image',
 }[coverSource.value] ?? 'Program background'));
-const requiresAgreementDetails = computed(() => !['provider_briefing', 'none'].includes(form.value.recipientAgreement.commitment_type));
+const selectionTermsIssue = computed(() => recipientTermsIssue(form.value.recipientAgreement) || onboardingPolicyError(form.value.onboardingPolicy));
 const selectedStages = computed(() => stageOptions.filter((stage) => form.value.selectionStages.includes(stage.id)));
 const eligibilityCounts = computed(() => ({
     required: eligibilityRules.value.filter((rule) => rule.mode === 'required').length,
@@ -257,17 +273,39 @@ function programDateMinimum(field) {
     const savedDate = savedDates.value[field];
     return preserveHistoricalDates.value && savedDate && savedDate < today ? savedDate : today;
 }
-const supportEndMinimum = computed(() => latestDate(programDateMinimum('support_ends_at'), form.value.supportStartsAt));
-const configurationErrors = computed(() => programConfigurationErrors({
-    slots_available: form.value.slotsAvailable,
-    application_limit: form.value.applicationLimit,
+const usesScreeningFiles = computed(() => form.value.applicationMode !== 'provider_review');
+const screeningFilesRequiredByEligibility = computed(() => form.value.eligibilityConditions.some(condition => condition.key === 'required_documents'));
+const documentErrors = computed(() => programDocumentErrors(form.value));
+const programDates = computed(() => ({
     application_opens_at: form.value.applicationOpensAt,
     deadline: form.value.deadline,
     expected_results_at: form.value.expectedResultsAt,
     handoff_deadline: form.value.handoffDeadline,
     support_starts_at: form.value.supportStartsAt,
     support_ends_at: form.value.supportEndsAt,
-}, { savedDates: savedDates.value, preserveHistoricalDates: preserveHistoricalDates.value }));
+}));
+const timelineMinimums = computed(() => programTimelineMinimums(programDates.value));
+const timelineFields = [
+    { field: 'application_opens_at', model: 'applicationOpensAt', label: 'Applications open' },
+    { field: 'deadline', model: 'deadline', label: 'Application deadline', required: true },
+    { field: 'handoff_deadline', model: 'handoffDeadline', label: 'Formal application deadline', afterDeadline: true },
+    { field: 'expected_results_at', model: 'expectedResultsAt', label: 'Expected final results', afterDeadline: true },
+    { field: 'support_starts_at', model: 'supportStartsAt', label: 'Support starts', required: true, afterDeadline: true },
+    { field: 'support_ends_at', model: 'supportEndsAt', label: 'Support ends', required: true, afterDeadline: true, afterSupportStart: true },
+];
+const plannedSupportPeriod = computed(() => form.value.supportStartsAt || form.value.supportEndsAt
+    ? `${programReviewDate(form.value.supportStartsAt)} to ${programReviewDate(form.value.supportEndsAt)}`
+    : 'Not set');
+const configurationErrors = computed(() => ({ ...programConfigurationErrors({
+    slots_available: form.value.slotsAvailable,
+    application_limit: form.value.applicationLimit,
+    ...programDates.value,
+}, { savedDates: savedDates.value, preserveHistoricalDates: preserveHistoricalDates.value }), ...documentErrors.value }));
+
+function dateInputUnavailable(field) {
+    if (form.value[field.model]) return false;
+    return (field.afterDeadline && !form.value.deadline) || (field.afterSupportStart && !form.value.supportStartsAt);
+}
 
 function configurationErrorForStep(stepId) {
     return Object.entries(configurationErrors.value).find(([field]) => stepForBackendField(field) === stepId)?.[1];
@@ -286,13 +324,12 @@ const stepChecks = computed(() => ({
         form.value.benefits.length
         && positiveNumber(form.value.slotsAvailable)
         && positiveNumber(form.value.applicationLimit)
-        && form.value.supportStartsAt
-        && form.value.supportEndsAt
-        && form.value.supportEndsAt >= form.value.supportStartsAt
         && !configurationErrorForStep('support')
     ),
     'dates-location': Boolean(
         form.value.deadline
+        && form.value.supportStartsAt
+        && form.value.supportEndsAt
         && form.value.locationName.trim()
         && form.value.locationAddress.trim()
         && programHasLocationPin.value
@@ -302,7 +339,6 @@ const stepChecks = computed(() => ({
     eligibility: Boolean(
         eligibilitySummary.value.trim()
         && eligibilitySummary.value.length <= 5000
-        && !customSummaryNeedsReview.value
         && !educationChoicesNeedReview.value
         && (
             form.value.eligibleEducationLevels.length
@@ -321,24 +357,16 @@ const stepChecks = computed(() => ({
     ),
     application: Boolean(
         form.value.applicationMode
-        && (form.value.applicationMode === 'provider_review' || form.value.requirements.trim())
+        && (!usesScreeningFiles.value || form.value.requirements.trim())
         && form.value.postQualificationRequirements.trim()
-        && form.value.handoffMode
-        && form.value.handoffInstructions.trim()
-        && (form.value.handoffMode !== 'onsite' || form.value.handoffLocationAddress.trim())
-        && (form.value.handoffMode !== 'online' || validWebUrl(form.value.handoffUrl))
+        && !handoffIssue.value
         && !configurationErrorForStep('application')
     ),
     selection: Boolean(
         ['screening', 'formal_application', 'decision'].every((stage) => form.value.selectionStages.includes(stage))
         && !Object.keys(criterionLabelErrors.value).length
         && form.value.reviewRubric.length
-        && form.value.recipientAgreement.commitment_type !== 'provider_briefing'
-        && form.value.recipientAgreement.release_conditions.trim()
-        && !onboardingPolicyError(form.value.onboardingPolicy)
-        && (!requiresAgreementDetails.value || [
-            'responsibilities', 'required_evidence', 'duration', 'noncompliance_consequence', 'exit_or_exception_process',
-        ].every((field) => form.value.recipientAgreement[field].trim()))
+        && !selectionTermsIssue.value
     ),
 }));
 
@@ -364,13 +392,6 @@ function numericValue(value) {
     return Number.isFinite(parsed) ? parsed : null;
 }
 
-function validWebUrl(value) {
-    try {
-        return ['http:', 'https:'].includes(new URL(value).protocol);
-    } catch {
-        return false;
-    }
-}
 
 function splitList(value) {
     if (!value) return [];
@@ -387,15 +408,16 @@ function closeAlert() {
 
 function stepMessage(stepId) {
     if (stepId === 'selection' && Object.keys(criterionLabelErrors.value).length) return Object.values(criterionLabelErrors.value)[0];
+    if (stepId === 'selection' && selectionTermsIssue.value) return selectionTermsIssue.value;
     if (stepId === 'eligibility' && educationChoicesNeedReview.value) return 'Resolve the education-level changes: choose replacement courses or year levels, explicitly remove the restriction, and review any retained custom values.';
     if (stepId === 'eligibility' && eligibilitySummary.value.length > 5000) return 'The eligibility summary exceeds 5,000 characters. Shorten the rule lists or use a shorter custom summary.';
-    if (stepId === 'eligibility' && customSummaryNeedsReview.value) return 'Check the custom eligibility summary against the current rules, then confirm it is consistent or use the rule-based summary.';
     if (stepId === 'eligibility' && educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions)) return educationPolicyError(form.value.educationEligibilityPolicy, form.value.eligibilityConditions);
     if (configurationErrorForStep(stepId)) return configurationErrorForStep(stepId);
+    if (stepId === 'application' && handoffIssue.value) return handoffIssue.value;
     return {
         basics: 'Add the title, category, cycle, summary, scholarship logo, and background image.',
-        support: 'Add at least one benefit, both capacity limits, and a valid support period.',
-        'dates-location': 'Add the deadline, public contact, complete program location, and map pin.',
+        support: 'Add at least one benefit and both capacity limits.',
+        'dates-location': 'Add the application deadline, support dates, public contact, complete program location, and map pin.',
         eligibility: 'Describe eligible applicants and add at least one matching rule.',
         application: 'Complete the portal review, required files, and formal application handoff.',
         selection: 'Confirm the selection stages and disclose the complete recipient agreement.',
@@ -508,16 +530,6 @@ async function changeEducationLevels(nextLevels) {
         courses: [...new Set([...educationReview.value.courses, ...impact.reviewCourses])],
         years: [...new Set([...educationReview.value.years, ...impact.reviewYears])],
     };
-}
-
-function useRuleBasedEligibilitySummary() {
-    useGeneratedEligibilitySummary.value = true;
-}
-
-function writeCustomEligibilitySummary() {
-    form.value.eligibility = eligibilitySummary.value;
-    useGeneratedEligibilitySummary.value = false;
-    reviewedEligibilitySummary.value = '';
 }
 
 function toggleStage(stage) {
@@ -649,23 +661,6 @@ function resetCover() {
     coverPickerOpen.value = false;
 }
 
-async function useOrganizationLocation() {
-    if (!organizationLocation.locationAddress || isReadOnly.value || isSaving.value) return;
-    if (organizationLocationWouldReplace(form.value, organizationLocation)) {
-        const confirmed = await requestConfirmation({
-            title: 'Replace the program location?',
-            message: 'This will replace this program venue and map pin with the organization location. Other program details will stay unchanged.',
-            confirmLabel: 'Use organization location', cancelLabel: 'Keep current venue',
-        });
-        if (!confirmed || isReadOnly.value || isSaving.value) return;
-    }
-    form.value.locationAddressDetails = null;
-    Object.assign(form.value, organizationLocation);
-    mapMessage.value = programHasLocationPin.value
-        ? 'Organization address and map pin copied. Save the program to keep these changes.'
-        : 'Organization address copied. No saved organization pin is available; select a program map pin.';
-}
-
 function normalizedBenefit(benefit) {
     return {
         type: benefit.type,
@@ -754,7 +749,6 @@ function fillForm(program) {
     logoPreviewUrl.value = '';
     clearCoverUpload();
     hasSavedProgram.value = true;
-    mapMessage.value = '';
     coursesNeedChoice.value = false;
     yearsNeedChoice.value = false;
     educationReview.value = { courses: [], years: [] };
@@ -789,12 +783,14 @@ function createPayload(status, termsAccepted = false) {
         eligibility_review_rules: JSON.stringify(form.value.eligibilityReviewRules),
         income_requirement: form.value.incomeRequirement, minimum_grade_scale: form.value.minimumGradeScale,
         minimum_gwa: form.value.minimumGwa, exclude_current_scholarship_recipients: form.value.excludeCurrentRecipients ? 1 : 0,
-        application_mode: form.value.applicationMode, requirements: form.value.requirements.trim(),
-        optional_requirements: form.value.optionalRequirements.trim(),
+        application_mode: form.value.applicationMode,
+        ...(usesScreeningFiles.value ? { requirements: form.value.requirements.trim(), optional_requirements: form.value.optionalRequirements.trim() } : {}),
         post_qualification_requirements: form.value.postQualificationRequirements.trim(),
         handoff_mode: form.value.handoffMode, handoff_instructions: form.value.handoffInstructions.trim(),
-        handoff_deadline: form.value.handoffDeadline, handoff_location_name: form.value.handoffLocationName.trim(),
-        handoff_location_address: form.value.handoffLocationAddress.trim(), handoff_url: form.value.handoffUrl.trim(),
+        handoff_deadline: form.value.handoffDeadline,
+        handoff_location_name: form.value.handoffMode === 'onsite' ? form.value.handoffLocationName.trim() : null,
+        handoff_location_address: form.value.handoffMode === 'onsite' ? form.value.handoffLocationAddress.trim() : null,
+        handoff_url: form.value.handoffMode === 'online' ? form.value.handoffUrl.trim() : null,
         handoff_address_details: JSON.stringify(form.value.handoffMode === 'onsite' ? form.value.handoffAddressDetails : null),
         handoff_latitude: form.value.handoffMode === 'onsite' ? form.value.handoffLatitude : null,
         handoff_longitude: form.value.handoffMode === 'onsite' ? form.value.handoffLongitude : null,
@@ -823,8 +819,8 @@ function firstError(error) {
 
 function stepForBackendField(field) {
     if (/^(title|category|program_cycle|description|image|cover)/.test(field)) return 'basics';
-    if (/^(benefits|slots_available|application_limit|support_)/.test(field)) return 'support';
-    if (/^(application_opens_at|deadline|expected_results_at|location_|latitude|longitude|contact_|official_program_url)/.test(field)) return 'dates-location';
+    if (/^(benefits|slots_available|application_limit)/.test(field)) return 'support';
+    if (/^(application_opens_at|deadline|expected_results_at|handoff_deadline|support_starts_at|support_ends_at|location_|latitude|longitude|contact_|official_program_url)/.test(field)) return 'dates-location';
     if (/^(eligibility|education_eligibility_policy|eligible_|income_|minimum_|exclude_)/.test(field)) return 'eligibility';
     if (/^(application_mode|requirements|optional_requirements|post_qualification|handoff_)/.test(field)) return 'application';
     if (/^(selection_stages|exam_scoring_method|stage_criterion_labels|review_rubric|recipient_agreement|onboarding_policy)/.test(field)) return 'selection';
@@ -1141,7 +1137,7 @@ onBeforeUnmount(() => {
                                 <div class="flex items-end justify-between gap-8">
                                     <div>
                                         <h3 class="text-base font-bold text-slate-950">Define what recipients receive</h3>
-                                        <p class="mt-1 text-sm text-slate-500">Add the award package, capacity, and support period.</p>
+                                        <p class="mt-1 text-sm text-slate-500">Add the award package and set how many students can apply and receive it.</p>
                                     </div>
                                     <span class="text-xs font-bold text-slate-500">{{ form.benefits.length }} of 10 benefits</span>
                                 </div>
@@ -1171,46 +1167,30 @@ onBeforeUnmount(() => {
                                 <div class="mt-6 grid w-full grid-cols-2 gap-5 border-t border-slate-200 pt-6">
                                     <label><span :class="labelClass">Recipient slots <span class="text-amber-700">Required</span></span><input v-model="form.slotsAvailable" type="number" min="1" max="1000000" :class="inputClass"></label>
                                     <label><span :class="labelClass">Application limit <span class="text-amber-700">Required</span></span><input v-model="form.applicationLimit" type="number" :min="Number(form.slotsAvailable) || 1" max="1000000" :class="inputClass"><span class="mt-1.5 block text-xs text-slate-500">Must be at least the number of recipient slots.</span></label>
-                                    <label><span :class="labelClass">Support starts <span class="text-amber-700">Required</span></span><input v-model="form.supportStartsAt" type="date" :min="programDateMinimum('support_starts_at')" :max="form.supportEndsAt || undefined" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Support ends <span class="text-amber-700">Required</span></span><input v-model="form.supportEndsAt" type="date" :min="supportEndMinimum" :class="inputClass"></label>
+                                </div>
+                                <div class="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-slate-200 bg-slate-50 px-4 py-3">
+                                    <p class="text-sm text-slate-600"><span class="font-bold text-slate-950">Planned support period:</span> {{ plannedSupportPeriod }}</p>
+                                    <button type="button" class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50" @click="openStep('dates-location')">Edit schedule</button>
                                 </div>
                             </section>
 
                             <section v-else-if="activeStep === 'dates-location'" class="px-7 py-6">
                                 <div>
-                                    <h3 class="text-base font-bold text-slate-950">Set the public schedule and contact point</h3>
-                                    <p class="mt-1 text-sm text-slate-500">Applicants use these details before they submit.</p>
+                                    <h3 class="text-base font-bold text-slate-950">Set the program timeline</h3>
+                                    <p id="program-timeline-help" class="mt-1 text-sm text-slate-500">Set the application deadline before adding later dates. These are program dates, not assigned appointments or automatic benefit releases.</p>
                                 </div>
-                                <div class="mt-6 grid w-full grid-cols-3 gap-5">
-                                    <label><span :class="labelClass">Applications open <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.applicationOpensAt" type="date" :min="programDateMinimum('application_opens_at')" :max="form.deadline || undefined" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Application deadline <span class="text-amber-700">Required</span></span><input v-model="form.deadline" type="date" :min="latestDate(programDateMinimum('deadline'), form.applicationOpensAt)" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Expected results <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.expectedResultsAt" type="date" :min="latestDate(programDateMinimum('expected_results_at'), form.deadline)" :class="inputClass"></label>
-                                </div>
-
-                                <div data-program-location class="mt-7 w-full border-t border-slate-200 pt-6">
-                                    <div class="flex items-center justify-between gap-6">
-                                        <div>
-                                            <h4 class="text-sm font-bold text-slate-950">Program location</h4>
-                                            <p class="mt-1 text-xs text-slate-500">Use the office or service location applicants should recognize.</p>
-                                        </div>
-                                        <div class="flex shrink-0 items-center gap-2">
-                                            <button type="button" data-use-organization-location :disabled="!organizationLocation.locationAddress" class="inline-flex items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40" @click="useOrganizationLocation"><i class="fa-solid fa-building-columns text-[10px]" aria-hidden="true"></i>Use organization location</button>
-                                        </div>
+                                <div class="mt-6 grid w-full gap-x-5 gap-y-4 sm:grid-cols-2" data-program-timeline>
+                                    <div v-for="field in timelineFields" :key="field.field" class="min-w-0">
+                                        <label :for="'program-date-' + field.field" :class="labelClass">{{ field.label }} <span :class="field.required ? 'text-amber-700' : 'font-normal text-slate-400'">{{ field.required ? 'Required' : 'Optional' }}</span></label>
+                                        <input :id="'program-date-' + field.field" v-model="form[field.model]" type="date" :min="latestDate(programDateMinimum(field.field), timelineMinimums[field.field])" :disabled="dateInputUnavailable(field)" :aria-invalid="configurationErrors[field.field] ? 'true' : undefined" :aria-describedby="configurationErrors[field.field] ? 'program-date-error-' + field.field : 'program-timeline-help'" :class="[inputClass, configurationErrors[field.field] && '!border-rose-400', 'disabled:bg-slate-50 disabled:text-slate-500']">
+                                        <p v-if="configurationErrors[field.field]" :id="'program-date-error-' + field.field" class="mt-1.5 text-xs font-semibold text-rose-700" role="status">{{ configurationErrors[field.field] }}</p>
                                     </div>
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">{{ organizationLocation.locationAddress ? 'Reuse the saved organization address and pin, or enter a different program venue below. This does not change the organization profile.' : 'No organization address is saved. Enter a program venue below, or ask the organization profile manager to add the office location.' }}</p>
-                                    <ProviderVenueAddress v-model="form.locationAddressDetails" v-model:venue="form.locationName" v-model:address="form.locationAddress" v-model:latitude="form.latitude" v-model:longitude="form.longitude" :include-venue-in-address="false" class="mt-4" @update:model-value="mapMessage = ''" />
-                                    <p data-program-location-status class="mt-3 text-xs font-semibold" :class="programHasLocationPin ? 'text-emerald-700' : 'text-amber-700'" role="status" aria-live="polite">
-                                        <i :class="programHasLocationPin ? 'fa-solid fa-circle-check' : 'fa-solid fa-location-dot'" class="mr-1.5" aria-hidden="true"></i>
-                                        {{ mapMessage || (programHasLocationPin ? 'Map pin selected' : 'Map pin still needed') }}
-                                    </p>
                                 </div>
+                                <p v-if="!form.deadline || !form.supportStartsAt" class="mt-3 text-xs text-slate-600">{{ !form.deadline ? 'Add the application deadline to enable later dates.' : 'Add the support start date to enable the support end date.' }}</p>
 
-                                <div class="mt-7 grid w-full grid-cols-2 gap-5 border-t border-slate-200 pt-6">
-                                    <label><span :class="labelClass">Public email</span><input v-model="form.contactEmail" type="email" maxlength="255" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Public contact number</span><input v-model="form.contactNumber" type="text" maxlength="30" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Contact person <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.contactPerson" type="text" maxlength="150" :class="inputClass"></label>
-                                    <label><span :class="labelClass">Department <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.contactDepartment" type="text" maxlength="150" :class="inputClass"></label>
-                                    <label class="col-span-2"><span :class="labelClass">Official program page <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.officialProgramUrl" type="url" maxlength="2048" :class="inputClass" placeholder="https://"></label>
+                                <div class="mt-7 space-y-2 border-t border-slate-200 pt-6">
+                                    <ProgramLocationEditor v-model="programLocation" :organization-location="organizationLocation" :request-confirmation="requestConfirmation" :disabled="isReadOnly || isSaving" />
+                                    <ProgramPublicContactEditor v-model="publicContact" :input-class="inputClass" :disabled="isReadOnly || isSaving" />
                                 </div>
                             </section>
 
@@ -1324,34 +1304,10 @@ onBeforeUnmount(() => {
                                     </div>
                                 </section>
 
-                                <section class="mt-6 border-t border-slate-200 pt-5" data-eligibility-review-policy>
-                                    <div class="flex items-start gap-3"><span class="grid size-9 shrink-0 place-items-center rounded-sm bg-slate-100 text-slate-600"><i class="fa-solid fa-comment-dots" aria-hidden="true"></i></span><div><h4 class="text-sm font-bold text-slate-950">Eligibility reconsideration</h4><p class="mt-1 text-xs leading-5 text-slate-500">Optional. Choose which required rules may be reviewed individually before an applicant can apply.</p></div></div>
-                                    <div class="mt-3 grid grid-cols-2 gap-2"><label v-for="rule in eligibilityRules.filter(rule => rule.mode === 'required')" :key="rule.key" class="flex cursor-pointer items-center gap-3 rounded-sm border border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-700"><input v-model="form.eligibilityReviewRules" type="checkbox" :value="rule.key" :disabled="eligibilityControlsDisabled" class="h-4 w-4">{{ rule.label }}</label></div>
-                                    <p class="mt-3 text-xs leading-5 text-slate-500">Unchecked rules stay mandatory without exceptions. Reviewers must approve each request with a reason. Profile verification, application dates, required files, and intake limits cannot be waived here.</p>
-                                </section>
-
-                                <details :open="!useGeneratedEligibilitySummary || customSummaryNeedsReview || eligibilitySummary.length > 5000" class="group mt-6 overflow-hidden rounded-sm border border-slate-200" data-eligibility-summary-panel>
-                                    <summary class="flex cursor-pointer list-none items-center justify-between gap-4 bg-slate-50 px-4 py-4 [&::-webkit-details-marker]:hidden">
-                                        <span class="flex items-center gap-3"><i class="fa-regular fa-file-lines block text-sm leading-none text-slate-500" aria-hidden="true"></i><span><span class="block text-sm font-bold text-slate-950">Applicant-facing summary</span><span class="mt-1 block text-xs text-slate-500">{{ useGeneratedEligibilitySummary ? 'Built automatically from the rules above. Open to review or customize.' : 'Custom wording saved for this program. Keep it consistent with the rules above.' }}</span></span></span>
-                                        <span class="flex shrink-0 items-center gap-3"><span class="rounded-sm border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600">{{ useGeneratedEligibilitySummary ? 'Automatic' : 'Custom' }}</span><i class="fa-solid fa-chevron-down block text-xs leading-none text-slate-400 group-open:rotate-180" aria-hidden="true"></i></span>
-                                    </summary>
-                                    <div class="border-t border-slate-200 px-4 py-4" data-program-eligibility-summary>
-                                        <div class="mb-2 flex items-center justify-between gap-4">
-                                            <label for="program-eligibility-summary" class="text-xs font-bold text-slate-700">Eligibility summary <span class="text-amber-700">Required</span></label>
-                                            <button v-if="useGeneratedEligibilitySummary" type="button" class="text-xs font-bold text-slate-600 underline underline-offset-2" @click="writeCustomEligibilitySummary">Write custom summary</button>
-                                            <button v-else type="button" class="text-xs font-bold text-slate-600 underline underline-offset-2" @click="useRuleBasedEligibilitySummary">Use rule-based summary</button>
-                                        </div>
-                                        <textarea id="program-eligibility-summary" :value="eligibilitySummary" :readonly="useGeneratedEligibilitySummary" rows="4" maxlength="5000" :class="textareaClass" :placeholder="useGeneratedEligibilitySummary ? 'Configure the rules above to generate the applicant-facing summary.' : 'Describe the eligibility rules and any additional provider conditions.'" @input="form.eligibility = $event.target.value"></textarea>
-                                        <div class="mt-1 flex items-start justify-between gap-4 text-xs leading-5 text-slate-500">
-                                            <p>{{ useGeneratedEligibilitySummary ? 'Updates automatically from your Required and Preferred rules. No need to type them again.' : 'Your existing wording is preserved. Check special conditions against the configured rules before submission.' }}</p>
-                                            <span class="shrink-0" :class="eligibilitySummary.length > 5000 ? 'font-bold text-rose-700' : ''">{{ eligibilitySummary.length }} / 5000</span>
-                                        </div>
-                                        <div v-if="customSummaryNeedsReview" data-eligibility-summary-review class="mt-3 flex items-center justify-between gap-4 border-l-2 border-amber-400 bg-amber-50 px-3 py-3">
-                                            <p class="text-xs leading-5 text-amber-950">Check that this custom summary agrees with the current rules above. Review it again if the rules or wording change.</p>
-                                            <button type="button" class="shrink-0 rounded-sm border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-950" @click="reviewedEligibilitySummary = currentEligibilitySummaryKey">I checked my summary</button>
-                                        </div>
-                                    </div>
-                                </details>
+                                <div class="mt-6 space-y-2">
+                                    <EligibilityReconsiderationEditor v-model="form.eligibilityReviewRules" :rules="eligibilityRules" :disabled="eligibilityControlsDisabled" />
+                                    <EligibilitySummaryEditor v-model="form.eligibility" v-model:automatic="useGeneratedEligibilitySummary" :generated-summary="suggestedEligibilitySummary" :textarea-class="textareaClass" :disabled="eligibilityControlsDisabled" />
+                                </div>
                             </section>
 
                             <section v-else-if="activeStep === 'application'" class="px-7 py-6">
@@ -1366,35 +1322,22 @@ onBeforeUnmount(() => {
                                             { value: 'onsite', label: 'Portal + in-person', text: 'Review uploads, then verify originals.' },
                                             { value: 'provider_review', label: 'Profile review only', text: 'No files required before submission.' },
                                         ]" :key="option.value" :class="['cursor-pointer border-r border-slate-200 p-4 last:border-r-0', form.applicationMode === option.value ? 'bg-amber-50' : 'bg-white']">
-                                            <span class="flex items-center gap-2"><input v-model="form.applicationMode" type="radio" :value="option.value" class="border-slate-300 text-slate-950 focus:ring-slate-700"><span class="text-sm font-bold text-slate-950">{{ option.label }}</span></span>
-                                            <span class="mt-2 block pl-6 text-xs leading-5 text-slate-500">{{ option.text }}</span>
+                                            <span class="flex items-center gap-2"><input v-model="form.applicationMode" type="radio" :value="option.value" :disabled="option.value === 'provider_review' && screeningFilesRequiredByEligibility" class="border-slate-300 text-slate-950 focus:ring-slate-700"><span class="text-sm font-bold text-slate-950">{{ option.label }}</span></span>
+                                            <span class="mt-2 block pl-6 text-xs leading-5 text-slate-500">{{ option.value === 'provider_review' && screeningFilesRequiredByEligibility ? 'Unavailable: an eligibility condition requires document review.' : option.text }}</span>
                                         </label>
                                     </div>
 
-                                    <div class="mt-6 grid grid-cols-2 gap-5">
-                                        <DocumentRequirementsPicker v-model="form.requirements" label="Pre-screening files" :required="form.applicationMode !== 'provider_review'" :disabled="isSaving" />
-                                        <DocumentRequirementsPicker v-model="form.optionalRequirements" label="Optional files" :disabled="isSaving" />
-                                        <DocumentRequirementsPicker v-model="form.postQualificationRequirements" class="col-span-2" label="Files needed after qualification" required :disabled="isSaving" />
+                                    <div class="mt-6 space-y-2">
+                                        <template v-if="usesScreeningFiles">
+                                            <DocumentRequirementsPicker v-model="form.requirements" :other-group-value="form.optionalRequirements" label="Pre-screening files" required :disabled="isReadOnly || isSaving" />
+                                            <DocumentRequirementsPicker v-model="form.optionalRequirements" :other-group-value="form.requirements" label="Optional files" :disabled="isReadOnly || isSaving" />
+                                        </template>
+                                        <p v-else class="text-sm text-slate-600">Applicants won't upload pre-screening files in Profile review only. The formal application requirements below still apply.</p>
+                                        <p v-if="documentErrors.application_mode || documentErrors.optional_requirements" role="status" class="rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">{{ documentErrors.application_mode || documentErrors.optional_requirements }}</p>
+                                        <DocumentRequirementsPicker v-model="form.postQualificationRequirements" label="Files needed after qualification" required :disabled="isReadOnly || isSaving" />
                                     </div>
 
-                                    <div class="mt-7 border-t border-slate-200 pt-6">
-                                        <p class="text-sm font-bold text-slate-950">How qualified applicants continue</p>
-                                        <div class="mt-3 grid grid-cols-3 gap-2">
-                                            <label v-for="option in [
-                                                { value: 'onsite', label: 'Visit provider office' },
-                                                { value: 'online', label: 'Use an official link' },
-                                                { value: 'provider_contact', label: 'Wait for provider contact' },
-                                            ]" :key="option.value" :class="['flex cursor-pointer items-center gap-2 border px-4 py-3 text-sm font-bold', form.handoffMode === option.value ? 'border-slate-950 bg-slate-950 text-white' : 'border-slate-200 text-slate-700']"><input v-model="form.handoffMode" type="radio" :value="option.value" class="sr-only">{{ option.label }}</label>
-                                        </div>
-                                        <div class="mt-5 grid grid-cols-2 gap-5">
-                                            <label class="col-span-2"><span :class="labelClass">Instructions <span class="text-amber-700">Required</span></span><textarea v-model="form.handoffInstructions" rows="3" maxlength="3000" :class="textareaClass"></textarea></label>
-                                            <label><span :class="labelClass">Formal application deadline <span class="font-normal text-slate-400">Optional</span></span><input v-model="form.handoffDeadline" type="date" :min="latestDate(programDateMinimum('handoff_deadline'), form.deadline)" :class="inputClass"></label>
-                                            <label v-if="form.handoffMode === 'online'"><span :class="labelClass">Official link <span class="text-amber-700">Required</span></span><input v-model="form.handoffUrl" type="url" :class="inputClass" placeholder="https://"></label>
-                                            <template v-if="form.handoffMode === 'onsite'">
-                                                <ProviderVenueAddress v-model="form.handoffAddressDetails" v-model:venue="form.handoffLocationName" v-model:address="form.handoffLocationAddress" v-model:latitude="form.handoffLatitude" v-model:longitude="form.handoffLongitude" :include-venue-in-address="false" class="col-span-2" />
-                                            </template>
-                                        </div>
-                                    </div>
+                                    <ProgramFormalApplicationEditor v-model="formalApplication" :organization-location="organizationLocation" :request-confirmation="requestConfirmation" :deadline-label="programReviewDate(form.handoffDeadline, 'Not set (optional)')" :disabled="isReadOnly || isSaving" :input-class="inputClass" :textarea-class="textareaClass" @edit-schedule="openStep('dates-location')" />
                                 </div>
                             </section>
 
@@ -1415,25 +1358,15 @@ onBeforeUnmount(() => {
                                 <div v-if="form.selectionStages.includes('exam')" class="mt-6 border-t border-slate-200 pt-5" data-exam-scoring-method>
                                     <label for="exam-scoring-method" :class="labelClass">Examination scoring method</label>
                                     <select id="exam-scoring-method" v-model="form.examScoringMethod" :class="inputClass" :disabled="isReadOnly || isSaving || applicationsCount > 0"><option value="total">Total exam score</option><option value="criteria">Score by criteria</option></select>
-                                    <p class="mt-2 text-xs leading-5 text-slate-500">{{ applicationsCount > 0 ? 'Fixed for this intake so all applicants are evaluated on the same basis. Use a new intake to change the method.' : (form.examScoringMethod === 'total' ? 'Selection staff enter the applicant\'s actual exam score and maximum, for example 43 out of 50. The DSS converts it to a percentage.' : 'Selection staff score each configured criterion. The DSS calculates the weighted exam score.') }}</p>
+                                    <p class="mt-2 text-xs leading-5 text-slate-500">{{ applicationsCount > 0 ? 'Fixed after the first application. Use a new intake to change it.' : (form.examScoringMethod === 'total' ? 'Enter earned points and the maximum, such as 43 out of 50.' : 'Enter a score for each exam criterion.') }}</p>
                                 </div>
-                                <StageCriterionLabelsEditor v-model="form.stageCriterionLabels" :rows="scoringPreview.rows" :fixed="applicationsCount > 0" :disabled="isReadOnly || isSaving" :input-class="inputClass" />
+                                <StageCriterionLabelsEditor v-model="form.stageCriterionLabels" :rows="scoringPreview.rows" :included-stages="form.selectionStages" :fixed="applicationsCount > 0" :disabled="isReadOnly || isSaving" :input-class="inputClass" />
                                 <SelectionScoringPreview :presets="scoringPresets" :stages="form.selectionStages" :fixed-policy="fixedScoringPolicy" :applications-count="applicationsCount" :exam-method="form.examScoringMethod" :criterion-labels="form.stageCriterionLabels" />
 
-                                <div class="mt-7 w-full border-t border-slate-200 pt-6">
-                                    <label><span :class="labelClass">Recipient commitment <span class="text-amber-700">Required</span></span><select v-model="form.recipientAgreement.commitment_type" :class="inputClass"><option value="provider_briefing" disabled>Choose the agreement type</option><option value="none">No ongoing recipient commitment</option><option value="renewal">Enrollment or renewal requirements</option><option value="service">Service or community commitment</option><option value="activities">Required program activities</option><option value="reporting">Progress or utilization reports</option><option value="custom">Custom commitment</option></select></label>
-                                    <div class="mt-5 grid grid-cols-2 gap-5">
-                                        <label :class="requiresAgreementDetails ? '' : 'col-span-2'"><span :class="labelClass">Conditions for receiving benefits <span class="text-amber-700">Required</span></span><textarea v-model="form.recipientAgreement.release_conditions" rows="3" :class="textareaClass" placeholder="State when and how support will be released."></textarea></label>
-                                        <template v-if="requiresAgreementDetails">
-                                            <label><span :class="labelClass">Recipient responsibilities <span class="text-amber-700">Required</span></span><textarea v-model="form.recipientAgreement.responsibilities" rows="3" :class="textareaClass"></textarea></label>
-                                            <label><span :class="labelClass">Required evidence <span class="text-amber-700">Required</span></span><textarea v-model="form.recipientAgreement.required_evidence" rows="3" :class="textareaClass"></textarea></label>
-                                            <label><span :class="labelClass">Commitment duration <span class="text-amber-700">Required</span></span><input v-model="form.recipientAgreement.duration" type="text" maxlength="500" :class="inputClass"></label>
-                                            <label><span :class="labelClass">If requirements are not met <span class="text-amber-700">Required</span></span><textarea v-model="form.recipientAgreement.noncompliance_consequence" rows="3" :class="textareaClass"></textarea></label>
-                                            <label><span :class="labelClass">Exception or withdrawal process <span class="text-amber-700">Required</span></span><textarea v-model="form.recipientAgreement.exit_or_exception_process" rows="3" :class="textareaClass"></textarea></label>
-                                        </template>
-                                    </div>
+                                <div class="mt-7 space-y-2">
+                                    <ProgramRecipientTermsEditor v-model="form.recipientAgreement" :disabled="isReadOnly || isSaving" :input-class="inputClass" :textarea-class="textareaClass" />
+                                    <ProgramOnboardingPolicyFields v-model="form.onboardingPolicy" :fixed="applicationsCount > 0" :disabled="isReadOnly || isSaving" :textarea-class="textareaClass" />
                                 </div>
-                                <ProgramOnboardingPolicyFields v-model="form.onboardingPolicy" :fixed="applicationsCount > 0" :disabled="isReadOnly || isSaving" :textarea-class="textareaClass" />
                             </section>
 
                             <section v-else class="px-7 py-6">

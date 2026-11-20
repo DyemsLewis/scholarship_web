@@ -50,11 +50,11 @@ source = source.slice(0, start) + String.raw`
     for(const [id,path] of [['support','support'],['dates-location','dates-location'],['eligibility','eligibility'],['application','application'],['selection','selection']]){
         await edit(id);
         await wait(()=>client.evaluate('location.pathname.endsWith('+JSON.stringify('/'+path)+')'),'edit '+id);
-        if(id==='dates-location')assert.ok(await client.evaluate("document.querySelector('[data-program-location]').innerText.includes('Use organization location')"));
+        if(id==='dates-location')assert.ok(await client.evaluate("document.querySelector('[data-program-location]').innerText.includes('Edit location')"));
         if(id==='eligibility'){
             assert.equal(await client.evaluate("document.getElementById('program-eligible-courses').tagName"),'BUTTON');
             assert.equal(await client.evaluate("document.querySelectorAll('[data-eligibility-picker] [data-add-option]').length"),0);
-            assert.ok(await client.evaluate("!!document.getElementById('program-eligibility-summary')"));
+            assert.ok(await client.evaluate("!!document.getElementById('program-eligibility-summary-edit') && !document.getElementById('program-eligibility-summary')"));
         }
         if(id==='selection')assert.equal(await client.evaluate("document.querySelector('[data-scoring-state]').innerText"),'Fixed for this intake');
         await review();

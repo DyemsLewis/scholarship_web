@@ -59,3 +59,13 @@ test('registration form compiles with recovery state and does not store password
     assert.match(source, /clearRegistrationProgress/);
     assert.match(source, /form.value.password = ''/);
 });
+
+test('provider-only sign-up guidance is visible in the details form before name entry', () => {
+    const source = readFileSync(new URL('../../resources/js/pages/RegisterPage.vue', import.meta.url), 'utf8');
+    const form = parse(source).descriptor.template.content.match(/<form v-if="registrationStep === 'details'"[^>]*>([\s\S]*?)<\/form>/)[1];
+    const notice = form.match(/<section v-if="isProviderRegistration"[^>]*aria-labelledby="provider-registration-program-access"[^>]*>([\s\S]*?)<\/section>/);
+    assert.ok(notice && notice.index < form.indexOf('id="first-name"'));
+    assert.match(notice[1], /cannot create scholarships by default/);
+    assert.match(notice[1], /Program Coordinator/);
+    assert.match(notice[1], /once your organization is approved/);
+});

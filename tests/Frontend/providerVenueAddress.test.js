@@ -37,12 +37,25 @@ test('one shared editor covers creation editing check-ins rescheduling and benef
 
 test('program venues and formal application handoffs use the same structured editor', () => {
     const source = read('pages/provider/programs/ProgramFormPage.vue');
-    assert.equal((source.match(/<ProviderVenueAddress/g) || []).length, 2);
+    assert.match(read('pages/provider/programs/components/ProgramLocationEditor.vue'), /<ProviderVenueAddress v-model="draft.locationAddressDetails"/);
+    assert.match(read('pages/provider/programs/components/ProgramFormalApplicationEditor.vue'), /<ProviderVenueAddress v-model="draft.handoffAddressDetails"/);
     assert.match(source, /location_address_details: JSON.stringify\(form.value.locationAddressDetails\)/);
     assert.match(source, /handoff_address_details: JSON.stringify/);
     assert.match(source, /program.location_address_details \?\? null/);
     assert.match(source, /program.handoff_address_details \?\? null/);
     assert.doesNotMatch(source, /v-model="form.locationAddress"[^>]*type="text"|v-model="form.handoffLocationAddress"[^>]*type="text"/);
+});
+
+test('pin actions share one wrapping toolbar and the map is outside it', () => {
+    const source = read('components/ProviderVenueAddress.vue');
+    const picker = read('components/LocationPinField.vue');
+    const toolbar = picker.match(/<div class="[^"]*flex-wrap[^"]*" data-pin-actions>([\s\S]*?)<\/div>/)?.[1];
+    assert.ok(toolbar);
+    assert.match(toolbar, /Clear pin/);
+    assert.match(toolbar, /<slot name="actions"\s*\/>/);
+    assert.match(toolbar, /Review map pin/);
+    assert.doesNotMatch(toolbar, /LocationMapModal|pickerPanel/);
+    assert.match(source, /<LocationPinField[^>]*>\s*<template #actions>[^]*?data-fill-pin-address[^]*?<\/template>\s*<\/LocationPinField>/);
 });
 
 test('check-in records expose the saved map and in-person releases can include instructions', () => {

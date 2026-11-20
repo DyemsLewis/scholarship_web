@@ -14,8 +14,17 @@ source = source.slice(0, start) + `
     const username = ${JSON.stringify(hosted ? 'orivanta.programs' : 'nuvareya.programs')};
 ` + String.raw`
     const field = (selector,value,event='input') => client.evaluate("(()=>{const e=document.querySelector("+JSON.stringify(selector)+");e.value="+JSON.stringify(value)+";e.dispatchEvent(new Event("+JSON.stringify(event)+",{bubbles:true}));})()");
-    const summary = () => client.evaluate("document.querySelector('#program-eligibility-summary').value");
-    const needsReview = () => client.evaluate("!!document.querySelector('[data-eligibility-summary-review]')");
+    const summaryField = () => client.evaluate("document.querySelector('#program-eligibility-summary').value");
+    const openSummary = async () => {
+        await client.evaluate("(()=>{const b=document.querySelector('#program-eligibility-summary-edit');b.focus({preventScroll:true});b.click()})()");
+        await wait(()=>client.evaluate("!!document.querySelector('#program-summary-editor-options')"),'summary modal');
+    };
+    const summary = async () => {
+        await openSummary();
+        const value = await summaryField();
+        await modalAction('program-summary-editor','Cancel');
+        return value;
+    };
     async function openModal(id) {
         await client.evaluate("(()=>{const b=document.getElementById("+JSON.stringify(id)+");b.focus({preventScroll:true});b.click()})()");
         await wait(()=>client.evaluate("!!document.querySelector('[data-eligibility-options-for="+id+"]')"),'options modal '+id);
@@ -47,12 +56,12 @@ source = source.slice(0, start) + `
     await navigate('/provider/programs/'+before.id+'/edit/eligibility',"!!document.querySelector('[data-program-eligibility-editor]')");
     assert.equal(await client.evaluate("document.querySelector('[data-program-save-status]').innerText.trim()"),'All changes saved');
     assert.equal(await summary(),before.eligibility);
-    assert.equal(await client.evaluate("document.querySelector('[data-eligibility-summary-panel]').open"),!(await client.evaluate("document.querySelector('#program-eligibility-summary').readOnly")));
+    assert.equal(await client.evaluate("!!document.querySelector('#program-eligibility-summary')"),false);
     assert.equal(await client.evaluate("[...document.querySelectorAll('[data-eligibility-picker] li')].every(e=>!!e.closest('[data-selection-field]'))"),true);
     assert.equal(await client.evaluate("[...document.querySelectorAll('[data-eligibility-mode]')].every(e=>e.getBoundingClientRect().height===32)"),true);
+    await openSummary();
     if(!(await client.evaluate("document.querySelector('#program-eligibility-summary').readOnly"))) await click('Use rule-based summary');
-    assert.equal(await needsReview(),false);
-    assert.equal(await client.evaluate("document.querySelector('[data-eligibility-summary-panel]').open"),false);
+    await modalAction('program-summary-editor','Apply changes');
     for(const width of [1440,1280]) {
         await client.send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
         assert.equal(await client.evaluate("document.documentElement.scrollWidth<=innerWidth+2"),true);
@@ -65,13 +74,13 @@ source = source.slice(0, start) + `
     const file=path.join(folder,'provider-program-eligibility.png');await writeFile(file,Buffer.from(image.data,'base64'));report.screenshots.push(file);
     await client.send('Emulation.setDeviceMetricsOverride',{width:1440,height:1000,deviceScaleFactor:1,mobile:false});
     const layout=()=>client.evaluate("(()=>{const r=document.querySelector('[data-program-eligibility-editor]').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,scroll:scrollY}})()");
-    const closedLayout=await layout(), oldSummary=await summary();
+    const oldSummary=await summary(), closedLayout=await layout();
     await openModal('program-eligible-courses');
     assert.deepEqual(await layout(),closedLayout);
     assert.deepEqual(await client.evaluate("(()=>{const d=document.querySelector('[data-eligibility-options-for=program-eligible-courses]'),r=d.getBoundingClientRect();return {fits:r.top>=0&&r.bottom<=innerHeight+1,footer:d.querySelector('footer').getBoundingClientRect().bottom<=innerHeight+1,focus:d.contains(document.activeElement),locked:document.documentElement.style.overflowY==='hidden'}})()"),{fits:true,footer:true,focus:true,locked:true});
     await shot('eligibility-course-modal');
     const chooseQuick=()=>client.evaluate("(()=>{const b=document.querySelector('[data-eligibility-options-for=program-eligible-courses] [data-quick-option]:not(:disabled)');if(!b)throw new Error('No common course shortcut available');const value=b.dataset.quickOption;b.click();return value})()");
-    await chooseQuick();assert.equal(await summary(),oldSummary);
+    await chooseQuick();
     await modalAction('program-eligible-courses','Cancel');
     await wait(()=>client.evaluate("!document.querySelector('[data-eligibility-options-for=program-eligible-courses]')"),'course cancellation');
     assert.equal(await summary(),oldSummary);assert.deepEqual(await layout(),closedLayout);
@@ -107,14 +116,11 @@ source = source.slice(0, start) + `
     assert.equal(await client.evaluate("document.querySelector('[data-eligibility-options-for=program-education-policy] footer').getBoundingClientRect().bottom<=innerHeight+1"),true);
     await modalAction('program-education-policy','Cancel');
     assert.equal(await client.evaluate("document.querySelector('[data-education-policy-editor]').innerText"),policyText);
-    await client.evaluate("document.querySelector('[data-eligibility-summary-panel] summary').click()");
+    await openSummary();
     await click('Write custom summary');
     await field('#program-eligibility-summary','Applicants must meet the configured study and coverage rules.');
-    assert.equal(await needsReview(),true);
-    assert.equal(await client.evaluate("document.querySelector('[data-eligibility-summary-panel]').open"),true);
-    await click('I checked my summary');assert.equal(await needsReview(),false);
+    await modalAction('program-summary-editor','Apply changes');
     await field('#program-academic-rule','percentage','change');await field('#program-academic-minimum','86');
-    assert.equal(await needsReview(),true);
     assert.equal(await summary(),'Applicants must meet the configured study and coverage rules.');
     if(!(await checkbox('College / University'))) await toggleEducation('College / University');
     await toggleEducation('Senior High School');

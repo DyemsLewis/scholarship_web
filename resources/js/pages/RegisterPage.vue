@@ -364,6 +364,15 @@ onBeforeUnmount(() => {
                 </span>
             </div>
 
+            <section v-if="isProviderRegistration" class="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3.5" aria-labelledby="provider-registration-program-access">
+                <i class="fa-solid fa-circle-info mt-1 text-sm text-amber-800" aria-hidden="true"></i>
+                <div class="min-w-0">
+                    <h2 id="provider-registration-program-access" class="text-sm font-bold text-slate-950">Who creates scholarships?</h2>
+                    <p class="mt-1 text-sm leading-6 text-slate-700">This representative account manages your organization profile and team access. It cannot create scholarships by default.</p>
+                    <p class="mt-1 text-sm leading-6 text-slate-700">After signing in, add a <strong>Program Coordinator</strong> in <strong>Team access</strong>. They can create scholarships and submit them for admin review once your organization is approved.</p>
+                </div>
+            </section>
+
             <section :class="formSectionClass">
                 <div class="flex items-start gap-3 border-b border-slate-200 pb-4">
                     <span class="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-900 text-sm text-amber-300">
@@ -378,7 +387,7 @@ onBeforeUnmount(() => {
                 <div class="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1fr)_5.5rem_minmax(0,1fr)] sm:items-end">
                     <div>
                         <label :class="labelClass" for="first-name">First name</label>
-                        <input id="first-name" v-model="form.firstName" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass">
+                        <input id="first-name" v-model="form.firstName" v-capitalize-name autocapitalize="sentences" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass">
                     </div>
                     <div class="sm:mx-auto sm:w-[5.5rem]">
                         <label :class="[labelClass, 'sm:text-center']" for="middle-initial">M.I. <span class="text-xs font-normal text-slate-500">(optional)</span></label>
@@ -386,7 +395,7 @@ onBeforeUnmount(() => {
                     </div>
                     <div>
                         <label :class="labelClass" for="last-name">Last name</label>
-                        <input id="last-name" v-model="form.lastName" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass">
+                        <input id="last-name" v-model="form.lastName" v-capitalize-name autocapitalize="sentences" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass">
                     </div>
                 </div>
 

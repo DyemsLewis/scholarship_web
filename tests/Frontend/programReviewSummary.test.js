@@ -36,6 +36,12 @@ test('all six review summaries show actual configured values without mutating th
     assert.equal(value(sections.support, 'Recipient slots'), '25');
     assert.equal(value(sections['dates-location'], 'Public venue'), 'Learning center\nAntipolo City');
     assert.equal(value(sections['dates-location'], 'Public map pin'), 'Selected');
+    assert.equal(value(sections['dates-location'], 'Formal application deadline'), 'Dec 20, 2026');
+    assert.equal(value(sections['dates-location'], 'Expected final results'), 'Dec 30, 2026');
+    assert.equal(value(sections['dates-location'], 'Support starts'), 'Jan 1, 2027');
+    assert.equal(value(sections['dates-location'], 'Support ends'), 'Dec 1, 2027');
+    assert.equal(value(sections.support, 'Support period'), undefined);
+    assert.equal(value(sections.application, 'Formal application deadline'), undefined);
     assert.equal(value(sections.eligibility, 'Required rules'), '2');
     assert.equal(value(sections.eligibility, 'Provider preferences'), '1');
     assert.equal(value(sections.eligibility, 'Target education'), 'Senior High School');

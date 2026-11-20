@@ -289,9 +289,13 @@ class DemoReadinessWorkflowTest extends TestCase
         ApplicationDocument::query()
             ->where('scholarship_application_id', $applicationId)
             ->pluck('id')
-            ->each(fn (int $documentId) => $this->actingAs($provider)
-                ->patchJson("/provider/documents/{$documentId}/status", ['status' => 'accepted'])
-                ->assertOk());
+            ->each(function (int $documentId) use ($provider): void {
+                $preview = $this->actingAs($provider)->get(route('documents.view', $documentId))->assertOk();
+                $this->patchJson("/provider/documents/{$documentId}/status", [
+                    'status' => 'accepted',
+                    'view_receipt' => $preview->headers->get(\App\Support\ApplicationDocumentReviewReceipt::HEADER),
+                ])->assertOk();
+            });
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$applicationId}/correction", [

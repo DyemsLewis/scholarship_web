@@ -2,10 +2,11 @@
 import { confirmChange } from "../../../support/outcomeConfirmation.js";
 import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import ProviderNextStep from '../../../components/ProviderNextStep.vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import ProviderSidebar from '../ProviderSidebar.vue';
 import DecisionReopenDialog from '../../../components/DecisionReopenDialog.vue';
 import ApplicantProfileRecord from '../../../components/profile/ApplicantProfileRecord.vue';
+import FilePreviewModal from '../../../components/FilePreviewModal.vue';
 import StaffTableIdentity from '../../../components/StaffTableIdentity.vue';
 import StageEvaluationEntryDialog from '../../../components/StageEvaluationEntryDialog.vue';
 import { screeningEvaluationStatus } from '../../../support/stageEvaluation';
@@ -25,7 +26,7 @@ const safeReturnUrl = returnTo?.startsWith('/provider/workspaces/reviews')
     : '/provider/workspaces/reviews/assigned';
 const sections = [
     { key: 'eligibility', label: 'Eligibility', icon: 'fa-solid fa-scale-balanced' },
-    { key: 'documents', label: 'Evidence', icon: 'fa-solid fa-file-circle-check' },
+    { key: 'documents', label: 'Application files', icon: 'fa-solid fa-file-circle-check' },
     { key: 'applicant', label: 'Profile', icon: 'fa-solid fa-user' },
     { key: 'decision', label: 'Result', icon: 'fa-solid fa-gavel' },
     { key: 'history', label: 'History', icon: 'fa-solid fa-clock-rotate-left' },
@@ -41,7 +42,13 @@ const successMessage = ref('');
 const showReopenDialog = ref(false);
 const reopenError = ref('');
 const selectedDocument = ref(null);
-const documentForm = ref({ status: 'accepted', review_notes: '' });
+const profileProofPreview = ref(null);
+const documentForm = ref({ status: '', review_notes: '' });
+const documentPreview = ref(null);
+const documentPreviewError = ref('');
+const documentReviewError = ref('');
+const documentDownloaded = ref(false);
+let previewRequest;
 const showCorrectionForm = ref(false);
 const correctionForm = ref({ message: '', targets: [] });
 const showPhotoReplacementForm = ref(false);
@@ -49,10 +56,9 @@ const photoReason = ref('');
 const documentDialog = ref(null);
 const correctionDialog = ref(null);
 const photoDialog = ref(null);
-const { handleKeydown: handleDocumentKeydown } = useModalAccessibility(() => Boolean(selectedDocument.value), documentDialog, () => { selectedDocument.value = null; });
+const { handleKeydown: handleDocumentKeydown } = useModalAccessibility(() => Boolean(selectedDocument.value), documentDialog, closeDocumentReview);
 const { handleKeydown: handleCorrectionKeydown } = useModalAccessibility(() => showCorrectionForm.value, correctionDialog, () => { showCorrectionForm.value = false; });
 const { handleKeydown: handlePhotoKeydown } = useModalAccessibility(() => showPhotoReplacementForm.value, photoDialog, () => { showPhotoReplacementForm.value = false; });
-const academicForm = ref({ academic_grading_scale: '', academic_result: '' });
 const decisionForm = ref({ decision: '', decision_reason: '', review_notes: '' });
 const rubricScores = ref({});
 const showEvaluationEntry = ref(false);
@@ -72,7 +78,7 @@ const isScreening = computed(() => application.value?.workflow_stage === 'screen
 const canEditReview = computed(() => isScreening.value && isAssignedToMe.value);
 const screeningBlocker = computed(() => {
     if (['requested', 'submitted'].includes(application.value?.correction_status)) return 'Resolve the open correction request before recording a result.';
-    if (decisionForm.value.decision === 'approve' && readiness.value.ready === false) return 'Accept the required evidence before passing screening.';
+    if (decisionForm.value.decision === 'approve' && readiness.value.ready === false) return 'Accept the required application files before passing screening.';
     return '';
 });
 const canSubmitScreening = computed(() => canEditReview.value && !workflow.value.is_closed && !actionBusy.value
@@ -84,8 +90,13 @@ const assignmentLabel = computed(() => {
     if (isUnassigned.value) return 'Unassigned';
     return `Assigned to ${application.value?.assigned_reviewer?.name || 'another reviewer'}`;
 });
-const acceptedDocuments = computed(() => application.value?.documents?.filter((document) => document.status === 'accepted').length ?? 0);
+const acceptedDocuments = computed(() => readiness.value.accepted ?? 0);
 const requiredDocuments = computed(() => readiness.value.required ?? application.value?.document_checklist?.length ?? 0);
+const documentHasInlinePreview = computed(() => ['application/pdf', 'image/jpeg', 'image/png'].includes(documentPreview.value?.mimeType));
+const canAcceptDocument = computed(() => Boolean(documentPreview.value?.receipt) && !documentPreviewError.value
+    && (documentHasInlinePreview.value || documentDownloaded.value));
+const canSaveDocumentReview = computed(() => canEditReview.value && !actionBusy.value && Boolean(documentForm.value.status)
+    && (documentForm.value.status !== 'accepted' || canAcceptDocument.value));
 const applicantProfileRecord = computed(() => ({
     name: applicant.value?.name || applicant.value?.username || 'Applicant record',
     photoUrl: applicant.value?.profile_photo_url,
@@ -137,11 +148,6 @@ function firstError(error, fallback) {
 function syncApplication(nextApplication) {
     showEvaluationEntry.value = false;
     application.value = nextApplication;
-    const academicScale = nextApplication?.applicant?.grading_scale ?? '';
-    academicForm.value = {
-        academic_grading_scale: academicScale,
-        academic_result: nextApplication?.applicant?.gwa ?? '',
-    };
     rubricScores.value = Object.fromEntries(
         (nextApplication?.rubric_review?.criteria ?? []).map((criterion) => [criterion.key, criterion.score ?? '']),
     );
@@ -175,40 +181,63 @@ async function claimReview() {
     }
 }
 
-function openDocumentReview(document) {
+async function openDocumentReview(document) {
     selectedDocument.value = document;
-    documentForm.value = { status: document.status === 'accepted' ? 'accepted' : 'accepted', review_notes: document.review_notes ?? '' };
-}
+    documentForm.value = { status: '', review_notes: document.review_notes ?? '' };
+    documentPreviewError.value = '';
+    documentReviewError.value = '';
+    documentDownloaded.value = false;
+    const request = new AbortController();
+    previewRequest = request;
 
-async function saveDocumentReview() {
-    if (!selectedDocument.value || actionBusy.value) return;
-    if (!await confirmOutcome({ record: `${applicant.value.name} - ${selectedDocument.value.original_name || selectedDocument.value.document_name}`,
-        outcome: documentForm.value.status, danger: documentForm.value.status !== 'accepted',
-        consequence: 'This saves the application document review. It does not select the applicant for a scholarship.' },
-    () => Boolean(selectedDocument.value) && !actionBusy.value)) return;
-    actionBusy.value = true;
-    errorMessage.value = '';
     try {
-        const response = await window.axios.patch(`/provider/documents/${selectedDocument.value.id}/status`, documentForm.value);
-        syncApplication(response.data.application);
-        selectedDocument.value = null;
-    } catch (error) {
-        errorMessage.value = firstError(error, 'The evidence decision could not be saved.');
-    } finally {
-        actionBusy.value = false;
+        const response = await window.axios.get(document.view_url, { responseType: 'blob', signal: request.signal });
+        if (request.signal.aborted) return;
+        const mimeType = response.data.type;
+        if (!response.data.size || mimeType === 'text/html' || mimeType === 'application/json') {
+            throw new Error('File preview unavailable');
+        }
+        documentPreview.value = {
+            url: URL.createObjectURL(response.data),
+            mimeType,
+            receipt: response.headers['x-document-review-receipt'],
+        };
+    } catch {
+        if (!request.signal.aborted) documentPreviewError.value = 'This file could not be opened. Try reopening it or request a replacement.';
     }
 }
 
-async function verifyAcademicRecord() {
-    if (!await confirmOutcome({ record: applicant.value.name, outcome: 'Verify academic result',
-        consequence: 'The entered academic scale and result will be recorded as reviewed.' }, () => !actionBusy.value)) return;
+function releaseDocumentPreview() {
+    previewRequest?.abort();
+    if (documentPreview.value?.url) URL.revokeObjectURL(documentPreview.value.url);
+    documentPreview.value = null;
+}
+
+function closeDocumentReview() {
+    if (actionBusy.value) return;
+    releaseDocumentPreview();
+    selectedDocument.value = null;
+}
+
+async function saveDocumentReview() {
+    const document = selectedDocument.value;
+    if (!document || !canSaveDocumentReview.value) return;
+    if (!await confirmOutcome({ record: `${applicant.value.name} - ${document.original_name || document.document_name}`,
+        outcome: labelize(documentForm.value.status), danger: documentForm.value.status !== 'accepted',
+        consequence: 'This saves the application document review. It does not select the applicant for a scholarship.' },
+    () => selectedDocument.value === document && canSaveDocumentReview.value)) return;
     actionBusy.value = true;
-    errorMessage.value = '';
+    documentReviewError.value = '';
     try {
-        const response = await window.axios.patch(`/provider/applications/${applicationId}/profile-verification`, academicForm.value);
+        const response = await window.axios.patch(`/provider/documents/${document.id}/status`, {
+            ...documentForm.value,
+            view_receipt: documentPreview.value?.receipt,
+        });
         syncApplication(response.data.application);
+        releaseDocumentPreview();
+        selectedDocument.value = null;
     } catch (error) {
-        errorMessage.value = firstError(error, 'The academic record could not be verified.');
+        documentReviewError.value = firstError(error, 'The evidence decision could not be saved.');
     } finally {
         actionBusy.value = false;
     }
@@ -335,6 +364,7 @@ function updateSection(section) {
 }
 
 onMounted(loadApplication);
+onBeforeUnmount(releaseDocumentPreview);
 </script>
 
 <template>
@@ -371,7 +401,7 @@ onMounted(loadApplication);
                         <div class="grid grid-cols-4 border-t border-slate-200 bg-slate-50">
                             <div class="border-r border-slate-200 px-5 py-3"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Stage</p><p class="mt-1 text-sm font-bold text-slate-900">{{ workflow.current_stage_label || labelize(application.workflow_stage) }}</p></div>
                             <div class="border-r border-slate-200 px-5 py-3"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Eligibility comparison</p><p class="mt-1 text-sm font-bold text-slate-900">{{ application.dss_explanation?.comparison?.label || 'Comparison unavailable' }}</p></div>
-                            <div class="border-r border-slate-200 px-5 py-3"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Evidence</p><p class="mt-1 text-sm font-bold text-slate-900">{{ acceptedDocuments }} of {{ requiredDocuments }} accepted</p></div>
+                            <div class="border-r border-slate-200 px-5 py-3"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Required files</p><p class="mt-1 text-sm font-bold text-slate-900">{{ requiredDocuments ? `${acceptedDocuments} of ${requiredDocuments} accepted` : 'None required' }}</p></div>
                             <div class="px-5 py-3"><p class="text-xs font-bold uppercase tracking-[0.16em] text-slate-600">Waiting</p><p class="mt-1 text-sm font-bold text-slate-900">{{ application.waiting_days }} day{{ application.waiting_days === 1 ? '' : 's' }}</p></div>
                         </div>
                     </header>
@@ -380,11 +410,11 @@ onMounted(loadApplication);
                         <div class="flex min-w-0 items-start gap-3">
                             <i class="fa-solid fa-shield-halved mt-0.5 text-amber-700" aria-hidden="true"></i>
                             <p class="text-sm leading-5 text-amber-950">
-                                <strong>Unverified applicant profile.</strong> Treat profile details as self-declared and give them less weight until the supporting evidence has been reviewed.
+                                <strong>Unverified applicant profile.</strong> Treat profile details as self-declared until an admin completes verification.
                             </p>
                         </div>
                         <button type="button" class="inline-flex h-9 shrink-0 items-center gap-2 border border-amber-300 bg-white px-3 text-xs font-bold text-amber-950 hover:border-amber-500" @click="updateSection('applicant')">
-                            <i class="fa-solid fa-shield-halved text-[10px]" aria-hidden="true"></i>Review profile evidence
+                            <i class="fa-solid fa-shield-halved text-[10px]" aria-hidden="true"></i>View profile
                         </button>
                     </div>
 
@@ -410,8 +440,8 @@ onMounted(loadApplication);
 
                     <section v-else-if="activeSection === 'documents'" class="mt-4 border border-slate-200 bg-white shadow-sm">
                         <header class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-                            <div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-circle-check text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Supporting evidence</h2><p class="mt-1 text-sm text-slate-500">Open each file, then save a clear review status.</p></div></div>
-                            <p class="text-sm font-bold text-slate-700">{{ acceptedDocuments }} of {{ requiredDocuments }} accepted</p>
+                            <div class="flex items-start gap-3"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-circle-check text-sm" aria-hidden="true"></i></span><div><h2 class="text-xl font-bold text-slate-950">Scholarship application files</h2><p class="mt-1 text-sm text-slate-500">Check that each submitted file meets this program's requirements. Profile verification is separate.</p></div></div>
+                            <p class="text-sm font-bold text-slate-700">{{ requiredDocuments ? `${acceptedDocuments} of ${requiredDocuments} required files accepted` : 'No required files' }}</p>
                         </header>
                         <div class="overflow-x-auto">
                             <table class="w-full min-w-[56rem] table-fixed border-collapse text-left"><colgroup><col><col class="w-40"><col class="w-44"><col class="w-60"></colgroup>
@@ -421,7 +451,7 @@ onMounted(loadApplication);
                                         <td class="px-6 py-4"><p class="font-bold text-slate-900">{{ document.document_name }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ document.original_name }}</p></td>
                                         <td class="px-6 py-4 text-sm text-slate-600">{{ document.uploaded_at || 'Not available' }}</td>
                                         <td class="px-6 py-4"><span :class="['inline-flex border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(document.status)]">{{ labelize(document.status) }}</span><WorkspaceTextSummary v-if="document.review_notes" class="mt-1.5 text-xs text-slate-600" :text="document.review_notes" label="review note" /></td>
-                                        <td class="px-6 py-4 text-right"><a :href="document.view_url" target="_blank" rel="noopener" class="mr-2 inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:border-slate-950">View<i class="fa-solid fa-arrow-up-right-from-square text-[9px]" aria-hidden="true"></i></a><button type="button" class="inline-flex h-9 items-center gap-2 bg-slate-950 px-3 text-xs font-bold text-white disabled:opacity-40" :disabled="!canEditReview" @click="openDocumentReview(document)"><i class="fa-solid fa-file-pen text-[9px]" aria-hidden="true"></i>Review</button></td>
+                                        <td class="px-6 py-4 text-right"><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-bold text-slate-700 hover:border-slate-950" @click="openDocumentReview(document)"><i class="fa-solid fa-eye text-[9px]" aria-hidden="true"></i>{{ canEditReview ? 'Open and review' : 'View file' }}</button></td>
                                     </tr>
                                     <tr v-if="!application.documents?.length"><td colspan="4" class="px-6 py-12 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-circle-xmark text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">No application files were submitted.</p></td></tr>
                                 </tbody>
@@ -445,16 +475,11 @@ onMounted(loadApplication);
                         </ApplicantProfileRecord>
 
                         <section class="border border-slate-200 bg-white px-6 py-5 shadow-sm">
-                            <div class="flex items-center justify-between"><div><h3 class="font-bold text-slate-950">Profile evidence</h3><p class="mt-1 text-sm text-slate-500">Academic record and identity evidence saved in the applicant profile.</p></div><span :class="['border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(applicant.profile_verification_status)]">{{ labelize(applicant.profile_verification_status) }}</span></div>
+                            <div class="flex items-center justify-between gap-4"><div><h3 class="font-bold text-slate-950">Profile verification evidence</h3><p class="mt-1 text-sm text-slate-500">{{ applicant.profile_verification_status === 'approved' ? 'These files are for reference. You do not need to verify the profile again.' : 'Admins handle profile verification. These files are for reference only.' }}</p></div><span :class="['border px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusClass(applicant.profile_verification_status)]">{{ profileVerificationLabel(applicant.profile_verification_status) }}</span></div>
                             <div class="mt-4 divide-y divide-slate-200 border border-slate-200">
-                                <div v-for="proof in applicant.profile_proofs" :key="proof.id" class="flex items-center gap-4 px-4 py-3"><i class="fa-regular fa-file-lines text-slate-400" aria-hidden="true"></i><div class="min-w-0 flex-1"><p class="application-text text-sm font-bold text-slate-900">{{ labelize(proof.document_type) }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ proof.original_name }} · {{ proof.uploaded_at }}</p></div><a :href="proof.view_url" target="_blank" rel="noopener" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700">Open<i class="fa-solid fa-arrow-up-right-from-square text-[9px]" aria-hidden="true"></i></a></div>
+                                <div v-for="proof in applicant.profile_proofs" :key="proof.id" class="flex items-center gap-4 px-4 py-3"><i class="fa-regular fa-file-lines text-slate-400" aria-hidden="true"></i><div class="min-w-0 flex-1"><p class="application-text text-sm font-bold text-slate-900">{{ proof.label || labelize(proof.document_type) }}</p><p class="mt-1 application-text text-xs text-slate-500">{{ proof.original_name }} · {{ proof.uploaded_at }}</p></div><button type="button" class="inline-flex h-9 items-center gap-2 border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700" @click="profileProofPreview = proof"><i class="fa-solid fa-eye text-[9px]" aria-hidden="true"></i>View</button></div>
                                 <div v-if="!applicant.profile_proofs?.length" class="px-4 py-8 text-center"><span class="mx-auto grid h-9 w-9 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-file-circle-xmark text-sm" aria-hidden="true"></i></span><p class="mt-3 text-sm text-slate-500">No profile evidence was uploaded.</p></div>
                             </div>
-                            <form v-if="canEditReview && applicant.profile_verification_status !== 'approved'" class="mt-4 flex items-end gap-3 bg-slate-50 p-4" @submit.prevent="verifyAcademicRecord">
-                                <label class="w-56"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Grading scale</span><select v-model="academicForm.academic_grading_scale" class="h-10 w-full border border-slate-300 bg-white px-3 text-sm"><option value="">Use scanned result</option><option value="percentage">Percentage</option><option value="grade_point">GWA / grade point</option><option value="pass_fail">Pass / fail</option><option value="other">Other scale</option></select></label>
-                                <label v-if="['percentage', 'grade_point'].includes(academicForm.academic_grading_scale)" class="w-44"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Verified result</span><input v-model="academicForm.academic_result" type="number" step="0.01" class="h-10 w-full border border-slate-300 px-3 text-sm"></label>
-                                <button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-shield-circle-check']" aria-hidden="true"></i>Verify profile evidence</button>
-                            </form>
                         </section>
                     </div>
 
@@ -489,13 +514,30 @@ onMounted(loadApplication);
             </div>
         </section>
 
-        <div v-if="selectedDocument" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" @click.self="selectedDocument = null">
-            <form ref="documentDialog" class="provider-application-workspace application-dialog w-full max-w-xl border border-slate-200 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="review-document-title" tabindex="-1" @keydown="handleDocumentKeydown" @submit.prevent="saveDocumentReview">
-                <header class="border-b border-slate-200 px-6 py-5"><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Evidence review</p><h2 id="review-document-title" class="application-text mt-1 text-xl font-bold text-slate-950">{{ selectedDocument.document_name }}</h2><p class="mt-1 text-sm text-slate-500">{{ selectedDocument.original_name }}</p></header>
-                <div class="application-dialog-body space-y-4 px-6 py-5"><label class="block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Review status</span><select v-model="documentForm.status" class="h-11 w-full border border-slate-300 bg-white px-3 text-sm"><option value="accepted">Accepted</option><option value="needs_replacement">Needs replacement</option><option value="rejected">Rejected</option><option value="pending">Pending review</option></select></label><label class="block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Note <span v-if="['rejected', 'needs_replacement'].includes(documentForm.status)">(required)</span></span><textarea v-model="documentForm.review_notes" rows="4" class="w-full border border-slate-300 px-3 py-2 text-sm" placeholder="Explain only what the applicant needs to know."></textarea></label></div>
-                <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700" @click="selectedDocument = null">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white disabled:opacity-60" :disabled="actionBusy"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>Save review</button></footer>
-            </form>
-        </div>
+        <FilePreviewModal :file="profileProofPreview" :title="profileProofPreview?.label || 'Profile evidence'" @close="profileProofPreview = null" />
+
+        <Teleport to="body">
+            <div v-if="selectedDocument" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-3 sm:p-6" @click.self="closeDocumentReview">
+                <form ref="documentDialog" class="provider-application-workspace application-dialog w-full max-w-5xl rounded-lg border border-slate-200 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="review-document-title" tabindex="-1" @keydown="handleDocumentKeydown" @submit.prevent="saveDocumentReview">
+                    <header class="border-b border-slate-200 px-5 py-4"><p class="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Application file</p><h2 id="review-document-title" class="application-text mt-1 text-xl font-bold text-slate-950">{{ selectedDocument.document_name }}</h2><p class="mt-1 break-all text-sm text-slate-500">{{ selectedDocument.original_name }}</p></header>
+                    <div class="application-dialog-body space-y-4 px-5 py-4">
+                        <p v-if="documentPreviewError" role="alert" class="rounded-md bg-amber-50 p-4 text-sm text-amber-900">{{ documentPreviewError }}</p>
+                        <p v-else-if="!documentPreview" role="status" class="bg-slate-50 p-4 text-sm text-slate-600">Opening file&hellip;</p>
+                        <iframe v-else-if="documentPreview.mimeType === 'application/pdf'" :src="documentPreview.url" :title="selectedDocument.document_name" class="h-[45dvh] w-full rounded-md border border-slate-200"></iframe>
+                        <img v-else-if="['image/jpeg', 'image/png'].includes(documentPreview.mimeType)" :src="documentPreview.url" :alt="selectedDocument.document_name" class="mx-auto max-h-[45dvh] max-w-full rounded-md border border-slate-200 object-contain" @error="documentPreviewError = 'This image could not be displayed. Request a replacement if you cannot open it.'">
+                        <p v-else class="rounded-md bg-slate-50 p-4 text-sm text-slate-600">This file type cannot be previewed here. Download and open it before recording the outcome.</p>
+                        <a v-if="documentPreview" :href="documentPreview.url" :download="selectedDocument.original_name" class="inline-flex items-center gap-2 text-sm font-bold text-slate-700 hover:underline" @click="documentDownloaded = true"><i class="fa-solid fa-download text-xs" aria-hidden="true"></i>Download file</a>
+                        <template v-if="canEditReview">
+                            <p v-if="documentPreview && !documentPreview.receipt && !documentPreviewError" role="alert" class="text-sm text-amber-900">Reopen the file before accepting it.</p>
+                            <label class="block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Review status</span><select v-model="documentForm.status" required class="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="" disabled>Choose a status after checking the file</option><option value="accepted" :disabled="!canAcceptDocument">Accepted</option><option value="needs_replacement">Needs replacement</option><option value="rejected">Rejected</option><option value="pending">Pending review</option></select></label>
+                            <label class="block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Note <span v-if="['rejected', 'needs_replacement'].includes(documentForm.status)">(required)</span></span><textarea v-model="documentForm.review_notes" :required="['rejected', 'needs_replacement'].includes(documentForm.status)" rows="2" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Explain only what the applicant needs to know."></textarea></label>
+                            <p v-if="documentReviewError" role="alert" class="text-sm text-rose-700">{{ documentReviewError }}</p>
+                        </template>
+                    </div>
+                    <footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button type="button" class="h-10 rounded-md border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700" :disabled="actionBusy" @click="closeDocumentReview">{{ canEditReview ? 'Cancel' : 'Close' }}</button><button v-if="canEditReview" type="submit" class="inline-flex h-10 items-center gap-2 rounded-md bg-slate-950 px-4 text-xs font-bold text-white disabled:opacity-60" :disabled="!canSaveDocumentReview"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-floppy-disk']" aria-hidden="true"></i>Save review</button></footer>
+                </form>
+            </div>
+        </Teleport>
 
         <div v-if="showCorrectionForm" class="fixed inset-0 z-50 grid place-items-center bg-slate-950/60 p-6" @click.self="showCorrectionForm = false">
             <form ref="correctionDialog" class="provider-application-workspace application-dialog w-full max-w-xl border border-slate-200 bg-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="review-correction-title" tabindex="-1" @keydown="handleCorrectionKeydown" @submit.prevent="requestCorrection"><header class="border-b border-slate-200 px-6 py-5"><h2 id="review-correction-title" class="text-xl font-bold text-slate-950">Request an applicant update</h2><p class="mt-1 text-sm text-slate-500">Choose the affected record and give one clear instruction.</p></header><div class="application-dialog-body space-y-4 px-6 py-5"><fieldset><legend class="text-xs font-semibold text-slate-700">Update needed</legend><div class="mt-2 flex flex-wrap gap-2"><label v-for="target in [['profile','Profile'],['academic_record','Academic record'],['application_files','Application files'],['other','Other']]" :key="target[0]" class="flex items-center gap-2 border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700"><input v-model="correctionForm.targets" type="checkbox" :value="target[0]">{{ target[1] }}</label></div></fieldset><label class="block"><span class="mb-1.5 block text-xs font-semibold text-slate-700">Instruction</span><textarea v-model="correctionForm.message" rows="4" required minlength="5" class="w-full border border-slate-300 px-3 py-2 text-sm" placeholder="State what needs to be corrected or replaced."></textarea></label></div><footer class="flex justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4"><button type="button" class="h-10 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700" @click="showCorrectionForm = false">Cancel</button><button type="submit" class="inline-flex h-10 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white" :disabled="actionBusy"><i :class="['fa-solid text-[9px]', actionBusy ? 'fa-spinner fa-spin' : 'fa-paper-plane']" aria-hidden="true"></i>Send request</button></footer></form>

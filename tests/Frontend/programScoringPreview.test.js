@@ -93,6 +93,8 @@ test('scoring component compiles and the form only consumes read-only scoring da
     assert.deepEqual(compileTemplate({ id: 'scoring-preview', filename, source: descriptor.template.content, compilerOptions: { bindingMetadata: script.bindings } }).errors, []);
     assert.doesNotMatch(source, /axios|fetch\(|v-model|<input/);
     assert.match(source, /You still make the final decision/);
+    assert.match(source, /<details[^>]+data-scoring-breakdown>/);
+    assert.match(source, /View scoring breakdown/);
     const form = read('resources/js/pages/provider/programs/ProgramFormPage.vue');
     assert.match(form, /fixedScoringPolicy.value = program.selection_scoring_policy \?\? null/);
     assert.match(form, /:applications-count="applicationsCount"/);

@@ -27,7 +27,9 @@ test('all staff profile records reuse the saved-record mapper and retain source 
         assert.match(source, /applicantProfileDetails\(applicant.value, \{ omitUnavailable: true \}\)/);
         assert.match(source, /educationSummary: profileEducationSummary/);
         assert.match(source, /show-data-source-notice/);
-        assert.match(source, /:verification-label="profileVerificationLabel/);
+        assert.match(source, file.startsWith('provider/')
+            ? /:verification-label="profileVerificationLabel/
+            : /:verification-label="reviewStatusLabel\([^"]+, 'applicants'\)"/);
         assert.doesNotMatch(source, /const applicantProfileSections = computed\(\(\) => \[/);
     }
     const record = readFileSync(new URL('../../resources/js/components/profile/ApplicantProfileRecord.vue', import.meta.url), 'utf8');

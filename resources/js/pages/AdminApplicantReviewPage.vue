@@ -9,7 +9,8 @@ import ReviewOfficerSidebar from '../components/ReviewOfficerSidebar.vue';
 import TaskPageHeader from '../components/TaskPageHeader.vue';
 import ApplicantProfileRecord from '../components/profile/ApplicantProfileRecord.vue';
 import { applicantProfileDetails } from '../support/applicantProfileDetails';
-import { profileEducationSummary, profileVerificationLabel } from '../support/applicantProfileLabels';
+import { profileEducationSummary } from '../support/applicantProfileLabels';
+import { reviewStatusLabel } from '../support/adminReviewPresentation.js';
 import { formatFileSize } from '../support/display';
 import { showPortalToast } from '../support/portalToast';
 
@@ -504,7 +505,7 @@ onMounted(loadApplicant);
                             :record="applicantProfileRecord"
                             :sections="applicantProfileSections"
                             :verification-status="applicantReviewStatus(applicant)"
-                            :verification-label="profileVerificationLabel(applicantReviewStatus(applicant))"
+                            :verification-label="reviewStatusLabel(applicantReviewStatus(applicant), 'applicants')"
                             :show-trust-notice="false"
                             show-data-source-notice
                         >

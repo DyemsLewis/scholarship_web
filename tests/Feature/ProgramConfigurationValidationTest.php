@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Scholarship;
 use App\Models\User;
+use App\Support\ProgramApplicationRules;
 use App\Support\ProgramConfigurationRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,7 +30,17 @@ class ProgramConfigurationValidationTest extends TestCase
             'late opening' => [['application_opens_at' => '2027-06-02', 'deadline' => '2027-06-01'], 'application_opens_at'],
             'early results' => [['expected_results_at' => '2027-05-31', 'deadline' => '2027-06-01'], 'expected_results_at'],
             'early formal deadline' => [['handoff_deadline' => '2027-05-31', 'deadline' => '2027-06-01'], 'handoff_deadline'],
-            'backward support' => [['support_starts_at' => '2027-09-01', 'support_ends_at' => '2027-08-31'], 'support_ends_at'],
+            'formal deadline on intake closing day' => [['handoff_deadline' => '2027-06-01', 'deadline' => '2027-06-01'], 'handoff_deadline'],
+            'results before formal applications close' => [['expected_results_at' => '2027-06-02', 'handoff_deadline' => '2027-06-03', 'deadline' => '2027-06-01'], 'expected_results_at'],
+            'results on the last application day' => [['expected_results_at' => '2027-06-01', 'deadline' => '2027-06-01'], 'expected_results_at'],
+            'support configured before a deadline exists' => [['support_starts_at' => '2027-06-02', 'support_ends_at' => '2027-06-03'], 'deadline'],
+            'formal deadline without intake deadline' => [['handoff_deadline' => '2027-06-03'], 'deadline'],
+            'results without intake deadline' => [['expected_results_at' => '2027-06-03'], 'deadline'],
+            'support starts on intake closing day' => [['support_starts_at' => '2027-06-01', 'deadline' => '2027-06-01'], 'support_starts_at'],
+            'support starts on formal application closing day' => [['support_starts_at' => '2027-06-02', 'handoff_deadline' => '2027-06-02', 'deadline' => '2027-06-01'], 'support_starts_at'],
+            'support starts before results' => [['support_starts_at' => '2027-06-02', 'expected_results_at' => '2027-06-03', 'deadline' => '2027-06-01'], 'support_starts_at'],
+            'support end without start' => [['support_ends_at' => '2027-06-04', 'deadline' => '2027-06-01'], 'support_starts_at'],
+            'backward support' => [['deadline' => '2027-06-01', 'support_starts_at' => '2027-09-01', 'support_ends_at' => '2027-08-31'], 'support_ends_at'],
         ];
         $cases = [];
         foreach (['draft', 'pending_review'] as $status) {
@@ -60,6 +71,10 @@ class ProgramConfigurationValidationTest extends TestCase
             'move deadline earlier' => [['deadline' => '2027-05-31'], 'application_opens_at'],
             'move results earlier' => [['expected_results_at' => '2027-06-29'], 'expected_results_at'],
             'move formal deadline earlier' => [['handoff_deadline' => '2027-06-29'], 'handoff_deadline'],
+            'clear application deadline with later dates' => [['deadline' => null], 'deadline'],
+            'move formal deadline beyond expected results' => [['handoff_deadline' => '2027-08-04'], 'expected_results_at'],
+            'move results beyond recorded support start' => [['expected_results_at' => '2027-08-05'], 'support_starts_at'],
+            'clear support start while an end is set' => [['support_starts_at' => null], 'support_starts_at'],
             'move support start later' => [['support_starts_at' => '2028-07-02'], 'support_ends_at'],
             'move support end earlier' => [['support_ends_at' => '2027-06-30'], 'support_ends_at'],
         ];
@@ -83,7 +98,7 @@ class ProgramConfigurationValidationTest extends TestCase
         $program = $this->program($provider);
         $this->actingAs($provider)->putJson('/provider/scholarships/'.$program->id, [
             'title' => $program->title, 'status' => 'draft', 'support_ends_at' => '2028-08-01',
-        ])->assertOk()->assertJsonPath('scholarship.support_starts_at', '2027-07-01')
+        ])->assertOk()->assertJsonPath('scholarship.support_starts_at', '2027-08-03')
             ->assertJsonPath('scholarship.support_ends_at', '2028-08-01');
     }
 
@@ -95,8 +110,8 @@ class ProgramConfigurationValidationTest extends TestCase
                 'title' => 'Valid boundary program', 'status' => 'draft',
                 'slots_available' => 20, 'application_limit' => $limit,
                 'application_opens_at' => '2027-06-01', 'deadline' => '2027-06-01',
-                'expected_results_at' => '2027-06-01', 'handoff_deadline' => '2027-06-01',
-                'support_starts_at' => '2027-07-01', 'support_ends_at' => '2027-07-01',
+                'expected_results_at' => '2027-06-03', 'handoff_deadline' => '2027-06-02',
+                'support_starts_at' => '2027-06-03', 'support_ends_at' => '2027-06-03',
             ])->assertCreated();
         }
     }
@@ -122,6 +137,84 @@ class ProgramConfigurationValidationTest extends TestCase
         $this->assertSame('pending_review', $program->fresh()->status);
     }
 
+    public function test_unchanged_live_timeline_can_be_kept_but_cannot_be_made_invalid_or_republished(): void
+    {
+        $provider = $this->provider();
+        $program = $this->program($provider);
+        $program->update(['status' => 'published', 'support_starts_at' => '2027-06-25']);
+
+        $this->assertSame([], ProgramConfigurationRules::errors([], $program));
+        $this->assertArrayHasKey('support_starts_at', ProgramConfigurationRules::errors([], $program, enforceFullTimeline: true));
+        $this->assertArrayHasKey('support_starts_at', ProgramConfigurationRules::errors(['support_ends_at' => '2028-08-01'], $program));
+        $this->assertSame([], ProgramConfigurationRules::errors(['support_starts_at' => '2027-08-03'], $program));
+
+        $program->update(['status' => 'pending_review']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->patchJson('/admin/scholarships/'.$program->id.'/review', [
+                'expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($program->id), 'status' => 'published',
+            ])->assertUnprocessable()->assertJsonValidationErrors('support_starts_at');
+        $this->assertSame('2027-06-25', $program->fresh()->support_starts_at?->toDateString());
+    }
+
+    public function test_creation_update_and_publication_reject_conflicts_between_document_groups(): void
+    {
+        $provider = $this->provider();
+        $this->actingAs($provider)->postJson('/provider/scholarships', [
+            'title' => 'Duplicate pre-screening requirements', 'status' => 'draft',
+            'application_mode' => 'online', 'requirements' => 'School ID', 'optional_requirements' => 'Recent school ID',
+        ])->assertUnprocessable()->assertJsonValidationErrors('optional_requirements');
+
+        $program = $this->program($provider);
+        $program->update(['application_mode' => 'online', 'requirements' => 'School ID']);
+        $this->putJson('/provider/scholarships/'.$program->id, [
+            'title' => $program->title, 'status' => 'draft', 'optional_requirements' => 'Student ID',
+        ])->assertUnprocessable()->assertJsonValidationErrors('optional_requirements');
+        $this->assertNull($program->fresh()->optional_requirements);
+
+        $program->update(['status' => 'pending_review', 'optional_requirements' => 'Current school ID']);
+        $this->actingAs(User::factory()->create(['role' => 'admin']))
+            ->patchJson('/admin/scholarships/'.$program->id.'/review', [
+                'expected_review_token' => \Tests\Support\AdminReviewSnapshots::program($program->id), 'status' => 'published',
+            ])->assertUnprocessable()->assertJsonValidationErrors('optional_requirements');
+    }
+
+    public function test_profile_only_keeps_old_file_lists_but_cannot_bypass_document_eligibility(): void
+    {
+        $provider = $this->provider();
+        $program = $this->program($provider);
+        $program->update(['application_mode' => 'online', 'requirements' => 'School ID']);
+        $payload = ['title' => $program->title, 'status' => 'draft', 'application_mode' => 'provider_review'];
+        $this->actingAs($provider)->putJson('/provider/scholarships/'.$program->id, [
+            ...$payload, 'requirements' => 'Ignored input',
+        ])->assertOk();
+        $this->assertSame('School ID', $program->fresh()->requirements);
+        $this->putJson('/provider/scholarships/'.$program->id, [
+            ...$payload, 'eligibility_conditions' => json_encode([['key' => 'required_documents', 'statement' => 'Review the required documents.']]),
+        ])->assertUnprocessable()->assertJsonValidationErrors('application_mode');
+    }
+
+    public function test_handoff_mode_clears_inactive_fields_from_storage_and_applicant_details(): void
+    {
+        $provider = $this->provider();
+        $program = $this->program($provider);
+        $program->update(['handoff_mode' => 'onsite', 'handoff_location_name' => 'Main office', 'handoff_location_address' => 'Antipolo']);
+        $providerForm = ['title' => $program->title, 'status' => 'draft'];
+        $this->actingAs($provider)->putJson('/provider/scholarships/'.$program->id, [
+            ...$providerForm, 'handoff_mode' => 'online', 'handoff_url' => 'https://forms.example.test/scholarship',
+        ])->assertOk()->assertJsonPath('scholarship.handoff_location_address', null);
+        $program->refresh();
+        $this->assertNull($program->handoff_location_name);
+        $program->forceFill(['handoff_location_address' => 'Old address in a legacy record']);
+        $channel = ProgramApplicationRules::handoffChannel($program);
+        $this->assertSame('https://forms.example.test/scholarship', $channel['url']);
+        $this->assertNull($channel['location_address']);
+        $this->assertNull($channel['map_url']);
+        $this->putJson('/provider/scholarships/'.$program->id, [
+            ...$providerForm, 'handoff_mode' => 'provider_contact',
+        ])->assertOk()->assertJsonPath('scholarship.handoff_url', null);
+        $this->assertNull($program->fresh()->handoff_url);
+    }
+
     public function test_new_support_dates_cannot_be_in_the_past_even_in_drafts(): void
     {
         $this->actingAs($this->provider());
@@ -136,7 +229,8 @@ class ProgramConfigurationValidationTest extends TestCase
         $this->assertDatabaseCount('scholarships', 0);
         $this->postJson('/provider/scholarships', [
             'title' => 'Same day support', 'status' => 'draft',
-            'support_starts_at' => now()->toDateString(), 'support_ends_at' => now()->toDateString(),
+            'deadline' => now()->toDateString(),
+            'support_starts_at' => now()->addDay()->toDateString(), 'support_ends_at' => now()->addDay()->toDateString(),
         ])->assertCreated();
     }
 
@@ -185,8 +279,8 @@ class ProgramConfigurationValidationTest extends TestCase
             'provider_id' => $provider->id, 'title' => 'Saved configuration', 'description' => 'Existing draft.', 'status' => 'draft',
             'slots_available' => 20, 'application_limit' => 100,
             'application_opens_at' => '2027-06-01', 'deadline' => '2027-06-30',
-            'expected_results_at' => '2027-07-15', 'handoff_deadline' => '2027-07-31',
-            'support_starts_at' => '2027-07-01', 'support_ends_at' => '2028-07-01',
+            'expected_results_at' => '2027-08-02', 'handoff_deadline' => '2027-07-31',
+            'support_starts_at' => '2027-08-03', 'support_ends_at' => '2028-07-01',
         ]);
     }
 }

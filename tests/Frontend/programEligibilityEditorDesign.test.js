@@ -9,10 +9,10 @@ const start = page.indexOf("<section v-else-if=\"activeStep === 'eligibility'\""
 const section = page.slice(start, page.indexOf("<section v-else-if=\"activeStep === 'application'\"", start));
 
 test('eligibility follows the shared builder hierarchy with two full-width rule groups and a final summary review', () => {
-    for (const text of ['data-program-eligibility-editor', 'Study and academic rules', 'Coverage and support rules', 'Applicant-facing summary']) assert.ok(section.includes(text), text);
+    for (const text of ['data-program-eligibility-editor', 'Study and academic rules', 'Coverage and support rules', '<EligibilitySummaryEditor']) assert.ok(section.includes(text), text);
     const study = section.indexOf('data-eligibility-group="study"');
     const access = section.indexOf('data-eligibility-group="access"');
-    const summary = section.indexOf('data-eligibility-summary-panel');
+    const summary = section.indexOf('<EligibilitySummaryEditor');
     assert.ok(study < access && access < summary);
     assert.ok(section.indexOf('id="program-study-levels"') < section.indexOf('id="program-eligible-courses"'));
     assert.doesNotMatch(section, /<aside|max-w-(xl|2xl|3xl)|grid-cols-\[.*_18rem/);
@@ -30,15 +30,18 @@ test('every existing rule, explicit-choice safeguard and saved treatment remains
     assert.match(page, /:disabled="isReadOnly \|\| isSaving"/);
 });
 
-test('the automatic summary is secondary but custom, stale and overlong summaries open for review', () => {
-    assert.match(section, /<details :open="!useGeneratedEligibilitySummary \|\| customSummaryNeedsReview \|\| eligibilitySummary.length > 5000"/);
-    assert.match(section, /:readonly="useGeneratedEligibilitySummary"/);
-    assert.match(section, /@input="form.eligibility = \$event.target.value"/);
-    assert.match(section, /@click="reviewedEligibilitySummary = currentEligibilitySummaryKey"/);
-    assert.match(section, /Write custom summary/);
-    assert.match(section, /Use rule-based summary/);
+test('the summary mode and review count are visible but their editors open only on demand', () => {
+    const summary = readFileSync(new URL('components/EligibilitySummaryEditor.vue', base), 'utf8');
+    const review = readFileSync(new URL('components/EligibilityReconsiderationEditor.vue', base), 'utf8');
+    assert.match(section, /<EligibilitySummaryEditor[^>]*v-model:automatic="useGeneratedEligibilitySummary"/);
+    assert.match(section, /<EligibilityReconsiderationEditor[^>]*:rules="eligibilityRules"/);
+    assert.doesNotMatch(section, /<textarea|I checked my summary/);
+    assert.match(summary.split('<EligibilityOptionsModal')[0], /'Automatic' : 'Custom'/);
+    assert.match(review.split('<EligibilityOptionsModal')[0], /None selected/);
+    assert.match(summary, /:readonly="draftAutomatic"/);
+    assert.match(summary, /Write custom summary/);
+    assert.match(summary, /Use rule-based summary/);
     assert.match(page, /eligibility: eligibilitySummary.value.trim\(\)/);
-    assert.match(page, /&& !customSummaryNeedsReview.value/);
     assert.match(page, /&& !educationChoicesNeedReview.value/);
 });
 
@@ -64,7 +67,7 @@ test('common course and grade shortcuts reuse the existing add validation withou
     assert.match(picker, /v-if="allowCustom"/);
 });
 
-for (const filename of ['ProgramFormPage.vue', 'components/EducationEligibilityPolicyEditor.vue', 'components/EligibilityRuleModeSelect.vue', 'components/EligibilityOptionPicker.vue', 'components/EligibilityCheckboxPicker.vue', 'components/EligibilityOptionsModal.vue']) {
+for (const filename of ['ProgramFormPage.vue', 'components/EducationEligibilityPolicyEditor.vue', 'components/EligibilityRuleModeSelect.vue', 'components/EligibilityOptionPicker.vue', 'components/EligibilityCheckboxPicker.vue', 'components/EligibilityOptionsModal.vue', 'components/EligibilitySummaryEditor.vue', 'components/EligibilityReconsiderationEditor.vue']) {
     test(`${filename} compiles with its real script bindings`, () => {
         const { descriptor, errors } = parse(readFileSync(new URL(filename, base), 'utf8')); assert.deepEqual(errors, []);
         const script = compileScript(descriptor, { id: filename });

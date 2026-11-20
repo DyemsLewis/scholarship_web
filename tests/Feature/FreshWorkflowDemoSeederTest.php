@@ -225,8 +225,11 @@ class FreshWorkflowDemoSeederTest extends TestCase
         $this->actingAs($partner)->getJson(route('provider.applications.show.data', $screening).'?workspace=review')->assertForbidden();
         $this->actingAs($staff('reviewer'));
         foreach ($screening->documents as $document) {
-            $this->get(route('documents.view', $document))->assertOk()->assertHeader('Content-Type', 'application/pdf');
-            $this->patchJson(route('provider.documents.status', $document), ['status' => 'accepted'])->assertOk();
+            $preview = $this->get(route('documents.view', $document))->assertOk()->assertHeader('Content-Type', 'application/pdf');
+            $this->patchJson(route('provider.documents.status', $document), [
+                'status' => 'accepted',
+                'view_receipt' => $preview->headers->get(\App\Support\ApplicationDocumentReviewReceipt::HEADER),
+            ])->assertOk();
         }
         $this->patchJson(route('provider.applications.stages.result', [$screening, 'screening']), [
             'result' => 'passed',

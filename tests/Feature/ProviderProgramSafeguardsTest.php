@@ -274,6 +274,7 @@ class ProviderProgramSafeguardsTest extends TestCase
         $this->actingAs($provider)
             ->postJson('/provider/scholarships', [
                 'title' => 'Support Period Draft',
+                'deadline' => now()->addMonth()->toDateString(),
                 'support_starts_at' => $startsAt,
                 'support_ends_at' => $endsAt,
                 'status' => 'draft',
@@ -294,6 +295,7 @@ class ProviderProgramSafeguardsTest extends TestCase
 
         $this->actingAs($provider)
             ->postJson('/provider/scholarships', $this->completeSubmissionPayload([
+                'deadline' => now()->addMonth()->toDateString(),
                 'support_starts_at' => now()->addYear()->toDateString(),
                 'support_ends_at' => now()->addMonths(2)->toDateString(),
             ]))

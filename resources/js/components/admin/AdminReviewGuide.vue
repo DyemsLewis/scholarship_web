@@ -1,7 +1,6 @@
 <script setup>
 import { computed } from 'vue';
 import { reviewStatusLabel } from '../../support/adminReviewPresentation.js';
-import { profileVerificationLabel } from '../../support/applicantProfileLabels.js';
 
 const props = defineProps({ workflow: { type: Object, default: null }, kind: { type: String, required: true } });
 defineEmits(['continue']);
@@ -21,7 +20,7 @@ const explanation = computed(() => {
 });
 function date(value) { return new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(new Date(value)); }
 function outcomeLabel(value) {
-    return props.kind === 'applicant' ? profileVerificationLabel(value) : reviewStatusLabel(value, props.kind === 'program' ? 'programs' : 'providers');
+    return reviewStatusLabel(value, props.kind === 'applicant' ? 'applicants' : props.kind === 'program' ? 'programs' : 'providers');
 }
 </script>
 

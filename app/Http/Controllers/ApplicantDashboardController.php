@@ -48,6 +48,7 @@ use App\Support\CompletedQualification;
 use App\Support\EducationEligibilityPolicy;
 use App\Support\EligibilityRulePolicy;
 use App\Support\PreScreeningHandoffRecord;
+use App\Support\ProgramApplicationRules;
 use App\Support\RecipientAgreement;
 use App\Support\RecipientMonitoringRequirementType;
 use App\Support\ReviewRubric;
@@ -3604,15 +3605,9 @@ class ApplicantDashboardController extends Controller
 
         return [
             'requirements' => $this->splitDocumentRequirements($scholarship->post_qualification_requirements),
-            'mode' => $scholarship->handoff_mode ?: 'provider_contact',
+            ...ProgramApplicationRules::handoffChannel($scholarship),
             'instructions' => $scholarship->handoff_instructions,
             'deadline' => $scholarship->handoff_deadline?->format('M d, Y'),
-            'location_name' => $scholarship->handoff_location_name,
-            'location_address' => $scholarship->handoff_location_address,
-            'latitude' => $scholarship->handoff_latitude,
-            'longitude' => $scholarship->handoff_longitude,
-            'map_url' => $scholarship->handoffMapUrl(),
-            'url' => $scholarship->handoff_url,
             'contact_person' => $scholarship->contact_person,
             'contact_department' => $scholarship->contact_department,
             'contact_email' => $scholarship->contact_email,

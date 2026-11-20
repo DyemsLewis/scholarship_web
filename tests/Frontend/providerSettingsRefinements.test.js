@@ -133,6 +133,34 @@ test('an existing role outside the actor catalog remains a custom role without a
     assert.deepEqual([...state.form.assigned_program_ids], [11]);
 });
 
+test('the coordinator setup link selects only an offered role and leaves edit assignments intact', async () => {
+    const path = 'pages/provider/team/TeamAccountFormPage.vue';
+    const manager = { value: 'manager', label: 'Manager' };
+    const coordinator = { value: 'program_coordinator', label: 'Program coordinator' };
+    const config = {
+        available_roles: [manager, coordinator],
+        role_presets: { manager: ['manage_team', 'manage_programs'], program_coordinator: ['manage_programs'] },
+        can_assign_all_programs: true,
+    };
+    async function load(pathname, data) {
+        const window = { location: { pathname, search: '?role=program_coordinator' }, axios: { get: async () => ({ data }) } };
+        const state = harness(path, 'loadAccount, form', { window });
+        await state.loadAccount();
+        return state.form;
+    }
+    const create = await load('/provider/team/accounts/create', config);
+    assert.equal(create.account_title, 'program_coordinator');
+    assert.deepEqual([...create.permissions], ['manage_programs']);
+
+    const limited = await load('/provider/team/accounts/create', { ...config, available_roles: [{ value: 'custom' }] });
+    assert.equal(limited.account_title, 'custom');
+    assert.deepEqual([...limited.permissions], []);
+
+    const edit = await load('/provider/team/accounts/88/edit', { ...config, account: { team_role: 'manager', permissions: ['manage_team'] } });
+    assert.equal(edit.account_title, 'manager');
+    assert.deepEqual([...edit.permissions], ['manage_team']);
+});
+
 test('server validation opens the correct team form step and preserves entered values', async () => {
     for (const [field, expected] of [['username', 1], ['permissions.0', 2], ['assigned_program_ids.0', 3]]) {
         const state = validTeamForm();

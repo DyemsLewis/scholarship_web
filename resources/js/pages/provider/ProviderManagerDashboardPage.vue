@@ -20,6 +20,8 @@ const overview = ref({
 
 const recentPrograms = computed(() => scholarships.value.slice(0, 5));
 const canManagePrograms = computed(() => user.value?.permissions?.includes('manage_programs') ?? false);
+const showProgramSetup = computed(() => Boolean(user.value?.is_organization_owner
+    && user.value?.permissions?.includes('manage_team') && !canManagePrograms.value));
 const canOpenProgramRecords = computed(() => ['manage_programs', 'verify_applications', 'manage_selection_activities', 'record_final_decisions', 'manage_recipients', 'manage_monitoring', 'manage_benefit_releases']
     .some(permission => user.value?.permissions?.includes(permission)));
 const showAllQueues = ref(false);
@@ -137,6 +139,23 @@ onMounted(loadDashboard);
                             <span class="workspace-dashboard-icon grid h-11 w-11 shrink-0 place-items-center bg-amber-100 text-amber-700"><i :class="priorityActionIcon" aria-hidden="true"></i></span>
                             <div class="min-w-0 flex-1"><p class="workspace-dashboard-label text-xs font-bold uppercase tracking-wide text-amber-700">{{ overview.priority_action.eyebrow }}</p><h2 id="manager-priority-title" class="workspace-dashboard-text mt-1 text-lg font-bold text-slate-950">{{ overview.priority_action.title }}</h2><p class="mt-1 text-sm text-slate-600"><template v-if="overview.priority_action.count">{{ overview.priority_action.count }} item{{ overview.priority_action.count === 1 ? '' : 's' }} · </template>{{ overview.priority_action.description }}</p></div>
                             <a :href="providerDashboardQueueLink(overview.priority_action.href)" class="workspace-dashboard-action inline-flex h-10 shrink-0 items-center gap-2 bg-slate-950 px-4 text-xs font-bold text-white hover:bg-slate-800">{{ overview.priority_action.label }} <i class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i></a>
+                        </div>
+                    </section>
+
+                    <section v-if="showProgramSetup" class="mt-4 rounded-sm border border-slate-200 bg-white px-5 py-4 shadow-sm sm:px-6" aria-labelledby="provider-program-setup-title">
+                        <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                            <div class="flex min-w-0 items-start gap-3.5">
+                                <span class="workspace-dashboard-icon grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-amber-100 text-amber-800"><i class="fa-solid fa-user-plus text-sm" aria-hidden="true"></i></span>
+                                <div class="min-w-0">
+                                    <h2 id="provider-program-setup-title" class="text-base font-bold text-slate-950">Set up scholarship creation</h2>
+                                    <p class="mt-1 max-w-3xl text-sm leading-6 text-slate-700">Your representative account manages the organization and team, but cannot create scholarships. Use a Program Coordinator or another team account with program access to create and submit scholarships.</p>
+                                    <p v-if="!user.can_post_scholarships" class="mt-1 text-xs leading-5 text-slate-600">You can add a coordinator now. An admin must approve the organization before they can create a scholarship.</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2 lg:shrink-0">
+                                <a v-if="overview.summary.active_team > 0" href="/provider/workspaces/team" class="inline-flex min-h-10 items-center rounded-sm px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100">Review team access</a>
+                                <a href="/provider/team/accounts/create?role=program_coordinator" class="workspace-dashboard-action inline-flex min-h-10 items-center gap-2 rounded-sm bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-slate-800">Add Program Coordinator <i class="fa-solid fa-arrow-right text-xs text-amber-300" aria-hidden="true"></i></a>
+                            </div>
                         </div>
                     </section>
 

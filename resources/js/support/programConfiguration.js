@@ -1,5 +1,52 @@
-import { providerDate } from './providerDates.js';
+import { latestDate, providerDate, providerDateOffset } from './providerDates.js';
 export const programDateToday = providerDate;
+
+const dateLabels = {
+    application_opens_at: 'application opening date', deadline: 'application deadline',
+    expected_results_at: 'expected final results date', handoff_deadline: 'formal application deadline',
+    support_starts_at: 'support start date', support_ends_at: 'support end date',
+};
+
+export function programTimelineMinimums(dates) {
+    const lastDeadline = latestDate(dates.deadline, dates.handoff_deadline);
+    const afterLastDeadline = providerDateOffset(lastDeadline, 1);
+    return {
+        deadline: dates.application_opens_at,
+        handoff_deadline: providerDateOffset(dates.deadline, 1),
+        expected_results_at: afterLastDeadline,
+        support_starts_at: latestDate(afterLastDeadline, dates.expected_results_at),
+        support_ends_at: dates.support_starts_at,
+    };
+}
+
+function timelineErrors(dates) {
+    const errors = {};
+    const { deadline, handoff_deadline: handoff, expected_results_at: results, support_starts_at: start, support_ends_at: end } = dates;
+    const lastDeadline = latestDate(deadline, handoff);
+    if (deadline && dates.application_opens_at > deadline) {
+        errors.application_opens_at = 'Applications must open on or before the application deadline.';
+    }
+    if (!deadline && (handoff || results || start || end)) {
+        errors.deadline = 'Set the application deadline before adding formal application, results, or support dates.';
+    }
+    if (deadline && handoff && handoff <= deadline) {
+        errors.handoff_deadline = 'The formal application deadline must be after applications close.';
+    }
+    if (results && lastDeadline && results <= lastDeadline) {
+        errors.expected_results_at = 'Expected final results must be after the last application deadline.';
+    }
+    if (start && lastDeadline && start <= lastDeadline) {
+        errors.support_starts_at = 'Support must start after the last application deadline.';
+    } else if (start && results && start < results) {
+        errors.support_starts_at = 'Support cannot start before the expected final results.';
+    }
+    if (end && !start) {
+        errors.support_starts_at = 'Set the support start date before the support end date.';
+    } else if (end && end < start) {
+        errors.support_ends_at = 'The support end date must be on or after the support start date.';
+    }
+    return errors;
+}
 
 export function programConfigurationErrors(values = {}, { today = programDateToday(), savedDates = {}, preserveHistoricalDates = false } = {}) {
     const errors = {};
@@ -19,26 +66,14 @@ export function programConfigurationErrors(values = {}, { today = programDateTod
         errors.application_limit = 'The application limit must be at least the number of recipient slots.';
     }
 
-    const pairs = [
-        ['deadline', 'application_opens_at', 'application_opens_at', 'The application opening date must be on or before the deadline.'],
-        ['expected_results_at', 'deadline', 'expected_results_at', 'The expected results date must be on or after the application deadline.'],
-        ['handoff_deadline', 'deadline', 'handoff_deadline', 'The formal application deadline must be on or after the pre-screening deadline.'],
-        ['support_ends_at', 'support_starts_at', 'support_ends_at', 'The support end date must be on or after the support start date.'],
-    ];
-    for (const [later, earlier, field, message] of pairs) {
-        if (isSet(values[later]) && isSet(values[earlier]) && values[later] < values[earlier]) {
-            errors[field] = message;
-        }
-    }
-    for (const [field, label] of [
-        ['application_opens_at', 'application opening date'], ['deadline', 'application deadline'],
-        ['expected_results_at', 'expected results date'], ['handoff_deadline', 'formal application deadline'],
-        ['support_starts_at', 'support start date'], ['support_ends_at', 'support end date'],
-    ]) {
-        const keepsHistoricalDate = preserveHistoricalDates && values[field] === savedDates[field];
-        if (isSet(values[field]) && values[field] < today && !keepsHistoricalDate) {
+    const dates = Object.fromEntries(Object.keys(dateLabels).map(field => [field, values[field] || '']));
+    const unchanged = preserveHistoricalDates && Object.keys(dateLabels).every(field => dates[field] === (savedDates[field] || ''));
+    const orderedErrors = unchanged ? {} : timelineErrors(dates);
+    for (const [field, label] of Object.entries(dateLabels)) {
+        const keepsHistoricalDate = preserveHistoricalDates && dates[field] === savedDates[field];
+        if (dates[field] && dates[field] < today && !keepsHistoricalDate) {
             errors[field] = `The ${label} must be today or a future date.`;
         }
     }
-    return errors;
+    return { ...orderedErrors, ...errors };
 }

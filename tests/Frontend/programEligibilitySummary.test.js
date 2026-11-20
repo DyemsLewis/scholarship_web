@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { eligibilitySummaryFromRules, eligibilitySummaryReviewKey } from '../../resources/js/support/programEligibilitySummary.js';
+import { eligibilitySummaryFromRules } from '../../resources/js/support/programEligibilitySummary.js';
 import { configuredEligibilityRules } from '../../resources/js/support/providerEligibilityRules.js';
 
 const rules = [
@@ -17,15 +17,6 @@ test('generated summaries separate required rules from nonblocking preferences',
     assert.match(preferred, /Preferred, not required to apply/);
 });
 
-test('review becomes stale when values, modes or custom wording change, not when rules reorder', () => {
-    const key = eligibilitySummaryReviewKey(rules, 'Provider conditions.');
-    assert.equal(eligibilitySummaryReviewKey([...rules].reverse(), ' Provider conditions. '), key);
-    assert.notEqual(eligibilitySummaryReviewKey([{ ...rules[0], value: '90%' }, rules[1]], 'Provider conditions.'), key);
-    assert.notEqual(eligibilitySummaryReviewKey([{ ...rules[0], mode: 'preferred' }, rules[1]], 'Provider conditions.'), key);
-    assert.notEqual(eligibilitySummaryReviewKey(rules.slice(1), 'Provider conditions.'), key);
-    assert.notEqual(eligibilitySummaryReviewKey(rules, 'Changed conditions.'), key);
-});
-
 test('summary uses existing rule configuration without inventing restrictions', () => {
     const configured = configuredEligibilityRules({ eligibleCourses: 'Any', eligibleLocations: 'Nationwide', incomeRequirement: 'Any', minimumGradeScale: 'percentage', minimumGwa: 88, eligibilityRuleModes: { academic: 'preferred' } });
     assert.equal(configured.length, 1);
@@ -33,8 +24,10 @@ test('summary uses existing rule configuration without inventing restrictions', 
     assert.doesNotMatch(eligibilitySummaryFromRules(configured), /Residency|Household income|Courses/);
 });
 
-test('builder preserves custom text, saves the effective summary and checks it before submission', () => {
+test('builder preserves custom text and validates the effective summary without requiring acknowledgement', () => {
     const source = readFileSync(new URL('../../resources/js/pages/provider/programs/ProgramFormPage.vue', import.meta.url), 'utf8');
-    for (const text of ['eligibility: eligibilitySummary.value.trim()', 'eligibility: eligibilitySummary.value', ':readonly="useGeneratedEligibilitySummary"', '&& !customSummaryNeedsReview.value', 'I checked my summary', 'useGeneratedEligibilitySummary.value = form.value.eligibility.trim() === suggestedEligibilitySummary.value.trim()']) assert.ok(source.includes(text), text);
+    for (const text of ['eligibility: eligibilitySummary.value.trim()', 'eligibility: eligibilitySummary.value', 'v-model:automatic="useGeneratedEligibilitySummary"', 'useGeneratedEligibilitySummary.value = form.value.eligibility.trim() === suggestedEligibilitySummary.value.trim()']) assert.ok(source.includes(text), text);
+    assert.match(source, /eligibility: Boolean\(\s*eligibilitySummary\.value\.trim\(\)\s*&& eligibilitySummary\.value\.length <= 5000/);
+    assert.doesNotMatch(source, /customSummaryNeedsReview|reviewedEligibilitySummary/);
     assert.doesNotMatch(source, /watch\(.*eligibility/);
 });

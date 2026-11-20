@@ -12,10 +12,10 @@ import ApplicantEvidenceReviewDialog from './ApplicantEvidenceReviewDialog.vue';
 import ApplicantEvidenceHistory from './ApplicantEvidenceHistory.vue';
 import ApplicantVerificationProfileModal from './ApplicantVerificationProfileModal.vue';
 import { applicantProfileDetails } from '../../../support/applicantProfileDetails';
-import { profileEducationSummary, profileVerificationLabel } from '../../../support/applicantProfileLabels';
+import { profileEducationSummary } from '../../../support/applicantProfileLabels';
 import AdminLoadState from '../components/AdminLoadState.vue';
 import { useAdminResource } from '../../../composables/useAdminResource';
-import { reviewErrorMessage } from '../../../support/adminReviewPresentation';
+import { reviewErrorMessage, reviewStatusLabel } from '../../../support/adminReviewPresentation';
 import { evidenceRows, evidenceReviewDate } from '../../../support/applicantEvidenceReview.js';
 
 const applicantId = (window.portalPathname?.() ?? window.location.pathname).match(/applicants\/(\d+)/)?.[1];
@@ -84,7 +84,7 @@ async function saveDecision() {
     if (!canSave.value) return;
     if (!await confirmOutcome({
         record: applicant.value.name,
-        outcome: profileVerificationLabel(decision.value),
+        outcome: reviewStatusLabel(decision.value, 'applicants'),
         consequence: 'This saves the final profile verification result. Approval allows the applicant to proceed with eligible applications; it does not award a scholarship.',
         danger: decision.value === 'rejected',
     }, () => canSave.value)) return;
@@ -200,7 +200,7 @@ onMounted(loadRecord);
                 :record="applicantProfileRecord"
                 :sections="applicantProfileSections"
                 :verification-status="verificationStatus"
-                :verification-label="profileVerificationLabel(verificationStatus)"
+                :verification-label="reviewStatusLabel(verificationStatus, 'applicants')"
                 :show-trust-notice="false"
                 show-data-source-notice
             >

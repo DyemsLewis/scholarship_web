@@ -1231,8 +1231,10 @@ onBeforeUnmount(cancelConfirmation);
                                     <p class="mt-1 text-sm text-slate-600">{{ formalApplicationHandoff.location_address }}</p>
                                     <div class="mt-3 flex flex-wrap gap-2">
                                         <button type="button" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700" @click="openFormalHandoffMap">View map</button>
-                                        <a v-if="formalApplicationHandoff.url" :href="formalApplicationHandoff.url" target="_blank" rel="noopener" class="rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white">Continue online</a>
                                     </div>
+                                </div>
+                                <div v-if="formalApplicationHandoff.url" class="sm:col-span-2" data-formal-handoff-online>
+                                    <a :href="formalApplicationHandoff.url" target="_blank" rel="noopener noreferrer" class="inline-flex rounded-md bg-slate-950 px-3 py-2 text-xs font-bold text-white">Continue online</a>
                                 </div>
                             </div>
                         </details>

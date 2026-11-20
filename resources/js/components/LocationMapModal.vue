@@ -6,6 +6,7 @@ import { hasLocationPin } from '../support/locationPins.js';
 
 const props = defineProps({
     open: { type: Boolean, default: false },
+    inline: { type: Boolean, default: false },
     eyebrow: { type: String, default: 'Location map' },
     title: { type: String, default: 'Map preview' },
     address: { type: String, default: '' },
@@ -29,7 +30,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'resolved', 'picked', 'error']);
 const dialog = ref(null);
-const { handleKeydown } = useModalAccessibility(() => props.open, dialog, () => emit('close'));
+const { handleKeydown: handleModalKeydown } = useModalAccessibility(() => props.open && !props.inline, dialog, () => emit('close'));
 const retryCount = ref(0);
 const selection = ref({ pending: false, valid: false });
 const draftLocation = ref(null);
@@ -68,6 +69,15 @@ function close() {
     emit('close');
 }
 
+function handleKeydown(event) {
+    if (!props.inline) return handleModalKeydown(event);
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+    }
+}
+
 function stageLocation(location, event) {
     if (!props.picker) { emit(event, location); return; }
     if (!hasLocationPin(location?.latitude, location?.longitude)) return;
@@ -89,19 +99,19 @@ function retryAddressSearch() {
 </script>
 
 <template>
-    <Teleport to="body">
+    <Teleport to="body" :disabled="inline">
         <div
             v-if="open"
             ref="dialog"
-            class="fixed inset-0 z-[2600] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5"
-            role="dialog"
-            aria-modal="true"
+            :class="inline ? 'overflow-hidden rounded-md border border-slate-300' : 'fixed inset-0 z-[2600] flex items-center justify-center bg-slate-950/70 p-3 sm:p-5'"
+            :role="inline ? 'region' : 'dialog'"
+            :aria-modal="inline ? undefined : true"
             aria-labelledby="location-map-modal-title"
-            tabindex="-1"
-            @click.self="close"
+            :tabindex="inline ? undefined : -1"
+            @click.self="!inline && close()"
             @keydown="handleKeydown"
         >
-            <section class="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl">
+            <section :class="inline ? 'bg-white' : 'flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl'">
                 <header class="flex items-start gap-3 border-b border-slate-200 px-4 py-4 sm:px-5">
                     <span class="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-amber-300">
                         <i class="fa-solid fa-map-location-dot" aria-hidden="true"></i>
@@ -134,7 +144,7 @@ function retryAddressSearch() {
                         :auto-geocode-delay="autoGeocodeDelay"
                         :geocode-zoom="geocodeZoom"
                         :geocode-trigger="mapGeocodeTrigger"
-                        height="min(60vh, 34rem)"
+                        :height="inline ? 'min(44dvh, 24rem)' : 'min(60vh, 34rem)'"
                         @resolved="stageLocation($event, 'resolved')"
                         @picked="stageLocation($event, 'picked')"
                         @error="emit('error', $event)"

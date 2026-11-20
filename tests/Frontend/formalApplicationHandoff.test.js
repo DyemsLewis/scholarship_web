@@ -39,6 +39,8 @@ test('online instructions retain the official link and do not invent a venue', a
     assert.ok(!html.includes('data-formal-handoff-venue'));
     assert.ok(!html.includes('data-formal-preparation'));
     assert.ok(!html.includes('data-formal-provider-contact'));
+    const overview = readFileSync(new URL('../../resources/js/pages/UserApplicationDetailPage.vue', import.meta.url), 'utf8');
+    assert.match(overview, /<\/div>\s*<\/div>\s*<div v-if="formalApplicationHandoff.url"[^>]*data-formal-handoff-online>/);
 });
 
 test('unpublished details use honest fallbacks and large requirement lists stay collapsed', async () => {

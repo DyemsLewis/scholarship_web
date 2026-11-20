@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
+import { computed, reactive, ref, watch } from 'vue';
 import { programOnboardingPolicy, onboardingPolicyError } from '../../resources/js/support/recipientOnboarding.js';
 
 for (const file of [
@@ -60,5 +61,41 @@ test('program setup persists the policy only when configured and locks it after 
     const fields = readFileSync('resources/js/pages/provider/programs/components/ProgramOnboardingPolicyFields.vue', 'utf8');
     assert.match(fields, /if \(props.disabled \|\| props.fixed\) return/);
     assert.match(fields, /:disabled="disabled \|\| fixed"/);
+    assert.match(fields, /:view-only="fixed"/);
     assert.doesNotMatch(fields, /type="file"/);
+});
+
+test('final agreement changes are staged, require instructions when enabled and cannot bypass the locked policy', () => {
+    const source = readFileSync('resources/js/pages/provider/programs/components/ProgramOnboardingPolicyFields.vue', 'utf8');
+    const { descriptor } = parse(source);
+    assert.doesNotMatch(descriptor.template.content.split('<EligibilityOptionsModal')[0], /<textarea|type="checkbox"/);
+    const props = reactive({ modelValue: null, disabled: false, fixed: false });
+    const events = [];
+    const deps = { computed, ref, watch, onboardingPolicyError, programOnboardingPolicy, defineProps: () => props, defineEmits: () => (...args) => events.push(args) };
+    const body = descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
+    const state = new Function(...Object.keys(deps), body + '\nreturn { show, close, apply, open, draftRequired, draftInstructions };')(...Object.values(deps));
+    state.show();
+    state.draftRequired.value = true;
+    state.apply();
+    assert.equal(state.open.value, true);
+    assert.deepEqual(events, []);
+    state.draftInstructions.value = 'Instructions to discard.';
+    state.close();
+    state.show();
+    assert.equal(state.draftRequired.value, false);
+    assert.equal(state.draftInstructions.value, '');
+
+    state.draftRequired.value = true;
+    state.draftInstructions.value = 'Complete the agreement at orientation.';
+    state.apply();
+    assert.equal(state.open.value, false);
+    assert.deepEqual(events[0], ['update:modelValue', { version: 1, final_agreement_required: true, instructions: 'Complete the agreement at orientation.' }]);
+
+    props.fixed = true;
+    props.modelValue = events[0][1];
+    state.show();
+    assert.equal(state.draftInstructions.value, 'Complete the agreement at orientation.');
+    state.draftRequired.value = false;
+    state.apply();
+    assert.equal(events.length, 1);
 });

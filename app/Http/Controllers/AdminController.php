@@ -31,6 +31,7 @@ use App\Support\AcademicRequirement;
 use App\Support\AdminWorkspace;
 use App\Support\CsvExport;
 use App\Support\EducationEligibilityPolicy;
+use App\Support\ProgramApplicationRules;
 use App\Support\ScholarshipEventPayload;
 use App\Support\ScholarshipSelectionPlan;
 use Illuminate\Auth\Events\Verified;
@@ -2266,15 +2267,15 @@ class AdminController extends Controller
             'support_starts_at' => $scholarship->support_starts_at?->format('M d, Y'),
             'support_ends_at' => $scholarship->support_ends_at?->format('M d, Y'),
             'official_program_url' => $scholarship->official_program_url,
-            'requirements' => $scholarship->requirements,
-            'optional_requirements' => $scholarship->optional_requirements,
+            'requirements' => $scholarship->application_mode === 'provider_review' ? null : $scholarship->requirements,
+            'optional_requirements' => $scholarship->application_mode === 'provider_review' ? null : $scholarship->optional_requirements,
             'post_qualification_requirements' => $scholarship->post_qualification_requirements,
             'handoff_mode' => $scholarship->handoff_mode,
             'handoff_instructions' => $scholarship->handoff_instructions,
             'handoff_deadline' => $scholarship->handoff_deadline?->format('M d, Y'),
-            'handoff_location_name' => $scholarship->handoff_location_name,
-            'handoff_location_address' => $scholarship->handoff_location_address,
-            'handoff_url' => $scholarship->handoff_url,
+            'handoff_location_name' => ProgramApplicationRules::usesHandoffVenue($scholarship->handoff_mode) ? $scholarship->handoff_location_name : null,
+            'handoff_location_address' => ProgramApplicationRules::usesHandoffVenue($scholarship->handoff_mode) ? $scholarship->handoff_location_address : null,
+            'handoff_url' => ProgramApplicationRules::handoffChannel($scholarship)['url'],
             'review_rubric' => $scholarship->review_rubric ?? [],
             'application_questions' => $scholarship->application_questions ?? [],
             'eligible_courses' => $scholarship->eligible_courses,

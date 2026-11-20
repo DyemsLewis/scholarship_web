@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { compileScript, compileTemplate, parse } from '@vue/compiler-sfc';
-import { createSSRApp, h } from 'vue';
+import { computed, createSSRApp, h, reactive, ref, watch } from 'vue';
 import { renderToString } from '@vue/server-renderer';
 import { programCriterionLabels, programCriterionLabelErrors, programScoringPreview } from '../../resources/js/support/programScoringPreview.js';
 import { programReviewSummary } from '../../resources/js/support/programReviewSummary.js';
@@ -23,9 +23,21 @@ const source = readFileSync(new URL('../../resources/js/pages/provider/programs/
 const { descriptor, errors } = parse(source, { filename });
 assert.deepEqual(errors, []);
 const script = compileScript(descriptor, { id: 'criterion-labels', inlineTemplate: true });
-const code = script.content.replace(/from (['"])vue\1/g, `from ${JSON.stringify(import.meta.resolve('vue'))}`);
+const code = script.content
+    .replace(/from (['"])vue\1/g, `from ${JSON.stringify(import.meta.resolve('vue'))}`)
+    .replace(/from ['"][^'"]+\/programScoringPreview\.js['"]/, `from ${JSON.stringify(new URL('../../resources/js/support/programScoringPreview.js', import.meta.url).href)}`)
+    .replace(/^import EligibilityOptionsModal .*;$/m, 'const EligibilityOptionsModal = { render: () => null };');
 const Editor = (await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'))).default;
 const render = props => renderToString(createSSRApp({ render: () => h(Editor, { modelValue: labels(), rows: preview().rows, ...props }) }));
+
+function editor(overrides = {}) {
+    const props = reactive({ modelValue: labels(), rows: preview().rows, ...overrides });
+    const events = [];
+    const deps = { computed, ref, watch, programCriterionLabelErrors, defineProps: () => props, defineEmits: () => (...args) => events.push(args) };
+    const setup = descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
+    const state = new Function(...Object.keys(deps), setup + '\nreturn { show, close, apply, draft, activeStage, errorMessage };')(...Object.values(deps));
+    return { ...state, props, events };
+}
 
 test('labels hydrate from defaults, configured inactive criteria, and the fixed policy without mutation', () => {
     const saved = { ...policy, stage_criteria: { interview: [{ ...policy.stage_criteria.interview[0], label: 'Study motivation' }] }, stage_criterion_labels: { exam: { knowledge: 'Mathematics' } } };
@@ -65,26 +77,65 @@ test('client checks reject blank, duplicated, invisible and overlong names witho
         assert.ok(programCriterionLabelErrors(input)['stage_criterion_labels.exam.knowledge'] || programCriterionLabelErrors(input)['stage_criterion_labels.exam.reasoning']);
     }
     const input = labels();
-    input.exam.knowledge = '<img src=x onerror=alert(1)>';
+    input.exam.knowledge = '<strong>Mathematics</strong>';
     const html = await render({ modelValue: input });
-    assert.ok(html.includes('&lt;img'));
-    assert.ok(!html.includes('<img'));
+    assert.ok(!html.includes(input.exam.knowledge));
 });
 
-test('editor shows active stage names, bounded label fields and disabled frozen controls', async () => {
+test('editor shows only included stage summaries and places bounded inputs inside the modal', async () => {
     const html = await render({});
     assert.match(html, /data-criterion-stage="exam"/);
     assert.match(html, /data-criterion-stage="interview"/);
-    assert.equal((html.match(/maxlength="80"/g) ?? []).length, 6);
-    assert.match(html, /value="Mathematics"/);
-    assert.match(html, /Weights and rating scales stay unchanged/);
+    assert.match(html, /Edit Exam criteria/);
+    assert.doesNotMatch(html, /<input/);
+    assert.match(source, /<EligibilityOptionsModal[^>]*:view-only="fixed"/);
+    assert.match(source, /maxlength="80"/);
+    assert.match(source, /Weights and rating scales stay unchanged/);
     const fixed = await render({ fixed: true });
-    assert.equal((fixed.match(/<fieldset[^>]*disabled/g) ?? []).length, 2);
-    assert.match(fixed, /fixed after the first application/);
+    assert.match(fixed, /View Exam criteria/);
+    assert.match(fixed, /fixed after the first application/i);
     const total = await render({ rows: preview(labels(), 0, 'total').rows });
     assert.doesNotMatch(total, /data-criterion-stage="exam"/);
+    assert.match(total, /data-criterion-stage="interview"/);
+    assert.doesNotMatch(await render({ includedStages: ['exam'] }), /data-criterion-stage="interview"/);
     const qualifying = await render({ rows: [] });
     assert.doesNotMatch(qualifying, /data-stage-criterion-labels/);
+});
+
+test('editing a single stage stages valid labels only until Apply and never changes other stages', () => {
+    const state = editor();
+    state.show('exam');
+    state.draft.value.knowledge = 'Discard this';
+    state.close();
+    state.show('exam');
+    assert.deepEqual(state.events, []);
+    assert.equal(state.draft.value.knowledge, 'Mathematics');
+    state.draft.value.knowledge = '   science  ';
+    state.apply();
+    assert.ok(state.errorMessage.value);
+    assert.equal(state.activeStage.value.key, 'exam');
+    assert.equal(state.events.length, 0);
+    state.draft.value.knowledge = '  Applied mathematics  ';
+    state.apply();
+    const payload = state.events[0][1];
+    assert.equal(payload.exam.knowledge, 'Applied mathematics');
+    assert.equal(state.props.modelValue.exam.knowledge, 'Mathematics');
+    assert.deepEqual(payload.interview, labels().interview);
+    assert.equal(state.activeStage.value, undefined);
+});
+
+test('locked review reads the fixed policy and excluded or absent criteria cannot open', () => {
+    const state = editor({ rows: preview(labels(), 1).rows, fixed: true, includedStages: ['exam'] });
+    state.show('interview');
+    assert.equal(state.activeStage.value, undefined);
+    state.show('exam');
+    assert.equal(state.draft.value.knowledge, 'Subject knowledge');
+    state.draft.value.knowledge = 'Not allowed';
+    state.apply();
+    assert.deepEqual(state.events, []);
+    const total = editor({ rows: preview(labels(), 0, 'total').rows });
+    total.show('exam');
+    assert.equal(total.activeStage.value, undefined);
 });
 
 test('program form compiles and submits labels rather than editable weights or a replacement policy', () => {

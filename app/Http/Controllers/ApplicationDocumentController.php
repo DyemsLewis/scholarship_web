@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ApplicationDocument;
 use App\Models\User;
+use App\Support\ApplicationDocumentReviewReceipt;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -19,10 +20,16 @@ class ApplicationDocumentController extends Controller
         abort_unless($this->canAccessDocument($user, $document), 403);
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
-        return Storage::disk('local')->response($document->path, $document->original_name, [
+        $response = Storage::disk('local')->response($document->path, $document->original_name, [
             'Cache-Control' => 'private, no-store',
             'X-Content-Type-Options' => 'nosniff',
         ]);
+
+        if ($request->isMethod('GET') && $user->isProvider() && $user->hasPortalPermission('verify_applications')) {
+            $response->headers->set(ApplicationDocumentReviewReceipt::HEADER, ApplicationDocumentReviewReceipt::issue($document, $user));
+        }
+
+        return $response;
     }
 
     public function download(Request $request, ApplicationDocument $document)

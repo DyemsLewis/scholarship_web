@@ -55,6 +55,7 @@ class FreshWorkflowDemoSeeder extends Seeder
     protected array $programs = [];
     protected array $applications = [];
     protected bool $seedStageScores = true;
+    protected bool $seedProofForUnfinishedSession = true;
     protected string $assetDirectory = Catalog::DIRECTORY;
     protected string $platformPrefix = Catalog::ADMIN;
     private array $sessions = [];
@@ -272,7 +273,7 @@ class FreshWorkflowDemoSeeder extends Seeder
             'first_name' => $record['first_name'], 'last_name' => $record['last_name'], 'middle_initial' => null,
             'gender' => $number % 2 ? 'female' : 'male', 'contact_number' => sprintf('0900003%04d', $number),
             'account_managed_by' => 'learner', 'citizenship_status' => 'filipino', 'birthdate' => $this->timeline->anchor->subYears(19)->toDateString(),
-            'education_level' => 'senior_high_school', 'school' => 'Luntag River Senior High School',
+            'education_level' => 'senior_high_school', 'school' => $record['school'] ?? 'Luntag River Senior High School',
             'school_type' => 'public', 'learner_reference_number' => sprintf('00007000%04d', $number),
             'course_or_strand' => $record['scenario'] === 'apply' ? 'HUMSS' : 'STEM', 'year_level' => 'Grade 12',
             'enrollment_status' => 'Enrolled', 'academic_year' => $this->schoolYear(), 'academic_term' => 'first_semester',
@@ -441,7 +442,7 @@ class FreshWorkflowDemoSeeder extends Seeder
             'assigned_at' => $published, 'acknowledged_at' => $conducted ? $published->addDay() : null]);
         $assignment->attendance()->create(['status' => $conducted ? 'present' : 'pending',
             'recorded_by' => $conducted ? $actor->id : null, 'recorded_at' => $conducted ? $recorded : null]);
-        if ($conducted && ! $session->evidence()->exists()) {
+        if (($completed || ($conducted && $this->seedProofForUnfinishedSession)) && ! $session->evidence()->exists()) {
             $file = Document::make($this->assetDirectory.'/sessions/'.$session->id.'/provider-proof.pdf', ucfirst($stage).' participation proof', [
                 'Session: '.$session->title, 'Program: '.$program->title,
                 'Attendance: present', 'Demo assessment record ready for the provider to choose an outcome.',

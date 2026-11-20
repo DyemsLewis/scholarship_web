@@ -11,7 +11,7 @@ const exam = [{ key: 'knowledge', label: 'Mathematics', weight: 40, maximum_scor
 const rubric = [{ key: 'academic_merit', label: 'Academic merit', weight: 55 }, { key: 'financial_need', label: 'Financial need', weight: 45 }];
 function harness(path, bindings, exposed) {
     const source = parse(read(path)).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
-    const deps = { ref, computed, watch, ...evaluation, useModalAccessibility: () => ({ handleKeydown() {} }), onMounted() {}, ...bindings };
+    const deps = { ref, computed, watch, ...evaluation, useModalAccessibility: () => ({ handleKeydown() {} }), onMounted() {}, onBeforeUnmount() {}, ...bindings };
     return new Function(...Object.keys(deps), source + '\nreturn {' + exposed + '};')(...Object.values(deps));
 }
 function modal(stage, modelValue, criteria) {
@@ -96,6 +96,37 @@ test('screening scores apply locally only for an assigned open review', () => {
     assert.equal(state.rubricScores.value.academic_merit, 90);
     assert.doesNotMatch(parse(read('pages/provider/reviews/ApplicationReviewRecordPage.vue')).descriptor.template.content, /v-model.number="rubricScores/);
 });
+
+test('scholarship files require a successful preview before acceptance; profile evidence is read-only', async () => {
+    const page = 'pages/provider/reviews/ApplicationReviewRecordPage.vue';
+    let resolvePreview;
+    const saved = [];
+    const application = { applicant: { name: 'Applicant' }, workflow_stage: 'screening', assigned_reviewer: { id: 1 } };
+    const state = harness(page, {
+        document: { getElementById: () => ({ dataset: { applicationId: 1 } }) },
+        window: { location: { search: '' }, portalUser: { id: 1 }, axios: {
+            get: () => new Promise((resolve) => { resolvePreview = resolve; }),
+            patch: async (url, payload) => { saved.push([url, payload]); return { data: { application } }; },
+        } },
+        confirmOutcome: async (_summary, canProceed) => canProceed(),
+        decisionReasonOptions: [],
+    }, 'syncApplication, documentForm, documentDownloaded, canAcceptDocument, openDocumentReview, saveDocumentReview');
+    state.syncApplication(application);
+    const opening = state.openDocumentReview({ id: 10, document_name: 'School ID', view_url: '/documents/10/view' });
+    assert.equal(state.documentForm.value.status, '');
+    state.documentForm.value.status = 'accepted';
+    await state.saveDocumentReview();
+    assert.equal(saved.length, 0);
+    resolvePreview({ data: new Blob(['file'], { type: 'application/msword' }), headers: { 'x-document-review-receipt': 'opened-file' } });
+    await opening;
+    assert.equal(state.canAcceptDocument.value, false);
+    state.documentDownloaded.value = true;
+    assert.equal(state.canAcceptDocument.value, true);
+    await state.saveDocumentReview();
+    assert.deepEqual(saved, [['/provider/documents/10/status', { status: 'accepted', review_notes: '', view_receipt: 'opened-file' }]]);
+    assert.doesNotMatch(read(page), /verifyAcademicRecord|\/profile-verification|Verify profile evidence/);
+});
+
 test('modal uses bounded scrolling and shared keyboard/scroll protection, without backend writes', () => {
     const source = read(modalPath);
     for (const text of ['useModalAccessibility', 'aria-modal="true"', '@click.self="close"', 'min-h-0 overflow-y-auto', '<footer class="flex shrink-0', 'Nothing is recorded until you review and confirm', 'Cancel discards changes']) assert.ok(source.includes(text), text);

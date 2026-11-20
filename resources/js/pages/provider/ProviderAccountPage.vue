@@ -166,9 +166,9 @@ onMounted(loadAccount);
                                     <div><h3 class="text-base font-bold text-slate-950">Personal identity</h3><p class="mt-1 text-xs text-slate-500">Shown to other authorized members of your provider team.</p></div>
                                 </div>
                                 <div class="mt-5 grid grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)] gap-5">
-                                    <label><span :class="labelClass">First name</span><input v-model="accountForm.first_name" required type="text" autocomplete="given-name" :class="inputClass"><span v-if="fieldError(accountErrors, 'first_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'first_name') }}</span></label>
+                                    <label><span :class="labelClass">First name</span><input v-model="accountForm.first_name" v-capitalize-name autocapitalize="sentences" required type="text" autocomplete="given-name" :class="inputClass"><span v-if="fieldError(accountErrors, 'first_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'first_name') }}</span></label>
                                     <label><span :class="labelClass">M.I.</span><input v-model="accountForm.middle_initial" maxlength="1" type="text" :class="inputClass"><span v-if="fieldError(accountErrors, 'middle_initial')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'middle_initial') }}</span></label>
-                                    <label><span :class="labelClass">Last name</span><input v-model="accountForm.last_name" required type="text" autocomplete="family-name" :class="inputClass"><span v-if="fieldError(accountErrors, 'last_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'last_name') }}</span></label>
+                                    <label><span :class="labelClass">Last name</span><input v-model="accountForm.last_name" v-capitalize-name autocapitalize="sentences" required type="text" autocomplete="family-name" :class="inputClass"><span v-if="fieldError(accountErrors, 'last_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ fieldError(accountErrors, 'last_name') }}</span></label>
                                 </div>
                             </section>
 

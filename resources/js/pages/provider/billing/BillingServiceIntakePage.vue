@@ -195,7 +195,7 @@ onMounted(loadIntake);
                             <div class="mt-4 grid grid-cols-2 gap-6">
                                 <div>
                                     <label for="service-contact-name" class="text-sm font-bold text-slate-800">Contact person</label>
-                                    <input id="service-contact-name" v-model="form.contact_name" type="text" maxlength="120" :class="['mt-2 h-12 w-full border px-4 text-sm outline-none', fieldError('contact_name') ? 'border-rose-400' : 'border-slate-300 focus:border-slate-950']">
+                                    <input id="service-contact-name" v-model="form.contact_name" v-capitalize-name autocapitalize="sentences" type="text" maxlength="120" :class="['mt-2 h-12 w-full border px-4 text-sm outline-none', fieldError('contact_name') ? 'border-rose-400' : 'border-slate-300 focus:border-slate-950']">
                                     <p v-if="fieldError('contact_name')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('contact_name') }}</p>
                                 </div>
                                 <div>

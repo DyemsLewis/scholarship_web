@@ -33,7 +33,7 @@ for (const file of ['LocationPinField.vue', 'LocationMapLink.vue', 'LocationMapM
 test('every previously text-only physical location has the shared pin picker', () => {
     for (const file of [
         'organization/OrganizationContactPage.vue',
-        'programs/ProgramFormPage.vue',
+        'programs/components/ProgramLocationEditor.vue',
         'selection/SelectionSessionFormPage.vue',
         'selection/components/SelectionSessionFormModal.vue',
         'releases/BenefitReleaseSchedulePage.vue',

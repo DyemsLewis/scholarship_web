@@ -33,11 +33,14 @@ source = source.slice(0, start) + `
         report.options.push({value,selected:state.selected,form:state.form});
         if(!state.form || report.errors.length){await shot('recipient-commitment-error');throw new Error('Commitment '+value+' failed: '+JSON.stringify({state,errors:report.errors}));}
         assert.equal(state.selected,value);
-        assert.equal(state.text.includes('Recipient responsibilities'),value!=='none');
+        assert.equal(await client.evaluate("document.querySelector('[data-recipient-terms-field]')"), null);
+        await click('Edit terms');
+        await wait(()=>client.evaluate("!!document.querySelector('#program-recipient-terms-options')"), 'recipient terms modal');
+        assert.equal(await client.evaluate("!!document.querySelector('[data-recipient-terms-field=responsibilities]')"), value!=='none');
         if(value==='reporting'){
-            await client.evaluate("document.querySelector('select option[value=provider_briefing]').parentElement.closest('label').scrollIntoView({block:'start'})");
             await shot('recipient-commitment-reporting');
         }
+        await click('Cancel',"document.querySelector('#program-recipient-terms-options')");
     }
     const after=(await get('/provider/scholarships/'+program.id)).body.scholarship;
     assert.deepEqual(after.recipient_agreement,before.recipient_agreement);

@@ -4,6 +4,7 @@ import test from 'node:test';
 import { compileScript, parse } from '@vue/compiler-sfc';
 import { createSSRApp } from 'vue';
 import { renderToString } from '@vue/server-renderer';
+import { capitalizeName } from '../../resources/js/support/capitalizeName.js';
 
 const source = readFileSync(new URL('../../resources/js/components/profile/ApplicantPersonalEditor.vue', import.meta.url), 'utf8');
 const { descriptor, errors } = parse(source, { filename: 'ApplicantPersonalEditor.vue' });
@@ -26,7 +27,7 @@ function render(overrides = {}) {
         accountManagerOptions: [{ value: 'learner', label: 'Learner' }],
         suffixOptions: ['Jr.', 'II'],
         ...overrides,
-    }));
+    }).directive('capitalize-name', capitalizeName));
 }
 
 test('a saved photo starts as a compact summary, not an expanded upload task', async () => {

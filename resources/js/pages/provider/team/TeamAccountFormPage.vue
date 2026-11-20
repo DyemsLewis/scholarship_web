@@ -7,6 +7,7 @@ import WorkspaceGuide from '../../../components/provider/WorkspaceGuide.vue';
 import { labelFromKey } from '../../../support/display';
 
 const accountId = (window.portalPathname?.() ?? window.location.pathname).match(/\/provider\/team\/accounts\/(\d+)\/edit$/)?.[1] ?? null;
+const requestedRole = accountId ? null : new URLSearchParams(window.location.search).get('role');
 const isEditMode = computed(() => Boolean(accountId));
 const isLoading = ref(true);
 const isSaving = ref(false);
@@ -146,7 +147,8 @@ async function loadAccount() {
         if (response.data.account) {
             applyAccount(response.data.account);
         } else {
-            form.account_title = availableRoles.value[0]?.value ?? 'custom';
+            const preferredRole = availableRoles.value.find((role) => role.value === requestedRole);
+            form.account_title = preferredRole?.value ?? availableRoles.value[0]?.value ?? 'custom';
             applyRolePreset();
         }
         hasLoaded.value = true;
@@ -231,9 +233,9 @@ const backToQueue = staffQueueReturn(window, 'team', '/provider/workspaces/team'
                     <section v-if="step === 1" aria-labelledby="account-details-heading">
                         <header class="flex items-center gap-3 border-b border-slate-200 px-6 py-5"><span class="grid h-9 w-9 shrink-0 place-items-center bg-slate-100 text-slate-600"><i class="fa-solid fa-id-card" aria-hidden="true"></i></span><div><h2 id="account-details-heading" class="text-lg font-bold text-slate-950">Account details</h2><p class="mt-1 text-sm text-slate-500">Use the staff member's own contact details and login name.</p></div></header>
                         <div class="grid grid-cols-3 gap-5 px-6 py-6">
-                            <label><span :class="labelClass">First name</span><input v-model="form.first_name" type="text" :class="fieldClass"><span v-if="firstError('first_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('first_name') }}</span></label>
+                            <label><span :class="labelClass">First name</span><input v-model="form.first_name" v-capitalize-name autocapitalize="sentences" type="text" :class="fieldClass"><span v-if="firstError('first_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('first_name') }}</span></label>
                             <label><span :class="labelClass">Middle initial</span><input v-model="form.middle_initial" type="text" maxlength="1" :class="fieldClass" @input="form.middle_initial = form.middle_initial.replace(/[^a-z]/gi, '').slice(0, 1).toUpperCase()"></label>
-                            <label><span :class="labelClass">Last name</span><input v-model="form.last_name" type="text" :class="fieldClass"><span v-if="firstError('last_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('last_name') }}</span></label>
+                            <label><span :class="labelClass">Last name</span><input v-model="form.last_name" v-capitalize-name autocapitalize="sentences" type="text" :class="fieldClass"><span v-if="firstError('last_name')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('last_name') }}</span></label>
                             <label><span :class="labelClass">Email</span><input v-model="form.email" type="email" :class="fieldClass"><span v-if="firstError('email')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('email') }}</span></label>
                             <label><span :class="labelClass">Username</span><input v-model="form.username" type="text" :class="fieldClass"><span v-if="firstError('username')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('username') }}</span></label>
                             <label><span :class="labelClass">Contact number</span><input v-model="form.contact_number" type="tel" :class="fieldClass" placeholder="09XX XXX XXXX"><span v-if="firstError('contact_number')" class="mt-1 block text-xs font-semibold text-rose-700">{{ firstError('contact_number') }}</span></label>

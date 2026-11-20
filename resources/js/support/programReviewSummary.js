@@ -45,8 +45,7 @@ export function programReviewSummary(form, { eligibilitySummary = '', rules = []
             details: [fact('Program description', text(form.description)), fact('Official program link', text(form.officialProgramUrl, 'Not specified'))],
         },
         support: {
-            facts: [fact('Recipient slots', count(form.slotsAvailable)), fact('Application limit', count(form.applicationLimit)),
-                fact('Support period', `${programReviewDate(form.supportStartsAt)} to ${programReviewDate(form.supportEndsAt)}`, true)],
+            facts: [fact('Recipient slots', count(form.slotsAvailable)), fact('Application limit', count(form.applicationLimit))],
             benefits: (form.benefits ?? []).map(benefit => ({
                 title: text(benefit.title, optionLabel(benefit.type, catalogs.benefitTypes)),
                 summary: scholarshipBenefitFacts({
@@ -60,7 +59,9 @@ export function programReviewSummary(form, { eligibilitySummary = '', rules = []
         },
         'dates-location': {
             facts: [fact('Applications open', programReviewDate(form.applicationOpensAt, 'Not specified')), fact('Application deadline', programReviewDate(form.deadline)),
-                fact('Expected results', programReviewDate(form.expectedResultsAt, 'Not specified')),
+                fact('Formal application deadline', programReviewDate(form.handoffDeadline, 'Not specified')),
+                fact('Expected final results', programReviewDate(form.expectedResultsAt, 'Not specified')),
+                fact('Support starts', programReviewDate(form.supportStartsAt)), fact('Support ends', programReviewDate(form.supportEndsAt)),
                 fact('Public map pin', hasLocationPin(form.latitude, form.longitude) ? 'Selected' : 'Not set'),
                 fact('Public venue', [form.locationName, form.locationAddress].filter(Boolean).join('\n') || 'Not set', true),
                 fact('Contact email', text(form.contactEmail, 'Not specified')), fact('Contact number', text(form.contactNumber, 'Not specified'))],
@@ -79,8 +80,7 @@ export function programReviewSummary(form, { eligibilitySummary = '', rules = []
             facts: [fact('Pre-screening method', optionLabel(form.applicationMode, [['online', 'Portal review'], ['onsite', 'Portal + in-person'], ['provider_review', 'Profile review only']])),
                 fact('Formal application method', optionLabel(form.handoffMode, [['onsite', 'In person'], ['online', 'Official link'], ['provider_contact', 'Wait for provider contact']])),
                 fact('Pre-screening files', form.applicationMode === 'provider_review' ? 'No uploads required' : `${requirements.length} required / ${optional.length} optional`),
-                fact('After qualification', `${qualified.length} document requirement${qualified.length === 1 ? '' : 's'}`),
-                fact('Formal application deadline', programReviewDate(form.handoffDeadline, 'Not specified'))],
+                fact('After qualification', `${qualified.length} document requirement${qualified.length === 1 ? '' : 's'}`)],
             detailsLabel: 'Document lists and formal application instructions',
             details: [
                 ...(form.applicationMode !== 'provider_review' ? [{ label: 'Required pre-screening files', items: requirements }, ...(optional.length ? [{ label: 'Optional files', items: optional }] : [])] : []),

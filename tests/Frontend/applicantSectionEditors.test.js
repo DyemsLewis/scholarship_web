@@ -6,6 +6,7 @@ import { createSSRApp } from 'vue';
 import { renderToString } from '@vue/server-renderer';
 import { completedQualificationOptions, profileValueLabel } from '../../resources/js/support/applicantProfileLabels.js';
 import { applicantProfileDetails } from '../../resources/js/support/applicantProfileDetails.js';
+import { capitalizeName } from '../../resources/js/support/capitalizeName.js';
 
 async function loadEditor(name) {
     const source = readFileSync(new URL(`../../resources/js/components/profile/${name}.vue`, import.meta.url), 'utf8');
@@ -24,7 +25,7 @@ const learning = await loadEditor('ApplicantLearningEditor');
 const household = await loadEditor('ApplicantHouseholdEditor');
 const address = await loadEditor('ApplicantAddressEditor');
 const option = (value, label = value) => ({ value, label });
-const render = (editor, props) => renderToString(createSSRApp(editor.component, props));
+const render = (editor, props) => renderToString(createSSRApp(editor.component, props).directive('capitalize-name', capitalizeName));
 
 function learningProps(overrides = {}) {
     return {

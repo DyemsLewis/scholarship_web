@@ -12,7 +12,7 @@ export function reviewErrorMessage(error, fallback) {
 
 export function reviewStatusLabel(value, queue = '') {
     if (queue === 'applicants') {
-        const labels = { approved: 'Evidence reviewed', rejected: 'Needs replacement', pending: 'Under review', unsubmitted: 'Not submitted' };
+        const labels = { approved: 'Profile reviewed', rejected: 'Needs replacement', pending: 'Under review', unsubmitted: 'Not submitted' };
         if (labels[value]) return labels[value];
     }
     if (queue === 'programs' && value === 'rejected') return 'Returned to provider';

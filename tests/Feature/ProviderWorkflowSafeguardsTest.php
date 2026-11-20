@@ -6,8 +6,10 @@ use App\Models\ApplicationDocument;
 use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\User;
+use App\Support\ApplicationDocumentReviewReceipt;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class ProviderWorkflowSafeguardsTest extends TestCase
@@ -25,6 +27,7 @@ class ProviderWorkflowSafeguardsTest extends TestCase
     {
         [$provider, $application] = $this->applicationWithRequiredDocument('School ID');
         $document = $application->documents()->firstOrFail();
+        Storage::fake('local')->put($document->path, '%PDF-1.7');
 
         $this->actingAs($provider)
             ->patchJson("/provider/applications/{$application->id}/decision", [
@@ -37,8 +40,17 @@ class ProviderWorkflowSafeguardsTest extends TestCase
         $this->assertSame('submitted', $application->fresh()->status);
 
         $this->actingAs($provider)
+            ->patchJson(route('provider.documents.status', $document), ['status' => 'accepted'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('view_receipt');
+        $this->assertSame('pending', $document->fresh()->status);
+
+        $preview = $this->get(route('documents.view', $document))->assertOk()
+            ->assertHeader(ApplicationDocumentReviewReceipt::HEADER);
+        $this->actingAs($provider)
             ->patchJson("/provider/documents/{$document->id}/status", [
                 'status' => 'accepted',
+                'view_receipt' => $preview->headers->get(ApplicationDocumentReviewReceipt::HEADER),
             ])
             ->assertOk();
 
@@ -49,6 +61,27 @@ class ProviderWorkflowSafeguardsTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('application.status', 'approved');
+    }
+
+    public function test_receipt_cannot_accept_a_replaced_file_and_missing_files_do_not_issue_one(): void
+    {
+        [$provider, $application] = $this->applicationWithRequiredDocument('School ID');
+        $document = $application->documents()->firstOrFail();
+        $disk = Storage::fake('local');
+        $this->actingAs($provider)->get(route('documents.view', $document))->assertNotFound()
+            ->assertHeaderMissing(ApplicationDocumentReviewReceipt::HEADER);
+
+        $disk->put($document->path, '%PDF-1.7');
+        $preview = $this->get(route('documents.view', $document))->assertOk();
+        $receipt = $preview->headers->get(ApplicationDocumentReviewReceipt::HEADER);
+        $document->update(['path' => 'test/school-id-replacement.pdf']);
+        $disk->put($document->path, '%PDF-1.7 replacement');
+
+        $this->patchJson(route('provider.documents.status', $document), [
+            'status' => 'accepted',
+            'view_receipt' => $receipt,
+        ])->assertUnprocessable()->assertJsonValidationErrors('view_receipt');
+        $this->assertSame('pending', $document->fresh()->status);
     }
 
     public function test_application_readiness_keeps_the_submitted_document_snapshot(): void

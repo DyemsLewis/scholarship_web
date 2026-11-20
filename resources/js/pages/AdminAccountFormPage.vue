@@ -749,7 +749,7 @@ onMounted(() => {
                             <div class="grid grid-cols-[minmax(0,1fr)_8rem_minmax(0,1fr)] items-start gap-4">
                                 <div>
                                     <label :class="labelClass" for="admin-first-name">First name</label>
-                                    <input id="admin-first-name" v-model="form.firstName" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass" :aria-invalid="Boolean(fieldError('first_name'))">
+                                    <input id="admin-first-name" v-model="form.firstName" v-capitalize-name autocapitalize="sentences" type="text" autocomplete="given-name" required placeholder="First name" :class="inputClass" :aria-invalid="Boolean(fieldError('first_name'))">
                                     <p v-if="fieldError('first_name')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('first_name') }}</p>
                                 </div>
 
@@ -772,7 +772,7 @@ onMounted(() => {
 
                                 <div>
                                     <label :class="labelClass" for="admin-last-name">Last name</label>
-                                    <input id="admin-last-name" v-model="form.lastName" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass" :aria-invalid="Boolean(fieldError('last_name'))">
+                                    <input id="admin-last-name" v-model="form.lastName" v-capitalize-name autocapitalize="sentences" type="text" autocomplete="family-name" required placeholder="Last name" :class="inputClass" :aria-invalid="Boolean(fieldError('last_name'))">
                                     <p v-if="fieldError('last_name')" class="mt-1 text-xs font-semibold text-rose-700">{{ fieldError('last_name') }}</p>
                                 </div>
                             </div>

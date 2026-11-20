@@ -6,6 +6,7 @@ import OutcomeConfirmationHost from './components/OutcomeConfirmationHost.vue';
 import FeedbackToast from './components/FeedbackToast.vue';
 import { installModalScrollEnvironment } from './support/modalScrollEnvironment';
 import { registerPortalPwa } from './support/portalPwa';
+import { capitalizeName } from './support/capitalizeName.js';
 
 if (!import.meta.env.DEV) {
     if (document.readyState === 'complete') void registerPortalPwa();
@@ -28,7 +29,9 @@ function loadIconCdn() {
 
 const appElement = document.getElementById('app');
 function createPortalApp(component) {
-    return createApp(component).component('FeedbackToast', FeedbackToast);
+    return createApp(component)
+        .component('FeedbackToast', FeedbackToast)
+        .directive('capitalize-name', capitalizeName);
 }
 const pages = {
     accountSetup: () => import('./pages/AccountSetupPage.vue'),

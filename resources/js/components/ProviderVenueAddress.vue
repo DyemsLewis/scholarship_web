@@ -13,8 +13,10 @@ const props = defineProps({
     latitude: { type: [String, Number], default: null },
     longitude: { type: [String, Number], default: null },
     includeVenueInAddress: { type: Boolean, default: true },
+    autoFillSavedPin: { type: Boolean, default: true },
+    inlineMap: Boolean,
 });
-const emit = defineEmits(['update:modelValue', 'update:address', 'update:venue', 'update:latitude', 'update:longitude']);
+const emit = defineEmits(['update:modelValue', 'update:address', 'update:venue', 'update:latitude', 'update:longitude', 'picker-open-change', 'lookup-pending']);
 const id = useId();
 const fields = computed(() => ({ ...emptyVenueAddress(), venue: props.venue, ...props.modelValue }));
 const required = computed(() => Boolean(props.modelValue) || !props.address);
@@ -24,6 +26,7 @@ const pinValues = ref({});
 const pinMessage = ref('');
 const pinFeedbackType = ref('success');
 const pinLookupPending = ref(false);
+watch(pinLookupPending, pending => emit('lookup-pending', pending));
 const coordinates = computed(() => props.modelValue ? fields.value : { latitude: props.latitude, longitude: props.longitude });
 const hasPin = computed(() => hasLocationPin(coordinates.value.latitude, coordinates.value.longitude));
 const fieldClass = 'mt-1.5 h-11 w-full min-w-0 rounded border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 disabled:bg-slate-50';
@@ -118,10 +121,10 @@ watch(() => [fields.value.region, fields.value.province], (current, previous) =>
     loadOptions();
 }, { immediate: true });
 // Older saved venues and copied organization locations may have only text and a pin.
-watch(() => [props.modelValue, props.latitude, props.longitude], () => {
-    if (!props.modelValue && hasPin.value) {
-        void fillFromPin({ latitude: props.latitude, longitude: props.longitude });
-    }
+watch(() => [props.modelValue, props.latitude, props.longitude, props.autoFillSavedPin], () => {
+    if (props.modelValue) return;
+    if (!props.autoFillSavedPin) cancelPinLookup();
+    else if (hasPin.value) void fillFromPin({ latitude: props.latitude, longitude: props.longitude });
 }, { immediate: true });
 onBeforeUnmount(() => { version++; cancelPinLookup(); });
 </script>
@@ -139,8 +142,11 @@ onBeforeUnmount(() => { version++; cancelPinLookup(); });
         <FeedbackAlertModal v-model="error" title="Venue location lists unavailable" retry-label="Try again" :busy="loading" @retry="loadOptions" />
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-barangay`">Barangay <span class="font-normal text-slate-500">(optional)</span><input :id="`${id}-barangay`" :value="fields.barangay" maxlength="100" :class="fieldClass" @input="change('barangay', $event.target.value)"></label>
         <label class="block text-xs font-bold text-slate-700" :for="`${id}-street`">Street / address details <span class="font-normal text-slate-500">(optional)</span><input :id="`${id}-street`" :value="fields.street" maxlength="160" :class="fieldClass" placeholder="Street and building number" @input="change('street', $event.target.value)"></label>
-        <LocationPinField :address="venueAddressText(modelValue) || address || venue" :latitude="coordinates.latitude" :longitude="coordinates.longitude" :reset-on-address-change="false" title="Venue location" @update:latitude="pin('latitude', $event)" @update:longitude="pin('longitude', $event)" @selected="fillFromPin" />
-        <button v-if="hasPin" type="button" :disabled="pinLookupPending" class="inline-flex min-h-9 items-center gap-2 rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50" data-fill-pin-address @click="fillFromPin(coordinates)"><i class="fa-solid fa-location-dot text-amber-700" aria-hidden="true"></i>{{ pinLookupPending ? 'Filling address...' : 'Fill address from pin' }}</button>
+        <LocationPinField :address="venueAddressText(modelValue) || address || venue" :latitude="coordinates.latitude" :longitude="coordinates.longitude" :reset-on-address-change="false" :inline-picker="inlineMap" title="Venue location" @update:latitude="pin('latitude', $event)" @update:longitude="pin('longitude', $event)" @selected="fillFromPin" @picker-open-change="emit('picker-open-change', $event)">
+            <template #actions>
+                <button v-if="hasPin" type="button" :disabled="pinLookupPending" class="inline-flex min-h-10 items-center gap-2 rounded-sm border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50" data-fill-pin-address @click="fillFromPin(coordinates)"><i class="fa-solid fa-location-dot text-amber-700" aria-hidden="true"></i>{{ pinLookupPending ? 'Filling address...' : 'Fill address from pin' }}</button>
+            </template>
+        </LocationPinField>
         <p v-if="pinLookupPending" class="text-xs leading-5 text-slate-600" role="status" aria-live="polite" data-pin-address-status>Pin selected. Looking up its address...</p>
         <FeedbackToast :message="pinLookupPending ? '' : pinMessage" :type="pinFeedbackType" />
     </fieldset>

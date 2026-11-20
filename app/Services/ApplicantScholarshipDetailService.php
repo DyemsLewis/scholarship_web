@@ -6,6 +6,7 @@ use App\Models\Scholarship;
 use App\Models\ScholarshipApplication;
 use App\Models\ScholarshipBookmark;
 use App\Models\User;
+use App\Support\ProgramApplicationRules;
 use App\Support\ScholarshipSelectionPlan;
 use Illuminate\Support\Str;
 
@@ -933,10 +934,8 @@ class ApplicantScholarshipDetailService
 
     private function formalApplicationSchedule(Scholarship $scholarship, int $sessionCount): array
     {
-        $mode = $scholarship->handoff_mode;
-        $hasVenue = in_array($mode, ['onsite', 'hybrid'], true);
-        $url = trim((string) $scholarship->handoff_url);
-        $url = filter_var($url, FILTER_VALIDATE_URL) && in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['https', 'http'], true) ? $url : null;
+        $channel = ProgramApplicationRules::handoffChannel($scholarship);
+        $mode = $channel['mode'];
 
         // Publish program instructions, not an applicant's private assigned-session details.
         return [
@@ -947,11 +946,11 @@ class ApplicantScholarshipDetailService
             },
             'deadline_label' => $scholarship->handoff_deadline?->format('M d, Y'),
             'instructions' => $scholarship->handoff_instructions,
-            'url' => $url,
+            'url' => $channel['url'],
             'requirements' => $this->eligibilityService->splitDocumentRequirements($scholarship->post_qualification_requirements),
-            'location' => $hasVenue ? [
-                'name' => $scholarship->handoff_location_name, 'address' => $scholarship->handoff_location_address,
-                'latitude' => $scholarship->handoff_latitude, 'longitude' => $scholarship->handoff_longitude,
+            'location' => ProgramApplicationRules::usesHandoffVenue($mode) ? [
+                'name' => $channel['location_name'], 'address' => $channel['location_address'],
+                'latitude' => $channel['latitude'], 'longitude' => $channel['longitude'],
             ] : null,
             'session_count' => $sessionCount,
             'is_assigned_appointment' => false,

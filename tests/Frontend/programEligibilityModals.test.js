@@ -79,7 +79,7 @@ test('qualification and enrollment modals preserve policy and unrelated modes on
 
 test('bulk study-level changes retain the previous confirmation and compatibility safeguards', async () => {
     const page = readFileSync(new URL('../../resources/js/pages/provider/programs/ProgramFormPage.vue', import.meta.url), 'utf8');
-    const fn = page.slice(page.indexOf('async function changeEducationLevels('), page.indexOf('\nfunction useRuleBasedEligibilitySummary'));
+    const fn = page.slice(page.indexOf('async function changeEducationLevels('), page.indexOf('\nfunction toggleStage'));
     const form = ref({ eligibleEducationLevels: ['senior_high_school'], eligibleCourses: 'STEM', eligibleYearLevels: 'Grade 12', incomeRequirement: 'Any' });
     const pending = ref(false), coursesNeedChoice = ref(false), yearsNeedChoice = ref(false), educationReview = ref({ courses: [], years: [] });
     let confirm = false, prompts = 0;

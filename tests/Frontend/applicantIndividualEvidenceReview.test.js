@@ -2,14 +2,13 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { staffQueueReturn } from '../../resources/js/support/staffQueueState.js';
 import { confirmOutcome, afterConfirmation } from './helpers/acceptedOutcome.js';
-import { profileVerificationLabel } from '../../resources/js/support/applicantProfileLabels.js';
 import { readFileSync } from 'node:fs';
 import { computed, ref } from 'vue';
 import { parse } from '@vue/compiler-sfc';
 import { useApplicantEvidenceDecision } from '../../resources/js/composables/useApplicantEvidenceDecision.js';
 import { useAdminResource } from '../../resources/js/composables/useAdminResource.js';
 import { evidenceRows, evidenceState, evidenceProfileClaims, evidenceLabel, evidenceEventLabel, evidenceReviewDate } from '../../resources/js/support/applicantEvidenceReview.js';
-import { reviewErrorMessage } from '../../resources/js/support/adminReviewPresentation.js';
+import { reviewErrorMessage, reviewStatusLabel } from '../../resources/js/support/adminReviewPresentation.js';
 
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const record = { id: 8, document_type: 'academic_record', revision: 2, review_url: '/admin/applicant-verification-documents/8/review', file_available: true };
@@ -107,7 +106,7 @@ function pageHarness(payload) {
     const source = readFileSync(new URL('../../resources/js/pages/admin/reviews/ApplicantReviewRecordPage.vue', import.meta.url), 'utf8');
     const script = parse(source).descriptor.scriptSetup.content.replace(/^import .*;\r?\n/gm, '');
     const window = { location: { pathname: '/admin/workspaces/reviews/applicants/39' }, axios: { get: async () => ({ data: { applicant: payload } }) } };
-    const deps = { staffQueueReturn, confirmOutcome, profileVerificationLabel, ref, computed, useAdminResource, reviewErrorMessage, evidenceRows, evidenceReviewDate, onMounted() {}, window, applicantProfileDetails: () => [], profileEducationSummary: () => '', useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/applicants', load() {} }) };
+    const deps = { staffQueueReturn, confirmOutcome, reviewStatusLabel, ref, computed, useAdminResource, reviewErrorMessage, evidenceRows, evidenceReviewDate, onMounted() {}, window, applicantProfileDetails: () => [], profileEducationSummary: () => '', useAdminReviewNavigation: () => ({ next: ref(null), loading: ref(false), error: ref(''), backUrl: '/admin/workspaces/reviews/applicants', load() {} }) };
     return new Function(...Object.keys(deps), `${script}\nreturn { loadRecord, applicant, canSave, notes, decision, evidenceSaved, selectedDocumentId, saveDecision, reloadEvidence, recordStale, window };`)(...Object.values(deps));
 }
 

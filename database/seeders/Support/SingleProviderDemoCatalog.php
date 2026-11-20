@@ -2,17 +2,39 @@
 
 namespace Database\Seeders\Support;
 
-final class SingleProviderDemoCatalog
+class SingleProviderDemoCatalog
 {
     public const DIRECTORY = 'single-provider-demo-20261114';
     public const CONFIRMATION = 'RESET_SINGLE_PROVIDER_DEMO_20261114';
     public const ADMIN = 'lumenops';
+    public const ROOT = 'lumenops.root';
+    public const ADMIN_NAME = 'Platform Administrator';
     public const PROVIDER = 'orivanta';
+    public const PROVIDER_BRAND = 'Orivanta';
+    public const PROVIDER_NAME = 'Orivanta Learning Foundation';
+    public const PROVIDER_MARK = 'OLF';
     public const LEARNERS = ['aurora', 'brio', 'cielo', 'dune'];
+    public const PROFILE_LEARNERS = ['profile', 'verification'];
+
+    public static function programs(): array
+    {
+        return [
+            'intake' => [static::PROVIDER_BRAND.' Open Learning Grant', 'OLG', 'intake', 'published'],
+            'screening' => [static::PROVIDER_BRAND.' Campus Access Scholarship', 'OCA', 'screening', 'published'],
+            'exam' => [static::PROVIDER_BRAND.' Applied Science Scholarship', 'OAS', 'exam', 'published'],
+            'interview' => [static::PROVIDER_BRAND.' Leadership Scholarship', 'OLS', 'interview', 'published'],
+            'decision' => [static::PROVIDER_BRAND.' Academic Merit Scholarship', 'OAM', 'decision', 'published'],
+            'support' => [static::PROVIDER_BRAND.' Continuing Learners Grant', 'OCL', 'support', 'published'],
+            'renewal' => [static::PROVIDER_BRAND.' Term Assistance Grant', 'OTA', 'support', 'published'],
+            'one_time' => [static::PROVIDER_BRAND.' School Essentials Award', 'OSE', 'one_time', 'published'],
+            'draft' => [static::PROVIDER_BRAND.' Digital Learning Grant', 'ODL', 'draft', 'draft'],
+            'review' => [static::PROVIDER_BRAND.' College Pathways Award', 'OCP', 'review', 'pending_review'],
+        ];
+    }
 
     public static function scenarios(): array
     {
-        return [
+        $scenarios = [
             ['screening', 'screening', 'aurora', 'Review the submitted files and record pre-screening.'],
             ['screening', 'formal', 'brio', 'Arrange formal verification and record the result.'],
             ['exam', 'exam.result', 'aurora', 'Record the completed examination outcome and evaluation.'],
@@ -39,5 +61,8 @@ final class SingleProviderDemoCatalog
             ['one_time', 'onetime.confirm', 'cielo', 'Confirm receipt of the released one-time award.'],
             ['one_time', 'onetime.complete', 'dune', 'Complete the award after its receipt has been confirmed.'],
         ];
+
+        $learners = array_combine(self::LEARNERS, static::LEARNERS);
+        return array_map(static fn (array $row): array => [$row[0], $row[1], $learners[$row[2]], $row[3]], $scenarios);
     }
 }

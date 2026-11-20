@@ -727,7 +727,8 @@ async function main() {
             try {
                 await waitFor(
                     () => client.evaluate(`document.readyState === 'complete'
-                        && (window.portalPathname?.() ?? location.pathname) === ${JSON.stringify(workspaceUrl.pathname)}
+                        && ((window.portalPathname?.() ?? location.pathname) === ${JSON.stringify(workspaceUrl.pathname)}
+                            || (${Boolean(capture.allowOpaqueRecord)} && location.pathname.startsWith(${JSON.stringify(`/${workspaceUrl.pathname.split('/')[1]}/r/`)})))
                         && location.search === ${JSON.stringify(workspaceUrl.search)}
                         && document.body.innerText.toLowerCase().includes(${JSON.stringify(heading.toLowerCase())})
                         && (${JSON.stringify(loadingText)} === null
@@ -1601,6 +1602,11 @@ async function main() {
 
             const capturePath = capture.path || screenshotPath;
             if (capturePath) {
+                if (capture.dismissWorkspaceGuide) {
+                    await delay(400);
+                    await client.evaluate(`document.querySelector('button[aria-label="Close workspace guide"]')?.click()`);
+                    await waitFor(() => client.evaluate("!document.querySelector('.workspace-guide-dialog')"), 'workspace guide to close');
+                }
                 if (capture.closeProfile) {
                     await client.evaluate("document.querySelector('[aria-label=\"Close profile editor\"]')?.click()");
                 }
